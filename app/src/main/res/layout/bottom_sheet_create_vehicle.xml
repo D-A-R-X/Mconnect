@@ -1,10 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
+    android:layout_height="match_parent"
     android:background="@drawable/bg_bottom_sheet_with_border"
     android:orientation="vertical"
-    android:padding="20dp">
+    android:paddingHorizontal="20dp"
+    android:paddingTop="20dp"
+    android:paddingBottom="16dp">
 
     <!-- Handle -->
     <View
@@ -45,6 +47,9 @@
                 android:textSize="13sp" />
         </LinearLayout>
 
+        <!-- Edit button kept in the tree (GONE) for ViewBinding compatibility.
+             Tapping any field edits directly, so no explicit Edit action is
+             shown; a Save bar appears at the bottom once something changes. -->
         <androidx.appcompat.widget.AppCompatButton
             android:id="@+id/btnEditVehicle"
             android:layout_width="wrap_content"
@@ -63,298 +68,324 @@
             android:paddingHorizontal="12dp" />
     </RelativeLayout>
 
-    <!-- Vehicle Number -->
-    <TextView
-        android:id="@+id/tvLabelVehicleNumber"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:fontFamily="@font/inter_semibold"
-        android:text="Vehicle Number *"
-        android:textColor="#374151"
-        android:textSize="13sp" />
-
-    <EditText
-        android:id="@+id/etVehicleNumber"
+    <!-- Scrolling field area — keeps the footer Save pinned to the bottom. -->
+    <ScrollView
         android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:layout_marginTop="6dp"
-        android:background="@drawable/bg_input"
-        android:drawableStart="@drawable/ic_custom_car"
-        android:drawablePadding="10dp"
-        android:fontFamily="@font/inter_regular"
-        android:hint="Enter Vehicle Number"
-        android:inputType="textCapCharacters"
-        android:paddingHorizontal="14dp"
-        android:textColor="#111827"
-        android:textColorHint="#9CA3AF"
-        android:textSize="14sp" />
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true"
+        android:overScrollMode="never"
+        android:scrollbars="none">
 
-    <!-- Make -->
-    <TextView
-        android:id="@+id/tvLabelMake"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="14dp"
-        android:fontFamily="@font/inter_semibold"
-        android:text="Make"
-        android:textColor="#374151"
-        android:textSize="13sp" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
 
-    <EditText
-        android:id="@+id/etMake"
-        android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:layout_marginTop="6dp"
-        android:background="@drawable/bg_input"
-        android:drawableStart="@drawable/ic_custom_car"
-        android:drawablePadding="10dp"
-        android:fontFamily="@font/inter_regular"
-        android:hint="Maruti Suzuki / Toyota / …"
-        android:inputType="textCapWords"
-        android:paddingHorizontal="14dp"
-        android:textColor="#111827"
-        android:textColorHint="#9CA3AF"
-        android:textSize="14sp" />
+            <!-- Vehicle Number -->
+            <TextView
+                android:id="@+id/tvLabelVehicleNumber"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Vehicle Number *"
+                android:textColor="#374151"
+                android:textSize="13sp" />
 
-    <!-- Model -->
-    <TextView
-        android:id="@+id/tvLabelModel"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="14dp"
-        android:fontFamily="@font/inter_semibold"
-        android:text="Model"
-        android:textColor="#374151"
-        android:textSize="13sp" />
+            <EditText
+                android:id="@+id/etVehicleNumber"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input"
+                android:drawableStart="@drawable/ic_custom_car"
+                android:drawablePadding="10dp"
+                android:fontFamily="@font/inter_regular"
+                android:hint="Enter Vehicle Number"
+                android:inputType="textCapCharacters"
+                android:paddingHorizontal="14dp"
+                android:textColor="#111827"
+                android:textColorHint="#9CA3AF"
+                android:textSize="14sp" />
 
-    <EditText
-        android:id="@+id/etModel"
-        android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:layout_marginTop="6dp"
-        android:background="@drawable/bg_input"
-        android:drawableStart="@drawable/ic_custom_car"
-        android:drawablePadding="10dp"
-        android:fontFamily="@font/inter_regular"
-        android:hint="Innova / Swift"
-        android:inputType="textCapWords"
-        android:paddingHorizontal="14dp"
-        android:textColor="#111827"
-        android:textColorHint="#9CA3AF"
-        android:textSize="14sp" />
+            <!-- Make (dropdown — VEHICLE_MAKES) -->
+            <TextView
+                android:id="@+id/tvLabelMake"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Make"
+                android:textColor="#374151"
+                android:textSize="13sp" />
 
-    <!-- Model Year -->
-    <TextView
-        android:id="@+id/tvLabelModelYear"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="14dp"
-        android:fontFamily="@font/inter_semibold"
-        android:text="Model Year"
-        android:textColor="#374151"
-        android:textSize="13sp" />
+            <EditText
+                android:id="@+id/etMake"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input"
+                android:drawableStart="@drawable/ic_custom_car"
+                android:drawableEnd="@drawable/ic_chevron_down"
+                android:drawablePadding="10dp"
+                android:fontFamily="@font/inter_regular"
+                android:hint="Select make"
+                android:focusable="false"
+                android:clickable="true"
+                android:cursorVisible="false"
+                android:inputType="none"
+                android:paddingHorizontal="14dp"
+                android:textColor="#111827"
+                android:textColorHint="#9CA3AF"
+                android:textSize="14sp" />
 
-    <EditText
-        android:id="@+id/etModelYear"
-        android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:layout_marginTop="6dp"
-        android:background="@drawable/bg_input"
-        android:drawableStart="@drawable/ic_custom_capacity"
-        android:drawablePadding="10dp"
-        android:fontFamily="@font/inter_regular"
-        android:hint="2023"
-        android:inputType="number"
-        android:maxLength="4"
-        android:paddingHorizontal="14dp"
-        android:textColor="#111827"
-        android:textColorHint="#9CA3AF"
-        android:textSize="14sp" />
+            <!-- Model -->
+            <TextView
+                android:id="@+id/tvLabelModel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Model"
+                android:textColor="#374151"
+                android:textSize="13sp" />
 
-    <!-- Vehicle Type -->
-    <TextView
-        android:id="@+id/tvLabelVehicleType"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="14dp"
-        android:fontFamily="@font/inter_semibold"
-        android:text="Vehicle Type *"
-        android:textColor="#374151"
-        android:textSize="13sp" />
+            <EditText
+                android:id="@+id/etModel"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input"
+                android:drawableStart="@drawable/ic_custom_car"
+                android:drawablePadding="10dp"
+                android:fontFamily="@font/inter_regular"
+                android:hint="Innova / Swift"
+                android:inputType="textCapWords"
+                android:paddingHorizontal="14dp"
+                android:textColor="#111827"
+                android:textColorHint="#9CA3AF"
+                android:textSize="14sp" />
 
-    <EditText
-        android:id="@+id/etVehicleType"
-        android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:layout_marginTop="6dp"
-        android:background="@drawable/bg_input"
-        android:drawableStart="@drawable/ic_custom_car"
-        android:drawablePadding="10dp"
-        android:fontFamily="@font/inter_regular"
-        android:hint="Enter Vehicle Type"
-        android:inputType="textCapWords"
-        android:paddingHorizontal="14dp"
-        android:textColor="#111827"
-        android:textColorHint="#9CA3AF"
-        android:textSize="14sp" />
+            <!-- Model Year -->
+            <TextView
+                android:id="@+id/tvLabelModelYear"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Model Year"
+                android:textColor="#374151"
+                android:textSize="13sp" />
 
-    <!-- Capacity -->
-    <TextView
-        android:id="@+id/tvLabelCapacity"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="14dp"
-        android:fontFamily="@font/inter_semibold"
-        android:text="Capacity *"
-        android:textColor="#374151"
-        android:textSize="13sp" />
+            <EditText
+                android:id="@+id/etModelYear"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input"
+                android:drawableStart="@drawable/ic_custom_capacity"
+                android:drawablePadding="10dp"
+                android:fontFamily="@font/inter_regular"
+                android:hint="2023"
+                android:inputType="number"
+                android:maxLength="4"
+                android:paddingHorizontal="14dp"
+                android:textColor="#111827"
+                android:textColorHint="#9CA3AF"
+                android:textSize="14sp" />
 
-    <EditText
-        android:id="@+id/etCapacity"
-        android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:layout_marginTop="6dp"
-        android:background="@drawable/bg_input"
-        android:drawableStart="@drawable/ic_custom_capacity"
-        android:drawablePadding="10dp"
-        android:fontFamily="@font/inter_regular"
-        android:hint="Enter Capacity"
-        android:inputType="text"
-        android:paddingHorizontal="14dp"
-        android:textColor="#111827"
-        android:textColorHint="#9CA3AF"
-        android:textSize="14sp" />
+            <!-- Vehicle Type (dropdown — VEHICLE_TYPES) -->
+            <TextView
+                android:id="@+id/tvLabelVehicleType"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Vehicle Type *"
+                android:textColor="#374151"
+                android:textSize="13sp" />
 
-    <!-- Name -->
-    <TextView
-        android:id="@+id/tvLabelName"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="14dp"
-        android:fontFamily="@font/inter_semibold"
-        android:text="Name *"
-        android:textColor="#374151"
-        android:textSize="13sp" />
+            <EditText
+                android:id="@+id/etVehicleType"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input"
+                android:drawableStart="@drawable/ic_custom_car"
+                android:drawableEnd="@drawable/ic_chevron_down"
+                android:drawablePadding="10dp"
+                android:fontFamily="@font/inter_regular"
+                android:hint="Select vehicle type"
+                android:focusable="false"
+                android:clickable="true"
+                android:cursorVisible="false"
+                android:inputType="none"
+                android:paddingHorizontal="14dp"
+                android:textColor="#111827"
+                android:textColorHint="#9CA3AF"
+                android:textSize="14sp" />
 
-    <EditText
-        android:id="@+id/etDriverName"
-        android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:layout_marginTop="6dp"
-        android:background="@drawable/bg_input"
-        android:drawableStart="@drawable/ic_custom_user"
-        android:drawablePadding="10dp"
-        android:fontFamily="@font/inter_regular"
-        android:hint="Enter Name"
-        android:inputType="textPersonName"
-        android:paddingHorizontal="14dp"
-        android:textColor="#111827"
-        android:textColorHint="#9CA3AF"
-        android:textSize="14sp" />
+            <!-- Capacity -->
+            <TextView
+                android:id="@+id/tvLabelCapacity"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Capacity *"
+                android:textColor="#374151"
+                android:textSize="13sp" />
 
-    <!-- Phone Number -->
-    <TextView
-        android:id="@+id/tvLabelPhone"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="14dp"
-        android:fontFamily="@font/inter_semibold"
-        android:text="Phone Number *"
-        android:textColor="#374151"
-        android:textSize="13sp" />
+            <EditText
+                android:id="@+id/etCapacity"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input"
+                android:drawableStart="@drawable/ic_custom_capacity"
+                android:drawablePadding="10dp"
+                android:fontFamily="@font/inter_regular"
+                android:hint="Enter Capacity"
+                android:inputType="number"
+                android:paddingHorizontal="14dp"
+                android:textColor="#111827"
+                android:textColorHint="#9CA3AF"
+                android:textSize="14sp" />
 
-    <EditText
-        android:id="@+id/etDriverPhone"
-        android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:layout_marginTop="6dp"
-        android:background="@drawable/bg_input"
-        android:drawableStart="@drawable/ic_custom_phone"
-        android:drawablePadding="10dp"
-        android:fontFamily="@font/inter_regular"
-        android:hint="Enter Phone Number"
-        android:inputType="phone"
-        android:paddingHorizontal="14dp"
-        android:textColor="#111827"
-        android:textColorHint="#9CA3AF"
-        android:textSize="14sp" />
+            <!-- Name -->
+            <TextView
+                android:id="@+id/tvLabelName"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Name *"
+                android:textColor="#374151"
+                android:textSize="13sp" />
 
-    <!-- WhatsApp Number -->
-    <TextView
-        android:id="@+id/tvLabelWhatsapp"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="14dp"
-        android:fontFamily="@font/inter_semibold"
-        android:text="WhatsApp Number"
-        android:textColor="#374151"
-        android:textSize="13sp" />
+            <EditText
+                android:id="@+id/etDriverName"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input"
+                android:drawableStart="@drawable/ic_custom_user"
+                android:drawablePadding="10dp"
+                android:fontFamily="@font/inter_regular"
+                android:hint="Enter Name"
+                android:inputType="textPersonName"
+                android:paddingHorizontal="14dp"
+                android:textColor="#111827"
+                android:textColorHint="#9CA3AF"
+                android:textSize="14sp" />
 
-    <EditText
-        android:id="@+id/etDriverWhatsapp"
-        android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:layout_marginTop="6dp"
-        android:background="@drawable/bg_input"
-        android:drawableStart="@drawable/ic_custom_phone"
-        android:drawablePadding="10dp"
-        android:fontFamily="@font/inter_regular"
-        android:hint="Enter WhatsApp Number"
-        android:inputType="phone"
-        android:paddingHorizontal="14dp"
-        android:textColor="#111827"
-        android:textColorHint="#9CA3AF"
-        android:textSize="14sp" />
+            <!-- Phone Number -->
+            <TextView
+                android:id="@+id/tvLabelPhone"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Phone Number *"
+                android:textColor="#374151"
+                android:textSize="13sp" />
 
-    <CheckBox
-        android:id="@+id/cbWhatsappSameAsMobile"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:checked="true"
-        android:fontFamily="@font/inter_regular"
-        android:text="Same as mobile number"
-        android:textColor="#374151"
-        android:textSize="13sp" />
+            <EditText
+                android:id="@+id/etDriverPhone"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input"
+                android:drawableStart="@drawable/ic_custom_phone"
+                android:drawablePadding="10dp"
+                android:fontFamily="@font/inter_regular"
+                android:hint="Enter Phone Number"
+                android:inputType="phone"
+                android:paddingHorizontal="14dp"
+                android:textColor="#111827"
+                android:textColorHint="#9CA3AF"
+                android:textSize="14sp" />
 
-    <!-- Agency — hidden: the backend binds the vehicle to the logged-in
-         agency, so asking for it here was redundant. Kept in the tree (GONE)
-         because the sheet's code still reads/writes the field. -->
-    <TextView
-        android:id="@+id/tvLabelAgency"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="14dp"
-        android:fontFamily="@font/inter_semibold"
-        android:text="Agency *"
-        android:textColor="#374151"
-        android:textSize="13sp"
-        android:visibility="gone" />
+            <!-- WhatsApp Number -->
+            <TextView
+                android:id="@+id/tvLabelWhatsapp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:fontFamily="@font/inter_semibold"
+                android:text="WhatsApp Number"
+                android:textColor="#374151"
+                android:textSize="13sp" />
 
-    <EditText
-        android:id="@+id/etAgency"
-        android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:layout_marginTop="6dp"
-        android:background="@drawable/bg_input"
-        android:drawableStart="@drawable/ic_custom_agency"
-        android:drawablePadding="10dp"
-        android:fontFamily="@font/inter_regular"
-        android:hint="Enter Agency"
-        android:inputType="text"
-        android:paddingHorizontal="14dp"
-        android:textColor="#111827"
-        android:textColorHint="#9CA3AF"
-        android:textSize="14sp"
-        android:visibility="gone" />
+            <EditText
+                android:id="@+id/etDriverWhatsapp"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input"
+                android:drawableStart="@drawable/ic_custom_phone"
+                android:drawablePadding="10dp"
+                android:fontFamily="@font/inter_regular"
+                android:hint="Enter WhatsApp Number"
+                android:inputType="phone"
+                android:paddingHorizontal="14dp"
+                android:textColor="#111827"
+                android:textColorHint="#9CA3AF"
+                android:textSize="14sp" />
 
-    <!-- Submit Button -->
+            <CheckBox
+                android:id="@+id/cbWhatsappSameAsMobile"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:checked="true"
+                android:fontFamily="@font/inter_regular"
+                android:text="Same as mobile number"
+                android:textColor="#374151"
+                android:textSize="13sp" />
+
+            <!-- Agency — hidden: the backend binds the vehicle to the logged-in
+                 agency, so asking for it here was redundant. Kept in the tree
+                 (GONE) because the sheet's code still reads/writes the field. -->
+            <TextView
+                android:id="@+id/tvLabelAgency"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Agency *"
+                android:textColor="#374151"
+                android:textSize="13sp"
+                android:visibility="gone" />
+
+            <EditText
+                android:id="@+id/etAgency"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input"
+                android:drawableStart="@drawable/ic_custom_agency"
+                android:drawablePadding="10dp"
+                android:fontFamily="@font/inter_regular"
+                android:hint="Enter Agency"
+                android:inputType="text"
+                android:paddingHorizontal="14dp"
+                android:textColor="#111827"
+                android:textColorHint="#9CA3AF"
+                android:textSize="14sp"
+                android:visibility="gone" />
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- Fixed footer: primary action pinned to the bottom of the sheet. In
+         create mode it's the always-on "Submit"; in edit mode it's hidden
+         until a field changes, then shows "Save Changes". -->
     <androidx.appcompat.widget.AppCompatButton
         android:id="@+id/btnSubmitCreate"
         android:layout_width="match_parent"
         android:layout_height="48dp"
-        android:layout_marginTop="24dp"
+        android:layout_marginTop="12dp"
         android:background="@drawable/bg_allocate_button_green"
         android:fontFamily="@font/inter_semibold"
         android:text="Submit"
@@ -362,12 +393,12 @@
         android:textColor="#FFFFFF"
         android:textSize="14sp" />
 
-    <!-- Edit Buttons (Edit Mode) -->
+    <!-- Legacy edit-button row, kept (GONE) for ViewBinding compatibility. -->
     <LinearLayout
         android:id="@+id/layoutEditButtons"
         android:layout_width="match_parent"
         android:layout_height="48dp"
-        android:layout_marginTop="24dp"
+        android:layout_marginTop="12dp"
         android:orientation="horizontal"
         android:visibility="gone">
 

@@ -99,23 +99,23 @@ class CreateDriverBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
+    private var isEditModeFlag = false
+    private var initialSnapshot = ""
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        // Save original key listeners
-        originalNameKeyListener = binding.etDriverName.keyListener
-        originalPhoneKeyListener = binding.etDriverPhone.keyListener
-        originalAddressKeyListener = binding.etDriverAddress.keyListener
+        // No explicit Edit action — the form is directly editable.
+        binding.btnEditDriver.visibility = View.GONE
 
         // Add red asterisks
         binding.tvLabelName.text = Html.fromHtml("Name <font color='#EF4444'>*</font>")
         binding.tvLabelPhone.text = Html.fromHtml("Phone Number <font color='#EF4444'>*</font>")
         binding.tvLabelAddress.text = Html.fromHtml("Address <font color='#EF4444'>*</font>")
 
-        val isEditMode = arguments?.getBoolean(ARG_IS_EDIT_MODE, false) ?: false
-        if (isEditMode) {
+        isEditModeFlag = arguments?.getBoolean(ARG_IS_EDIT_MODE, false) ?: false
+        if (isEditModeFlag) {
             binding.tvCreateDriverTitle.text = "Edit Drivers"
-            binding.btnEditDriver.visibility = View.VISIBLE
             binding.btnSubmitCreate.visibility = View.GONE
             binding.layoutEditButtons.visibility = View.VISIBLE
 
@@ -128,10 +128,7 @@ class CreateDriverBottomSheet : BottomSheetDialogFragment() {
             binding.etDriverPhone.setText(initialPhone)
             binding.etDriverAddress.setText(initialAddress)
 
-            setFieldsEditable(false)
-
-            var isCurrentlyEditing = false
-
+            // Deactivate / Activate stays available (independent of edits).
             if (status == "Inactive") {
                 binding.btnDeactivate.text = "Activate"
                 binding.btnDeactivate.setTextColor(Color.parseColor("#22C55E"))
@@ -141,55 +138,26 @@ class CreateDriverBottomSheet : BottomSheetDialogFragment() {
                 binding.btnDeactivate.setTextColor(Color.parseColor("#EF4444"))
                 binding.btnDeactivate.setBackgroundResource(R.drawable.bg_btn_deactivate_outline_red)
             }
-
-            binding.btnEditDriver.setOnClickListener {
-                isCurrentlyEditing = true
-                setFieldsEditable(true)
-                binding.btnDeactivate.text = "Cancel"
-                binding.btnDeactivate.setTextColor(Color.parseColor("#EF4444"))
-                binding.btnDeactivate.setBackgroundResource(R.drawable.bg_btn_deactivate_outline_red)
+            binding.btnDeactivate.setOnClickListener {
+                onDeactivateCallback?.invoke()
+                dismiss()
             }
 
+            // Save: grey + disabled until a field changes, then green + clickable.
             binding.btnSave.setOnClickListener {
-                if (!isCurrentlyEditing) return@setOnClickListener
+                if (driverSnapshot() == initialSnapshot) return@setOnClickListener
                 val name = binding.etDriverName.text.toString().trim()
                 val phone = binding.etDriverPhone.text.toString().trim()
                 val address = binding.etDriverAddress.text.toString().trim()
-
                 if (name.isEmpty() || phone.isEmpty() || address.isEmpty()) {
                     Toast.makeText(requireContext(), "Please fill all fields", Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
                 }
-
                 onSaveCallback?.invoke(name, phone, address)
                 dismiss()
             }
-
-            binding.btnDeactivate.setOnClickListener {
-                if (isCurrentlyEditing) {
-                    isCurrentlyEditing = false
-                    setFieldsEditable(false)
-                    binding.etDriverName.setText(initialName)
-                    binding.etDriverPhone.setText(initialPhone)
-                    binding.etDriverAddress.setText(initialAddress)
-                    if (status == "Inactive") {
-                        binding.btnDeactivate.text = "Activate"
-                        binding.btnDeactivate.setTextColor(Color.parseColor("#22C55E"))
-                        binding.btnDeactivate.setBackgroundResource(R.drawable.bg_btn_edit_outline_green)
-                    } else {
-                        binding.btnDeactivate.text = "Deactivate"
-                        binding.btnDeactivate.setTextColor(Color.parseColor("#EF4444"))
-                        binding.btnDeactivate.setBackgroundResource(R.drawable.bg_btn_deactivate_outline_red)
-                    }
-                } else {
-                    onDeactivateCallback?.invoke()
-                    dismiss()
-                }
-            }
-
         } else {
             binding.tvCreateDriverTitle.text = "Create Drivers"
-            binding.btnEditDriver.visibility = View.GONE
             binding.btnSubmitCreate.visibility = View.VISIBLE
             binding.layoutEditButtons.visibility = View.GONE
 
@@ -201,7 +169,6 @@ class CreateDriverBottomSheet : BottomSheetDialogFragment() {
                 val name = binding.etDriverName.text.toString().trim()
                 val phone = binding.etDriverPhone.text.toString().trim()
                 val address = binding.etDriverAddress.text.toString().trim()
-
                 if (name.isEmpty()) {
                     Toast.makeText(requireContext(), "Please enter name", Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
@@ -214,53 +181,40 @@ class CreateDriverBottomSheet : BottomSheetDialogFragment() {
                     Toast.makeText(requireContext(), "Please enter address", Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
                 }
-
                 onCreateCallback?.invoke(name, phone, address)
                 dismiss()
             }
         }
+
+        // Snapshot after seeding, then watch the fields for the dirty state.
+        initialSnapshot = driverSnapshot()
+        val watcher = object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) = refreshSaveState()
+        }
+        listOf(binding.etDriverName, binding.etDriverPhone, binding.etDriverAddress)
+            .forEach { it.addTextChangedListener(watcher) }
+        refreshSaveState()
     }
 
-    private fun setFieldsEditable(editable: Boolean) {
-        if (editable) {
-            binding.etDriverName.keyListener = originalNameKeyListener
-            binding.etDriverPhone.keyListener = originalPhoneKeyListener
-            binding.etDriverAddress.keyListener = originalAddressKeyListener
+    private fun driverSnapshot(): String =
+        listOf(binding.etDriverName, binding.etDriverPhone, binding.etDriverAddress)
+            .joinToString("|") { it.text.toString().trim() }
 
-            val editTexts = listOf(binding.etDriverName, binding.etDriverPhone, binding.etDriverAddress)
-            for (et in editTexts) {
-                et.isFocusable = true
-                et.isFocusableInTouchMode = true
-                et.isCursorVisible = true
-                et.isLongClickable = true
-            }
-
-            // Edit Mode: Solid green button with white text and white icon
-            binding.btnEditDriver.setBackgroundResource(R.drawable.bg_allocate_button_green)
-            binding.btnEditDriver.setTextColor(Color.WHITE)
-            androidx.core.content.ContextCompat.getDrawable(requireContext(), R.drawable.ic_edit_white)?.let { d ->
-                val wrapped = androidx.core.graphics.drawable.DrawableCompat.wrap(d).mutate()
-                androidx.core.graphics.drawable.DrawableCompat.setTint(wrapped, Color.WHITE)
-                binding.btnEditDriver.setCompoundDrawablesWithIntrinsicBounds(wrapped, null, null, null)
-            }
+    /** Grey + disabled Save until something changes, then green + clickable.
+     *  Only applies in edit mode; create mode's Submit is always active. */
+    private fun refreshSaveState() {
+        if (_binding == null || !isEditModeFlag) return
+        val dirty = driverSnapshot() != initialSnapshot
+        val btn = binding.btnSave
+        btn.isEnabled = dirty
+        if (dirty) {
+            btn.setBackgroundResource(R.drawable.bg_allocate_button_green)
+            btn.setTextColor(Color.WHITE)
         } else {
-            val editTexts = listOf(binding.etDriverName, binding.etDriverPhone, binding.etDriverAddress)
-            for (et in editTexts) {
-                et.keyListener = null
-                et.isFocusable = false
-                et.isFocusableInTouchMode = false
-                et.isCursorVisible = false
-                et.isLongClickable = false
-            }
-
-            // View Mode: Outlined green button with green text and green icon
-            binding.btnEditDriver.setBackgroundResource(R.drawable.bg_btn_edit_outline_green)
-            binding.btnEditDriver.setTextColor(Color.parseColor("#22C55E"))
-            androidx.core.content.ContextCompat.getDrawable(requireContext(), R.drawable.ic_edit_white)?.let { d ->
-                val wrapped = androidx.core.graphics.drawable.DrawableCompat.wrap(d).mutate()
-                androidx.core.graphics.drawable.DrawableCompat.setTint(wrapped, Color.parseColor("#22C55E"))
-                binding.btnEditDriver.setCompoundDrawablesWithIntrinsicBounds(wrapped, null, null, null)
-            }
+            btn.setBackgroundResource(R.drawable.bg_btn_disabled_grey)
+            btn.setTextColor(Color.parseColor("#9CA3AF"))
         }
     }
 
