@@ -326,7 +326,16 @@ class CollectionsFragment : Fragment() {
             null
         } else {
             withContext(Dispatchers.IO) {
-                val bytes = file.readBytes()
+                // Downscale photo proofs before upload (field networks are weak).
+                // Non-image proofs pass through untouched.
+                val isImage = (mime ?: "").startsWith("image/", ignoreCase = true)
+                val upload = if (isImage) {
+                    com.manjugroups.m_connect.util.ImageCompressor.compress(file)
+                } else {
+                    file
+                }
+                val bytes = upload.readBytes()
+                if (upload !== file) runCatching { upload.delete() }
                 val resp = storage.uploadStorageFile(
                     token = session.bearerToken,
                     body = bytes.toRequestBody((mime ?: "application/octet-stream").toMediaTypeOrNull()),

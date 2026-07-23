@@ -300,8 +300,10 @@ class AgencyDriverTripActionSheet : BottomSheetDialogFragment() {
             return result.storageId
                 ?: throw IllegalStateException(result.errorMessage ?: "Failed to upload photo")
         }
-        val body = file.asRequestBody("image/jpeg".toMediaType())
+        val upload = com.manjugroups.m_connect.util.ImageCompressor.compress(file)
+        val body = upload.asRequestBody("image/jpeg".toMediaType())
         val res = api.uploadStorageFile(session.bearerToken, body)
+        if (upload !== file) runCatching { upload.delete() }
         return res.storageId
             ?: throw IllegalStateException(res.error ?: "Failed to upload photo")
     }

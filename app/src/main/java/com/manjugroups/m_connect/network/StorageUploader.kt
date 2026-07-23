@@ -1,6 +1,9 @@
 package com.manjugroups.m_connect.network
 
+import com.manjugroups.m_connect.util.ImageCompressor
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.asRequestBody
 import retrofit2.HttpException
@@ -33,36 +36,57 @@ object StorageUploader {
         file: File,
         attempts: Int = 3,
         contentType: String = "image/jpeg",
+        // Photos are downscaled before upload to spare field networks; set false
+        // for the rare case a caller needs the exact original bytes preserved.
+        compressImages: Boolean = true,
     ): Result {
-        var lastError: String? = null
-        repeat(attempts) { attempt ->
-            try {
-                val mime = runCatching { contentType.toMediaType() }.getOrNull()
-                    ?: "application/octet-stream".toMediaType()
-                val body = file.asRequestBody(mime)
-                val response = api.uploadStorageFile(token, body)
-                val id = response.storageId
-                if (!id.isNullOrBlank()) return Result(id, null)
-                lastError = response.error ?: "Server did not return a file ID."
-            } catch (e: HttpException) {
-                if (e.code() in 400..499) {
-                    val message = when (e.code()) {
-                        401 -> "Session expired. Please log in again."
-                        413 -> "Photo is too large."
-                        else -> "Upload rejected (HTTP ${e.code()})."
-                    }
-                    return Result(null, message)
-                }
-                lastError = "Server error (HTTP ${e.code()})."
-            } catch (e: SocketTimeoutException) {
-                lastError = "Connection timed out."
-            } catch (e: IOException) {
-                lastError = "Network error. Check your connection."
-            } catch (e: Exception) {
-                lastError = e.message ?: "Unexpected error."
-            }
-            if (attempt < attempts - 1) delay(1500L * (attempt + 1))
+        // Shrink photos once, up front — never per retry. Only image content is
+        // touched (PDFs / other docs pass through). Compression is best-effort:
+        // ImageCompressor returns the original on any failure. A distinct temp is
+        // deleted after the upload; the caller's own file is never removed.
+        val isImage = contentType.startsWith("image/", ignoreCase = true)
+        val uploadFile = if (compressImages && isImage) {
+            runCatching { withContext(Dispatchers.IO) { ImageCompressor.compress(file) } }
+                .getOrDefault(file)
+        } else {
+            file
         }
-        return Result(null, lastError)
+        val ownsTemp = uploadFile !== file
+
+        var lastError: String? = null
+        try {
+            repeat(attempts) { attempt ->
+                try {
+                    val mime = runCatching { contentType.toMediaType() }.getOrNull()
+                        ?: "application/octet-stream".toMediaType()
+                    val body = uploadFile.asRequestBody(mime)
+                    val response = api.uploadStorageFile(token, body)
+                    val id = response.storageId
+                    if (!id.isNullOrBlank()) return Result(id, null)
+                    lastError = response.error ?: "Server did not return a file ID."
+                } catch (e: HttpException) {
+                    if (e.code() in 400..499) {
+                        val message = when (e.code()) {
+                            401 -> "Session expired. Please log in again."
+                            413 -> "Photo is too large."
+                            else -> "Upload rejected (HTTP ${e.code()})."
+                        }
+                        return Result(null, message)
+                    }
+                    lastError = "Server error (HTTP ${e.code()})."
+                } catch (e: SocketTimeoutException) {
+                    lastError = "Connection timed out."
+                } catch (e: IOException) {
+                    lastError = "Network error. Check your connection."
+                } catch (e: Exception) {
+                    lastError = e.message ?: "Unexpected error."
+                }
+                if (attempt < attempts - 1) delay(1500L * (attempt + 1))
+            }
+            return Result(null, lastError)
+        } finally {
+            // Clean up only the compressed temp we created, never the caller's file.
+            if (ownsTemp) runCatching { uploadFile.delete() }
+        }
     }
 }
