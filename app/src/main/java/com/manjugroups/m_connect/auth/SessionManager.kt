@@ -247,6 +247,31 @@ class SessionManager(context: Context) {
             (department ?: "").trim().equals("Administration", ignoreCase = true)
 
     /**
+     * A non-driver MANAGER in the fleet-owning departments (Transport /
+     * Administration) — e.g. "Assistant Manager • Transport". They run the
+     * fleet dispatch, sitting above Driver • Administration. Drivers are
+     * excluded (they drive, not dispatch).
+     */
+    private fun isFleetManagerDesignation(): Boolean {
+        val dept = (department ?: "").trim().lowercase(java.util.Locale.US)
+        val desig = (designation ?: "").trim().lowercase(java.util.Locale.US)
+        val fleetDept = dept == "transport" || dept == "administration"
+        return fleetDept && !isDriverDesignation(designation) && desig.contains("manager")
+    }
+
+    /**
+     * Extra capability for a fleet MANAGER (not a plain Driver • Administration
+     * dispatcher): allot to external agencies AND assign the agency's own
+     * drivers + vehicles — the travel-desk dispatcher powers, from inside MMS.
+     * Gated on the manager designation or an explicit fleet permission.
+     */
+    val canAssignAgencyResources: Boolean
+        get() = !isExternalFleetPrincipal &&
+            (isFleetManagerDesignation() ||
+                iamPermissions.contains("marketing.fleet.assign") ||
+                iamPermissions.contains("marketing.fleet.manageVehicles"))
+
+    /**
      * Who gets the internal fleet-dispatch Home (the Pending / Assigned /
      * Completed allocation queue). Two populations:
      *   1. Driver • Administration by designation ([isFleetAdminDriver]).
@@ -271,6 +296,10 @@ class SessionManager(context: Context) {
             // driver's own-trips Home instead.
             if (isDriverMode) return false
             if (canViewVpDashboard()) return false
+            // A non-driver MANAGER in the Transport / Administration department
+            // runs the fleet — they sit above Driver • Administration, so they
+            // get the dispatch by designation even before an IAM key is granted.
+            if (isFleetManagerDesignation()) return true
             return iamPermissions.contains("marketing.fleet.assign") ||
                 iamPermissions.contains("marketing.fleet.view")
         }
