@@ -2252,7 +2252,7 @@ class HomeFragment : Fragment() {
         val siteVisitId = trip.id?.takeIf { it.isNotBlank() } ?: return
         viewLifecycleOwner.lifecycleScope.launch {
             val resp = runCatching {
-                fleetApi.unallocate(
+                fleetApi.unassignMms(
                     session.bearerToken,
                     com.manjugroups.m_connect.network.TravelDeskDriverTripRequest(siteVisitId),
                 )

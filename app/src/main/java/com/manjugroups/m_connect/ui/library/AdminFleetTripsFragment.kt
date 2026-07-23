@@ -304,10 +304,11 @@ class AdminFleetTripsFragment : Fragment() {
         allocateJob?.cancel()
         allocateJob = viewLifecycleOwner.lifecycleScope.launch {
             val resp = runCatching {
-                api.unallocate(
-                    token,
-                    com.manjugroups.m_connect.network.TravelDeskDriverTripRequest(trip.id),
-                )
+                val body = com.manjugroups.m_connect.network.TravelDeskDriverTripRequest(trip.id)
+                // MMS internal fleet unassigns via the staff-token dispatch
+                // route; the travel-desk /unallocate only accepts an agency
+                // session and 401s for staff.
+                if (useMmsFleet) api.unassignMms(token, body) else api.unallocate(token, body)
             }.getOrNull()
             if (_binding == null) return@launch
             if (resp?.success == true) {

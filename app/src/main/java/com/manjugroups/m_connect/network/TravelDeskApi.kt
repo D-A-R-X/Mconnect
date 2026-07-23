@@ -200,6 +200,14 @@ interface TravelDeskApi {
         @Body body: AllotAgencyRequest
     ): TravelDeskAllocateResponse
 
+    // Unassign an MFPL/agency-allotted trip (staff token). NOT the travel-desk
+    // /trips/unallocate route — that only accepts an agency session.
+    @POST("api/mms-fleet/dispatch/unassign")
+    suspend fun unassignMms(
+        @Header("Authorization") token: String,
+        @Body body: TravelDeskDriverTripRequest
+    ): TravelDeskAllocateResponse
+
     @GET("api/mms-fleet/dispatch/drivers")
     suspend fun listMmsDrivers(
         @Header("Authorization") token: String
