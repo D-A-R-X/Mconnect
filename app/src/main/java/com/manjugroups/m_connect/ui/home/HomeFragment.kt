@@ -2037,7 +2037,7 @@ class HomeFragment : Fragment() {
                 fleetError = null
                 // Rows with no id can't be opened or allocated; drop them
                 // rather than let one odd record break the screen.
-                fleetPending = pending.rows.filter { !it.id.isNullOrBlank() }
+                val pendingRows = pending.rows.filter { !it.id.isNullOrBlank() }
                 val assignedRows = assigned.rows.filter { !it.id.isNullOrBlank() }
                 // A dispatch trip is done when the driver has ended it
                 // (travelDeskEndedAt), the same signal the backend's "complete"
@@ -2049,8 +2049,9 @@ class HomeFragment : Fragment() {
                         (t.status ?: "").equals("completed", ignoreCase = true)
                 }
                 // A trip that was never started and whose slot has passed is
-                // expired — it can't run, so it shouldn't sit in Assigned as if
-                // it were still live. It moves to the Completed tab, badged.
+                // expired — it can't run, so it shouldn't sit in Assigned (or
+                // Pending) as if it were still live. It moves to the Completed
+                // tab, badged "Expired", and loses the Allocate action.
                 val isExpired = { t: com.manjugroups.m_connect.network.TravelDeskTrip ->
                     !isDone(t) && t.travelDeskStartedAt == null &&
                         com.manjugroups.m_connect.util.VisitExpiry.isExpired(
@@ -2058,8 +2059,11 @@ class HomeFragment : Fragment() {
                             isDone = false,
                         )
                 }
+                // Expired pending trips are terminal too — drop them from Pending
+                // (no Allocate) and reclassify into Completed with the Expired badge.
+                fleetPending = pendingRows.filterNot(isExpired)
                 fleetAssigned = assignedRows.filterNot(isDone).filterNot(isExpired)
-                fleetExpired = assignedRows.filter(isExpired)
+                fleetExpired = assignedRows.filter(isExpired) + pendingRows.filter(isExpired)
                 fleetCompleted = assignedRows.filter(isDone) + fleetExpired
                 fleetVehicles = vehicles.rows
                 fleetAgencies = agencies.filter {
