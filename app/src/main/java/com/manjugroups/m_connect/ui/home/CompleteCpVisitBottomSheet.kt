@@ -33,6 +33,7 @@ import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.BookingExchangeSource
+import com.manjugroups.m_connect.util.ongoingOnly
 import com.manjugroups.m_connect.network.BookingPlotPrefillResponse
 import com.manjugroups.m_connect.network.ClientProfile
 import com.manjugroups.m_connect.network.ConvertCpVisitToSiteVisitRequest
@@ -1666,7 +1667,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
 
         // ---- Site Visit interactions ----
         view?.findViewById<View>(R.id.rowSvProject)?.setOnClickListener { pickSvProject() }
-        view?.findViewById<View>(R.id.rowSvDate)?.setOnClickListener { pickDate(tvSvDate, "dd-MM-yyyy") }
+        view?.findViewById<View>(R.id.rowSvDate)?.setOnClickListener { openSvDatePicker() }
         view?.findViewById<View>(R.id.rowSvTime)?.setOnClickListener { pickTime(tvSvTime) }
 
         view?.findViewById<View>(R.id.rowSvIncharge)?.setOnClickListener {
@@ -3977,7 +3978,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         SearchableSelectionDialog.show(
             context = requireContext(),
             title = "Select project",
-            options = items.map { p ->
+            // Site visits are scheduled only against ongoing projects.
+            options = items.ongoingOnly().map { p ->
                 SearchableOption(
                     item = p,
                     title = p.name ?: "Unnamed project",

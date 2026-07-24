@@ -321,7 +321,10 @@ class AdminFleetVehiclesFragment : Fragment() {
             fun bind(item: VehicleItem) {
                 binding.root.setOnClickListener { onItemClick(item) }
                 binding.tvVehiclePlate.text = item.plateNumber
-                binding.tvVehicleName.text = "${item.name} / ${item.capacity} / ${item.fuelType}"
+                // Third slot is the model year (was a hardcoded "—" fuel-type
+                // placeholder, so a saved year like 2020 never appeared).
+                val year = item.modelYear.takeIf { it.isNotBlank() } ?: "—"
+                binding.tvVehicleName.text = "${item.name} / ${item.capacity} / $year"
                 binding.tvDriverName.text = item.driverName
                 binding.tvDriverPhone.text = item.driverPhone
                 binding.tvVehicleStatus.text = item.status

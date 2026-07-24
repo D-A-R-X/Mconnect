@@ -1505,8 +1505,10 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
 
     private suspend fun uploadArrivalPhoto(file: File): String? = withContext(Dispatchers.IO) {
         try {
-            val body = file.asRequestBody("image/jpeg".toMediaType())
+            val upload = com.manjugroups.m_connect.util.ImageCompressor.compress(file)
+            val body = upload.asRequestBody("image/jpeg".toMediaType())
             val resp = api.uploadStorageFile(session.bearerToken, body)
+            if (upload !== file) runCatching { upload.delete() }
             resp.storageId
         } catch (e: Exception) {
             android.util.Log.w("TripNav", "Arrival photo upload failed", e)

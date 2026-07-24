@@ -444,8 +444,14 @@ class TaskUpdateBottomSheet : BottomSheetDialogFragment() {
                 FileOutputStream(tmp).use { out -> input.copyTo(out) }
             } ?: return@withContext null
             val mime = ctx.contentResolver.getType(uri) ?: "image/jpeg"
-            val body = tmp.asRequestBody(mime.toMediaTypeOrNull())
+            val upload = if (mime.startsWith("image/", ignoreCase = true)) {
+                com.manjugroups.m_connect.util.ImageCompressor.compress(tmp)
+            } else {
+                tmp
+            }
+            val body = upload.asRequestBody(mime.toMediaTypeOrNull())
             val resp = api.uploadStorageFile(bearer, body)
+            if (upload !== tmp) runCatching { upload.delete() }
             tmp.delete()
             val sid = resp.storageId ?: return@withContext null
             TaskUpdateImage(storageId = sid, url = null, name = tmp.name)

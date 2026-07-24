@@ -139,8 +139,13 @@ class AgencyDriverTripsFragment : Fragment() {
             val trips = runCatching {
                 api.listDriverTrips(session.bearerToken)
             }.getOrNull()
-            binding.swipeDriverTrips.isRefreshing = false
+            // The fetch suspends; the view can be torn down while it's in flight
+            // — e.g. the driver finishes ending a trip, the end sheet dismisses
+            // and pops this fragment. Bail BEFORE touching the binding: reading
+            // it (_binding!!) after the view is destroyed is an NPE crash. The
+            // guard used to sit one line below this access, so it never helped.
             if (_binding == null) return@launch
+            binding.swipeDriverTrips.isRefreshing = false
             allTrips = trips?.rows.orEmpty().filter { !it.id.isNullOrBlank() }
             render()
         }

@@ -304,10 +304,11 @@ class AdminFleetTripsFragment : Fragment() {
         allocateJob?.cancel()
         allocateJob = viewLifecycleOwner.lifecycleScope.launch {
             val resp = runCatching {
-                api.unallocate(
-                    token,
-                    com.manjugroups.m_connect.network.TravelDeskDriverTripRequest(trip.id),
-                )
+                val body = com.manjugroups.m_connect.network.TravelDeskDriverTripRequest(trip.id)
+                // MMS internal fleet unassigns via the staff-token dispatch
+                // route; the travel-desk /unallocate only accepts an agency
+                // session and 401s for staff.
+                if (useMmsFleet) api.unassignMms(token, body) else api.unallocate(token, body)
             }.getOrNull()
             if (_binding == null) return@launch
             if (resp?.success == true) {
@@ -630,6 +631,11 @@ class AdminFleetTripsFragment : Fragment() {
         var endKm: Double? = null,
         var startPhotoId: String? = null,
         var endPhotoId: String? = null,
+        // An external-agency allotment vs the in-house (Internal / MFPL) fleet.
+        // Drives the manage sheet's wording — an agency trip is removed with
+        // "Remove agency", not "Remove driver".
+        var external: Boolean = false,
+        var agencyName: String? = null,
     )
 
     private class AdminTripsAdapter(

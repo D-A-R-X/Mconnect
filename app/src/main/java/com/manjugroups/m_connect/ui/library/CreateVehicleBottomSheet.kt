@@ -28,6 +28,18 @@ class CreateVehicleBottomSheet : BottomSheetDialogFragment() {
     private var originalAgencyKeyListener: KeyListener? = null
 
     companion object {
+        // Same option sets as the web Travel Desk vehicle form
+        // (features/fleet/types.ts VEHICLE_MAKES / VEHICLE_TYPES).
+        private val VEHICLE_MAKES = listOf(
+            "Maruti Suzuki", "Mahindra", "Toyota", "Hyundai", "Tata", "Kia",
+            "Honda", "MG", "Renault", "Nissan", "Volkswagen", "Skoda", "Ford",
+            "Force", "Isuzu", "Other",
+        )
+        private val VEHICLE_TYPES = listOf(
+            "Hatchback", "Sedan", "SUV", "MUV", "Van", "Tempo Traveller",
+            "Bus", "Pickup", "Other",
+        )
+
         private const val ARG_IS_EDIT_MODE = "arg_is_edit_mode"
         private const val ARG_PLATE = "arg_plate"
         private const val ARG_MAKE = "arg_make"
@@ -126,6 +138,12 @@ class CreateVehicleBottomSheet : BottomSheetDialogFragment() {
             it.elevation = 0f
             it.background = null
             it.setBackgroundColor(Color.TRANSPARENT)
+            // Give the sheet a bounded (tall) height so the root's match_parent
+            // resolves and the footer Save can pin to the bottom while the
+            // fields scroll. Without a fixed height a wrap_content sheet lets
+            // the footer scroll away with the content.
+            val screenH = resources.displayMetrics.heightPixels
+            it.layoutParams = it.layoutParams.apply { height = (screenH * 0.92f).toInt() }
             // Expand + lock so the keyboard can't snap the sheet to a peek
             // state mid-edit.
             val behavior = com.google.android.material.bottomsheet.BottomSheetBehavior.from(it)
@@ -134,16 +152,21 @@ class CreateVehicleBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
+    private var isEditModeFlag = false
+    private var initialSnapshot = ""
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        // Save original key listeners
-        originalVehicleNumberKeyListener = binding.etVehicleNumber.keyListener
-        originalVehicleTypeKeyListener = binding.etVehicleType.keyListener
-        originalCapacityKeyListener = binding.etCapacity.keyListener
-        originalDriverNameKeyListener = binding.etDriverName.keyListener
-        originalDriverPhoneKeyListener = binding.etDriverPhone.keyListener
-        originalAgencyKeyListener = binding.etAgency.keyListener
+        // No explicit Edit action — the form is directly editable. The old
+        // Edit button stays GONE.
+        binding.btnEditVehicle.visibility = View.GONE
+        binding.layoutEditButtons.visibility = View.GONE
+
+        // Make + Vehicle Type are dropdowns (same option sets as the web
+        // Travel Desk vehicle form). "Other" turns the field into free text.
+        setupChoiceField(binding.etMake, "Select make", VEHICLE_MAKES)
+        setupChoiceField(binding.etVehicleType, "Select vehicle type", VEHICLE_TYPES)
 
         // WhatsApp "same as mobile": disable + mirror the mobile field.
         fun applyWhatsappSame(checked: Boolean) {
@@ -156,6 +179,7 @@ class CreateVehicleBottomSheet : BottomSheetDialogFragment() {
         applyWhatsappSame(binding.cbWhatsappSameAsMobile.isChecked)
         binding.cbWhatsappSameAsMobile.setOnCheckedChangeListener { _, checked ->
             applyWhatsappSame(checked)
+            refreshSaveState()
         }
         binding.etDriverPhone.addTextChangedListener(object : android.text.TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
@@ -175,119 +199,48 @@ class CreateVehicleBottomSheet : BottomSheetDialogFragment() {
         binding.tvLabelPhone.text = Html.fromHtml("Phone Number <font color='#EF4444'>*</font>")
         binding.tvLabelAgency.text = Html.fromHtml("Agency <font color='#EF4444'>*</font>")
 
-        val isEditMode = arguments?.getBoolean(ARG_IS_EDIT_MODE, false) ?: false
-        if (isEditMode) {
-            // View/Edit Details Mode
+        isEditModeFlag = arguments?.getBoolean(ARG_IS_EDIT_MODE, false) ?: false
+        if (isEditModeFlag) {
+            // Edit / details mode — fields pre-filled and directly editable.
             binding.tvCreateVehicleTitle.text = "Vehicle Details"
-            binding.btnEditVehicle.visibility = View.VISIBLE
-            
-            // View Mode Initially: show Close button, hide Edit Buttons
-            binding.btnSubmitCreate.visibility = View.VISIBLE
-            binding.btnSubmitCreate.text = "Close"
-            binding.layoutEditButtons.visibility = View.GONE
 
-            val initialPlate = arguments?.getString(ARG_PLATE) ?: ""
-            val initialMake = arguments?.getString(ARG_MAKE) ?: ""
-            val initialModel = arguments?.getString(ARG_MODEL) ?: ""
-            val initialModelYear = arguments?.getString(ARG_MODEL_YEAR) ?: ""
-            val initialType = arguments?.getString(ARG_TYPE) ?: ""
-            val initialCapacity = arguments?.getString(ARG_CAPACITY) ?: ""
-            val initialName = arguments?.getString(ARG_NAME) ?: ""
-            val initialPhone = arguments?.getString(ARG_PHONE) ?: ""
+            binding.etVehicleNumber.setText(arguments?.getString(ARG_PLATE) ?: "")
+            binding.etMake.setText(arguments?.getString(ARG_MAKE) ?: "")
+            binding.etModel.setText(arguments?.getString(ARG_MODEL) ?: "")
+            binding.etModelYear.setText(arguments?.getString(ARG_MODEL_YEAR) ?: "")
+            binding.etVehicleType.setText(arguments?.getString(ARG_TYPE) ?: "")
+            binding.etCapacity.setText(arguments?.getString(ARG_CAPACITY) ?: "")
+            binding.etDriverName.setText(arguments?.getString(ARG_NAME) ?: "")
+            binding.etDriverPhone.setText(arguments?.getString(ARG_PHONE) ?: "")
             val initialWhatsapp = arguments?.getString(ARG_WHATSAPP) ?: ""
-            val initialAgency = arguments?.getString(ARG_AGENCY) ?: ""
-
-            binding.etVehicleNumber.setText(initialPlate)
-            binding.etMake.setText(initialMake)
-            binding.etModel.setText(initialModel)
-            binding.etModelYear.setText(initialModelYear)
-            binding.etVehicleType.setText(initialType)
-            binding.etCapacity.setText(initialCapacity)
-            binding.etDriverName.setText(initialName)
-            binding.etDriverPhone.setText(initialPhone)
+            val initialPhone = arguments?.getString(ARG_PHONE) ?: ""
             binding.etDriverWhatsapp.setText(initialWhatsapp)
-            binding.etAgency.setText(initialAgency)
-            // If a WhatsApp differs from the mobile, un-tick "same as mobile".
+            binding.etAgency.setText(arguments?.getString(ARG_AGENCY) ?: "")
             binding.cbWhatsappSameAsMobile.isChecked =
                 initialWhatsapp.isBlank() || initialWhatsapp == initialPhone
 
-            setFieldsEditable(false)
-
-            var isCurrentlyEditing = false
-
+            // The Save bar is the fixed footer: grey + disabled until something
+            // changes, then green + clickable.
+            binding.btnSubmitCreate.text = "Save Changes"
             binding.btnSubmitCreate.setOnClickListener {
-                dismiss() // This acts as Close button in View Mode
-            }
-
-            binding.btnEditVehicle.setOnClickListener {
-                isCurrentlyEditing = true
-                setFieldsEditable(true)
-                // Hide Close button, show Edit buttons (Cancel / Save)
-                binding.btnSubmitCreate.visibility = View.GONE
-                binding.layoutEditButtons.visibility = View.VISIBLE
-                
-                binding.btnDeactivate.text = "Cancel"
-                binding.btnDeactivate.setTextColor(Color.parseColor("#EF4444"))
-                binding.btnDeactivate.setBackgroundResource(R.drawable.bg_btn_deactivate_outline_red)
-            }
-
-            binding.btnSave.setOnClickListener {
-                if (!isCurrentlyEditing) return@setOnClickListener
-                val result = collectForm()
-                if (result == null) {
+                if (formSnapshot() == initialSnapshot) return@setOnClickListener
+                val result = collectForm() ?: run {
                     Toast.makeText(requireContext(), "Please fill all required fields", Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
                 }
                 onSaveCallback?.invoke(result)
                 dismiss()
             }
-
-            binding.btnDeactivate.setOnClickListener {
-                if (isCurrentlyEditing) {
-                    isCurrentlyEditing = false
-                    setFieldsEditable(false)
-                    binding.etVehicleNumber.setText(initialPlate)
-                    binding.etMake.setText(initialMake)
-                    binding.etModel.setText(initialModel)
-                    binding.etModelYear.setText(initialModelYear)
-                    binding.etVehicleType.setText(initialType)
-                    binding.etCapacity.setText(initialCapacity)
-                    binding.etDriverName.setText(initialName)
-                    binding.etDriverPhone.setText(initialPhone)
-                    binding.etDriverWhatsapp.setText(initialWhatsapp)
-                    binding.etAgency.setText(initialAgency)
-                    
-                    // Show Close button, hide Edit buttons (Cancel / Save)
-                    binding.btnSubmitCreate.visibility = View.VISIBLE
-                    binding.layoutEditButtons.visibility = View.GONE
-                }
-            }
         } else {
-            // Create Mode: all fields are empty/cleared by default
+            // Create mode — empty fields, always-active Submit.
             binding.tvCreateVehicleTitle.text = "Create Vehicle"
-            binding.btnEditVehicle.visibility = View.GONE
-            binding.btnSubmitCreate.visibility = View.VISIBLE
-            binding.layoutEditButtons.visibility = View.GONE
-
-            binding.etVehicleNumber.setText("")
-            binding.etMake.setText("")
-            binding.etModel.setText("")
-            binding.etModelYear.setText("")
-            binding.etVehicleType.setText("")
-            binding.etCapacity.setText("")
-            binding.etDriverName.setText("")
-            binding.etDriverPhone.setText("")
-            binding.etDriverWhatsapp.setText("")
-
-            binding.btnSubmitCreate.setOnClickListener {
-                validateAndSubmit()
-            }
+            binding.btnSubmitCreate.text = "Submit"
+            binding.btnSubmitCreate.setOnClickListener { validateAndSubmit() }
         }
 
         // Lock the Agency field when a fixed agency was passed in (mobile
         // path: the logged-in external-fleet agency is creating the vehicle
-        // for themselves). Applied AFTER the create-mode setup so its
-        // setText("") doesn't wipe the value we just locked.
+        // for themselves).
         val fixedAgency = arguments?.getString(ARG_FIXED_AGENCY)?.takeIf { it.isNotBlank() }
         if (fixedAgency != null) {
             binding.etAgency.setText(fixedAgency)
@@ -298,56 +251,84 @@ class CreateVehicleBottomSheet : BottomSheetDialogFragment() {
             binding.etAgency.isLongClickable = false
             binding.etAgency.alpha = 0.7f
         }
+
+        // Snapshot the starting state AFTER all fields are seeded, then watch
+        // every field so the Save bar reflects "has anything changed".
+        initialSnapshot = formSnapshot()
+        attachDirtyWatchers()
+        refreshSaveState()
     }
 
-    private fun setFieldsEditable(editable: Boolean) {
-        val editTexts = listOf(
-            binding.etVehicleNumber,
-            binding.etVehicleType,
-            binding.etCapacity,
-            binding.etDriverName,
-            binding.etDriverPhone,
-            binding.etAgency
-        )
-        if (editable) {
-            binding.etVehicleNumber.keyListener = originalVehicleNumberKeyListener
-            binding.etVehicleType.keyListener = originalVehicleTypeKeyListener
-            binding.etCapacity.keyListener = originalCapacityKeyListener
-            binding.etDriverName.keyListener = originalDriverNameKeyListener
-            binding.etDriverPhone.keyListener = originalDriverPhoneKeyListener
-            binding.etAgency.keyListener = originalAgencyKeyListener
+    /** All the fields whose text feeds the dirty check. */
+    private fun editableFields() = listOf(
+        binding.etVehicleNumber, binding.etMake, binding.etModel,
+        binding.etModelYear, binding.etVehicleType, binding.etCapacity,
+        binding.etDriverName, binding.etDriverPhone, binding.etDriverWhatsapp,
+    )
 
-            for (et in editTexts) {
-                et.isFocusable = true
-                et.isFocusableInTouchMode = true
-                et.isCursorVisible = true
-                et.isLongClickable = true
-            }
+    private fun formSnapshot(): String =
+        editableFields().joinToString("|") { it.text.toString().trim() } +
+            "|wa=" + binding.cbWhatsappSameAsMobile.isChecked
 
-            // Edit Mode: Solid green button with white text and white icon
-            binding.btnEditVehicle.setBackgroundResource(R.drawable.bg_allocate_button_green)
-            binding.btnEditVehicle.setTextColor(Color.WHITE)
-            androidx.core.content.ContextCompat.getDrawable(requireContext(), R.drawable.ic_edit_white)?.let { d ->
-                val wrapped = androidx.core.graphics.drawable.DrawableCompat.wrap(d).mutate()
-                androidx.core.graphics.drawable.DrawableCompat.setTint(wrapped, Color.WHITE)
-                binding.btnEditVehicle.setCompoundDrawablesWithIntrinsicBounds(wrapped, null, null, null)
-            }
+    private fun attachDirtyWatchers() {
+        val watcher = object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) = refreshSaveState()
+        }
+        editableFields().forEach { it.addTextChangedListener(watcher) }
+    }
+
+    /** Grey + disabled when nothing changed; green + clickable once it has.
+     *  Create mode keeps the Submit button always active. */
+    private fun refreshSaveState() {
+        if (_binding == null) return
+        val btn = binding.btnSubmitCreate
+        if (!isEditModeFlag) {
+            btn.isEnabled = true
+            btn.setBackgroundResource(R.drawable.bg_allocate_button_green)
+            btn.setTextColor(Color.WHITE)
+            return
+        }
+        val dirty = formSnapshot() != initialSnapshot
+        btn.isEnabled = dirty
+        if (dirty) {
+            btn.setBackgroundResource(R.drawable.bg_allocate_button_green)
+            btn.setTextColor(Color.WHITE)
         } else {
-            for (et in editTexts) {
-                et.keyListener = null
-                et.isFocusable = false
-                et.isFocusableInTouchMode = false
-                et.isCursorVisible = false
-                et.isLongClickable = false
-            }
+            btn.setBackgroundResource(R.drawable.bg_btn_disabled_grey)
+            btn.setTextColor(Color.parseColor("#9CA3AF"))
+        }
+    }
 
-            // View Mode: Outlined green button with green text and green icon
-            binding.btnEditVehicle.setBackgroundResource(R.drawable.bg_btn_edit_outline_green)
-            binding.btnEditVehicle.setTextColor(Color.parseColor("#22C55E"))
-            androidx.core.content.ContextCompat.getDrawable(requireContext(), R.drawable.ic_edit_white)?.let { d ->
-                val wrapped = androidx.core.graphics.drawable.DrawableCompat.wrap(d).mutate()
-                androidx.core.graphics.drawable.DrawableCompat.setTint(wrapped, Color.parseColor("#22C55E"))
-                binding.btnEditVehicle.setCompoundDrawablesWithIntrinsicBounds(wrapped, null, null, null)
+    /**
+     * Turn an EditText into a tap-to-pick dropdown backed by [options]. Picking
+     * "Other" converts it to a free-text field (drops the chevron) so a make /
+     * type outside the list can still be entered — mirrors the web form.
+     */
+    private fun setupChoiceField(field: android.widget.EditText, title: String, options: List<String>) {
+        field.setOnClickListener {
+            com.manjugroups.m_connect.ui.common.SearchableSelectionDialog.show(
+                context = requireContext(),
+                title = title,
+                options = options.map {
+                    com.manjugroups.m_connect.ui.common.SearchableOption(item = it, title = it)
+                },
+            ) { picked ->
+                if (picked == "Other") {
+                    field.setOnClickListener(null)
+                    field.isFocusableInTouchMode = true
+                    field.isFocusable = true
+                    field.isCursorVisible = true
+                    field.keyListener = android.text.method.TextKeyListener.getInstance()
+                    field.setCompoundDrawablesWithIntrinsicBounds(
+                        field.compoundDrawablesRelative[0], null, null, null,
+                    )
+                    field.setText("")
+                    field.requestFocus()
+                } else {
+                    field.setText(picked)
+                }
             }
         }
     }

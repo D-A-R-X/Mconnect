@@ -19,6 +19,7 @@ import com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
+import com.manjugroups.m_connect.util.ongoingOnly
 import com.manjugroups.m_connect.network.CreateBookingRequest
 import com.manjugroups.m_connect.network.InventoryUnit
 import com.manjugroups.m_connect.network.MarketingProject
@@ -224,7 +225,7 @@ class BookingCreateFragment : Fragment() {
                 }
                 // Bookings are only made against ongoing projects (matches the
                 // web's "Ongoing" = status == "ongoing").
-                val projects = resp.projects.filter { it.status?.trim()?.lowercase() == "ongoing" }
+                val projects = resp.projects.ongoingOnly()
                 if (projects.isEmpty()) {
                     toast("No ongoing projects available")
                     return@launch

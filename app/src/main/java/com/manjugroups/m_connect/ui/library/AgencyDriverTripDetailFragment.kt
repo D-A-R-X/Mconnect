@@ -80,6 +80,21 @@ class AgencyDriverTripDetailFragment : Fragment(), OnMapReadyCallback {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
+        // The app draws edge-to-edge, so pad the header down by the status-bar
+        // inset — otherwise the "Trip Details" title slides up under the system
+        // bar (this screen never applied the inset, unlike the trips list).
+        val basePaddingTop = binding.detailHeaderBar.paddingTop
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(
+            binding.detailHeaderBar,
+        ) { v, insets ->
+            val top = insets.getInsets(
+                androidx.core.view.WindowInsetsCompat.Type.statusBars(),
+            ).top
+            v.setPadding(v.paddingLeft, basePaddingTop + top, v.paddingRight, v.paddingBottom)
+            insets
+        }
+        androidx.core.view.ViewCompat.requestApplyInsets(binding.detailHeaderBar)
+
         binding.tvDetailTitle.text = title.ifBlank { "Site visit" }
         binding.tvDetailWhen.text = whenText
         binding.tvDetailAddress.text = address.ifBlank { "No address" }

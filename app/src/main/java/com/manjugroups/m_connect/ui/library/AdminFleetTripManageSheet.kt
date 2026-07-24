@@ -35,7 +35,13 @@ class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
                 .findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
             sheet?.let {
                 it.setBackgroundResource(android.R.color.transparent)
+                // The host defaults to match_parent, so an EXPANDED sheet leaves
+                // a white gap below short content. Wrap it to the content height.
+                it.layoutParams = it.layoutParams.apply {
+                    height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+                }
                 BottomSheetBehavior.from(it).apply {
+                    isFitToContents = true
                     state = BottomSheetBehavior.STATE_EXPANDED
                     skipCollapsed = true
                 }
@@ -59,8 +65,13 @@ class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
                 ?.let { "Site visit" } ?: "Site visit"
         view.findViewById<TextView>(R.id.tvManageWhen).text = t.time
         view.findViewById<TextView>(R.id.tvManageAddress).text = t.address
-        view.findViewById<TextView>(R.id.tvManageVehicle).text =
-            t.allocatedVehicle?.let { "Vehicle: $it" } ?: "Vehicle assigned"
+        // Name the source. An external-agency trip has no MFPL vehicle — the
+        // agency provides the cab — so "Vehicle assigned" was misleading there.
+        view.findViewById<TextView>(R.id.tvManageVehicle).text = when {
+            t.external -> t.agencyName?.let { "External · $it" } ?: "External agency"
+            t.allocatedVehicle != null -> "Internal · ${t.allocatedVehicle}"
+            else -> "Vehicle assigned"
+        }
         view.findViewById<TextView>(R.id.tvManageDriver).text = when {
             t.driverName != null && t.driverPhone != null -> "${t.driverName} · ${t.driverPhone}"
             t.driverName != null -> t.driverName!!
@@ -89,13 +100,22 @@ class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
         } else {
             actions.visibility = View.VISIBLE
             note.visibility = View.GONE
-            view.findViewById<View>(R.id.btnManageReassign).setOnClickListener {
-                onReassign?.invoke()
-                dismissAllowingStateLoss()
+            // An external agency allotment is removed with "Remove agency" (it
+            // clears the agency and drops the SV back to Pending), not "Remove
+            // driver" — there's no in-house driver on it to remove.
+            view.findViewById<android.widget.Button>(R.id.btnManageReassign).apply {
+                text = if (t.external) "Change agency" else "Reassign"
+                setOnClickListener {
+                    onReassign?.invoke()
+                    dismissAllowingStateLoss()
+                }
             }
-            view.findViewById<View>(R.id.btnManageRemove).setOnClickListener {
-                onRemove?.invoke()
-                dismissAllowingStateLoss()
+            view.findViewById<android.widget.Button>(R.id.btnManageRemove).apply {
+                text = if (t.external) "Remove agency" else "Remove driver"
+                setOnClickListener {
+                    onRemove?.invoke()
+                    dismissAllowingStateLoss()
+                }
             }
         }
     }

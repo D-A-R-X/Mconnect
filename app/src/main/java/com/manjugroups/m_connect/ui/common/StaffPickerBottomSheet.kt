@@ -50,7 +50,6 @@ object StaffPickerBottomSheet {
         val emptyView = view.findViewById<TextView>(R.id.tvPickerEmpty)
         val rv = view.findViewById<RecyclerView>(R.id.rvPickerList)
         rv.layoutManager = LinearLayoutManager(context)
-        rv.setHasFixedSize(true)
         val adapter = StaffAdapter { picked ->
             onPicked(picked)
             dialog.dismiss()

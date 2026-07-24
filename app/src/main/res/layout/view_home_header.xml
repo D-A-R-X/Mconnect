@@ -269,6 +269,7 @@
             android:layout_height="match_parent"
             android:clipChildren="false"
             android:clipToPadding="false"
+            android:paddingBottom="30dp"
             android:visibility="gone">
 
             <!-- Left text section -->

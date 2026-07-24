@@ -873,14 +873,29 @@ class HomeFragment : Fragment() {
         // Home shows today's visits only.
         val unfilteredVisits = state.todayVisits.filter { it.status != "cancelled" }
         val visits = if (session.isDriverMode) {
+            // Same rule as the card badge: a trip never started whose slot has
+            // passed is "expired". It belongs in Completed (badged Expired), NOT
+            // in Upcoming — a lost trip can't still read as pending work.
+            val doneSet = setOf("completed", "complete", "done", "closed")
+            val inProgressSet = setOf(
+                "in-progress", "in_progress", "ongoing", "started", "active",
+                "arrived", "on_site", "on-site", "picked_from_site",
+            )
+            fun isExpired(v: TodayVisit): Boolean {
+                val s = v.status.lowercase(Locale.getDefault())
+                return s !in doneSet && s !in inProgressSet &&
+                    com.manjugroups.m_connect.util.VisitExpiry.isExpired(
+                        v.scheduledDate, v.scheduledStartTime, isDone = false,
+                    )
+            }
             when (selectedTab) {
                 "upcoming" -> unfilteredVisits.filter {
                     val s = it.status.lowercase(Locale.getDefault())
-                    s !in setOf("completed", "complete", "done", "closed")
+                    s !in doneSet && !isExpired(it)
                 }
                 "completed" -> unfilteredVisits.filter {
                     val s = it.status.lowercase(Locale.getDefault())
-                    s in setOf("completed", "complete", "done", "closed")
+                    s in doneSet || isExpired(it)
                 }
                 else -> unfilteredVisits
             }
@@ -2176,7 +2191,7 @@ class HomeFragment : Fragment() {
                 fleetError = null
                 // Rows with no id can't be opened or allocated; drop them
                 // rather than let one odd record break the screen.
-                fleetPending = pending.rows.filter { !it.id.isNullOrBlank() }
+                val pendingRows = pending.rows.filter { !it.id.isNullOrBlank() }
                 val assignedRows = assigned.rows.filter { !it.id.isNullOrBlank() }
                 // A dispatch trip is done when the driver has ended it
                 // (travelDeskEndedAt), the same signal the backend's "complete"
@@ -2188,8 +2203,9 @@ class HomeFragment : Fragment() {
                         (t.status ?: "").equals("completed", ignoreCase = true)
                 }
                 // A trip that was never started and whose slot has passed is
-                // expired — it can't run, so it shouldn't sit in Assigned as if
-                // it were still live. It moves to the Completed tab, badged.
+                // expired — it can't run, so it shouldn't sit in Assigned (or
+                // Pending) as if it were still live. It moves to the Completed
+                // tab, badged "Expired", and loses the Allocate action.
                 val isExpired = { t: com.manjugroups.m_connect.network.TravelDeskTrip ->
                     !isDone(t) && t.travelDeskStartedAt == null &&
                         com.manjugroups.m_connect.util.VisitExpiry.isExpired(
@@ -2197,8 +2213,11 @@ class HomeFragment : Fragment() {
                             isDone = false,
                         )
                 }
+                // Expired pending trips are terminal too — drop them from Pending
+                // (no Allocate) and reclassify into Completed with the Expired badge.
+                fleetPending = pendingRows.filterNot(isExpired)
                 fleetAssigned = assignedRows.filterNot(isDone).filterNot(isExpired)
-                fleetExpired = assignedRows.filter(isExpired)
+                fleetExpired = assignedRows.filter(isExpired) + pendingRows.filter(isExpired)
                 fleetCompleted = assignedRows.filter(isDone) + fleetExpired
                 fleetVehicles = vehicles.rows
                 fleetAgencies = agencies.filter {
@@ -2320,6 +2339,23 @@ class HomeFragment : Fragment() {
         )
         // Allocate only makes sense while the trip has no vehicle.
         card.btnAllocate.visibility = if (isPending) View.VISIBLE else View.GONE
+        // The chip row is three equal thirds ONLY while Allocate is present
+        // (pending). Once Allocate is gone (assigned/completed), leaving the two
+        // survivors weighted stretched the "1" people pill to half the card.
+        // Drop their weight so they wrap to content and sit left-aligned instead.
+        val peopleChip = card.tvAttendeesTag.parent as View
+        listOf(peopleChip, card.lmoTagContainer).forEach { chip ->
+            (chip.layoutParams as android.widget.LinearLayout.LayoutParams).also { lp ->
+                if (isPending) {
+                    lp.width = 0
+                    lp.weight = 1f
+                } else {
+                    lp.width = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+                    lp.weight = 0f
+                }
+                chip.layoutParams = lp
+            }
+        }
         if (isPending) {
             card.btnAllocate.setOnClickListener { openFleetAllocate(trip) }
             card.assignmentInfo.visibility = View.GONE
@@ -2377,6 +2413,8 @@ class HomeFragment : Fragment() {
             endKm = trip.travelDeskEndKm,
             startPhotoId = trip.travelDeskStartPhotoIds.firstOrNull(),
             endPhotoId = trip.travelDeskEndPhotoIds.firstOrNull(),
+            external = trip.travelAgency?.name?.isNotBlank() == true,
+            agencyName = trip.travelAgency?.name?.trim()?.ifBlank { null },
         )
         com.manjugroups.m_connect.ui.library.AdminFleetTripManageSheet.newInstance(
             trip = adminTrip,
@@ -2391,21 +2429,27 @@ class HomeFragment : Fragment() {
         val siteVisitId = trip.id?.takeIf { it.isNotBlank() } ?: return
         viewLifecycleOwner.lifecycleScope.launch {
             val resp = runCatching {
-                fleetApi.unallocate(
+                fleetApi.unassignMms(
                     session.bearerToken,
                     com.manjugroups.m_connect.network.TravelDeskDriverTripRequest(siteVisitId),
                 )
             }.getOrNull()
             if (_binding == null) return@launch
+            val external = trip.travelAgency?.name?.isNotBlank() == true
             if (resp?.success == true) {
                 android.widget.Toast.makeText(
-                    requireContext(), "Driver removed — back to Pending.",
+                    requireContext(),
+                    if (external) "Agency removed — back to Pending."
+                    else "Driver removed — back to Pending.",
                     android.widget.Toast.LENGTH_SHORT,
                 ).show()
                 loadFleetDispatch()
             } else {
                 android.widget.Toast.makeText(
-                    requireContext(), resp?.error ?: "Could not remove the driver.",
+                    requireContext(),
+                    resp?.error
+                        ?: if (external) "Could not remove the agency."
+                        else "Could not remove the driver.",
                     android.widget.Toast.LENGTH_LONG,
                 ).show()
             }
@@ -2427,10 +2471,14 @@ class HomeFragment : Fragment() {
 
         val vehicleNo = trip.vehicle?.vehicleNumber?.takeIf { it.isNotBlank() }
         val agency = trip.travelAgency?.name?.takeIf { it.isNotBlank() }
-        card.tvAssignedVehicle.text = listOfNotNull(
-            vehicleNo ?: "Vehicle pending",
-            agency?.let { "· $it" },
-        ).joinToString(" ")
+        // An agency ref marks the trip as farmed out to an EXTERNAL agency;
+        // otherwise it's the in-house (Internal / MFPL) fleet. Lead the line
+        // with that source so the dispatcher can tell the two apart at a glance.
+        val external = agency != null
+        val source = if (external) "External" else "Internal"
+        val detail = if (external) agency else vehicleNo
+        card.tvAssignedVehicle.text =
+            if (detail != null) "$source · $detail" else source
 
         val driver = trip.driverName?.takeIf { it.isNotBlank() }
         val phone = trip.driverPhone?.takeIf { it.isNotBlank() }
@@ -2440,13 +2488,23 @@ class HomeFragment : Fragment() {
             else -> "Driver not set"
         }
 
-        card.tvAssignedProgress.text = when {
+        // Progress stamps only exist once the driver actually sets off. Before
+        // that, "Awaiting pickup" was noise next to "Driver not set" — so show
+        // the badge only once there's real progress to report and hide it while
+        // the trip is still just assigned.
+        val progress = when {
             trip.travelDeskEndedAt != null -> "Dropped"
             trip.travelDeskPickedFromSiteAt != null -> "Picked from site"
             trip.travelDeskOnSiteAt != null -> "On site"
             trip.travelDeskStartedAt != null -> "Picked from CP"
             trip.travelDeskArrivedAt != null -> "Reached client"
-            else -> "Awaiting pickup"
+            else -> null
+        }
+        if (progress != null) {
+            card.tvAssignedProgress.visibility = View.VISIBLE
+            card.tvAssignedProgress.text = progress
+        } else {
+            card.tvAssignedProgress.visibility = View.GONE
         }
     }
 
@@ -2534,7 +2592,7 @@ class HomeFragment : Fragment() {
     ) {
         viewLifecycleOwner.lifecycleScope.launch {
             val external = result.assignMode == "external"
-            val resp = runCatching {
+            val outcome = runCatching {
                 if (external) {
                     // Allot to an external agency — sets travelAgencyId on the SV;
                     // the agency assigns the cab in Travel Desk.
@@ -2557,8 +2615,9 @@ class HomeFragment : Fragment() {
                         ),
                     )
                 }
-            }.getOrNull()
+            }
             if (_binding == null) return@launch
+            val resp = outcome.getOrNull()
             if (resp?.success == true) {
                 android.widget.Toast.makeText(
                     requireContext(),
@@ -2567,12 +2626,42 @@ class HomeFragment : Fragment() {
                 ).show()
                 loadFleetDispatch()
             } else {
+                // Surface the REAL reason. Retrofit throws on non-2xx (a plain
+                // body type, not Response<T>), so a 400/403 permission error or a
+                // mutation rejection would otherwise collapse into a meaningless
+                // "Allocation failed." Dig the backend's { error } out of the
+                // HttpException body so the dispatcher sees exactly what failed.
+                val msg = resp?.error
+                    ?: outcome.exceptionOrNull()?.let { fleetErrorMessage(it) }
+                    ?: "Allocation failed."
                 android.widget.Toast.makeText(
-                    requireContext(), resp?.error ?: "Allocation failed.",
-                    android.widget.Toast.LENGTH_LONG,
+                    requireContext(), msg, android.widget.Toast.LENGTH_LONG,
                 ).show()
             }
         }
+    }
+
+    /**
+     * Turn a failed fleet API call into a human message. Retrofit throws
+     * HttpException on any non-2xx; the backend puts the real reason in a
+     * { "success": false, "error": "..." } body (e.g. a FORBIDDEN permission
+     * message or "site visit not found"). Pull that out so the dispatcher sees
+     * the actual cause instead of a generic failure toast.
+     */
+    private fun fleetErrorMessage(t: Throwable): String? = when (t) {
+        is retrofit2.HttpException -> {
+            val body = runCatching { t.response()?.errorBody()?.string() }.getOrNull()
+            val parsed = body?.let {
+                runCatching {
+                    com.google.gson.JsonParser.parseString(it)
+                        .asJsonObject.get("error")?.asString
+                }.getOrNull()
+            }
+            (parsed?.takeIf { it.isNotBlank() }
+                ?: "Server rejected the request (${t.code()}).")
+        }
+        is java.io.IOException -> "Network error — check your connection."
+        else -> null
     }
 
     private fun setupDriverTabs() {
