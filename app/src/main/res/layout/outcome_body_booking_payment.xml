@@ -16,7 +16,27 @@
         android:orientation="vertical">
 
     <TextView style="@style/OutcomeFieldLabel" android:text="Charges &amp; Advance" />
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="10dp" android:text="Registration Charges *" />
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="10dp" android:text="Promotional Offer *" />
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_briefcase" />
+        <EditText android:id="@+id/etPayPromoOffer" style="@style/OutcomeFieldEdit" android:hint="Enter promotional offer" android:inputType="textCapWords" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Offer Value *" />
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_rupee" />
+        <EditText android:id="@+id/etPayPromoValue" style="@style/OutcomeFieldEdit" android:hint="0.00" android:inputType="numberDecimal" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Terms &amp; Conditions *" />
+    <LinearLayout android:id="@+id/rowPayPromoTnc" style="@style/OutcomeFieldPillClickable">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_doc" />
+        <TextView android:id="@+id/tvPayPromoTnc" style="@style/OutcomeFieldValue" android:hint="Select timeline..." />
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_chevron_down" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Registration Charges *" />
     <LinearLayout style="@style/OutcomeFieldPill">
         <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_briefcase" />
         <EditText android:id="@+id/etPayRegCharges" style="@style/OutcomeFieldEdit" android:hint="Enter Cost" android:inputType="numberDecimal" />
@@ -130,6 +150,281 @@
             style="@style/OutcomeFieldEdit"
             android:hint="Amount customer wants as loan"
             android:inputType="numberDecimal" />
+    </LinearLayout>
+
+    <!-- Client Payable Summary Card (iOS Parity) -->
+    <LinearLayout
+        android:id="@+id/cardClientPayableSummary"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:layout_marginBottom="8dp"
+        android:background="@drawable/bg_summary_card"
+        android:orientation="vertical"
+        android:padding="16dp"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+            <ImageView
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:src="@drawable/ic_outcome_doc" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:fontFamily="@font/inter_bold"
+                android:text="Client Payable Summary"
+                android:textColor="#101828"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:orientation="horizontal">
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="@font/inter_medium"
+                android:text="Total land cost"
+                android:textColor="#475467"
+                android:textSize="13sp" />
+            <TextView
+                android:id="@+id/tvSummaryLandCost"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_semibold"
+                android:textColor="#101828"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="horizontal">
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="@font/inter_medium"
+                android:text="GST"
+                android:textColor="#475467"
+                android:textSize="13sp" />
+            <TextView
+                android:id="@+id/tvSummaryGst"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_semibold"
+                android:textColor="#101828"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="horizontal">
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="@font/inter_medium"
+                android:text="Registration charges"
+                android:textColor="#475467"
+                android:textSize="13sp" />
+            <TextView
+                android:id="@+id/tvSummaryRegCharges"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_semibold"
+                android:textColor="#101828"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="horizontal">
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="@font/inter_medium"
+                android:text="Document charges"
+                android:textColor="#475467"
+                android:textSize="13sp" />
+            <TextView
+                android:id="@+id/tvSummaryDocCharges"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_semibold"
+                android:textColor="#101828"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="horizontal">
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="@font/inter_medium"
+                android:text="Patta charges"
+                android:textColor="#475467"
+                android:textSize="13sp" />
+            <TextView
+                android:id="@+id/tvSummaryPattaCharges"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_semibold"
+                android:textColor="#101828"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="horizontal">
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="@font/inter_medium"
+                android:text="Other charges"
+                android:textColor="#475467"
+                android:textSize="13sp" />
+            <TextView
+                android:id="@+id/tvSummaryOtherCharges"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_semibold"
+                android:textColor="#101828"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginVertical="10dp"
+            android:background="#EAECF0" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="@font/inter_bold"
+                android:text="Total amount payable"
+                android:textColor="#101828"
+                android:textSize="14sp" />
+            <TextView
+                android:id="@+id/tvSummaryTotalPayable"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_bold"
+                android:textColor="#101828"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:fontFamily="@font/inter_bold"
+            android:text="PAYMENT POSITION"
+            android:textColor="#667085"
+            android:textSize="11sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:fontFamily="@font/inter_regular"
+            android:text="Enter the advance below. The client may pay more than the project minimum."
+            android:textColor="#667085"
+            android:textSize="11sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal">
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="@font/inter_medium"
+                android:text="Minimum advance"
+                android:textColor="#475467"
+                android:textSize="13sp" />
+            <TextView
+                android:id="@+id/tvSummaryMinAdvance"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_semibold"
+                android:textColor="#101828"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="horizontal">
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="@font/inter_medium"
+                android:text="Advance entered"
+                android:textColor="#475467"
+                android:textSize="13sp" />
+            <TextView
+                android:id="@+id/tvSummaryAdvanceEntered"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_semibold"
+                android:textColor="#101828"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="horizontal">
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="@font/inter_bold"
+                android:text="Balance after advance"
+                android:textColor="#101828"
+                android:textSize="14sp" />
+            <TextView
+                android:id="@+id/tvSummaryBalanceAfterAdvance"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_bold"
+                android:textColor="#101828"
+                android:textSize="14sp" />
+        </LinearLayout>
     </LinearLayout>
 
     <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Advance Booking Payment *" />

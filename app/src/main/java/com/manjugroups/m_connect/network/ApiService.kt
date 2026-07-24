@@ -1130,6 +1130,18 @@ interface ApiService {
         @Query("bookingDate") bookingDate: String? = null,
     ): BookingPlotPrefillResponse
 
+    @GET("api/bookings/conversion-prefill")
+    suspend fun getBookingConversionPrefill(
+        @Header("Authorization") token: String,
+        @Query("mobileNumber") mobileNumber: String,
+    ): BookingConversionPrefillResponse
+
+    @GET("api/bookings/exchange-source-candidates")
+    suspend fun listBookingExchangeSourceCandidates(
+        @Header("Authorization") token: String,
+        @Query("mobileNumber") mobileNumber: String,
+    ): BookingExchangeSourcesResponse
+
     @GET("api/telecaller/leads/search-by-phone")
     suspend fun searchTelecallerLeadsByPhone(
         @Header("Authorization") token: String,
@@ -1315,7 +1327,7 @@ data class LogoutResponse(val success: Boolean, val message: String?)
 // Staff models
 data class StaffListResponse(val success: Boolean, val total: Int?, val staff: List<StaffData> = emptyList())
 data class StaffData(
-    @SerializedName("_id") val id: String?,
+    @SerializedName("_id", alternate = ["id"]) val id: String?,
     val name: String?,
     val phone: String?,
     val role: String?,
@@ -1458,7 +1470,7 @@ data class AttendanceRequestResponse(
 data class AttendanceRecord(
     // Convex document id of the staffAttendance row — required to raise a
     // correction/remark request against it (/api/hr/attendance/request).
-    @SerializedName("_id") val id: String? = null,
+    @SerializedName("_id", alternate = ["id"]) val id: String? = null,
     val date: String?,
     val status: String?,
     val totalMinutes: Int?,
@@ -1592,7 +1604,7 @@ data class AttendanceApprovalsResponse(
 )
 
 data class AttendanceApprovalRecord(
-    @SerializedName("_id") val id: String?,
+    @SerializedName("_id", alternate = ["id"]) val id: String?,
     val staffId: String? = null,
     val staffName: String? = null,
     val date: String? = null,
@@ -1700,7 +1712,7 @@ data class LeaveBalance(
 
 data class MyLeavesResponse(val success: Boolean, val total: Int?, val leaves: List<LeaveData> = emptyList())
 data class LeaveData(
-    @SerializedName("_id") val id: String?,
+    @SerializedName("_id", alternate = ["id"]) val id: String?,
     val leaveId: String? = null,
     // Applicant's staff id — lets the approval UI recognise the viewer's OWN
     // leave and hide its Approve/Reject (no self-approval).
@@ -1738,7 +1750,7 @@ data class ApplyLeaveResponse(val success: Boolean, val leaveId: String?, val er
 // Comp Off models — an earned credit is valid only within its earned month
 // and is spent on a single day to create a "compensatory" leave.
 data class CompOffCredit(
-    @SerializedName("_id") val id: String,
+    @SerializedName("_id", alternate = ["id"]) val id: String,
     val earnedDate: String? = null,
     val expiresAt: String? = null,
     val source: String? = null,
@@ -1785,7 +1797,7 @@ data class PermissionUsageResponse(
 )
 data class MyPermissionsResponse(val success: Boolean, val total: Int?, val permissions: List<PermissionData> = emptyList())
 data class PermissionData(
-    @SerializedName("_id") val id: String?,
+    @SerializedName("_id", alternate = ["id"]) val id: String?,
     val permissionId: String? = null,
     // Authoritative owner of the row. The mobile filters its "My
     // Permissions" view against this so a misbehaving backend can't
@@ -1827,7 +1839,7 @@ data class ProfilePhotoData(val storageId: String? = null, val url: String? = nu
 // field — which is what happens when the backend returns amounts like
 // 25000.0 from a number column.
 data class LoanData(
-    @SerializedName("_id") val id: String?,
+    @SerializedName("_id", alternate = ["id"]) val id: String?,
     val loanId: String?,
     val staffId: String?,
     val staffName: String?,
@@ -1883,7 +1895,7 @@ data class LoanData(
 )
 
 data class LoanRepaymentData(
-    @SerializedName("_id") val id: String? = null,
+    @SerializedName("_id", alternate = ["id"]) val id: String? = null,
     val loanId: String? = null,
     val staffId: String? = null,
     val month: String? = null,
@@ -2012,7 +2024,7 @@ data class NotificationsResponse(
     val notifications: List<NotificationData> = emptyList()
 )
 data class NotificationData(
-    @SerializedName("_id") val id: String?,
+    @SerializedName("_id", alternate = ["id"]) val id: String?,
     val type: String?,
     val title: String?,
     val message: String?,
@@ -2054,7 +2066,7 @@ data class StaffCountResponse(
 // Staff detail
 data class StaffDetailResponse(val success: Boolean, val staff: StaffFullData?)
 data class StaffFullData(
-    @SerializedName("_id") val id: String?,
+    @SerializedName("_id", alternate = ["id"]) val id: String?,
     val name: String?, val phone: String?, val email: String?,
     val role: String?, val designation: String?, val department: String?,
     val status: String?, val employeeId: String?,
@@ -2087,7 +2099,7 @@ data class EmergencyContact(val name: String?, val phone: String?, val relation:
 // Chat models
 data class ChannelsResponse(val success: Boolean, val channels: List<ChannelData> = emptyList())
 data class ChannelData(
-    @SerializedName("_id") val id: String?,
+    @SerializedName("_id", alternate = ["id"]) val id: String?,
     val name: String?, val description: String?,
     val type: String?, val memberCount: Int?,
     val unreadCount: Int?, val slug: String?,
@@ -2111,7 +2123,7 @@ data class CreateChannelResponse(val success: Boolean, val channelId: String?)
 data class ConversationsResponse(val success: Boolean, val conversations: List<ConversationData> = emptyList())
 data class ConversationDetailResponse(val success: Boolean, val conversation: ConversationData?)
 data class ConversationData(
-    @SerializedName("_id") val id: String?,
+    @SerializedName("_id", alternate = ["id"]) val id: String?,
     val displayName: String?, val type: String?,
     val unreadCount: Int?, val muted: Boolean?,
     val lastMessage: MessageData?,
@@ -2125,7 +2137,7 @@ data class ConversationData(
     val participants: List<ParticipantData>?
 )
 data class ParticipantData(
-    @SerializedName("_id") val id: String?,
+    @SerializedName("_id", alternate = ["id"]) val id: String?,
     val name: String?,
     val photo: String? = null,
     // "admin" | "member" (absent = member; creator implicitly admin).
@@ -2144,7 +2156,7 @@ data class PollMessagesResponse(
     val count: Int = 0
 )
 data class MessageData(
-    @SerializedName("_id") val id: String?,
+    @SerializedName("_id", alternate = ["id"]) val id: String?,
     @SerializedName("_creationTime") val creationTime: Double?,
     val body: String?, val senderId: String?, val senderName: String?,
     val channelId: String?, val conversationId: String?,
@@ -2163,7 +2175,7 @@ data class MessageData(
     @Transient val hasFailed: Boolean = false,
 )
 data class MessageAttachmentData(
-    @SerializedName("_id") val id: String? = null,
+    @SerializedName("_id", alternate = ["id"]) val id: String? = null,
     val storageId: String?,
     val fileName: String?,
     val fileType: String?,
@@ -2202,7 +2214,7 @@ data class TypingResponse(
     val typing: List<TypingIndicatorData> = emptyList()
 )
 data class TypingIndicatorData(
-    @SerializedName("_id") val id: String?,
+    @SerializedName("_id", alternate = ["id"]) val id: String?,
     val staffId: String?,
     val staffName: String?,
     val expiresAt: Long?
@@ -2211,7 +2223,7 @@ data class TypingIndicatorData(
 // ── Chat search + attachments ──────────────────────────────────────────────
 
 data class ChatSearchMessage(
-    @SerializedName("_id") val id: String?,
+    @SerializedName("_id", alternate = ["id"]) val id: String?,
     val senderId: String?,
     val senderName: String?,
     val body: String?,
@@ -2226,7 +2238,7 @@ data class ChatSearchResponse(
 )
 
 data class ChatAttachmentItem(
-    @SerializedName("_id") val id: String?,
+    @SerializedName("_id", alternate = ["id"]) val id: String?,
     val messageId: String?,
     val storageId: String?,
     val fileName: String?,
@@ -2255,7 +2267,7 @@ data class ChatAttachmentsResponse(
 
 data class ChannelMembersResponse(val success: Boolean, val members: List<ChannelMemberData> = emptyList())
 data class ChannelMemberData(
-    @SerializedName("_id") val id: String?,
+    @SerializedName("_id", alternate = ["id"]) val id: String?,
     val staffId: String?,
     val role: String?,
     val muted: Boolean? = null,
@@ -2356,7 +2368,7 @@ data class ReactionRequest(
 // ── Chat presence models ────────────────────────────────────────────────────
 
 data class PresenceData(
-    @SerializedName("_id") val id: String?,
+    @SerializedName("_id", alternate = ["id"]) val id: String?,
     val staffId: String? = null,
     val status: String? = null,
     val lastSeenAt: Long? = null
@@ -2399,7 +2411,7 @@ data class UpdateMyProfileResponse(
 // ── Project Tasks (mobile My Tasks) ─────────────────────────────────────────
 
 data class TaskData(
-    @SerializedName("_id") val id: String,
+    @SerializedName("_id", alternate = ["id"]) val id: String,
     val taskId: String? = null,
     val projectId: String? = null,
     val projectName: String? = null,
@@ -2456,7 +2468,7 @@ data class MyTaskSummaryResponse(
 // Shape mirrors the web `dailyTasks.listForTaskManager` enriched task; only
 // the fields the mobile Task Manager row needs are declared here.
 data class DailyTaskData(
-    @SerializedName("_id") val id: String,
+    @SerializedName("_id", alternate = ["id"]) val id: String,
     val title: String? = null,
     val taskName: String? = null,
     val label: String? = null,
@@ -2567,7 +2579,7 @@ data class TaskMutationResponse(
 // ── Project Management: projects list / detail / per-project tasks ─────────
 
 data class ProjectSummary(
-    @SerializedName("_id") val id: String,
+    @SerializedName("_id", alternate = ["id"]) val id: String,
     val name: String? = null,
     val description: String? = null,
     val status: String? = null,
@@ -2607,7 +2619,7 @@ data class ProjectTasksResponse(
 )
 
 data class TaskTimelineEntry(
-    @SerializedName("_id") val id: String,
+    @SerializedName("_id", alternate = ["id"]) val id: String,
     val taskId: String? = null,
     val projectId: String? = null,
     val date: String? = null,
@@ -2633,7 +2645,7 @@ data class TaskTimelineResponse(
 )
 
 data class TaskResourceEntry(
-    @SerializedName("_id") val id: String,
+    @SerializedName("_id", alternate = ["id"]) val id: String,
     val taskId: String? = null,
     val resourceType: String? = null,    // material | labour | equipment
     val itemName: String? = null,
@@ -2674,7 +2686,7 @@ data class ExpenseReceipt(
 )
 
 data class ProjectExpense(
-    @SerializedName("_id") val id: String,
+    @SerializedName("_id", alternate = ["id"]) val id: String,
     val projectId: String? = null,
     val category: String,                // labour | materials | equipment | other
     val amount: Double,
@@ -2721,7 +2733,7 @@ data class ProjectExpenseDetailResponse(
 )
 
 data class ProjectExpenseDetail(
-    @SerializedName("_id") val id: String,
+    @SerializedName("_id", alternate = ["id"]) val id: String,
     val projectId: String? = null,
     val category: String,
     val amount: Double,
@@ -2775,7 +2787,7 @@ data class MarkExpensePaidRequest(
 // ── Telecaller leads (mobile) ──────────────────────────────────────────────
 
 data class TelecallerLeadData(
-    @SerializedName("_id") val id: String,
+    @SerializedName("_id", alternate = ["id"]) val id: String,
     val source: String? = null,
     val contactName: String? = null,
     val mobileNumber: String? = null,
@@ -2826,9 +2838,11 @@ data class ClientSearchResponse(
 )
 
 data class ClientProfile(
-    @SerializedName("_id") val id: String? = null,
+    @SerializedName("_id", alternate = ["id"]) val id: String? = null,
     val title: String? = null,
     val clientName: String? = null,
+    val clientImageStorageId: String? = null,
+    val clientImageFileName: String? = null,
     val fatherSpouseName: String? = null,
     val dateOfBirth: String? = null,
     val anniversaryDate: String? = null,
@@ -2837,19 +2851,32 @@ data class ClientProfile(
     val alternateNumbers: String? = null,
     val whatsappNumber: String? = null,
     val email: String? = null,
+    val doorNo: String? = null,
+    val streetName: String? = null,
     val homeAddress: String? = null,
     val addressLine1: String? = null,
+    val addressLine2: String? = null,
+    val landmark: String? = null,
     val formattedAddress: String? = null,
     val pincode: String? = null,
     val state: String? = null,
     val district: String? = null,
     val location: String? = null,
+    val lat: Double? = null,
+    val lng: Double? = null,
+    val googleMapsLink: String? = null,
     val profession: String? = null,
     val designation: String? = null,
     val department: String? = null,
     val incomePerAnnum: String? = null,
     val officeName: String? = null,
     val officeAddress: String? = null,
+    val officeDoorNo: String? = null,
+    val officeStreet: String? = null,
+    val officeAddressLine1: String? = null,
+    val officeAddressLine2: String? = null,
+    val officeArea: String? = null,
+    val officePincode: String? = null,
     val officeMobile: String? = null,
     val officePhone: String? = null,
     val officeEmail: String? = null,
@@ -2861,6 +2888,39 @@ data class ClientProfile(
     val referenceName2: String? = null,
     val referenceMobile2: String? = null,
     val referenceProfession2: String? = null,
+)
+
+data class BookingConversionPrefillResponse(
+    val success: Boolean = false,
+    val prefill: BookingConversionPrefill? = null,
+    val error: String? = null,
+)
+
+data class BookingConversionPrefill(
+    val bookingId: String? = null,
+    val bookingRefNo: String? = null,
+    val previousProject: String? = null,
+    val previousPlot: String? = null,
+    val totalAmountPaid: Double? = null,
+)
+
+data class BookingExchangeSourcesResponse(
+    val success: Boolean = false,
+    val bookings: List<BookingExchangeSource>? = null,
+    val error: String? = null,
+)
+
+data class BookingExchangeSource(
+    @SerializedName("_id", alternate = ["id"]) val id: String,
+    val bookingRefNo: String? = null,
+    val clientName: String? = null,
+    val projectId: String? = null,
+    val projectName: String? = null,
+    val plotId: String? = null,
+    val plotNo: String? = null,
+    val extentSqft: Double? = null,
+    val exchangeValue: Double? = null,
+    val bookingDate: String? = null,
 )
 
 /**
@@ -2898,7 +2958,7 @@ data class ManualProfilePatch(
 )
 
 data class TelecallerLeadSearchData(
-    @SerializedName("_id") val id: String,
+    @SerializedName("_id", alternate = ["id"]) val id: String,
     val contactName: String? = null,
     val mobileNumber: String? = null,
     val emailId: String? = null,
@@ -2980,7 +3040,7 @@ data class DialDooctiResponse(
 
 // ── Marketing: Projects + Inventory Units (KOS-52) ──────────────────────────
 data class MarketingProject(
-    @SerializedName("_id") val id: String,
+    @SerializedName("_id", alternate = ["id"]) val id: String,
     val name: String? = null,
     val scope: String? = null,
     val status: String? = null,
@@ -2988,9 +3048,11 @@ data class MarketingProject(
     // Gates the "Special (max 180 days)" payment plan in the booking form,
     // mirroring the web. Null until the backend exposing it is deployed.
     val specialPaymentEnabled: Boolean? = null,
-    // Minimum advance configured in Project Details. Booking confirmation
-    // must reject a lower amount, matching the web/iOS form.
     val minimumAdvanceAmount: Double? = null,
+    val promoOffer: String? = null,
+    val projectOfferValue: Double? = null,
+    val projectOfferTerms: String? = null,
+    val projectOfferValidityDays: Double? = null,
 )
 
 data class MarketingProjectsResponse(
@@ -3014,7 +3076,7 @@ data class CreateProjectResponse(
 )
 
 data class MaterialCatalogItem(
-    @SerializedName("_id") val id: String? = null,
+    @SerializedName("_id", alternate = ["id"]) val id: String? = null,
     val name: String? = null,
     val unit: String? = null,
     val category: String? = null,
@@ -3043,7 +3105,7 @@ data class InventoryLayoutCoordinates(
 data class LayoutPoint(val x: Double, val y: Double)
 
 data class InventoryUnit(
-    @SerializedName("_id") val id: String,
+    @SerializedName("_id", alternate = ["id"]) val id: String,
     val projectId: String? = null,
     val unitNumber: String? = null,
     val unitType: String? = null,           // plot|villa|flat
@@ -3053,7 +3115,7 @@ data class InventoryUnit(
     val floor: Int? = null,
     val block: String? = null,
     val priceSnapshot: Double? = null,
-    val status: String,                     // available|held|booked|sold
+    val status: String? = null,                     // available|held|booked|sold
     val rawStatus: String? = null,
     val reservedByBookingId: String? = null,
     val soldByBookingId: String? = null,
@@ -3075,7 +3137,7 @@ data class InventoryUnitResponse(
 )
 
 data class InventoryLayoutProject(
-    @SerializedName("_id") val id: String,
+    @SerializedName("_id", alternate = ["id"]) val id: String,
     val name: String? = null,
     val scope: String? = null,
 )
@@ -3090,17 +3152,20 @@ data class InventoryLayoutResponse(
 data class InventoryUnitIdRequest(val id: String)
 
 data class BookingPlotPrefillProject(
-    @SerializedName("_id") val id: String? = null,
+    @SerializedName("_id", alternate = ["id"]) val id: String? = null,
     val name: String? = null,
     val ratePerSqft: Double? = null,
     val guidelineRatePerSqft: Double? = null,
     val gstPercent: Double? = null,
-    // See MarketingProject.specialPaymentEnabled.
     val specialPaymentEnabled: Boolean? = null,
+    val promoOffer: String? = null,
+    val projectOfferValue: Double? = null,
+    val projectOfferTerms: String? = null,
+    val projectOfferValidityDays: Double? = null,
 )
 
 data class BookingPlotPrefillPlot(
-    @SerializedName("_id") val id: String? = null,
+    @SerializedName("_id", alternate = ["id"]) val id: String? = null,
     val plotNo: String? = null,
     val area: Double? = null,
     val ratePerSqft: Double? = null,
@@ -3136,7 +3201,7 @@ data class BookingPlotPrefillResponse(
     val project: BookingPlotPrefillProject? = null,
     val plot: BookingPlotPrefillPlot? = null,
     val fields: BookingPlotPrefillFields? = null,
-    val schedules: List<BookingPaymentSchedulePrefill> = emptyList(),
+    val schedules: List<BookingPaymentSchedulePrefill>? = emptyList(),
     val error: String? = null,
 )
 
@@ -3308,7 +3373,7 @@ data class BookingDraftSaveResponse(
 )
 
 data class BookingDraftPayload(
-    @SerializedName("_id") val id: String? = null,
+    @SerializedName("_id", alternate = ["id"]) val id: String? = null,
     val staffId: String? = null,
     val sourceKey: String? = null,
     val sourceCpVisitId: String? = null,
@@ -3335,7 +3400,7 @@ data class BookingDraftClearResponse(
 // Server enriches each row with projectName + plotNumber so the list card
 // can render without secondary lookups.
 data class Booking(
-    @SerializedName("_id") val id: String,
+    @SerializedName("_id", alternate = ["id"]) val id: String,
     @SerializedName("_creationTime") val creationTime: Double? = null,
     val bookingRefNo: String? = null,
     val title: String? = null,
@@ -3526,14 +3591,14 @@ data class BookingApprovalStep(
 )
 
 data class BookingPlotDetail(
-    @SerializedName("_id") val id: String? = null,
+    @SerializedName("_id", alternate = ["id"]) val id: String? = null,
     val unitNumber: String? = null,
     val plotNo: String? = null,
     val status: String? = null,
 )
 
 data class BookingStaffBrief(
-    @SerializedName("_id") val id: String? = null,
+    @SerializedName("_id", alternate = ["id"]) val id: String? = null,
     val name: String? = null,
 )
 
@@ -4003,7 +4068,7 @@ data class InvitationLookupResponse(
 )
 
 data class InvitationDetail(
-    @SerializedName("_id") val id: String?,
+    @SerializedName("_id", alternate = ["id"]) val id: String?,
     val token: String?,
     val visitorName: String?,
     val visitorPhone: String?,
@@ -4082,7 +4147,7 @@ data class IssuesListResponse(
 )
 
 data class IssueItem(
-    @SerializedName("_id") val id: String?,
+    @SerializedName("_id", alternate = ["id"]) val id: String?,
     val projectId: String?,
     val title: String?,
     val description: String?,

@@ -1,6 +1,7 @@
 package com.manjugroups.m_connect.ui.home
 
 import android.Manifest
+import android.util.Log
 import android.app.Dialog
 import android.graphics.Color
 import android.net.Uri
@@ -31,6 +32,7 @@ import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
+import com.manjugroups.m_connect.network.BookingExchangeSource
 import com.manjugroups.m_connect.network.BookingPlotPrefillResponse
 import com.manjugroups.m_connect.network.ClientProfile
 import com.manjugroups.m_connect.network.ConvertCpVisitToSiteVisitRequest
@@ -92,6 +94,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var draftManager: BookingDraftManager? = null
     private var draftRestoreApplied: Boolean = false
     private var draftSuppressSave: Boolean = false
+    private var isUpdatingFields: Boolean = false
 
     // ---- Enums ----------------------------------------------------------
     private enum class Outcome { BOOKING, SITE_VISIT, POSTPONE, NOT_INTERESTED }
@@ -289,6 +292,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     // Client form (Frame 3) — many already declared.
     private var etClientMobile: EditText? = null
     private var tvFormPhone: TextView? = null
+    private var formSameAsPersonalChecked: Boolean = false
     private var tvFormTitle: TextView? = null
     private var etFormName: EditText? = null
     private var etFormFather: EditText? = null
@@ -306,6 +310,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var etFormState: EditText? = null
     private var etFormDistrict: EditText? = null
     private var etFormLocation: EditText? = null
+    private var etFormLocationMap: EditText? = null
 
     // Professional
     private var tvProfProfession: TextView? = null
@@ -330,7 +335,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
 
     // Booking
     private var tvBookType: TextView? = null
-    private var bookConversionManualEntry: Boolean = true
+    private var bookConversionManualEntry: Boolean = false
     private var bookExchangeManualEntry: Boolean = true
     private var groupBookConversion: View? = null
     private var groupBookConversionManual: View? = null
@@ -340,6 +345,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var etBookConversionPlot: EditText? = null
     private var etBookConversionCredit: EditText? = null
     private var etBookConversionNotes: EditText? = null
+    private var groupBookConversionNotes: View? = null
     private var etBookConversionSourceBooking: EditText? = null
     private var groupBookExchange: View? = null
     private var groupBookExchangeManual: View? = null
@@ -349,10 +355,27 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var etBookExchangeProject: EditText? = null
     private var etBookExchangePlot: EditText? = null
     private var etBookExchangeExtent: EditText? = null
+    private var tvBookExchangeInternalProject: TextView? = null
+    private var tvBookExchangeInternalPlot: TextView? = null
+    private var tvBookExchangeInternalStatus: TextView? = null
     private var etBookExchangeLookupProject: EditText? = null
     private var etBookExchangeLookupPlot: EditText? = null
     private var etBookExchangeMobile: EditText? = null
     private var etBookExchangeSourceBooking: EditText? = null
+    private var tvBookExchangeLinkedProperty: TextView? = null
+    private var cardBookExchangeSummary: View? = null
+    private var tvBookSummaryLabel1: TextView? = null
+    private var tvBookSummaryValue1: TextView? = null
+    private var tvBookSummaryLabel2: TextView? = null
+    private var tvBookSummaryValue2: TextView? = null
+    private var tvBookSummaryLabel3: TextView? = null
+    private var tvBookSummaryValue3: TextView? = null
+    private var tvBookSummaryLabel4: TextView? = null
+    private var tvBookSummaryValue4: TextView? = null
+    private var groupBookExchangeValue: View? = null
+    private var exchangeSourceCandidates: List<BookingExchangeSource> = emptyList()
+    private var internalExchangeCandidates: List<BookingExchangeSource> = emptyList()
+    private var selectedExchangeCandidate: BookingExchangeSource? = null
     private var lblBookExchangeValue: TextView? = null
     private var etBookExchangeValue: EditText? = null
     private var tvBookExchangeBalance: TextView? = null
@@ -420,6 +443,21 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var tvPay3Date: TextView? = null
     private var etPay4Mode: EditText? = null
     private var tvPay4Date: TextView? = null
+
+    // Prefill Status Banners & Client Payable Summary (iOS Parity)
+    private var tvPlotPrefillStatus: TextView? = null
+    private var tvConversionPrefillStatus: TextView? = null
+    private var cardClientPayableSummary: View? = null
+    private var tvSummaryLandCost: TextView? = null
+    private var tvSummaryGst: TextView? = null
+    private var tvSummaryRegCharges: TextView? = null
+    private var tvSummaryDocCharges: TextView? = null
+    private var tvSummaryPattaCharges: TextView? = null
+    private var tvSummaryOtherCharges: TextView? = null
+    private var tvSummaryTotalPayable: TextView? = null
+    private var tvSummaryMinAdvance: TextView? = null
+    private var tvSummaryAdvanceEntered: TextView? = null
+    private var tvSummaryBalanceAfterAdvance: TextView? = null
     private var tvPayPrefReg: TextView? = null
 
     // Staff
@@ -857,6 +895,23 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         tvFormAnniversary = view.findViewById(R.id.tvFormAnniversary)
         etFormAltNumber = view.findViewById(R.id.etFormAlternateNumber)
         etFormWhatsApp = view.findViewById(R.id.etFormWhatsApp)
+        
+        val rowFormSameAsPersonal = view.findViewById<View>(R.id.rowFormSameAsPersonal)
+        val ivFormSameAsPersonal = view.findViewById<ImageView>(R.id.ivFormSameAsPersonal)
+        rowFormSameAsPersonal?.setOnClickListener {
+            formSameAsPersonalChecked = !formSameAsPersonalChecked
+            ivFormSameAsPersonal?.setImageResource(
+                if (formSameAsPersonalChecked) R.drawable.ic_outcome_checkbox_checked
+                else R.drawable.ic_outcome_checkbox_empty
+            )
+            if (formSameAsPersonalChecked) {
+                etFormWhatsApp?.setText(tvFormPhone?.text?.toString())
+                etFormWhatsApp?.isEnabled = false
+            } else {
+                etFormWhatsApp?.isEnabled = true
+            }
+        }
+        
         etFormEmail = view.findViewById(R.id.etFormEmail)
         tvFormNationality = view.findViewById(R.id.tvFormNationality)
         imgClientPhoto = view.findViewById(R.id.imgClientPhoto)
@@ -881,7 +936,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         etFormPincode = view.findViewById(R.id.etFormPincode)
         etFormState = view.findViewById(R.id.etFormState)
         etFormDistrict = view.findViewById(R.id.etFormDistrict)
-        etFormLocation = view.findViewById(R.id.etFormLocation)
+        etFormLocationMap = view.findViewById(R.id.etFormLocationMap)
         // Pincode → Location/District/State auto-fill. Mirrors the web's
         // usePincodeLocationEnrichment effect in mms-external-leads.tsx.
         // The post-office Name from India Post IS the locality (e.g.
@@ -902,17 +957,22 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 enrichBookingPincode(pin)
             }
         })
-        (tvFormPhone as? EditText)?.addTextChangedListener(object : TextWatcher {
+        val phoneWatcher = object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
             override fun afterTextChanged(s: Editable?) {
+                if (formSameAsPersonalChecked) {
+                    etFormWhatsApp?.setText(s?.toString())
+                }
                 val raw = s?.toString()?.trim().orEmpty()
                 val digits = raw.filter { it.isDigit() }.takeLast(10)
                 if (digits.length < 10 || digits == lastLookedUpBookingPhone) return
                 lastLookedUpBookingPhone = digits
                 lookupAndPrefillClientByPhone(digits)
             }
-        })
+        }
+        etClientMobile?.addTextChangedListener(phoneWatcher)
+        (tvFormPhone as? EditText)?.addTextChangedListener(phoneWatcher)
     }
 
     private fun bindProfessionalFields(view: View) {
@@ -948,19 +1008,30 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         etBookConversionPlot = view.findViewById(R.id.etBookConversionPlot)
         etBookConversionCredit = view.findViewById(R.id.etBookConversionCredit)
         etBookConversionNotes = view.findViewById(R.id.etBookConversionNotes)
+        groupBookConversionNotes = view.findViewById(R.id.groupBookConversionNotes)
         etBookConversionSourceBooking = view.findViewById(R.id.etBookConversionSourceBooking)
         groupBookExchange = view.findViewById(R.id.groupBookExchange)
         groupBookExchangeManual = view.findViewById(R.id.groupBookExchangeManual)
         groupBookExchangeLinkedInternal = view.findViewById(R.id.groupBookExchangeLinkedInternal)
         groupBookExchangeLinked = view.findViewById(R.id.groupBookExchangeLinked)
         tvBookExchangeSource = view.findViewById(R.id.tvBookExchangeSource)
-        etBookExchangeProject = view.findViewById(R.id.etBookExchangeProject)
-        etBookExchangePlot = view.findViewById(R.id.etBookExchangePlot)
         etBookExchangeExtent = view.findViewById(R.id.etBookExchangeExtent)
-        etBookExchangeLookupProject = view.findViewById(R.id.etBookExchangeLookupProject)
-        etBookExchangeLookupPlot = view.findViewById(R.id.etBookExchangeLookupPlot)
+        tvBookExchangeInternalProject = view.findViewById(R.id.tvBookExchangeInternalProject)
+        tvBookExchangeInternalPlot = view.findViewById(R.id.tvBookExchangeInternalPlot)
+        tvBookExchangeInternalStatus = view.findViewById(R.id.tvBookExchangeInternalStatus)
         etBookExchangeMobile = view.findViewById(R.id.etBookExchangeMobile)
         etBookExchangeSourceBooking = view.findViewById(R.id.etBookExchangeSourceBooking)
+        tvBookExchangeLinkedProperty = view.findViewById(R.id.tvBookExchangeLinkedProperty)
+        cardBookExchangeSummary = view.findViewById(R.id.cardBookExchangeSummary)
+        tvBookSummaryLabel1 = view.findViewById(R.id.tvBookSummaryLabel1)
+        tvBookSummaryValue1 = view.findViewById(R.id.tvBookSummaryValue1)
+        tvBookSummaryLabel2 = view.findViewById(R.id.tvBookSummaryLabel2)
+        tvBookSummaryValue2 = view.findViewById(R.id.tvBookSummaryValue2)
+        tvBookSummaryLabel3 = view.findViewById(R.id.tvBookSummaryLabel3)
+        tvBookSummaryValue3 = view.findViewById(R.id.tvBookSummaryValue3)
+        tvBookSummaryLabel4 = view.findViewById(R.id.tvBookSummaryLabel4)
+        tvBookSummaryValue4 = view.findViewById(R.id.tvBookSummaryValue4)
+        groupBookExchangeValue = view.findViewById(R.id.groupBookExchangeValue)
         lblBookExchangeValue = view.findViewById(R.id.lblBookExchangeValue)
         etBookExchangeValue = view.findViewById(R.id.etBookExchangeValue)
         tvBookExchangeBalance = view.findViewById(R.id.tvBookExchangeBalance)
@@ -981,6 +1052,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         groupBookSiteVisit = view.findViewById(R.id.groupBookSiteVisit)
         etBookSvName = view.findViewById(R.id.etBookSvName)
         etBookSvMobile = view.findViewById(R.id.etBookSvMobile)
+        tvPlotPrefillStatus = view.findViewById(R.id.tvPlotPrefillStatus)
+        tvConversionPrefillStatus = view.findViewById(R.id.tvConversionPrefillStatus)
     }
 
     private fun bindChargesFields(view: View) {
@@ -1012,6 +1085,18 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         rowPayLoanAmount = view.findViewById(R.id.rowPayLoanAmount)
         etPayLoanAmount = view.findViewById(R.id.etPayLoanAmount)
         tvPayMinimumAdvance = view.findViewById(R.id.tvPayMinimumAdvance)
+
+        cardClientPayableSummary = view.findViewById(R.id.cardClientPayableSummary)
+        tvSummaryLandCost = view.findViewById(R.id.tvSummaryLandCost)
+        tvSummaryGst = view.findViewById(R.id.tvSummaryGst)
+        tvSummaryRegCharges = view.findViewById(R.id.tvSummaryRegCharges)
+        tvSummaryDocCharges = view.findViewById(R.id.tvSummaryDocCharges)
+        tvSummaryPattaCharges = view.findViewById(R.id.tvSummaryPattaCharges)
+        tvSummaryOtherCharges = view.findViewById(R.id.tvSummaryOtherCharges)
+        tvSummaryTotalPayable = view.findViewById(R.id.tvSummaryTotalPayable)
+        tvSummaryMinAdvance = view.findViewById(R.id.tvSummaryMinAdvance)
+        tvSummaryAdvanceEntered = view.findViewById(R.id.tvSummaryAdvanceEntered)
+        tvSummaryBalanceAfterAdvance = view.findViewById(R.id.tvSummaryBalanceAfterAdvance)
         groupPayDigitalProof = view.findViewById(R.id.groupPayDigitalProof)
         etPayTransactionId = view.findViewById(R.id.etPayTransactionId)
         btnPayProofUpload = view.findViewById(R.id.btnPayProofUpload)
@@ -1035,6 +1120,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
             override fun afterTextChanged(s: Editable?) {
+                if (isUpdatingFields || draftSuppressSave) return
                 applySpecialConsiderationVisibility()
                 recomputeBookingFinanceDerivedFields()
             }
@@ -1295,6 +1381,78 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             refreshBookingTypeSections()
             scheduleDraftPushIfActive()
         }
+        view?.findViewById<View>(R.id.rowBookExchangeLinkedProperty)?.setOnClickListener {
+            val phone = textOrNull(etClientMobile?.text) ?: textOrNull(tvFormPhone?.text) ?: ""
+            val digits = phone.filter { it.isDigit() }.takeLast(10)
+            if (digits.length < 10) {
+                Toast.makeText(requireContext(), "Enter 10-digit client mobile first", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            if (exchangeSourceCandidates.isEmpty()) {
+                loadExchangeSourceCandidates(digits) {
+                    showExchangeLinkedPropertyPicker()
+                }
+            } else {
+                showExchangeLinkedPropertyPicker()
+            }
+        }
+        view?.findViewById<View>(R.id.rowBookExchangeInternalProject)?.setOnClickListener {
+            val phone = textOrNull(etBookExchangeMobile?.text) ?: textOrNull(etClientMobile?.text) ?: textOrNull(tvFormPhone?.text) ?: ""
+            val digits = phone.filter { it.isDigit() }.takeLast(10)
+            if (digits.length < 10) {
+                Toast.makeText(requireContext(), "Enter 10-digit booked mobile first", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            if (internalExchangeCandidates.isEmpty()) {
+                loadInternalExchangeCandidates(digits) {
+                    showExchangeProjectPicker()
+                }
+            } else {
+                showExchangeProjectPicker()
+            }
+        }
+
+        view?.findViewById<View>(R.id.rowBookExchangeInternalPlot)?.setOnClickListener {
+            val projName = textOrNull(tvBookExchangeInternalProject?.text)
+            if (projName.isNullOrBlank() || projName == "Select old project") {
+                Toast.makeText(requireContext(), "Pick old project first", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val plots = internalExchangeCandidates.filter { it.projectName.equals(projName, ignoreCase = true) }
+            val options = plots.mapNotNull { it.plotNo?.trim() }.filter { it.isNotEmpty() }.distinct()
+            if (options.isEmpty()) {
+                Toast.makeText(requireContext(), "No confirmed old plots found for $projName", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            picker("Select Old Plot", options) { selectedPlot ->
+                tvBookExchangeInternalPlot?.text = selectedPlot
+                val matched = plots.firstOrNull { it.plotNo?.equals(selectedPlot, ignoreCase = true) == true }
+                if (matched != null) {
+                    selectedExchangeCandidate = matched
+                    etBookExchangeSourceBooking?.setText(matched.id)
+                    matched.exchangeValue?.takeIf { it.isFinite() }?.let { valNum ->
+                        val rounded = kotlin.math.round(valNum)
+                        val str = if (kotlin.math.abs(valNum - rounded) < 0.01) rounded.toLong().toString()
+                        else String.format(Locale.US, "%.2f", valNum)
+                        etBookExchangeValue?.setText(str)
+                    }
+                    tvBookExchangeInternalStatus?.visibility = View.VISIBLE
+                    tvBookExchangeInternalStatus?.text = "Exchanged Property: ${matched.bookingRefNo ?: matched.id} — ${matched.projectName} / Plot ${matched.plotNo}"
+                    updateExchangePropertySummary()
+                }
+            }
+        }
+
+        etBookExchangeMobile?.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) {
+                val phone = s?.toString()?.filter { it.isDigit() }?.takeLast(10).orEmpty()
+                if (phone.length == 10 && textOrNull(tvBookType?.text) == "INTERNAL EXCHANGE") {
+                    loadInternalExchangeCandidates(phone)
+                }
+            }
+        })
         etBookExchangeValue?.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
@@ -1592,48 +1750,279 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         } else {
             "Linked previous booking"
         }
-        groupBookConversionManual?.visibility =
-            if (isConversion && bookConversionManualEntry) View.VISIBLE else View.GONE
-        groupBookConversionLinked?.visibility =
-            if (isConversion && !bookConversionManualEntry) View.VISIBLE else View.GONE
+        groupBookConversionManual?.visibility = if (isConversion) View.VISIBLE else View.GONE
+        groupBookConversionLinked?.visibility = View.GONE
+        groupBookConversionNotes?.visibility = if (isConversion && bookConversionManualEntry) View.VISIBLE else View.GONE
+
+        etBookConversionProject?.isEnabled = bookConversionManualEntry
+        etBookConversionPlot?.isEnabled = bookConversionManualEntry
+        etBookConversionCredit?.isEnabled = bookConversionManualEntry
+        etBookConversionNotes?.isEnabled = bookConversionManualEntry
+
+        val ivBookConversionSource = view?.findViewById<ImageView>(R.id.ivBookConversionSource)
+        ivBookConversionSource?.setImageResource(
+            if (bookConversionManualEntry) R.drawable.ic_outcome_checkbox_empty
+            else R.drawable.ic_outcome_checkbox_checked
+        )
+
+        if (isConversion && !bookConversionManualEntry) {
+            val phone = textOrNull(etClientMobile?.text) ?: textOrNull(tvFormPhone?.text) ?: ""
+            val digits = phone.filter { it.isDigit() }.takeLast(10)
+            if (digits.length == 10) {
+                loadConversionPrefill(digits)
+            }
+        } else {
+            tvConversionPrefillStatus?.visibility = View.GONE
+        }
 
         tvBookExchangeSource?.text = if (bookExchangeManualEntry) {
             "Manual old property entry"
         } else {
             "Linked old property"
         }
+        val ivBookExchangeSource = view?.findViewById<ImageView>(R.id.ivBookExchangeSource)
+        ivBookExchangeSource?.setImageResource(
+            if (bookExchangeManualEntry) R.drawable.ic_outcome_checkbox_empty
+            else R.drawable.ic_outcome_checkbox_checked
+        )
+
         groupBookExchangeManual?.visibility =
             if (isExchange && bookExchangeManualEntry) View.VISIBLE else View.GONE
         groupBookExchangeLinkedInternal?.visibility =
             if (type == "INTERNAL EXCHANGE" && !bookExchangeManualEntry) View.VISIBLE else View.GONE
         groupBookExchangeLinked?.visibility =
-            if (isExchange && !bookExchangeManualEntry) View.VISIBLE else View.GONE
+            if (type == "EXCHANGE" && !bookExchangeManualEntry) View.VISIBLE else View.GONE
+        groupBookExchangeValue?.visibility =
+            if (bookExchangeManualEntry) View.VISIBLE else View.GONE
         lblBookExchangeValue?.text = if (type == "EXCHANGE") "Exchange Value *" else "Exchange Value"
         tvBookExchangeBalance?.visibility = if (type == "EXCHANGE") View.VISIBLE else View.GONE
+
+        if (type == "EXCHANGE" && !bookExchangeManualEntry) {
+            val phone = textOrNull(etClientMobile?.text) ?: textOrNull(tvFormPhone?.text) ?: ""
+            val digits = phone.filter { it.isDigit() }.takeLast(10)
+            if (digits.length == 10) {
+                loadExchangeSourceCandidates(digits)
+            }
+        } else if (type == "INTERNAL EXCHANGE" && !bookExchangeManualEntry) {
+            val phone = textOrNull(etBookExchangeMobile?.text) ?: textOrNull(etClientMobile?.text) ?: textOrNull(tvFormPhone?.text) ?: ""
+            val digits = phone.filter { it.isDigit() }.takeLast(10)
+            if (etBookExchangeMobile?.text.isNullOrBlank() && digits.length == 10) {
+                etBookExchangeMobile?.setText(digits)
+            }
+            if (digits.length == 10) {
+                loadInternalExchangeCandidates(digits)
+            }
+        }
         updateExchangeBalance()
     }
 
+    private fun loadConversionPrefill(phone: String) {
+        if (phone.length < 10) return
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.getBookingConversionPrefill(session.bearerToken, phone)
+                if (!isAdded) return@launch
+                if (resp.success && resp.prefill != null) {
+                    val prefill = resp.prefill
+                    isUpdatingFields = true
+                    try {
+                        etBookConversionProject?.setText(prefill.previousProject.orEmpty())
+                        etBookConversionPlot?.setText(prefill.previousPlot.orEmpty())
+                        prefill.totalAmountPaid?.takeIf { it.isFinite() }?.let { credit ->
+                            val rounded = kotlin.math.round(credit)
+                            val str = if (kotlin.math.abs(credit - rounded) < 0.01) rounded.toLong().toString()
+                            else String.format(Locale.US, "%.2f", credit)
+                            etBookConversionCredit?.setText(str)
+                        }
+                    } finally {
+                        isUpdatingFields = false
+                    }
+                    tvConversionPrefillStatus?.visibility = View.VISIBLE
+                    tvConversionPrefillStatus?.text = "Previous booking details auto-filled"
+                } else {
+                    tvConversionPrefillStatus?.visibility = View.GONE
+                }
+            } catch (e: Exception) {
+                Log.e("BookingConversion", "Failed to load conversion prefill", e)
+                if (isAdded) tvConversionPrefillStatus?.visibility = View.GONE
+            }
+        }
+    }
+
+    private fun loadInternalExchangeCandidates(phone: String, onDone: (() -> Unit)? = null) {
+        if (phone.length < 10) return
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.listBookingExchangeSourceCandidates(session.bearerToken, phone)
+                if (!isAdded) return@launch
+                if (resp.success && !resp.bookings.isNullOrEmpty()) {
+                    internalExchangeCandidates = resp.bookings
+                    onDone?.invoke()
+                } else {
+                    internalExchangeCandidates = emptyList()
+                    if (isAdded && onDone != null) {
+                        Toast.makeText(requireContext(), resp.error ?: "No confirmed booking matches this mobile", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("Exchange", "Failed to load exchange candidates", e)
+            }
+        }
+    }
+
+    private fun showExchangeProjectPicker() {
+        val projects = internalExchangeCandidates.mapNotNull { it.projectName?.trim() }.filter { it.isNotEmpty() }.distinct()
+        if (projects.isEmpty()) {
+            Toast.makeText(requireContext(), "No confirmed old projects found for this mobile", Toast.LENGTH_SHORT).show()
+            return
+        }
+        picker("Select Old Project", projects) { selectedProj ->
+            tvBookExchangeInternalProject?.text = selectedProj
+            tvBookExchangeInternalPlot?.text = "Select old plot"
+            tvBookExchangeInternalStatus?.visibility = View.GONE
+        }
+    }
+
+    private fun loadExchangeSourceCandidates(phone: String, onDone: (() -> Unit)? = null) {
+        if (phone.length < 10) return
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.listBookingExchangeSourceCandidates(session.bearerToken, phone)
+                if (!isAdded) return@launch
+                if (resp.success && !resp.bookings.isNullOrEmpty()) {
+                    exchangeSourceCandidates = resp.bookings
+                    onDone?.invoke()
+                } else {
+                    exchangeSourceCandidates = emptyList()
+                    if (isAdded && onDone != null) {
+                        Toast.makeText(requireContext(), resp.error ?: "No confirmed property found for this mobile", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("Exchange", "Failed to load exchange candidates", e)
+            }
+        }
+    }
+
+    private fun showExchangeLinkedPropertyPicker() {
+        if (exchangeSourceCandidates.isEmpty()) {
+            Toast.makeText(requireContext(), "No confirmed property found for this mobile", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val options = exchangeSourceCandidates.map { "${it.projectName ?: "Project"} / Plot ${it.plotNo ?: "—"}" }
+        picker("Select Exchanged Property", options) { selectedText ->
+            val idx = options.indexOf(selectedText)
+            if (idx in exchangeSourceCandidates.indices) {
+                val candidate = exchangeSourceCandidates[idx]
+                selectedExchangeCandidate = candidate
+                tvBookExchangeLinkedProperty?.text = selectedText
+                etBookExchangeSourceBooking?.setText(candidate.id)
+                candidate.exchangeValue?.takeIf { it.isFinite() }?.let { valNum ->
+                    val rounded = kotlin.math.round(valNum)
+                    val str = if (kotlin.math.abs(valNum - rounded) < 0.01) rounded.toLong().toString()
+                    else String.format(Locale.US, "%.2f", valNum)
+                    etBookExchangeValue?.setText(str)
+                }
+                updateExchangeBalance()
+                updateExchangePropertySummary()
+            }
+        }
+    }
+
     private fun updateExchangeBalance() {
-        if (textOrNull(tvBookType?.text) != "EXCHANGE") return
-        val total = calculatedTotalPayableAmount() ?: 0.0
-        val exchange = numberOrNull(etBookExchangeValue?.text) ?: 0.0
-        tvBookExchangeBalance?.text = String.format(
-            Locale.US,
-            "Balance Payable: ₹%,.0f",
-            (total - exchange).coerceAtLeast(0.0),
-        )
+        try {
+            if (textOrNull(tvBookType?.text) != "EXCHANGE") return
+            val total = calculatedTotalPayableAmount() ?: 0.0
+            val exchange = numberOrNull(etBookExchangeValue?.text) ?: 0.0
+            val balance = (total - exchange).coerceAtLeast(0.0)
+            tvBookExchangeBalance?.text = if (balance.isFinite()) {
+                String.format(Locale.US, "Balance Payable: ₹%,.0f", balance)
+            } else {
+                "Balance Payable: ₹0"
+            }
+            updateExchangePropertySummary()
+        } catch (e: Exception) {
+            Log.e("BookingPlot", "Error in updateExchangeBalance", e)
+        }
+    }
+
+    private fun updateExchangePropertySummary() {
+        val type = textOrNull(tvBookType?.text).orEmpty()
+        val candidate = selectedExchangeCandidate
+
+        if (candidate != null) {
+            if (type == "INTERNAL EXCHANGE") {
+                tvBookSummaryLabel1?.text = "Booking"
+                tvBookSummaryValue1?.text = candidate.bookingRefNo ?: candidate.id
+                tvBookSummaryLabel2?.text = "Customer"
+                tvBookSummaryValue2?.text = candidate.clientName ?: "—"
+                tvBookSummaryLabel3?.text = "Property"
+                tvBookSummaryValue3?.text = "${candidate.projectName ?: "Project"} / ${candidate.plotNo ?: "Plot"}"
+                tvBookSummaryLabel4?.text = "Original Booking Date"
+                tvBookSummaryValue4?.text = candidate.bookingDate ?: "—"
+                cardBookExchangeSummary?.visibility = View.VISIBLE
+                return
+            } else if (type == "EXCHANGE") {
+                tvBookSummaryLabel1?.text = "Project Name"
+                tvBookSummaryValue1?.text = candidate.projectName ?: "—"
+                tvBookSummaryLabel2?.text = "Plot Number"
+                tvBookSummaryValue2?.text = candidate.plotNo ?: "—"
+                tvBookSummaryLabel3?.text = "Extent (Sq. Ft. / Acres)"
+                tvBookSummaryValue3?.text = formatExchangeExtent(candidate.extentSqft)
+                tvBookSummaryLabel4?.text = "Exchange Value"
+                tvBookSummaryValue4?.text = formatExchangeRupees(candidate.exchangeValue)
+                cardBookExchangeSummary?.visibility = View.VISIBLE
+                return
+            }
+        }
+
+        if (type == "EXCHANGE" && bookExchangeManualEntry) {
+            val projName = textOrNull(etBookExchangeProject?.text)
+            val plotNo = textOrNull(etBookExchangePlot?.text)
+            val extentVal = numberOrNull(etBookExchangeExtent?.text)
+            val valueNum = numberOrNull(etBookExchangeValue?.text)
+
+            if (!projName.isNullOrBlank() || !plotNo.isNullOrBlank() || extentVal != null || valueNum != null) {
+                tvBookSummaryLabel1?.text = "Project Name"
+                tvBookSummaryValue1?.text = projName ?: "—"
+                tvBookSummaryLabel2?.text = "Plot Number"
+                tvBookSummaryValue2?.text = plotNo ?: "—"
+                tvBookSummaryLabel3?.text = "Extent (Sq. Ft. / Acres)"
+                tvBookSummaryValue3?.text = formatExchangeExtent(extentVal)
+                tvBookSummaryLabel4?.text = "Exchange Value"
+                tvBookSummaryValue4?.text = formatExchangeRupees(valueNum)
+                cardBookExchangeSummary?.visibility = View.VISIBLE
+                return
+            }
+        }
+
+        cardBookExchangeSummary?.visibility = View.GONE
+    }
+
+    private fun formatExchangeExtent(extent: Double?): String {
+        if (extent == null || extent <= 0) return "—"
+        val acres = extent / 43560.0
+        val extentStr = if (extent % 1.0 == 0.0) String.format(Locale.US, "%,.0f", extent) else String.format(Locale.US, "%,.2f", extent)
+        val acresStr = String.format(Locale.US, "%.3f", acres)
+        return "$extentStr / $acresStr"
+    }
+
+    private fun formatExchangeRupees(value: Double?): String {
+        if (value == null || value <= 0) return "₹0"
+        return String.format(Locale.US, "₹%,.0f", value)
     }
 
     private fun calculatedTotalPayableAmount(): Double? {
         val bookingCost = numberOrNull(etChargeBookingCost?.text) ?: return null
         val agreed = (bookingCost - (numberOrNull(etChargeSpecialConsideration?.text) ?: 0.0))
             .coerceAtLeast(0.0)
-        return agreed +
+        val total = agreed +
             (numberOrNull(etPayRegCharges?.text) ?: 0.0) +
             (if (payGstApplicable) numberOrNull(etPayGstAmount?.text) ?: 0.0 else 0.0) +
             (numberOrNull(etPayDocCharges?.text) ?: 0.0) +
             (numberOrNull(etPayPattaCharges?.text) ?: 0.0) +
             (if (payOtherApplicable) numberOrNull(etPayOtherCharges?.text) ?: 0.0 else 0.0)
+        return if (total.isFinite()) total else null
     }
 
     private fun refreshPaymentToggles() {
@@ -2163,36 +2552,42 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             }
             if (!isAdded) return@launch
 
-            fun fill(field: EditText?, value: String?) {
-                val v = value?.trim().orEmpty()
-                if (v.isEmpty()) return
-                if (field?.text?.toString()?.trim().isNullOrEmpty()) field?.setText(v)
-            }
+            isUpdatingFields = true
+            try {
+                fun fill(field: EditText?, value: String?) {
+                    val v = value?.trim().orEmpty()
+                    if (v.isEmpty()) return
+                    field?.setText(v)
+                }
 
-            lead?.let {
-                // Prefer the operator-edited manualProfile over the
-                // AI-derived latestAnalysisProfile. The web's Edit
-                // Live Profile dialog writes to lead.manualProfile,
-                // and when the operator typed pincode/state/district
-                // there, those values reflect their explicit intent
-                // (often verified via the pincode-lookup auto-fill).
-                // The AI analysis is a fallback for fields the
-                // operator hasn't touched yet — fall through with `?:`
-                // so an empty manualProfile entry still hits the AI
-                // value without forcing the operator to re-type.
-                val manual = it.manualProfile
-                val ai = it.latestAnalysisProfile
-                fill(etFormName, it.contactName ?: manual?.clientName ?: ai?.clientName)
-                fill(etFormEmail, it.emailId)
-                fill(etFormAltNumber, manual?.alternateMobileNumber ?: ai?.alternateMobileNumber)
-                fill(etFormHomeDoorNo, it.clientPlaceProfile?.doorNo ?: manual?.doorNo ?: ai?.doorNo)
-                fill(etFormHomeAddress, manual?.address ?: ai?.address ?: it.suggestedVisitAddress)
-                fill(etFormPincode, manual?.pincode ?: ai?.pincode)
-                fill(etFormState, manual?.state ?: ai?.state)
-                fill(etFormDistrict, manual?.district ?: ai?.district)
-                fill(etFormLocation, it.locationPreferred ?: it.clientCity)
+                lead?.let {
+                    val manual = it.manualProfile
+                    val ai = it.latestAnalysisProfile
+                    val place = it.clientPlaceProfile
+                    fill(etFormName, it.contactName ?: manual?.clientName ?: ai?.clientName)
+                    fill(etFormEmail, it.emailId)
+                    fill(etFormAltNumber, manual?.alternateMobileNumber ?: ai?.alternateMobileNumber)
+                    fill(etFormHomeDoorNo, place?.doorNo ?: manual?.doorNo ?: ai?.doorNo)
+                    fill(etFormHomeStreet, place?.landmark ?: manual?.address ?: ai?.address)
+                    fill(etFormHomeAddress, manual?.address ?: ai?.address ?: it.suggestedVisitAddress)
+                    fill(etFormPincode, manual?.pincode ?: ai?.pincode)
+                    fill(etFormState, manual?.state ?: ai?.state)
+                    fill(etFormDistrict, manual?.district ?: ai?.district)
+                    fill(etFormLocation, it.locationPreferred ?: it.clientCity)
+                    val mapsUrl = it.suggestedGoogleMapsLink ?: if (it.suggestedVisitLat != null && it.suggestedVisitLng != null) "https://www.google.com/maps?q=${it.suggestedVisitLat},${it.suggestedVisitLng}" else null
+                    fill(etFormLocationMap, mapsUrl)
+                    if (bookIsAgainstVisit == YesNo.YES) {
+                        fill(etBookSvName, it.contactName ?: manual?.clientName ?: ai?.clientName)
+                        fill(etBookSvMobile, it.mobileNumber)
+                    }
+                }
+                client?.let { prefillFromClient(it, ::fill) }
+                if (lead != null || client != null) {
+                    Toast.makeText(requireContext(), "Client details auto-filled from database", Toast.LENGTH_SHORT).show()
+                }
+            } finally {
+                isUpdatingFields = false
             }
-            client?.let { prefillFromClient(it, ::fill) }
 
             if (lead != null && !isStandaloneBookingMode) {
                 // CP/SV lead-derived data is locked until Edit, so changes
@@ -2212,31 +2607,56 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
+    private fun parseAddressString(addressStr: String?): Map<String, String> {
+        val str = addressStr?.trim().orEmpty()
+        if (str.isEmpty()) return emptyMap()
+        val result = mutableMapOf<String, String>()
+        val parts = str.split(",")
+        for (part in parts) {
+            val pieces = part.split(":", limit = 2)
+            if (pieces.size == 2) {
+                val key = pieces[0].trim().lowercase(Locale.US)
+                val value = pieces[1].trim()
+                if (value.isNotEmpty()) {
+                    result[key] = value
+                }
+            }
+        }
+        return result
+    }
+
     private fun prefillFromClient(
         client: ClientProfile,
         fill: (EditText?, String?) -> Unit,
     ) {
-        fun fillLabel(field: TextView?, value: String?, placeholder: String) {
+        fun fillLabel(field: TextView?, value: String?) {
             val v = value?.trim().orEmpty()
             if (v.isEmpty()) return
-            val current = field?.text?.toString()?.trim().orEmpty()
-            if (current.isEmpty() || current.equals(placeholder, ignoreCase = true)) field?.text = v
+            field?.text = v
         }
-        fillLabel(tvFormTitle, client.title, "Title")
+        fillLabel(tvFormTitle, client.title)
         fill(etFormName, client.clientName)
         fill(etFormFather, client.fatherSpouseName)
-        fillLabel(tvFormDob, client.dateOfBirth, "dd/mm/yyyy")
-        fillLabel(tvFormAnniversary, client.anniversaryDate, "dd/mm/yyyy")
-        fillLabel(tvFormNationality, client.nationality, "Nationality")
+        fillLabel(tvFormDob, client.dateOfBirth)
+        fillLabel(tvFormAnniversary, client.anniversaryDate)
+        fillLabel(tvFormNationality, client.nationality)
         fill(etFormAltNumber, client.alternateNumbers)
         fill(etFormWhatsApp, client.whatsappNumber)
         fill(etFormEmail, client.email)
-        fill(etFormHomeAddress, client.homeAddress ?: client.formattedAddress ?: client.addressLine1)
-        fill(etFormPincode, client.pincode)
-        fill(etFormState, client.state)
-        fill(etFormDistrict, client.district)
-        fill(etFormLocation, client.location)
-        fillLabel(tvProfProfession, client.profession, "Select Profession")
+
+        val homeParsed = parseAddressString(client.homeAddress ?: client.formattedAddress ?: client.addressLine1)
+        fill(etFormHomeDoorNo, client.doorNo ?: homeParsed["door no"] ?: homeParsed["doorno"])
+        fill(etFormHomeStreet, client.streetName ?: client.addressLine1 ?: homeParsed["street"] ?: homeParsed["street name"])
+        fill(etFormHomeAddress, client.homeAddress ?: client.formattedAddress ?: client.addressLine1 ?: homeParsed["address"])
+        fill(etFormHomeAddressLine2, client.addressLine2 ?: client.landmark ?: homeParsed["address line 2"] ?: homeParsed["landmark"])
+        fill(etFormPincode, client.pincode ?: homeParsed["pincode"])
+        fill(etFormState, client.state ?: homeParsed["state"])
+        fill(etFormDistrict, client.district ?: homeParsed["district"])
+        fill(etFormLocation, client.location ?: homeParsed["location"])
+        val mapLink = client.googleMapsLink ?: if (client.lat != null && client.lng != null) "https://www.google.com/maps?q=${client.lat},${client.lng}" else null
+        fill(etFormLocationMap, mapLink)
+
+        fillLabel(tvProfProfession, client.profession)
         val isSalaried = client.profession.equals("Salaried", ignoreCase = true)
         groupProfDepartment?.visibility = if (isSalaried) View.VISIBLE else View.GONE
         if (isSalaried) {
@@ -2255,11 +2675,19 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
         fill(etProfDesignation, client.designation)
         fill(etProfIncome, client.incomePerAnnum)
+
+        val officeParsed = parseAddressString(client.officeAddress ?: client.officeAddressLine1)
         fill(etOfficeName, client.officeName)
-        fill(etOfficeAddress, client.officeAddress)
+        fill(etOfficeEmail, client.officeEmail)
         fill(etOfficeMobile, client.officeMobile)
         fill(etOfficePhone, client.officePhone)
-        fill(etOfficeEmail, client.officeEmail)
+        fill(etOfficeDoorNo, client.officeDoorNo ?: officeParsed["door no"] ?: officeParsed["doorno"])
+        fill(etOfficeStreet, client.officeStreet ?: officeParsed["street"] ?: officeParsed["street name"])
+        fill(etOfficeAddress, client.officeAddressLine1 ?: client.officeAddress ?: officeParsed["address line 1"] ?: officeParsed["address"])
+        fill(etOfficeAddressLine2, client.officeAddressLine2 ?: officeParsed["address line 2"] ?: officeParsed["landmark"])
+        fill(etOfficeArea, client.officeArea ?: officeParsed["area"])
+        fill(etOfficePincode, client.officePincode ?: officeParsed["pincode"])
+
         fill(etStaffAadhar, client.aadhaar)
         fill(etStaffPancard, client.pan)
         fill(etStaffRefName1, client.referenceName1)
@@ -2268,6 +2696,17 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         fill(etStaffRefName2, client.referenceName2)
         fill(etStaffRefMobile2, client.referenceMobile2)
         fill(etStaffRefProf2, client.referenceProfession2)
+
+        if (bookIsAgainstVisit == YesNo.YES) {
+            fill(etBookSvName, client.clientName)
+            fill(etBookSvMobile, client.mobileNumber)
+        }
+
+        if (!client.clientImageStorageId.isNullOrBlank()) {
+            clientImageStorageId = client.clientImageStorageId
+            clientImageFileName = client.clientImageFileName ?: "client-photo.jpg"
+            renderClientImage()
+        }
     }
 
     /**
@@ -2998,7 +3437,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private fun applyAdvancePaymentVisibility() {
         val mode = textOrNull(tvBookMode?.text)?.uppercase(Locale.US).orEmpty()
         groupPayDigitalProof?.visibility =
-            if (mode in setOf("UPI", "NEFT", "RTGS")) View.VISIBLE else View.GONE
+            if (mode in setOf("UPI", "NEFT", "RTGS", "CHEQUE", "DD")) View.VISIBLE else View.GONE
         groupPayInstrument?.visibility =
             if (mode in setOf("CHEQUE", "DD")) View.VISIBLE else View.GONE
         lblPayInstrumentNo?.text = if (mode == "DD") "DD No *" else "Cheque No *"
@@ -3134,6 +3573,23 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             bookingGstPercent = null
             tvBookProject?.text = project.name ?: "Selected"
             tvBookPlot?.text = "Select Plot"
+            if (!project.scope.isNullOrBlank()) {
+                tvBookProperty?.text = project.scope
+            } else {
+                tvBookProperty?.text = "Select Type"
+            }
+            if (!project.promoOffer.isNullOrBlank()) {
+                etChargePromoOffers?.setText(project.promoOffer)
+            }
+            project.projectOfferValue?.takeIf { it.isFinite() }?.let { offerVal ->
+                val rounded = kotlin.math.round(offerVal)
+                val str = if (kotlin.math.abs(offerVal - rounded) < 0.01) rounded.toLong().toString()
+                else String.format(Locale.US, "%.2f", offerVal)
+                etChargePromoValue?.setText(str)
+            }
+            if (!project.projectOfferTerms.isNullOrBlank()) {
+                tvChargePromoTnc?.text = project.projectOfferTerms
+            }
             updateMinimumAdvanceHint(project)
             // A different project may not allow the Special plan.
             plotPrefillSpecialPayment = false
@@ -3148,34 +3604,37 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun updateMinimumAdvanceHint(project: MarketingProject?) {
+        val min = project?.minimumAdvanceAmount ?: 0.0
+        val safeMin = if (min.isFinite()) min else 0.0
         tvPayMinimumAdvance?.text = String.format(
             Locale.US,
             "Project minimum: ₹%,.0f. Higher advance is allowed.",
-            project?.minimumAdvanceAmount ?: 0.0,
+            safeMin,
         )
     }
 
     private fun pickBookingUnit() {
+        if (!isAdded) return
         val project = bookingProject
         if (project == null) {
             showError("Select project first")
             return
         }
-        if (bookingUnitCacheProjectId == project.id && bookingUnitCache.isNotEmpty()) {
-            showBookingUnitPicker(bookingUnitCache)
-            return
+        try {
+            if (bookingUnitCacheProjectId == project.id && bookingUnitCache.isNotEmpty()) {
+                showBookingUnitPicker(bookingUnitCache)
+                return
+            }
+        } catch (e: Exception) {
+            Log.e("BookingPlot", "Crash showing cached unit picker", e)
         }
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                // Fetch every unit then apply the public/raw status mapping on
-                // device. Older deployments stored bookable rows as raw
-                // "available" while newer responses expose a normalized
-                // public status; server-side filtering alone could therefore
-                // return an empty picker for projects such as Rajan test.
                 val resp = api.listInventoryUnits(
                     token = session.bearerToken,
                     projectId = project.id,
                 )
+                if (!isAdded) return@launch
                 if (!resp.success) {
                     showError(resp.error ?: "Failed to load plots")
                     return@launch
@@ -3189,22 +3648,22 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 bookingUnitCache = available
                 showBookingUnitPicker(available)
             } catch (e: Exception) {
-                showError(e.message ?: "Failed to load plots")
+                Log.e("BookingPlot", "Crash in pickBookingUnit network", e)
+                try { showError(e.message ?: "Failed to load plots") } catch (_: Exception) {}
             }
         }
     }
 
     private fun showBookingUnitPicker(items: List<InventoryUnit>) {
-        SearchableSelectionDialog.show(
-            context = requireContext(),
-            title = "Select plot",
-            options = items.map { unit ->
+        val ctx = context ?: return
+        val safeOptions = try {
+            items.map { unit ->
                 val title = unit.unitNumber ?: unit.id
                 val subtitle = listOfNotNull(
                     unit.unitType,
                     unit.facing?.let { "Facing $it" },
-                    unit.area?.let { "${it.toInt()} sqft" },
-                    unit.priceSnapshot?.let { "₹${it.toLong()}" },
+                    unit.area?.takeIf { it.isFinite() }?.let { "${it.toInt()} sqft" },
+                    unit.priceSnapshot?.takeIf { it.isFinite() }?.let { "₹${it.toLong()}" },
                 ).joinToString(" • ").takeIf { it.isNotBlank() }
                 SearchableOption(
                     item = unit,
@@ -3213,21 +3672,35 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     keywords = listOfNotNull(unit.id, unit.block, unit.dimensions, unit.rawStatus)
                         .joinToString(" "),
                 )
-            },
+            }
+        } catch (e: Exception) {
+            Log.e("BookingPlot", "Failed to build plot options", e)
+            showError("Failed to display plots: ${e.message}")
+            return
+        }
+        SearchableSelectionDialog.show(
+            context = ctx,
+            title = "Select plot",
+            options = safeOptions,
             emptyMessage = "No plots found",
         ) { unit ->
-            if (!isAvailableForBooking(unit)) {
-                showError("Selected plot is no longer available")
-                return@show
+            try {
+                if (!isAvailableForBooking(unit)) {
+                    showError("Selected plot is no longer available")
+                    return@show
+                }
+                bookingUnit = unit
+                tvBookPlot?.text = unit.unitNumber ?: unit.id
+                loadBookingPlotPrefill(force = true)
+            } catch (e: Exception) {
+                Log.e("BookingPlot", "Crash in plot onSelected callback", e)
+                try { showError("Error selecting plot: ${e.message}") } catch (_: Exception) {}
             }
-            bookingUnit = unit
-            tvBookPlot?.text = unit.unitNumber ?: unit.id
-            loadBookingPlotPrefill(force = true)
         }
     }
 
     private fun isAvailableForBooking(unit: InventoryUnit): Boolean =
-        unit.status.trim().equals("available", ignoreCase = true) ||
+        unit.status?.trim()?.equals("available", ignoreCase = true) == true ||
             unit.rawStatus?.trim()?.equals("available", ignoreCase = true) == true
 
     private fun loadBookingPlotPrefill(force: Boolean = false) {
@@ -3242,84 +3715,157 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     plotId = unit.id,
                     bookingDate = bookingDateForApi(),
                 )
+                if (!isAdded) return@launch
                 if (!resp.success) {
                     showError(resp.error ?: "Failed to load plot finance details")
                     return@launch
                 }
                 applyBookingPlotPrefill(resp)
             } catch (e: Exception) {
-                showError(e.message ?: "Failed to load plot finance details")
+                Log.e("BookingPlot", "Crash in loadBookingPlotPrefill", e)
+                try { showError(e.message ?: "Failed to load plot finance details") } catch (_: Exception) {}
             }
         }
     }
 
     private fun applyBookingPlotPrefill(resp: BookingPlotPrefillResponse) {
-        bookingGstPercent = resp.project?.gstPercent
-        plotPrefillSpecialPayment = resp.project?.specialPaymentEnabled == true
-        ensurePaymentPlanAllowed()
-        // Older backends trim the flag out of the prefill — resolve it from
-        // the raw project doc instead.
-        if (resp.project?.specialPaymentEnabled == null) {
-            resolveProjectSpecialPaymentFlag(resp.project?.id ?: bookingProject?.id)
-        }
-        val fields = resp.fields
-        fun money(value: Double?): String? {
-            if (value == null || !value.isFinite()) return null
-            val rounded = kotlin.math.round(value)
-            return if (kotlin.math.abs(value - rounded) < 0.01) rounded.toLong().toString()
-            else String.format(Locale.US, "%.2f", value)
-        }
-        fun setMoney(field: EditText?, value: Double?) {
-            money(value)?.let { field?.setText(it) }
-        }
-        fun setDate(field: TextView?, iso: String?) {
-            val parsed = dateTextForApi(iso) ?: return
-            val date = runCatching {
-                SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(parsed)
-            }.getOrNull() ?: return
-            field?.text = SimpleDateFormat("dd/MM/yyyy", Locale.US).format(date)
-        }
+        try {
+            bookingGstPercent = resp.project?.gstPercent
+            plotPrefillSpecialPayment = resp.project?.specialPaymentEnabled == true
+            ensurePaymentPlanAllowed()
+            if (resp.project?.specialPaymentEnabled == null) {
+                resolveProjectSpecialPaymentFlag(resp.project?.id ?: bookingProject?.id)
+            }
+            val fields = resp.fields
+            fun money(value: Double?): String? {
+                if (value == null || !value.isFinite()) return null
+                val rounded = kotlin.math.round(value)
+                return if (kotlin.math.abs(value - rounded) < 0.01) rounded.toLong().toString()
+                else String.format(Locale.US, "%.2f", value)
+            }
+            fun setMoney(field: EditText?, value: Double?) {
+                val str = money(value) ?: return
+                if (field?.text?.toString() != str) {
+                    field?.setText(str)
+                }
+            }
+            fun setDate(field: TextView?, iso: String?) {
+                val parsed = dateTextForApi(iso) ?: return
+                val date = runCatching {
+                    SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(parsed)
+                }.getOrNull() ?: return
+                field?.text = SimpleDateFormat("dd/MM/yyyy", Locale.US).format(date)
+            }
 
-        setMoney(etChargeBookingCost, fields?.bookingCost)
-        setMoney(etChargeGuidelineValue, fields?.guidelineValue)
-        setMoney(etPayRegCharges, fields?.registrationCharges)
-        setMoney(etPayGstAmount, fields?.gstAmount)
-        setMoney(etPayDocCharges, fields?.documentCharges)
-        setMoney(etPayPattaCharges, fields?.pattaCharges)
-        setMoney(etPayOtherCharges, fields?.otherCharges)
-        setMoney(etPayAdvanceAmount, fields?.advanceAmount)
-        setMoney(etPayAllotDue, fields?.allotmentDueAmount)
-        setDate(tvPayAllotDate, fields?.allotmentDueDate)
+            isUpdatingFields = true
+            try {
+                setMoney(etChargeBookingCost, fields?.bookingCost)
+                setMoney(etChargeGuidelineValue, fields?.guidelineValue)
+                setMoney(etPayRegCharges, fields?.registrationCharges)
+                setMoney(etPayGstAmount, fields?.gstAmount)
+                setMoney(etPayDocCharges, fields?.documentCharges)
+                setMoney(etPayPattaCharges, fields?.pattaCharges)
+                setMoney(etPayOtherCharges, fields?.otherCharges)
+                setMoney(etPayAdvanceAmount, fields?.advanceAmount)
+                setMoney(etPayAllotDue, fields?.allotmentDueAmount)
+                setDate(tvPayAllotDate, fields?.allotmentDueDate)
 
-        val schedules = resp.schedules
-        schedules.getOrNull(0)?.let {
-            setMoney(etPay2Mode, it.amount)
-            setDate(tvPay2Date, it.dueDate)
+                val proj = resp.project
+                if (proj != null) {
+                    if (!proj.promoOffer.isNullOrBlank()) {
+                        etChargePromoOffers?.setText(proj.promoOffer)
+                    }
+                    if (proj.projectOfferValue != null && proj.projectOfferValue.isFinite()) {
+                        setMoney(etChargePromoValue, proj.projectOfferValue)
+                    }
+                    if (!proj.projectOfferTerms.isNullOrBlank()) {
+                        tvChargePromoTnc?.text = proj.projectOfferTerms
+                    }
+                }
+
+                val schedules = resp.schedules ?: emptyList()
+                schedules.getOrNull(0)?.let {
+                    setMoney(etPay2Mode, it.amount)
+                    setDate(tvPay2Date, it.dueDate)
+                }
+                schedules.getOrNull(1)?.let {
+                    setMoney(etPay3Mode, it.amount)
+                    setDate(tvPay3Date, it.dueDate)
+                }
+                schedules.getOrNull(2)?.let {
+                    setMoney(etPay4Mode, it.amount)
+                    setDate(tvPay4Date, it.dueDate)
+                }
+            } finally {
+                isUpdatingFields = false
+            }
+            recomputeBookingFinanceDerivedFields()
+            tvPlotPrefillStatus?.visibility = View.VISIBLE
+            if (isAdded) {
+                Toast.makeText(requireContext(), "Plot pricing filled from project settings", Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: Exception) {
+            Log.e("BookingPlot", "Crash in applyBookingPlotPrefill", e)
+            try { showError("Error applying plot details: ${e.message}") } catch (_: Exception) {}
         }
-        schedules.getOrNull(1)?.let {
-            setMoney(etPay3Mode, it.amount)
-            setDate(tvPay3Date, it.dueDate)
-        }
-        schedules.getOrNull(2)?.let {
-            setMoney(etPay4Mode, it.amount)
-            setDate(tvPay4Date, it.dueDate)
-        }
-        recomputeBookingFinanceDerivedFields()
-        Toast.makeText(requireContext(), "Plot pricing filled from project settings", Toast.LENGTH_SHORT).show()
     }
 
     private fun recomputeBookingFinanceDerivedFields() {
+        if (isUpdatingFields) return
         updateExchangeBalance()
-        val gstPercent = bookingGstPercent ?: return
-        if (!payGstApplicable) return
-        val bookingCost = numberOrNull(etChargeBookingCost?.text) ?: return
-        val specialConsideration = numberOrNull(etChargeSpecialConsideration?.text) ?: 0.0
-        val guidelineValue = numberOrNull(etChargeGuidelineValue?.text) ?: return
-        val agreedAmount = bookingCost - specialConsideration
-        val taxable = agreedAmount - guidelineValue
-        if (taxable > 0 && gstPercent.isFinite()) {
-            etPayGstAmount?.setText(kotlin.math.round((taxable * gstPercent) / 100).toLong().toString())
+
+        // Recalculate GST if applicable
+        val gstPercent = bookingGstPercent
+        if (payGstApplicable && gstPercent != null && gstPercent.isFinite()) {
+            val bookingCost = numberOrNull(etChargeBookingCost?.text)
+            val guidelineValue = numberOrNull(etChargeGuidelineValue?.text)
+            if (bookingCost != null && guidelineValue != null) {
+                val specialConsideration = numberOrNull(etChargeSpecialConsideration?.text) ?: 0.0
+                val agreedAmount = bookingCost - specialConsideration
+                val taxable = agreedAmount - guidelineValue
+                if (taxable > 0) {
+                    val calcGst = kotlin.math.round((taxable * gstPercent) / 100).toLong().toString()
+                    if (etPayGstAmount?.text?.toString() != calcGst) {
+                        isUpdatingFields = true
+                        try {
+                            etPayGstAmount?.setText(calcGst)
+                        } finally {
+                            isUpdatingFields = false
+                        }
+                    }
+                }
+            }
         }
+
+        // Update Client Payable Summary Card (iOS Parity)
+        val bookingCost = numberOrNull(etChargeBookingCost?.text) ?: 0.0
+        val specialConsideration = numberOrNull(etChargeSpecialConsideration?.text) ?: 0.0
+        val agreed = (bookingCost - specialConsideration).coerceAtLeast(0.0)
+        val gstVal = if (payGstApplicable) (numberOrNull(etPayGstAmount?.text) ?: 0.0) else 0.0
+        val regVal = numberOrNull(etPayRegCharges?.text) ?: 0.0
+        val docVal = numberOrNull(etPayDocCharges?.text) ?: 0.0
+        val pattaVal = numberOrNull(etPayPattaCharges?.text) ?: 0.0
+        val otherVal = if (payOtherApplicable) (numberOrNull(etPayOtherCharges?.text) ?: 0.0) else 0.0
+
+        val totalPayable = agreed + gstVal + regVal + docVal + pattaVal + otherVal
+        val minAdvance = bookingProject?.minimumAdvanceAmount ?: 0.0
+        val advanceEntered = numberOrNull(etPayAdvanceAmount?.text) ?: 0.0
+        val balanceAfterAdvance = (totalPayable - advanceEntered).coerceAtLeast(0.0)
+
+        fun fmt(d: Double): String = String.format(Locale.US, "₹%,.0f", if (d.isFinite()) d else 0.0)
+
+        tvSummaryLandCost?.text = fmt(agreed)
+        tvSummaryGst?.text = fmt(gstVal)
+        tvSummaryRegCharges?.text = fmt(regVal)
+        tvSummaryDocCharges?.text = fmt(docVal)
+        tvSummaryPattaCharges?.text = fmt(pattaVal)
+        tvSummaryOtherCharges?.text = fmt(otherVal)
+        tvSummaryTotalPayable?.text = fmt(totalPayable)
+        tvSummaryMinAdvance?.text = fmt(minAdvance)
+        tvSummaryAdvanceEntered?.text = fmt(advanceEntered)
+        tvSummaryBalanceAfterAdvance?.text = fmt(balanceAfterAdvance)
+
+        cardClientPayableSummary?.visibility = if (totalPayable > 0 || bookingCost > 0) View.VISIBLE else View.GONE
     }
 
     private fun pickBookingStaff(
@@ -4169,7 +4715,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun renderClientImage() {
-        val hasImage = clientImageStorageId != null
+        val hasImage = !clientImageStorageId.isNullOrBlank()
         tvClientImageAction?.text = if (hasImage) "Change Client Pic" else "Upload Client Pic"
         rowClientImagePreview?.visibility = if (hasImage) View.VISIBLE else View.GONE
         tvClientImageName?.text = clientImageFileName ?: "Client image uploaded"
@@ -4178,6 +4724,12 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         val local = clientImageLocalUri
         if (hasImage && local != null) {
             img.load(local)
+        } else if (hasImage && !clientImageStorageId.isNullOrBlank()) {
+            val url = "${com.manjugroups.m_connect.BuildConfig.BASE_URL}api/storage/serve?storageId=$clientImageStorageId"
+            img.load(url) {
+                placeholder(R.drawable.ic_outcome_person)
+                error(R.drawable.ic_outcome_person)
+            }
         } else {
             img.load(R.drawable.ic_outcome_person)
         }
