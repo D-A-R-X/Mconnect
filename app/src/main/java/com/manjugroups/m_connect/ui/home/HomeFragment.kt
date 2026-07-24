@@ -137,7 +137,7 @@ class HomeFragment : Fragment() {
         startBannerAnimation()
 
         setupRoleAdaptiveView()
-        setupOverviewTabs()
+        setupMarketingOverview()
         setupDriverTabs()
         // Fleet administrators see the allocation queue in this same
         // Today's Trip surface, so load it alongside the normal home data.
@@ -396,7 +396,7 @@ class HomeFragment : Fragment() {
                         // under the profile row and only the CARD area scrolls
                         // under it (stage 2). Pick whichever section is live.
                         val dashboard = session.canViewVpDashboard()
-                        val stickyHeaderId = if (dashboard) R.id.overviewHeader else R.id.tripHeader
+                        val stickyHeaderId = if (dashboard) 0 else R.id.tripHeader
                         val cardsAreaId = if (dashboard) R.id.overviewCardsArea else R.id.tripCardsArea
                         // overflow = how far the cards extend past the pinned
                         // header's bottom (space between it and the nav bar). If
@@ -414,7 +414,6 @@ class HomeFragment : Fragment() {
                         // list keeps its natural height (no empty gap, no forced
                         // banner-lift).
                         val target = when {
-                            dashboard -> (vp + sLimit - (120 * d).toInt()).coerceAtLeast(0)
                             overflow > 0 -> (vp + sLimit + overflow).coerceAtLeast(0)
                             else -> 0
                         }
@@ -431,6 +430,7 @@ class HomeFragment : Fragment() {
                             b.homeContent.scrollTo(0, 0)
                             b.whiteContentArea.translationY = 0f
                             b.root.findViewById<View>(R.id.overviewCardsArea)?.translationY = 0f
+                            b.root.findViewById<View>(R.id.overviewHeader)?.translationY = 0f
                             b.root.findViewById<View>(R.id.overviewHeader)?.translationZ = 0f
                             b.root.findViewById<View>(R.id.tripCardsArea)?.translationY = 0f
                             b.root.findViewById<View>(R.id.tripHeader)?.translationZ = 0f
@@ -482,11 +482,14 @@ class HomeFragment : Fragment() {
                             if (dashboard) R.id.overviewCardsArea else R.id.tripCardsArea
                         )
                         val stickyHeader = b.root.findViewById<View>(
-                            if (dashboard) R.id.overviewHeader else R.id.tripHeader
+                            if (dashboard) 0 else R.id.tripHeader
                         )
                         val overshoot = (scrollY - sLimit).coerceAtLeast(0f)
                         b.whiteContentArea.translationY = overshoot
                         cardsArea?.translationY = -overshoot
+                        if (dashboard) {
+                            b.root.findViewById<View>(R.id.overviewHeader)?.translationY = -overshoot
+                        }
                         stickyHeader?.translationZ = if (overshoot > 0f) 20f * den else 0f
                         b.whiteContentArea.clipChildren = overshoot > 0f
                     }
@@ -1940,37 +1943,188 @@ class HomeFragment : Fragment() {
 
     private var selectedTab = "all"
 
-    private fun setupOverviewTabs() {
-        val tabHr = _binding?.root?.findViewById<TextView>(R.id.tabHr) ?: return
-        val tabMarketing = _binding?.root?.findViewById<TextView>(R.id.tabMarketing) ?: return
-        val layoutHr = _binding?.root?.findViewById<View>(R.id.layoutHr) ?: return
-        val layoutMarketing = _binding?.root?.findViewById<View>(R.id.layoutMarketing) ?: return
+    private fun setupMarketingOverview() {
+        val root = _binding?.root ?: return
+        
+        // Populate Grid Cards
+        fun bindMarketingCard(card: View?, title: String, value: String, trend: String, trendUp: Boolean, iconRes: Int, colorHex: String, animate: Boolean) {
+            card?.findViewById<TextView>(R.id.tvKpiTitle)?.text = title
+            
+            val tvValue = card?.findViewById<TextView>(R.id.tvKpiValue)
+            tvValue?.text = value
+            tvValue?.setTextColor(android.graphics.Color.parseColor(colorHex))
+            
+            card?.findViewById<TextView>(R.id.tvTrendValue)?.text = trend
+            card?.findViewById<ImageView>(R.id.ivKpiIcon)?.setImageResource(iconRes)
+            
+            val tvTrendText = card?.findViewById<TextView>(R.id.tvTrendValue)
+            val arrow = card?.findViewById<ImageView>(R.id.ivTrendArrow)
+            val trendColor = if (trendUp) android.graphics.Color.parseColor("#10B981") else android.graphics.Color.parseColor("#EF4444")
+            arrow?.setColorFilter(trendColor)
+            tvTrendText?.setTextColor(trendColor)
 
-        tabHr.setOnClickListener {
-            layoutHr.visibility = View.VISIBLE
-            layoutMarketing.visibility = View.GONE
-            
-            tabHr.setBackgroundResource(R.drawable.bg_loans_segment_active)
-            tabHr.setTextColor(Color.parseColor("#FFFFFF"))
-            tabHr.typeface = androidx.core.content.res.ResourcesCompat.getFont(requireContext(), R.font.inter_semibold)
-            
-            tabMarketing.setBackgroundResource(0)
-            tabMarketing.setTextColor(Color.parseColor("#475467"))
-            tabMarketing.typeface = androidx.core.content.res.ResourcesCompat.getFont(requireContext(), R.font.inter_medium)
+            // Animation
+            val anim = android.view.animation.AnimationUtils.loadAnimation(requireContext(), R.anim.anim_jump_in)
+            anim.startOffset = ((card?.id ?: 0) % 5) * 50L // Stagger slightly
+            card?.findViewById<ImageView>(R.id.ivKpiIcon)?.startAnimation(anim)
         }
 
-        tabMarketing.setOnClickListener {
-            layoutHr.visibility = View.GONE
-            layoutMarketing.visibility = View.VISIBLE
-            
-            tabMarketing.setBackgroundResource(R.drawable.bg_loans_segment_active)
-            tabMarketing.setTextColor(Color.parseColor("#FFFFFF"))
-            tabMarketing.typeface = androidx.core.content.res.ResourcesCompat.getFont(requireContext(), R.font.inter_semibold)
-            
-            tabHr.setBackgroundResource(0)
-            tabHr.setTextColor(Color.parseColor("#475467"))
-            tabHr.typeface = androidx.core.content.res.ResourcesCompat.getFont(requireContext(), R.font.inter_medium)
+        bindMarketingCard(root.findViewById(R.id.cardTotalCalls), "Total Calls", "984", "12%", true, R.drawable.ic_3d_calls, "#3B82F6", true)
+        bindMarketingCard(root.findViewById(R.id.cardHotLeads), "Hot Leads", "37", "16%", true, R.drawable.ic_3d_hot, "#10B981", true)
+        bindMarketingCard(root.findViewById(R.id.cardSiteVisits), "Site Visits", "15", "25%", true, R.drawable.ic_3d_sv, "#8B5CF6", true)
+        bindMarketingCard(root.findViewById(R.id.cardBookings), "Bookings", "2", "100%", true, R.drawable.ic_3d_bookings, "#F59E0B", true)
+        bindMarketingCard(root.findViewById(R.id.cardCollection), "Collection (Today)", "₹18.60 L", "32%", true, R.drawable.ic_3d_collection, "#10B981", false)
+        bindMarketingCard(root.findViewById(R.id.cardBookingValue), "Booking Value", "₹1.85 Cr", "120%", true, R.drawable.ic_3d_value, "#3B82F6", false)
+
+        // Populate Funnel
+        fun setupFunnelRow(id: Int, label: String, value: String, percent: String, colorHex: String) {
+            val row = root.findViewById<View>(id) ?: return
+            row.findViewById<TextView>(R.id.tvFunnelLabel)?.text = label
+            row.findViewById<TextView>(R.id.tvFunnelValue)?.text = value
+            row.findViewById<TextView>(R.id.tvFunnelPercent)?.text = percent
+            row.findViewById<View>(R.id.vFunnelDot)?.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor(colorHex))
         }
+
+        setupFunnelRow(R.id.rowFunnel1, "Total Calls", "984", "100%", "#3B82F6")
+        setupFunnelRow(R.id.rowFunnel2, "Interested", "541", "55.0%", "#06B6D4")
+        setupFunnelRow(R.id.rowFunnel3, "Warm Leads", "239", "24.3%", "#F59E0B")
+        setupFunnelRow(R.id.rowFunnel4, "Hot Leads", "37", "3.8%", "#EF4444")
+        setupFunnelRow(R.id.rowFunnel5, "Site Visits", "15", "1.5%", "#8B5CF6")
+        setupFunnelRow(R.id.rowFunnel6, "Bookings", "2", "0.2%", "#10B981")
+
+        // Helper to create 3D clay morphism drawable
+        fun createClayDrawable(colorHex: String): android.graphics.drawable.Drawable {
+            val baseColor = android.graphics.Color.parseColor(colorHex)
+            val cornerRadius = 32f
+
+            val baseShape = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                setColor(baseColor)
+                this.cornerRadius = cornerRadius
+            }
+
+            val highlight = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                colors = intArrayOf(android.graphics.Color.parseColor("#4DFFFFFF"), android.graphics.Color.TRANSPARENT)
+                orientation = android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM
+                this.cornerRadius = cornerRadius
+            }
+
+            val shadow = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                colors = intArrayOf(android.graphics.Color.TRANSPARENT, android.graphics.Color.parseColor("#4D000000"))
+                orientation = android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM
+                this.cornerRadius = cornerRadius
+            }
+
+            return android.graphics.drawable.LayerDrawable(arrayOf(baseShape, highlight, shadow))
+        }
+
+        // Animate funnel blocks assembling and apply clay background
+        val funnelChart = root.findViewById<android.view.ViewGroup>(R.id.funnelChart)
+        if (funnelChart != null) {
+            val colors = listOf("#3B82F6", "#06B6D4", "#F59E0B", "#EF4444", "#8B5CF6", "#10B981")
+            val values = listOf("984", "541", "239", "37", "15", "2")
+            
+            // Set up LayoutAnimationController for staggered assembly animation
+            val jumpAnim = android.view.animation.AnimationUtils.loadAnimation(requireContext(), R.anim.anim_jump_in)
+            val controller = android.view.animation.LayoutAnimationController(jumpAnim, 0.2f)
+            funnelChart.layoutAnimation = controller
+
+            for (i in 0 until funnelChart.childCount) {
+                val block = funnelChart.getChildAt(i) as? TextView
+                if (block != null && i < colors.size) {
+                    block.background = createClayDrawable(colors[i])
+                    block.text = values[i]
+                }
+            }
+            funnelChart.startLayoutAnimation()
+            
+            // Add click interaction
+            funnelChart.setOnClickListener {
+                funnelChart.startLayoutAnimation()
+            }
+        }
+        
+        val funnelCard = root.findViewById<View>(R.id.funnelCard)
+        funnelCard?.startAnimation(
+            android.view.animation.AnimationUtils.loadAnimation(requireContext(), R.anim.anim_jump_in)
+        )
+        funnelCard?.setOnClickListener {
+            funnelChart?.startLayoutAnimation()
+        }
+
+        // Date & Team Filters
+        root.findViewById<View>(R.id.llOverviewDateFilter)?.setOnClickListener {
+            com.manjugroups.m_connect.ui.projects.DateFilterBottomSheet.newInstance()
+                .show(childFragmentManager, "DateFilter")
+        }
+        childFragmentManager.setFragmentResultListener(
+            com.manjugroups.m_connect.ui.projects.DateFilterBottomSheet.REQUEST_KEY,
+            viewLifecycleOwner
+        ) { _, bundle ->
+            val from = bundle.getString(com.manjugroups.m_connect.ui.projects.DateFilterBottomSheet.RESULT_FROM) ?: return@setFragmentResultListener
+            try {
+                val date = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).parse(from)
+                if (date != null) {
+                    val formatted = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.US).format(date)
+                    root.findViewById<TextView>(R.id.tvOverviewDateFilter)?.text = formatted.uppercase(java.util.Locale.US)
+                }
+            } catch(e: Exception) {}
+        }
+        
+        root.findViewById<View>(R.id.llOverviewTeamFilter)?.setOnClickListener {
+            com.manjugroups.m_connect.ui.common.AppBottomSheets.showOptions(
+                requireContext(),
+                "Select Team",
+                listOf(
+                    com.manjugroups.m_connect.ui.common.AppBottomSheets.Option("All Teams") {}
+                )
+            )
+        }
+
+        // Populate Conversion KPIs
+        fun setupKpi(id: Int, title: String, value: String, trend: String, iconRes: Int, colorHex: String, index: Int) {
+            val card = root.findViewById<View>(id) ?: return
+            
+            val tintColor = Color.parseColor(colorHex)
+            
+            val tvTitle = card.findViewById<TextView>(R.id.tvConversionTitle)
+            tvTitle?.text = title
+            // DO NOT tint title, leave default color
+            
+            val tvValue = card.findViewById<TextView>(R.id.tvConversionValue)
+            tvValue?.text = value
+            tvValue?.setTextColor(tintColor)
+            
+            val tvTrend = card.findViewById<TextView>(R.id.tvConversionTrendValue)
+            tvTrend?.text = trend
+            // DO NOT tint trend, keep it green
+            
+            val arrowGraph = card.findViewById<ImageView>(R.id.ivConversionChart)
+            arrowGraph?.setColorFilter(tintColor)
+            
+            card.findViewById<ImageView>(R.id.ivConversionBadge)?.setImageResource(iconRes)
+            
+            // Animate graph arrow from start to end
+            if (arrowGraph != null) {
+                arrowGraph.post {
+                    arrowGraph.pivotX = 0f
+                    arrowGraph.scaleX = 0f
+                    
+                    val scaleAnim = android.animation.ObjectAnimator.ofFloat(arrowGraph, "scaleX", 0f, 1f)
+                    scaleAnim.duration = 800
+                    scaleAnim.interpolator = android.view.animation.DecelerateInterpolator()
+                    scaleAnim.startDelay = (200 + index * 100).toLong()
+                    scaleAnim.start()
+                }
+            }
+        }
+
+        setupKpi(R.id.kpiInterest, "Interest\nRate", "55.0%", "3.2%", R.drawable.ic_3d_interest, "#3B82F6", 0)
+        setupKpi(R.id.kpiWarmHot, "Warm to\nHot", "15.5%", "1.8%", R.drawable.ic_3d_warm_hot, "#EF4444", 1)
+        setupKpi(R.id.kpiHotSite, "Hot to\nSite Visit", "40.5%", "5.6%", R.drawable.ic_3d_hot_site, "#F59E0B", 2)
+        setupKpi(R.id.kpiSiteBooking, "Site Visit to\nBooking", "13.3%", "6.2%", R.drawable.ic_3d_site_booking, "#10B981", 3)
     }
 
     /**

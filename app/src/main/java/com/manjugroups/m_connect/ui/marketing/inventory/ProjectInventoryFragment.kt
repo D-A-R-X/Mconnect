@@ -199,10 +199,11 @@ class ProjectInventoryFragment : Fragment() {
             (unit.unitNumber ?: "—") + "  ·  " + (unit.unitType ?: "unit")
         row.findViewById<TextView>(R.id.tvUnitMeta).text = formatMeta(unit)
         val statusPill = row.findViewById<TextView>(R.id.tvUnitStatus)
-        statusPill.text = unit.status.replaceFirstChar { it.uppercase() }
-        statusPill.setTextColor(statusColor(unit.status))
+        val statusStr = unit.status ?: "unknown"
+        statusPill.text = statusStr.replaceFirstChar { it.uppercase() }
+        statusPill.setTextColor(statusColor(statusStr))
 
-        val canBook = canCreateBooking() && unit.status == "available"
+        val canBook = canCreateBooking() && statusStr.equals("available", ignoreCase = true)
         row.setOnClickListener {
             if (canBook) {
                 openBookingForm(unit)

@@ -140,6 +140,7 @@ class PendingTasksBottomSheet(
             val tvCreatorName = v.findViewById<TextView>(R.id.tvCreatorName)
             val tvCreatorRole = v.findViewById<TextView>(R.id.tvCreatorRole)
             val tvAvatar = v.findViewById<TextView>(R.id.tvAvatar)
+            val ivCreatedOnIcon = v.findViewById<ImageView>(R.id.ivCreatedOnIcon)
             val tvCreatedOn = v.findViewById<TextView>(R.id.tvCreatedOn)
         }
 
@@ -184,6 +185,7 @@ class PendingTasksBottomSheet(
             projBg.setColor(Color.parseColor(bgPillColor))
             
             holder.ivIllustration.setImageResource(iconRes)
+            holder.ivCreatedOnIcon.imageTintList = android.content.res.ColorStateList.valueOf(activeColor)
             
             holder.tvTitle.text = task.title ?: task.taskName ?: task.label ?: "Pending task"
             holder.tvProject.text = task.module ?: "General"
