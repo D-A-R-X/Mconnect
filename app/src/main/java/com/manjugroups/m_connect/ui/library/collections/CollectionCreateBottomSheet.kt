@@ -221,22 +221,10 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
             etBooking.isFocusable = false
             etBooking.isCursorVisible = false
             etBooking.keyListener = null
-            etBooking.setOnClickListener {
-                if (allBookings.isEmpty()) {
-                    toast("Loading bookings…")
-                    loadOpenBookings()
-                } else {
-                    etBooking.showDropDown()
-                }
-            }
-            etBooking.setOnItemClickListener { _, _, position, _ ->
-                allBookings.getOrNull(position)?.let { picked ->
-                    selectedCase = picked
-                    selectedCaseId = picked.id
-                    selectedCaseLabel = bookingDisplayLabel(picked)
-                    etBooking.setText(selectedCaseLabel)
-                }
-            }
+            // Our searchable picker (with a search bar) instead of the native
+            // AutoCompleteTextView dropdown — each row shows the client and the
+            // project, and the search matches name / number / project / plot.
+            etBooking.setOnClickListener { openBookingPicker() }
             loadOpenBookings()
         }
 
@@ -331,51 +319,82 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
     // intent. Tap → list shows under the field; pick → field text
     // updates and selectedCaseId locks in the right caseId.
 
-    private fun loadOpenBookings() {
+    private fun loadOpenBookings(openAfter: Boolean = false) {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val resp = withContext(Dispatchers.IO) {
                     api.listOpenBookings(session.bearerToken)
                 }
+                if (!isAdded) return@launch
                 if (!resp.success) {
                     toast(resp.error ?: "Could not load bookings")
                     return@launch
                 }
                 allBookings = resp.cases
-                applyBookingsToDropdown()
+                if (openAfter) openBookingPicker()
             } catch (e: Exception) {
                 toast(e.message ?: "Could not load bookings")
             }
         }
     }
 
-    private fun applyBookingsToDropdown() {
-        val labels = allBookings.map { bookingDisplayLabel(it) }
-        etBooking.setAdapter(
-            ArrayAdapter(
-                requireContext(),
-                android.R.layout.simple_list_item_1,
-                labels,
-            ),
-        )
-        // After the adapter swaps in, the dropdown's measured width
-        // can stay at zero (the field hasn't been laid out with the
-        // new data yet) so the first showDropDown() call comes out
-        // blank. Forcing the width keeps the panel anchored to the
-        // field width across rebuilds.
-        etBooking.setDropDownWidth(android.view.ViewGroup.LayoutParams.MATCH_PARENT)
+    /**
+     * Searchable booking picker (our SearchableSelectionDialog). Each row leads
+     * with the client — name, or their number when the name is blank — and shows
+     * the project (and plot) beneath, so field staff can find a booking by
+     * whichever they remember. Search matches name / number / project / plot / ref.
+     */
+    private fun openBookingPicker() {
+        if (allBookings.isEmpty()) {
+            toast("Loading bookings…")
+            loadOpenBookings(openAfter = true)
+            return
+        }
+        val options = allBookings.map { c ->
+            com.manjugroups.m_connect.ui.common.SearchableOption(
+                item = c,
+                title = bookingClientLabel(c),
+                subtitle = bookingProjectLabel(c).takeIf { it.isNotBlank() },
+                keywords = listOf(
+                    c.clientName, c.mobileNumber,
+                    c.projectName.orEmpty(), c.plotNo.orEmpty(), c.bookingRefNo,
+                ).joinToString(" "),
+            )
+        }
+        com.manjugroups.m_connect.ui.common.SearchableSelectionDialog.show(
+            context = requireContext(),
+            title = "Select Booking",
+            options = options,
+            emptyMessage = "No open bookings",
+        ) { picked ->
+            selectedCase = picked
+            selectedCaseId = picked.id
+            selectedCaseLabel = bookingSelectedLabel(picked)
+            etBooking.setText(selectedCaseLabel)
+        }
     }
 
-    private fun bookingDisplayLabel(c: PostSaleCaseSummary): String {
+    /** Client identity for a booking row — name, else number, else ref. */
+    private fun bookingClientLabel(c: PostSaleCaseSummary): String =
+        c.clientName.trim().ifBlank { c.mobileNumber.trim() }.ifBlank { c.bookingRefNo }
+
+    /** Project (+ plot) for a booking row; blank when neither is set. */
+    private fun bookingProjectLabel(c: PostSaleCaseSummary): String {
         val project = c.projectName.orEmpty().trim()
         val plot = c.plotNo.orEmpty().trim()
         return when {
             project.isNotBlank() && plot.isNotBlank() -> "$project - Plot $plot"
             project.isNotBlank() -> project
             plot.isNotBlank() -> "Plot $plot"
-            c.clientName.isNotBlank() -> c.clientName
-            else -> c.bookingRefNo
+            else -> ""
         }
+    }
+
+    /** What fills the field once a booking is picked: client + project. */
+    private fun bookingSelectedLabel(c: PostSaleCaseSummary): String {
+        val client = bookingClientLabel(c)
+        val project = bookingProjectLabel(c)
+        return if (project.isNotBlank()) "$client · $project" else client
     }
 
     private fun showImageAttached(fileName: String) {
