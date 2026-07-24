@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <cache-path name="punch_photos" path="punch_photos/" />
+    <cache-path name="agency_trip_photos" path="agency_trip_photos/" />
     <cache-path name="arrival_photos" path="arrival_photos/" />
     <cache-path name="on_duty_proof" path="on_duty_proof/" />
     <cache-path name="expense_receipts" path="expense_receipts/" />
