@@ -271,6 +271,9 @@ data class CompleteOfflineTripRequest(
     val driverPhone: String? = null,
     val beta: Double? = null,
     val tollAmount: Double? = null,
+    val fleetType: String? = null,
+    val vehicleId: String? = null,
+    val agencyName: String? = null,
 )
 
 data class CreateVehicleRequest(

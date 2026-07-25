@@ -266,3 +266,139 @@ and the Android app should get the same completed/offline outcome behavior.
 - Finished the Android side of the same flow: Admin Fleet expired/completed rows now open a Complete Outcome sheet instead of being read-only; the sheet requires only package price and accepts optional distance, driver, driver phone, beta, and toll.
 - Added Android network/request support for `/api/mms-fleet/dispatch/complete-offline` and included the newly saved trip fields in `TravelDeskTrip` mapping.
 - Verified Android compile with `./gradlew.bat :app:assembleDebug` after setting Android Studio JBR as `JAVA_HOME`; build passed.
+
+---
+
+### Session 7 — Camera Crash Fix + External Fleet Complete-Offline + 1-Day Expiry Parity
+
+**Date:** 2026-07-25
+**Agent:** Codex (big-pickle)
+
+**Goal:** Fix camera crash blocking external fleet drivers from starting trips; enable
+complete-offline for external fleet trips on Android; add 1-day expiry grace period to
+MMS web so all 3 repos agree.
+
+**What was done:**
+
+#### 1. Camera crash fix (Android)
+The `AgencyDriverTripActionSheet` crashed immediately when opening the camera for
+odometer photos. Root causes:
+- `FileProvider.getUriForFile()` was unguarded — can throw `IllegalArgumentException`
+  on certain OEM ROMs (SELinux policy edge cases). Wrapped in `runCatching`.
+- `cameraLauncher` callback called `requireContext()` after process death — added
+  `isAdded` guard.
+- `permissionLauncher` callback same issue — added `isAdded` guard.
+- `performSubmit()` catch block called `requireContext()` after the sheet could be
+  detached — added `isAdded` guard.
+
+Ported the same 3 guards to `DriverStartTripBottomSheet` and `DriverEndTripBottomSheet`
+which had the identical bugs. `DriverEndTripBottomSheet` already had the `performSubmit`
+guard (from a previous fix) but was missing the camera callback guards.
+
+**Files changed (Android):**
+| File | Change |
+|------|--------|
+| `AgencyDriverTripActionSheet.kt` | `isAdded` in camera/permission callbacks; `runCatching` on FileProvider; `isAdded` in performSubmit catch |
+| `DriverStartTripBottomSheet.kt` | Same 3 fixes |
+| `DriverEndTripBottomSheet.kt` | `isAdded` in camera/permission callbacks; `runCatching` on FileProvider |
+
+#### 2. External fleet complete-offline (Android)
+Removed the `!useMmsFleet` guard in `openCompleteOfflineSheet()` that blocked external
+fleet trips from using the Complete Outcome flow. The backend endpoint
+`/api/mms-fleet/dispatch/complete-offline` calls `fleet.markExpiredTripOutcomePending`
+which is fleet-agnostic.
+
+**File changed:**
+| File | Change |
+|------|--------|
+| `AdminFleetTripsFragment.kt` | Removed `!useMmsFleet` block in `openCompleteOfflineSheet()` |
+
+#### 3. 1-day expiry grace period — MMS web
+`isExpiredAssignedVisit()` in `convex/marketing/fleet.ts` used `date < todayIST` with no
+grace. App (`VisitExpiry.kt`) and travel-desk (`isExpiredTrip`) already had 1-day grace.
+Added `ONE_DAY_MS` grace to MMS web so all 3 surfaces agree.
+
+**File changed (MMS web):**
+| File | Change |
+|------|--------|
+| `convex/marketing/fleet.ts` | Added 1-day grace to `isExpiredAssignedVisit()` |
+
+#### External fleet progress actions
+Verified that the full progress chain (reached → start → on-site → picked-from-site → end)
+already works for both internal and external fleet on Android:
+- `AgencyDriverTripDetailFragment` handles all intermediate steps via `markOnSite()` and
+  `markPickedFromSite()` which branch on `internal` flag.
+- `AgencyDriverTripActionSheet` handles start (arrive + start chained) and end.
+- `AdminFleetTripsFragment.submitProgressAction()` handles admin-initiated progress for
+  both fleet types.
+- All mutations hit the correct backend (TravelDeskApi for external, GeoTrackApi for internal)
+  and are reflected on both MMS web and travel-desk web.
+
+**Build result:** `./gradlew :app:assembleDebug` → **BUILD SUCCESSFUL** ✅
+
+**Pushes:**
+| Repo | Remote | Branch | Status |
+|------|--------|--------|--------|
+| Mconnect | origin (manjugroupsdev) | merge | ✅ `03a2287..1ed1d52` |
+| Mconnect | darx (D-A-R-X) | merge | ✅ `03a2287..1ed1d52` |
+| MMS website | origin (manjugroupsdev) | max | ✅ `da88ecdc..962319cc` |
+| travel-desk | — | aizen | No changes needed (already had 1-day grace) |
+
+---
+
+### Session 7b — CompleteOfflineSheet Redesign: Fleet Type + Vehicle Picker
+
+**Date:** 2026-07-25
+**Agent:** Codex (big-pickle)
+
+**Goal:** Redesign the Complete Offline (expired trip) form so fleet type is
+explicitly selected (Internal/External) and the correct fields appear for each.
+
+**What was done:**
+
+#### Layout redesign
+- Added a **Fleet type** spinner (Internal / External) defaulting from the trip's
+  `external` flag.
+- **Internal panel:** vehicle picker (SearchableSelectionDialog, matches the allocate
+  sheet pattern), auto-displays default driver name/phone when a vehicle is selected.
+  Package price (required) + distance (optional) below.
+- **External panel:** agency name text (pre-filled from trip data), package price
+  (required), distance (optional).
+- Panels toggle visibility based on the spinner selection.
+
+#### Data model change
+`CompleteOfflineTripResult` replaced with a cleaner model:
+| Field | Type | Purpose |
+|-------|------|---------|
+| `fleetType` | `"internal"` / `"external"` | Chosen fleet type |
+| `vehicleId` | `String?` | Selected vehicle (internal only) |
+| `vehicleLabel` | `String?` | Display label (internal only) |
+| `driverName` | `String?` | From vehicle default driver (internal) |
+| `driverPhone` | `String?` | From vehicle default driver (internal) |
+| `agencyName` | `String?` | Agency name (external only) |
+| `packageAmount` | `Double` | Required for both |
+| `distanceKm` | `Double?` | Optional for both |
+
+Removed `beta` / `tollAmount` from the result — the complete-offline form only
+collects package + distance; beta/toll belong in the start/end trip capture sheets.
+
+#### Call site updates
+- `AdminFleetTripsFragment.openCompleteOfflineSheet()` now passes `vehicles` list.
+- `HomeFragment` passes `emptyList()` (outcome-pending home cards don't need the
+  vehicle picker — the trip was already assigned).
+
+**Files changed:**
+| File | Change |
+|------|--------|
+| `AdminFleetCompleteOfflineSheet.kt` | Full rewrite — fleet type spinner, vehicle picker, dual panels |
+| `dialog_admin_fleet_complete_offline.xml` | Full rewrite — fleet type spinner, Internal/External panels |
+| `AdminFleetTripsFragment.kt` | Pass `vehicles` to sheet; remove beta/toll from request |
+| `HomeFragment.kt` | Pass `emptyList()` to sheet; remove beta/toll from request |
+
+**Build result:** `./gradlew :app:assembleDebug` → **BUILD SUCCESSFUL** ✅
+
+**Pushes:**
+| Repo | Remote | Branch | Status |
+|------|--------|--------|--------|
+| Mconnect | origin (manjugroupsdev) | merge | ✅ `1ed1d52..aa2b8a4` |
+| Mconnect | darx (D-A-R-X) | merge | ✅ `1ed1d52..aa2b8a4` |

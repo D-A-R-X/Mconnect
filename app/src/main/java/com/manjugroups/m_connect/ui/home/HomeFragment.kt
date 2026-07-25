@@ -1910,6 +1910,9 @@ class HomeFragment : Fragment() {
                                 distanceKm = result.distanceKm,
                                 driverName = result.driverName,
                                 driverPhone = result.driverPhone,
+                                fleetType = result.fleetType,
+                                vehicleId = result.vehicleId,
+                                agencyName = result.agencyName,
                             ),
                         )
                     }.getOrNull()
@@ -2452,7 +2455,7 @@ class HomeFragment : Fragment() {
             },
         )
         // Allocate for pending, Complete for expired, hidden for assigned/completed.
-        val showCompleteBtn = isExpiredRow && !isOutcomePendingRow
+        val showCompleteBtn = isExpiredRow && !isOutcomePendingRow && session.canCompleteOfflineFleet()
         card.btnAllocate.visibility = if (isPending || showCompleteBtn) View.VISIBLE else View.GONE
         if (showCompleteBtn) {
             card.btnAllocate.text = "Complete"
@@ -2648,6 +2651,9 @@ class HomeFragment : Fragment() {
                         distanceKm = result.distanceKm,
                         driverName = result.driverName,
                         driverPhone = result.driverPhone,
+                        fleetType = result.fleetType,
+                        vehicleId = result.vehicleId,
+                        agencyName = result.agencyName,
                     ),
                 )
             }.getOrNull()
@@ -2655,10 +2661,13 @@ class HomeFragment : Fragment() {
             if (resp?.success == true) {
                 android.widget.Toast.makeText(
                     requireContext(),
-                    "Trip details saved. Outcome pending.",
+                    "Trip details saved. Opening outcome form.",
                     android.widget.Toast.LENGTH_SHORT,
                 ).show()
                 loadFleetDispatch()
+                CompleteCpVisitBottomSheet
+                    .forSiteVisit(siteVisitId = trip.id.orEmpty())
+                    .showOnce(parentFragmentManager, "fleet_sv_outcome")
             } else {
                 android.widget.Toast.makeText(
                     requireContext(),

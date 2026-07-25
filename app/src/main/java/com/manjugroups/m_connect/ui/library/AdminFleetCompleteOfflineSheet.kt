@@ -67,9 +67,10 @@ class AdminFleetCompleteOfflineSheet : BottomSheetDialogFragment() {
 
         val layoutInternal = view.findViewById<View>(R.id.layoutInternalFleet)
         val layoutExternal = view.findViewById<View>(R.id.layoutExternalFleet)
+        val layoutOwn = view.findViewById<View>(R.id.layoutOwnVehicle)
         val spinner = view.findViewById<Spinner>(R.id.spinnerFleetType)
 
-        val fleetTypes = listOf("Internal", "External")
+        val fleetTypes = listOf("Internal", "External", "Own Vehicle")
         val spinnerAdapter = ArrayAdapter(
             requireContext(),
             android.R.layout.simple_spinner_item,
@@ -84,12 +85,14 @@ class AdminFleetCompleteOfflineSheet : BottomSheetDialogFragment() {
             override fun onItemSelected(parent: AdapterView<*>?, v: View?, pos: Int, id: Long) {
                 layoutInternal.visibility = if (pos == 0) View.VISIBLE else View.GONE
                 layoutExternal.visibility = if (pos == 1) View.VISIBLE else View.GONE
+                layoutOwn.visibility = if (pos == 2) View.VISIBLE else View.GONE
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
 
         setupInternalFleet(view, t)
         setupExternalFleet(view, t)
+        setupOwnVehicle(view, t)
 
         view.findViewById<View>(R.id.btnCancelComplete).setOnClickListener {
             dismissAllowingStateLoss()
@@ -168,42 +171,62 @@ class AdminFleetCompleteOfflineSheet : BottomSheetDialogFragment() {
             .setText(t.distanceKm?.toDisplayText().orEmpty())
     }
 
+    private fun setupOwnVehicle(view: View, t: AdminFleetTripsFragment.AdminTrip) {
+        view.findViewById<EditText>(R.id.etPackageAmountOwn)
+            .setText(t.packageAmount?.toDisplayText().orEmpty())
+        view.findViewById<EditText>(R.id.etDistanceKmOwn)
+            .setText(t.distanceKm?.toDisplayText().orEmpty())
+    }
+
     private fun parseResult(view: View, fleetTypeIndex: Int): CompleteOfflineTripResult? {
         return try {
-            val fleetType = if (fleetTypeIndex == 0) "internal" else "external"
             val t = trip!!
-
-            if (fleetType == "internal") {
-                val activeVehicles = vehicles
-                    .filter { (it.status ?: "active").equals("active", ignoreCase = true) }
-                val selectedVehicle = activeVehicles.getOrNull(selectedVehicleIndex)
-                CompleteOfflineTripResult(
-                    fleetType = fleetType,
-                    vehicleId = selectedVehicle?.id,
-                    vehicleLabel = selectedVehicle?.let {
-                        val num = it.vehicleNumber ?: "—"
-                        val typePart = it.type?.takeIf { s -> s.isNotBlank() }?.let { s -> "$s · " }.orEmpty()
-                        "$typePart$num"
-                    },
-                    driverName = selectedVehicle?.defaultDriverName?.trim()?.takeIf { s -> s.isNotBlank() },
-                    driverPhone = selectedVehicle?.defaultDriverPhone?.trim()?.takeIf { s -> s.isNotBlank() },
-                    agencyName = null,
-                    packageAmount = requiredNumber(view, R.id.etPackageAmount, "Package price"),
-                    distanceKm = optionalNumber(view, R.id.etDistanceKm, "Distance travelled"),
-                )
-            } else {
-                val agencyName = view.findViewById<EditText>(R.id.etAgencyName)
-                    .text.toString().trim().takeIf { it.isNotBlank() }
-                CompleteOfflineTripResult(
-                    fleetType = fleetType,
-                    vehicleId = null,
-                    vehicleLabel = null,
-                    driverName = null,
-                    driverPhone = null,
-                    agencyName = agencyName,
-                    packageAmount = requiredNumber(view, R.id.etPackageAmountExternal, "Package price"),
-                    distanceKm = optionalNumber(view, R.id.etDistanceKmExternal, "Distance travelled"),
-                )
+            when (fleetTypeIndex) {
+                0 -> {
+                    val activeVehicles = vehicles
+                        .filter { (it.status ?: "active").equals("active", ignoreCase = true) }
+                    val selectedVehicle = activeVehicles.getOrNull(selectedVehicleIndex)
+                    CompleteOfflineTripResult(
+                        fleetType = "internal",
+                        vehicleId = selectedVehicle?.id,
+                        vehicleLabel = selectedVehicle?.let {
+                            val num = it.vehicleNumber ?: "—"
+                            val typePart = it.type?.takeIf { s -> s.isNotBlank() }?.let { s -> "$s · " }.orEmpty()
+                            "$typePart$num"
+                        },
+                        driverName = selectedVehicle?.defaultDriverName?.trim()?.takeIf { s -> s.isNotBlank() },
+                        driverPhone = selectedVehicle?.defaultDriverPhone?.trim()?.takeIf { s -> s.isNotBlank() },
+                        agencyName = null,
+                        packageAmount = requiredNumber(view, R.id.etPackageAmount, "Package price"),
+                        distanceKm = optionalNumber(view, R.id.etDistanceKm, "Distance travelled"),
+                    )
+                }
+                1 -> {
+                    val agencyName = view.findViewById<EditText>(R.id.etAgencyName)
+                        .text.toString().trim().takeIf { it.isNotBlank() }
+                    CompleteOfflineTripResult(
+                        fleetType = "external",
+                        vehicleId = null,
+                        vehicleLabel = null,
+                        driverName = null,
+                        driverPhone = null,
+                        agencyName = agencyName,
+                        packageAmount = requiredNumber(view, R.id.etPackageAmountExternal, "Package price"),
+                        distanceKm = optionalNumber(view, R.id.etDistanceKmExternal, "Distance travelled"),
+                    )
+                }
+                else -> {
+                    CompleteOfflineTripResult(
+                        fleetType = "own",
+                        vehicleId = null,
+                        vehicleLabel = null,
+                        driverName = null,
+                        driverPhone = null,
+                        agencyName = null,
+                        packageAmount = requiredNumber(view, R.id.etPackageAmountOwn, "Package price"),
+                        distanceKm = optionalNumber(view, R.id.etDistanceKmOwn, "Distance travelled"),
+                    )
+                }
             }
         } catch (_: IllegalArgumentException) {
             null

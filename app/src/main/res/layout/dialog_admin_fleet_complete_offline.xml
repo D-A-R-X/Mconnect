@@ -221,6 +221,59 @@
                 android:textSize="14sp" />
         </LinearLayout>
 
+        <!-- Own vehicle: package + distance only -->
+        <LinearLayout
+            android:id="@+id/layoutOwnVehicle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="Package price *"
+                android:textColor="#344054"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/etPackageAmountOwn"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input"
+                android:fontFamily="@font/inter_regular"
+                android:hint="Enter package price"
+                android:inputType="numberDecimal"
+                android:paddingHorizontal="12dp"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textSize="14sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="Distance travelled"
+                android:textColor="#344054"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/etDistanceKmOwn"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input"
+                android:fontFamily="@font/inter_regular"
+                android:hint="Km (optional)"
+                android:inputType="numberDecimal"
+                android:paddingHorizontal="12dp"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textSize="14sp" />
+        </LinearLayout>
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

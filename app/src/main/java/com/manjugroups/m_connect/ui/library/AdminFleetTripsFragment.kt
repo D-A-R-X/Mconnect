@@ -115,6 +115,13 @@ class AdminFleetTripsFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
+        // When the SV outcome form (Booking/Postpone/Not Interested) completes,
+        // refresh the trips list so the completed-offline trip disappears.
+        parentFragmentManager.setFragmentResultListener(
+            com.manjugroups.m_connect.ui.home.CompleteCpVisitBottomSheet.RESULT_KEY,
+            viewLifecycleOwner,
+        ) { _, _ -> refresh() }
+
         binding.homeHeader.setup(this)
         binding.homeHeader.setFleetBannerMode()
         // Avatar tap routes the agency to their Settings tab (which IS their
@@ -287,7 +294,7 @@ class AdminFleetTripsFragment : Fragment() {
             onAllocateClick = { trip -> openAllocateSheet(trip) },
             onManageClick = { trip -> openManageSheet(trip) },
             onCompleteClick = { trip -> openCompleteOfflineSheet(trip) },
-        )
+        ).also { it.canCompleteOffline = session.canCompleteOfflineFleet() }
         binding.rvAdminTrips.layoutManager = LinearLayoutManager(requireContext())
         binding.rvAdminTrips.adapter = tripsAdapter
         binding.rvAdminTrips.isNestedScrollingEnabled = false
@@ -437,6 +444,10 @@ class AdminFleetTripsFragment : Fragment() {
     }
 
     private fun openCompleteOfflineSheet(trip: AdminTrip) {
+        if (!session.canCompleteOfflineFleet()) {
+            Toast.makeText(requireContext(), "You don't have permission to complete trips offline.", Toast.LENGTH_SHORT).show()
+            return
+        }
         AdminFleetCompleteOfflineSheet.newInstance(trip, vehicles) { result ->
             submitCompleteOffline(trip, result)
         }.showOnce(parentFragmentManager, "AdminFleetCompleteOfflineSheet")
@@ -459,6 +470,9 @@ class AdminFleetTripsFragment : Fragment() {
                         distanceKm = result.distanceKm,
                         driverName = result.driverName,
                         driverPhone = result.driverPhone,
+                        fleetType = result.fleetType,
+                        vehicleId = result.vehicleId,
+                        agencyName = result.agencyName,
                     ),
                 )
             }.getOrNull()
@@ -466,11 +480,12 @@ class AdminFleetTripsFragment : Fragment() {
             if (resp?.success == true) {
                 Toast.makeText(
                     requireContext(),
-                    "Trip details saved. Outcome pending.",
+                    "Trip details saved. Opening outcome form.",
                     Toast.LENGTH_SHORT,
                 ).show()
-                refresh()
-                applyFilter("Assigned")
+                com.manjugroups.m_connect.ui.home.CompleteCpVisitBottomSheet
+                    .forSiteVisit(siteVisitId = trip.id)
+                    .showOnce(parentFragmentManager, "fleet_sv_outcome")
             } else {
                 Toast.makeText(
                     requireContext(),
@@ -845,6 +860,7 @@ class AdminFleetTripsFragment : Fragment() {
     ) : RecyclerView.Adapter<AdminTripsAdapter.ViewHolder>() {
 
         private var items: List<AdminTrip> = emptyList()
+        var canCompleteOffline: Boolean = false
 
         fun submitList(newList: List<AdminTrip>) {
             items = newList
@@ -889,10 +905,14 @@ class AdminFleetTripsFragment : Fragment() {
                     item.expired -> {
                         binding.tvTripStatus.setBackgroundResource(R.drawable.bg_badge_pending)
                         binding.tvTripStatus.setTextColor(Color.parseColor("#B42318"))
-                        binding.btnAllocate.visibility = View.VISIBLE
-                        binding.btnAllocate.text = "Completed"
-                        binding.btnAllocate.setBackgroundResource(R.drawable.bg_allocate_button_green)
-                        binding.btnAllocate.setOnClickListener { onCompleteClick(item) }
+                        if (canCompleteOffline) {
+                            binding.btnAllocate.visibility = View.VISIBLE
+                            binding.btnAllocate.text = "Completed"
+                            binding.btnAllocate.setBackgroundResource(R.drawable.bg_allocate_button_green)
+                            binding.btnAllocate.setOnClickListener { onCompleteClick(item) }
+                        } else {
+                            binding.btnAllocate.visibility = View.GONE
+                        }
                     }
                     item.status == "Pending" -> {
                         binding.tvTripStatus.setBackgroundResource(R.drawable.bg_badge_pending)
