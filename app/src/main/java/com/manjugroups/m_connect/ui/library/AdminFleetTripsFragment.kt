@@ -437,10 +437,6 @@ class AdminFleetTripsFragment : Fragment() {
     }
 
     private fun openCompleteOfflineSheet(trip: AdminTrip) {
-        if (!useMmsFleet) {
-            Toast.makeText(requireContext(), "Use the web Travel Desk for agency trips.", Toast.LENGTH_SHORT).show()
-            return
-        }
         AdminFleetCompleteOfflineSheet.newInstance(trip) { result ->
             submitCompleteOffline(trip, result)
         }.showOnce(parentFragmentManager, "AdminFleetCompleteOfflineSheet")

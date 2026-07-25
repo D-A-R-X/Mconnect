@@ -77,7 +77,7 @@ class DriverStartTripBottomSheet : BottomSheetDialogFragment() {
             ivUploadedPhoto.visibility = View.VISIBLE
             ivUploadedPhoto.load(file)
         } else {
-            Toast.makeText(requireContext(), "Camera capture cancelled", Toast.LENGTH_SHORT).show()
+            if (isAdded) Toast.makeText(requireContext(), "Camera capture cancelled", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -87,7 +87,7 @@ class DriverStartTripBottomSheet : BottomSheetDialogFragment() {
         if (granted) {
             launchCamera()
         } else {
-            Toast.makeText(requireContext(), "Camera permission is required", Toast.LENGTH_SHORT).show()
+            if (isAdded) Toast.makeText(requireContext(), "Camera permission is required", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -154,11 +154,16 @@ class DriverStartTripBottomSheet : BottomSheetDialogFragment() {
         }
         val file = File.createTempFile("start_", ".jpg", dir)
         currentPhotoFile = file
-        val uri = FileProvider.getUriForFile(
-            requireContext(),
-            "${requireContext().packageName}.fileprovider",
-            file
-        )
+        val uri = runCatching {
+            FileProvider.getUriForFile(
+                requireContext(),
+                "${requireContext().packageName}.fileprovider",
+                file
+            )
+        }.getOrElse {
+            if (isAdded) Toast.makeText(requireContext(), "Unable to open camera", Toast.LENGTH_SHORT).show()
+            return
+        }
         currentPhotoUri = uri
 
         val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
@@ -257,6 +262,7 @@ class DriverStartTripBottomSheet : BottomSheetDialogFragment() {
                 setFragmentResult(RESULT_KEY, bundleOf("success" to true, "visitId" to visitId))
                 dismissAllowingStateLoss()
             } catch (e: Exception) {
+                if (!isAdded) return@launch
                 btnSubmit.isEnabled = true
                 Toast.makeText(requireContext(), readApiError(e), Toast.LENGTH_LONG).show()
             }
