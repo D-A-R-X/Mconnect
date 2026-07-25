@@ -24,6 +24,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import com.manjugroups.m_connect.ui.common.showOnce
 import com.manjugroups.m_connect.ui.common.InfiniteScrollPager
+import com.manjugroups.m_connect.ui.home.CompleteCpVisitBottomSheet
 
 class AdminFleetTripsFragment : Fragment() {
 
@@ -118,7 +119,7 @@ class AdminFleetTripsFragment : Fragment() {
         // When the SV outcome form (Booking/Postpone/Not Interested) completes,
         // refresh the trips list so the completed-offline trip disappears.
         parentFragmentManager.setFragmentResultListener(
-            com.manjugroups.m_connect.ui.home.CompleteCpVisitBottomSheet.RESULT_KEY,
+            CompleteCpVisitBottomSheet.RESULT_KEY,
             viewLifecycleOwner,
         ) { _, _ -> refresh() }
 
@@ -483,7 +484,7 @@ class AdminFleetTripsFragment : Fragment() {
                     "Trip details saved. Opening outcome form.",
                     Toast.LENGTH_SHORT,
                 ).show()
-                com.manjugroups.m_connect.ui.home.CompleteCpVisitBottomSheet
+                CompleteCpVisitBottomSheet
                     .forSiteVisit(siteVisitId = trip.id)
                     .showOnce(parentFragmentManager, "fleet_sv_outcome")
             } else {
