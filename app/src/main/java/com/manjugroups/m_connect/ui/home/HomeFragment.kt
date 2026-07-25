@@ -1889,7 +1889,7 @@ class HomeFragment : Fragment() {
 
         // Step 1: trip details
         com.manjugroups.m_connect.ui.library.AdminFleetCompleteOfflineSheet
-            .newInstance(adminTrip) { result ->
+            .newInstance(adminTrip, emptyList()) { result ->
                 // Submit trip details to backend, then open outcome sheet.
                 val token = session.bearerToken
                 if (token.isBlank()) {
@@ -1910,8 +1910,6 @@ class HomeFragment : Fragment() {
                                 distanceKm = result.distanceKm,
                                 driverName = result.driverName,
                                 driverPhone = result.driverPhone,
-                                beta = result.beta,
-                                tollAmount = result.tollAmount,
                             ),
                         )
                     }.getOrNull()
@@ -2622,7 +2620,7 @@ class HomeFragment : Fragment() {
             tollAmount = trip.travelDeskTollAmount,
             totalAmount = trip.travelDeskTotalAmount,
         )
-        com.manjugroups.m_connect.ui.library.AdminFleetCompleteOfflineSheet.newInstance(adminTrip) { result ->
+        com.manjugroups.m_connect.ui.library.AdminFleetCompleteOfflineSheet.newInstance(adminTrip, emptyList()) { result ->
             submitHomeFleetCompleteOffline(trip, result)
         }.showOnce(parentFragmentManager, "home_fleet_complete_offline")
     }
@@ -2650,8 +2648,6 @@ class HomeFragment : Fragment() {
                         distanceKm = result.distanceKm,
                         driverName = result.driverName,
                         driverPhone = result.driverPhone,
-                        beta = result.beta,
-                        tollAmount = result.tollAmount,
                     ),
                 )
             }.getOrNull()

@@ -437,7 +437,7 @@ class AdminFleetTripsFragment : Fragment() {
     }
 
     private fun openCompleteOfflineSheet(trip: AdminTrip) {
-        AdminFleetCompleteOfflineSheet.newInstance(trip) { result ->
+        AdminFleetCompleteOfflineSheet.newInstance(trip, vehicles) { result ->
             submitCompleteOffline(trip, result)
         }.showOnce(parentFragmentManager, "AdminFleetCompleteOfflineSheet")
     }
@@ -459,8 +459,6 @@ class AdminFleetTripsFragment : Fragment() {
                         distanceKm = result.distanceKm,
                         driverName = result.driverName,
                         driverPhone = result.driverPhone,
-                        beta = result.beta,
-                        tollAmount = result.tollAmount,
                     ),
                 )
             }.getOrNull()
