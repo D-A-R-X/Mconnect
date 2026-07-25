@@ -3776,6 +3776,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                         conversationId = conversationId,
                         body = previousText,
                         parentMessageId = parentId,
+                        mentionedStaffIds = emptyList(),
                         attachments = uploadedAttachments,
                     ),
                 )

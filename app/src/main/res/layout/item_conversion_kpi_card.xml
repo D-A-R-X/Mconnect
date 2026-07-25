@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/cardConversion"
+    android:layout_width="140dp"
+    android:layout_height="wrap_content"
+    android:layout_marginEnd="12dp"
+    android:layout_marginVertical="8dp"
+    app:cardCornerRadius="16dp"
+    app:cardElevation="8dp"
+    app:cardBackgroundColor="#FFFFFF"
+    android:outlineAmbientShadowColor="#1A000000"
+    android:outlineSpotShadowColor="#1A000000">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="12dp">
+
+        <LinearLayout
+            android:id="@+id/llTopRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toStartOf="parent">
+
+            <ImageView
+                android:id="@+id/ivConversionBadge"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_custom_user" />
+
+            <TextView
+                android:id="@+id/tvConversionTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:text="Interest\nRate"
+                android:textColor="#374151"
+                android:textSize="12sp"
+                android:fontFamily="@font/inter_semibold"
+                android:lineSpacingExtra="0dp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/tvConversionValue"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="55.0%"
+            android:textColor="#1E3A8A"
+            android:textSize="22sp"
+            android:fontFamily="@font/inter_bold"
+            android:layout_marginTop="8dp"
+            app:layout_constraintTop_toBottomOf="@id/llTopRow"
+            app:layout_constraintStart_toStartOf="parent" />
+
+        <LinearLayout
+            android:id="@+id/llConversionTrend"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="4dp"
+            app:layout_constraintTop_toBottomOf="@id/tvConversionValue"
+            app:layout_constraintStart_toStartOf="parent">
+
+            <ImageView
+                android:id="@+id/ivConversionTrendArrow"
+                android:layout_width="10dp"
+                android:layout_height="10dp"
+                android:src="@drawable/ic_arrow_up"
+                app:tint="#10B981" />
+
+            <TextView
+                android:id="@+id/tvConversionTrendValue"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="3.2%"
+                android:textColor="#10B981"
+                android:textSize="11sp"
+                android:fontFamily="@font/inter_semibold"
+                android:layout_marginStart="2dp" />
+        </LinearLayout>
+
+        <ImageView
+            android:id="@+id/ivConversionChart"
+            android:layout_width="match_parent"
+            android:layout_height="20dp"
+            android:layout_marginTop="12dp"
+            android:scaleType="fitXY"
+            android:src="@drawable/ic_graph_arrow"
+            app:layout_constraintTop_toBottomOf="@id/llConversionTrend"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</androidx.cardview.widget.CardView>

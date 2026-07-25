@@ -31,7 +31,12 @@ import com.manjugroups.m_connect.network.Booking
 import com.manjugroups.m_connect.network.BookingApproveRequest
 import com.manjugroups.m_connect.network.BookingRejectRequest
 import com.manjugroups.m_connect.network.UpdateBookingRequest
+import android.net.Uri
+import androidx.activity.result.contract.ActivityResultContracts
+import com.manjugroups.m_connect.network.StorageUploader
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -394,7 +399,7 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
                 setOnClickListener { promptReject() }
             })
             row.addView(actionButton("Approve", "#ECFDF3", "#067647").apply {
-                setOnClickListener { approveBooking() }
+                setOnClickListener { promptApprove() }
             })
             content.addView(row)
         } else if (request?.status == "pending") {
@@ -571,21 +576,156 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
-    private fun approveBooking() {
+    private var pendingProofStorageId: String? = null
+    private var pendingProofFileName: String? = null
+    private var tvApprovalAttachmentName: TextView? = null
+    private var btnUploadAttachment: TextView? = null
+
+    private val pickApprovalAttachment = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        if (uri == null) return@registerForActivityResult
+        uploadApprovalAttachment(uri)
+    }
+
+    private fun uploadApprovalAttachment(uri: Uri) {
+        val ctx = context ?: return
+        btnUploadAttachment?.text = "Uploading…"
+        btnUploadAttachment?.isEnabled = false
+        viewLifecycleOwner.lifecycleScope.launch {
+            val displayName = resolveDocName(uri)
+            val mime = ctx.contentResolver.getType(uri) ?: "application/octet-stream"
+            val uploaded = withContext(Dispatchers.IO) {
+                runCatching {
+                    val suffix = displayName.substringAfterLast('.', "bin").take(8)
+                    val temp = java.io.File.createTempFile("approve_proof_", ".$suffix", ctx.cacheDir)
+                    try {
+                        ctx.contentResolver.openInputStream(uri).use { input ->
+                            requireNotNull(input) { "Unable to read selected file" }
+                            temp.outputStream().use { output -> input.copyTo(output) }
+                        }
+                        StorageUploader.upload(api, session.bearerToken, temp, contentType = mime)
+                    } finally {
+                        temp.delete()
+                    }
+                }.getOrNull()
+            }
+            val storageId = uploaded?.storageId
+            btnUploadAttachment?.isEnabled = true
+            if (!storageId.isNullOrBlank()) {
+                pendingProofStorageId = storageId
+                pendingProofFileName = displayName
+                tvApprovalAttachmentName?.text = displayName
+                tvApprovalAttachmentName?.setTextColor(Color.parseColor("#187A2F"))
+                btnUploadAttachment?.text = "Change File"
+                Toast.makeText(ctx, "Attachment uploaded", Toast.LENGTH_SHORT).show()
+            } else {
+                btnUploadAttachment?.text = "Attach File (Optional)"
+                Toast.makeText(ctx, "Attachment upload failed", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun resolveDocName(uri: Uri): String {
+        val ctx = context ?: return "payment-proof"
+        ctx.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val idx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (idx >= 0) return cursor.getString(idx)
+            }
+        }
+        return uri.lastPathSegment ?: "payment-proof"
+    }
+
+    private fun promptApprove() {
+        val input = EditText(requireContext()).apply {
+            hint = "Enter Transaction ID / Ref No *"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT
+            setSingleLine(true)
+        }
+        val attachRow = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(12), 0, 0)
+        }
+        attachRow.addView(TextView(requireContext()).apply {
+            text = "Payment Proof / Receipt (Optional)"
+            textSize = 12f
+            typeface = interFont(R.font.inter_medium)
+            setTextColor(Color.parseColor("#475467"))
+        })
+
+        btnUploadAttachment = TextView(requireContext()).apply {
+            text = if (pendingProofStorageId != null) "Change File" else "Attach File (Optional)"
+            textSize = 13f
+            typeface = interFont(R.font.inter_medium)
+            setTextColor(Color.parseColor("#1570EF"))
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+            background = ResourcesCompat.getDrawable(resources, R.drawable.bg_outcome_edit_chip_inactive, null)
+            setOnClickListener {
+                pickApprovalAttachment.launch("*/*")
+            }
+        }
+        tvApprovalAttachmentName = TextView(requireContext()).apply {
+            text = pendingProofFileName ?: "No file attached"
+            textSize = 12f
+            setTextColor(if (pendingProofStorageId != null) Color.parseColor("#187A2F") else Color.parseColor("#98A2B3"))
+            setPadding(0, dp(4), 0, 0)
+        }
+        attachRow.addView(btnUploadAttachment)
+        attachRow.addView(tvApprovalAttachmentName)
+
+        val container = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(10), dp(20), dp(10))
+            addView(TextView(requireContext()).apply {
+                text = "Attach Accounts Transaction ID / Ref No to approve this booking."
+                textSize = 13f
+                setTextColor(Color.parseColor("#475467"))
+                setPadding(0, 0, 0, dp(10))
+            })
+            addView(input)
+            addView(attachRow)
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle("Approve Booking")
+            .setView(container)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Approve", null)
+            .create()
+            .apply {
+                setOnShowListener {
+                    getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                        val txId = input.text?.toString()?.trim().orEmpty()
+                        if (txId.isBlank()) {
+                            Toast.makeText(requireContext(), "Transaction ID / Ref No is required to approve", Toast.LENGTH_SHORT).show()
+                            return@setOnClickListener
+                        }
+                        dismiss()
+                        approveBooking(txId, pendingProofStorageId, pendingProofFileName)
+                    }
+                }
+            }
+            .show()
+    }
+
+    private fun approveBooking(transactionId: String, proofStorageId: String? = null, proofFileName: String? = null) {
         val b = booking ?: return
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val tx = approvalTransactionInput?.text?.toString()?.trim()?.takeIf { it.isNotBlank() }
                 val resp = api.approveBooking(
                     session.bearerToken,
                     b.id,
-                    BookingApproveRequest(accountsTransactionId = tx),
+                    BookingApproveRequest(
+                        accountsTransactionId = transactionId,
+                        accountsPaymentProofStorageId = proofStorageId,
+                        accountsPaymentProofFileName = proofFileName,
+                    ),
                 )
                 if (!resp.success) {
                     Toast.makeText(requireContext(), resp.error ?: "Approve failed", Toast.LENGTH_LONG).show()
                     return@launch
                 }
-                Toast.makeText(requireContext(), "Approved", Toast.LENGTH_SHORT).show()
+                pendingProofStorageId = null
+                pendingProofFileName = null
+                Toast.makeText(requireContext(), "Approved Successfully", Toast.LENGTH_SHORT).show()
                 setFragmentResult(RESULT_KEY, bundleOf("bookingId" to b.id))
                 loadBooking()
             } catch (e: Exception) {

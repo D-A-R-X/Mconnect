@@ -21,6 +21,19 @@
         <ImageView style="@style/OutcomeFieldChevron" />
     </LinearLayout>
 
+    <TextView
+        android:id="@+id/tvConversionPrefillStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:drawableStart="@drawable/ic_check_circle_green"
+        android:drawablePadding="6dp"
+        android:fontFamily="@font/inter_medium"
+        android:text="Previous booking details auto-filled"
+        android:textColor="#187A2F"
+        android:textSize="12sp"
+        android:visibility="gone" />
+
     <LinearLayout
         android:id="@+id/groupBookConversion"
         android:layout_width="match_parent"
@@ -29,7 +42,7 @@
         android:visibility="gone">
         <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Conversion Source" />
         <LinearLayout android:id="@+id/rowBookConversionSource" style="@style/OutcomeFieldPillClickable">
-            <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_checkbox_checked" />
+            <ImageView android:id="@+id/ivBookConversionSource" style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_checkbox_checked" />
             <TextView android:id="@+id/tvBookConversionSource" style="@style/OutcomeFieldValue" android:text="Manual previous booking entry" />
         </LinearLayout>
         <LinearLayout
@@ -52,10 +65,16 @@
                 <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_rupee" />
                 <EditText android:id="@+id/etBookConversionCredit" style="@style/OutcomeFieldEdit" android:hint="Amount paid on previous booking" android:inputType="numberDecimal" />
             </LinearLayout>
-            <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Conversion Notes" />
-            <LinearLayout style="@style/OutcomeFieldPill">
-                <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_doc" />
-                <EditText android:id="@+id/etBookConversionNotes" style="@style/OutcomeFieldEdit" android:hint="Details about the previous booking" android:inputType="textCapSentences" />
+            <LinearLayout
+                android:id="@+id/groupBookConversionNotes"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+                <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Conversion Notes" />
+                <LinearLayout style="@style/OutcomeFieldPill">
+                    <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_doc" />
+                    <EditText android:id="@+id/etBookConversionNotes" style="@style/OutcomeFieldEdit" android:hint="Details about the previous booking" android:inputType="textCapSentences" />
+                </LinearLayout>
             </LinearLayout>
         </LinearLayout>
         <LinearLayout
@@ -80,7 +99,7 @@
         android:visibility="gone">
         <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Exchange Source" />
         <LinearLayout android:id="@+id/rowBookExchangeSource" style="@style/OutcomeFieldPillClickable">
-            <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_checkbox_checked" />
+            <ImageView android:id="@+id/ivBookExchangeSource" style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_checkbox_checked" />
             <TextView android:id="@+id/tvBookExchangeSource" style="@style/OutcomeFieldValue" android:text="Manual old property entry" />
         </LinearLayout>
         <LinearLayout
@@ -110,21 +129,32 @@
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:visibility="gone">
-            <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Old Project ID *" />
-            <LinearLayout style="@style/OutcomeFieldPill">
+            <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Old Project Name *" />
+            <LinearLayout android:id="@+id/rowBookExchangeInternalProject" style="@style/OutcomeFieldPillClickable">
                 <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_briefcase" />
-                <EditText android:id="@+id/etBookExchangeLookupProject" style="@style/OutcomeFieldEdit" android:hint="Linked old project ID" android:inputType="text" />
+                <TextView android:id="@+id/tvBookExchangeInternalProject" style="@style/OutcomeFieldValue" android:hint="Select old project" />
+                <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_chevron_down" />
             </LinearLayout>
             <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Old Plot Number *" />
-            <LinearLayout style="@style/OutcomeFieldPill">
+            <LinearLayout android:id="@+id/rowBookExchangeInternalPlot" style="@style/OutcomeFieldPillClickable">
                 <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_briefcase" />
-                <EditText android:id="@+id/etBookExchangeLookupPlot" style="@style/OutcomeFieldEdit" android:hint="Old plot" android:inputType="text" />
+                <TextView android:id="@+id/tvBookExchangeInternalPlot" style="@style/OutcomeFieldValue" android:hint="Select old plot" />
+                <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_chevron_down" />
             </LinearLayout>
             <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Connected Mobile Number *" />
             <LinearLayout style="@style/OutcomeFieldPill">
                 <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_phone" />
                 <EditText android:id="@+id/etBookExchangeMobile" style="@style/OutcomeFieldEdit" android:hint="10-digit booked mobile" android:inputType="phone" android:maxLength="10" />
             </LinearLayout>
+            <TextView
+                android:id="@+id/tvBookExchangeInternalStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:fontFamily="@font/inter_medium"
+                android:textColor="#187A2F"
+                android:textSize="12sp"
+                android:visibility="gone" />
         </LinearLayout>
         <LinearLayout
             android:id="@+id/groupBookExchangeLinked"
@@ -132,16 +162,126 @@
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:visibility="gone">
-            <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Source Booking ID *" />
-            <LinearLayout style="@style/OutcomeFieldPill">
-                <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_doc" />
-                <EditText android:id="@+id/etBookExchangeSourceBooking" style="@style/OutcomeFieldEdit" android:hint="Matched booking ID" android:inputType="text" />
+            <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Exchanged Property *" />
+            <LinearLayout android:id="@+id/rowBookExchangeLinkedProperty" style="@style/OutcomeFieldPillClickable">
+                <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_briefcase" />
+                <TextView android:id="@+id/tvBookExchangeLinkedProperty" style="@style/OutcomeFieldValue" android:hint="Select exchanged property" />
+                <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_chevron_down" />
+            </LinearLayout>
+            <EditText android:id="@+id/etBookExchangeSourceBooking" android:layout_width="0dp" android:layout_height="0dp" android:visibility="gone" />
+        </LinearLayout>
+        <!-- Exchanged Property Summary Card (matching iOS DirectBookingTypeSummaryCard) -->
+        <LinearLayout
+            android:id="@+id/cardBookExchangeSummary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_outcome_edit_chip_inactive"
+            android:orientation="vertical"
+            android:padding="12dp"
+            android:visibility="gone">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+                <TextView
+                    android:id="@+id/tvBookSummaryLabel1"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:fontFamily="@font/inter_medium"
+                    android:text="Project Name"
+                    android:textColor="#667085"
+                    android:textSize="12sp" />
+                <TextView
+                    android:id="@+id/tvBookSummaryValue1"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/inter_semibold"
+                    android:text="—"
+                    android:textColor="#101828"
+                    android:textSize="12sp" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal">
+                <TextView
+                    android:id="@+id/tvBookSummaryLabel2"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:fontFamily="@font/inter_medium"
+                    android:text="Plot Number"
+                    android:textColor="#667085"
+                    android:textSize="12sp" />
+                <TextView
+                    android:id="@+id/tvBookSummaryValue2"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/inter_semibold"
+                    android:text="—"
+                    android:textColor="#101828"
+                    android:textSize="12sp" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal">
+                <TextView
+                    android:id="@+id/tvBookSummaryLabel3"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:fontFamily="@font/inter_medium"
+                    android:text="Extent (Sq. Ft. / Acres)"
+                    android:textColor="#667085"
+                    android:textSize="12sp" />
+                <TextView
+                    android:id="@+id/tvBookSummaryValue3"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/inter_semibold"
+                    android:text="—"
+                    android:textColor="#101828"
+                    android:textSize="12sp" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal">
+                <TextView
+                    android:id="@+id/tvBookSummaryLabel4"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:fontFamily="@font/inter_medium"
+                    android:text="Exchange Value"
+                    android:textColor="#667085"
+                    android:textSize="12sp" />
+                <TextView
+                    android:id="@+id/tvBookSummaryValue4"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/inter_semibold"
+                    android:text="—"
+                    android:textColor="#101828"
+                    android:textSize="12sp" />
             </LinearLayout>
         </LinearLayout>
-        <TextView android:id="@+id/lblBookExchangeValue" style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Exchange Value *" />
-        <LinearLayout style="@style/OutcomeFieldPill">
-            <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_rupee" />
-            <EditText android:id="@+id/etBookExchangeValue" style="@style/OutcomeFieldEdit" android:hint="Old property value" android:inputType="numberDecimal" />
+        <LinearLayout
+            android:id="@+id/groupBookExchangeValue"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+            <TextView android:id="@+id/lblBookExchangeValue" style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Exchange Value *" />
+            <LinearLayout style="@style/OutcomeFieldPill">
+                <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_rupee" />
+                <EditText android:id="@+id/etBookExchangeValue" style="@style/OutcomeFieldEdit" android:hint="Old property value" android:inputType="numberDecimal" />
+            </LinearLayout>
         </LinearLayout>
         <TextView
             android:id="@+id/tvBookExchangeBalance"
@@ -186,11 +326,56 @@
         <ImageView style="@style/OutcomeFieldChevron" />
     </LinearLayout>
 
+    <TextView
+        android:id="@+id/tvPlotPrefillStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:drawableStart="@drawable/ic_check_circle_green"
+        android:drawablePadding="6dp"
+        android:fontFamily="@font/inter_medium"
+        android:text="Plot pricing filled from project settings"
+        android:textColor="#187A2F"
+        android:textSize="12sp"
+        android:visibility="gone" />
+
     <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Property Type *" />
     <LinearLayout android:id="@+id/rowBookProperty" style="@style/OutcomeFieldPillClickable">
         <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_briefcase" />
         <TextView android:id="@+id/tvBookProperty" style="@style/OutcomeFieldValue" android:hint="Select Type" />
         <ImageView style="@style/OutcomeFieldChevron" />
+    </LinearLayout>
+
+    <!-- Duplicate Bookings (single-cell Yes radio) -->
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Duplicate Bookings" />
+    <LinearLayout
+        android:id="@+id/rowBookDuplicate"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_outcome_field_pill"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="14dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:text="Yes"
+            android:textColor="#101828"
+            android:textSize="13sp" />
+
+        <ImageView
+            android:id="@+id/ivBookDuplicate"
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_outcome_radio_on" />
     </LinearLayout>
 
     <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="20dp" android:text="Source / Referral" />
@@ -308,35 +493,4 @@
         </LinearLayout>
     </LinearLayout>
 
-    <!-- Duplicate Bookings (single-cell Yes radio) -->
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Duplicate Bookings" />
-    <LinearLayout
-        android:id="@+id/rowBookDuplicate"
-        android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:layout_marginTop="6dp"
-        android:background="@drawable/bg_outcome_field_pill"
-        android:clickable="true"
-        android:focusable="true"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingHorizontal="14dp">
-
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:fontFamily="@font/inter_medium"
-            android:includeFontPadding="false"
-            android:text="Yes"
-            android:textColor="#101828"
-            android:textSize="13sp" />
-
-        <ImageView
-            android:id="@+id/ivBookDuplicate"
-            android:layout_width="18dp"
-            android:layout_height="18dp"
-            android:contentDescription="@null"
-            android:src="@drawable/ic_outcome_radio_on" />
-    </LinearLayout>
 </LinearLayout>

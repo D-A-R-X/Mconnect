@@ -495,16 +495,17 @@ class GroupInfoFragment : Fragment() {
                             session.bearerToken,
                             UpdateChannelRequest(
                                 channelId = channelId!!,
-                                name = name.takeIf { it != channel?.name },
-                                description = desc.takeIf { it != (channel?.description ?: "") },
+                                name = name,
+                                description = desc,
+                                type = channel?.type,
                             ),
                         )
                         else -> api.updateGroupConversation(
                             session.bearerToken,
                             UpdateGroupConversationRequest(
                                 conversationId = conversationId!!,
-                                name = name.takeIf { it != currentName },
-                                description = desc.takeIf { it != (conversationDescription ?: "") },
+                                name = name,
+                                description = desc,
                             ),
                         )
                     }
@@ -556,16 +557,42 @@ class GroupInfoFragment : Fragment() {
                 toast(result?.errorMessage ?: "Couldn't upload the photo")
                 return@launch
             }
-            val saved = runCatching {
+            val savedResult = runCatching {
                 api.updateChannel(
                     session.bearerToken,
-                    UpdateChannelRequest(channelId = chId, avatarStorageId = storageId),
+                    UpdateChannelRequest(
+                        channelId = chId, 
+                        name = channel?.name,
+                        description = channel?.description,
+                        type = channel?.type,
+                        avatarStorageId = storageId,
+                        avatarUrl = storageId,
+                        avatar = storageId,
+                        profilePhoto = storageId,
+                        photo = storageId,
+                        image = storageId,
+                        imageUrl = storageId,
+                        photoUrl = storageId,
+                        avatarId = storageId
+                    ),
                 )
-            }.getOrNull()
+            }
             if (_binding == null) return@launch
             binding.avatarUploadOverlay.visibility = View.GONE
             binding.btnChangePhoto.isEnabled = true
-            if (saved?.success == true) refresh() else toast("Couldn't update the group photo")
+            
+            val saved = savedResult.getOrNull()
+            if (saved?.success == true) {
+                refresh()
+            } else {
+                val err = savedResult.exceptionOrNull()
+                val msg = if (err is retrofit2.HttpException) err.response()?.errorBody()?.string() else err?.message
+                android.app.AlertDialog.Builder(requireContext())
+                    .setTitle("Error")
+                    .setMessage("Failed to update photo:\n\n$msg")
+                    .setPositiveButton("OK", null)
+                    .show()
+            }
         }
     }
 

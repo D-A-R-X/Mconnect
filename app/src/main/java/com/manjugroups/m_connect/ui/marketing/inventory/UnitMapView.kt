@@ -82,7 +82,7 @@ class UnitMapView @JvmOverloads constructor(
                 (x + w) * scale + offsetX,
                 (y + h) * scale + offsetY,
             )
-            fillPaint.color = colorForStatus(u.status)
+            fillPaint.color = colorForStatus(u.status ?: "unknown")
             canvas.drawRect(rect, fillPaint)
             canvas.drawRect(rect, strokePaint)
             u.unitNumber?.let { label ->
