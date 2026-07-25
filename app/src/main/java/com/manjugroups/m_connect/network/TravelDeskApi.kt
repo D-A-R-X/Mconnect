@@ -208,6 +208,12 @@ interface TravelDeskApi {
         @Body body: TravelDeskDriverTripRequest
     ): TravelDeskAllocateResponse
 
+    @POST("api/mms-fleet/dispatch/complete-offline")
+    suspend fun completeOfflineMms(
+        @Header("Authorization") token: String,
+        @Body body: CompleteOfflineTripRequest
+    ): TravelDeskAllocateResponse
+
     @GET("api/mms-fleet/dispatch/drivers")
     suspend fun listMmsDrivers(
         @Header("Authorization") token: String

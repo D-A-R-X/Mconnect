@@ -1365,6 +1365,10 @@ data class CpVisitDetail(
      * staff list endpoint.
      */
     val inchargeStaff: CpVisitStaff? = null,
+    // Fleet "completed offline" signal — mirrors the TodayVisit field
+    // so the SV overview can unlock outcome buttons for staff who
+    // didn't start a live trip.
+    val completedOffline: Boolean? = null,
 )
 
 data class CpVisitProject(
@@ -1656,6 +1660,12 @@ data class TodayVisit(
     // CpVisitDetail's stored `createdAt` (same numeric value).
     @com.google.gson.annotations.SerializedName("_creationTime")
     val creationTime: Double? = null,
+    // Fleet "completed offline" flow: when the fleet admin marks an
+    // expired SV as completed without a live trip, the backend sets
+    // completedOffline=true and outcome=null. The site incharge must
+    // then record the outcome from their mobile app.
+    val completedOffline: Boolean? = null,
+    val outcome: String? = null,
 )
 
 data class CpVisitState(

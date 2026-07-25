@@ -2553,6 +2553,9 @@ class HomeFragment : Fragment() {
             onReassign = { openFleetAllocate(trip) },
             onRemove = { removeFleetTripDriver(trip) },
             onComplete = { openHomeFleetCompleteOffline(trip) },
+            onProgressAction = { action, km, toll, beta ->
+                submitHomeFleetProgressAction(trip, action, km, toll, beta)
+            },
         ).showOnce(parentFragmentManager, "home_fleet_manage")
     }
 
@@ -2666,6 +2669,143 @@ class HomeFragment : Fragment() {
                     resp?.error ?: "Could not complete this trip.",
                     android.widget.Toast.LENGTH_LONG,
                 ).show()
+            }
+        }
+    }
+
+    /**
+     * Advance a fleet trip through its lifecycle stage from the home-screen
+     * manage sheet. Internal (MMS) trips use GeoTrackApi mms-fleet endpoints;
+     * external (travel-desk) trips use TravelDeskApi driver endpoints.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    private fun submitHomeFleetProgressAction(
+        trip: com.manjugroups.m_connect.network.TravelDeskTrip,
+        action: String,
+        km: Double?,
+        toll: Double?,
+        beta: Double?,
+    ) {
+        val token = session.bearerToken
+        if (token.isBlank()) {
+            android.widget.Toast.makeText(
+                requireContext(),
+                "Session expired \u2014 sign in again.",
+                android.widget.Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
+        val sheet = parentFragmentManager.findFragmentByTag("home_fleet_manage")
+            as? com.manjugroups.m_connect.ui.library.AdminFleetTripManageSheet
+
+        val isExternal = trip.travelAgency?.name?.isNotBlank() == true
+        val id = trip.id.orEmpty()
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val auth = "Bearer $token"
+                when (action) {
+                    "reached" -> {
+                        if (!isExternal) {
+                            com.manjugroups.m_connect.network.GeoTrackApi.create()
+                                .markMmsFleetDriverArrived(
+                                    auth,
+                                    com.manjugroups.m_connect.network.MmsFleetDriverSiteVisitRequest(id),
+                                )
+                        } else {
+                            fleetApi.driverMarkArrived(
+                                auth,
+                                com.manjugroups.m_connect.network.TravelDeskDriverTripRequest(id),
+                            )
+                        }
+                    }
+                    "start" -> {
+                        if (!isExternal) {
+                            com.manjugroups.m_connect.network.GeoTrackApi.create()
+                                .startMmsFleetDriverTrip(
+                                    auth,
+                                    com.manjugroups.m_connect.network.MmsFleetDriverStartRequest(
+                                        siteVisitId = id,
+                                        photoIds = emptyList(),
+                                        startKm = km,
+                                    ),
+                                )
+                        } else {
+                            fleetApi.driverStartTrip(
+                                auth,
+                                com.manjugroups.m_connect.network.TravelDeskStartTripRequest(
+                                    siteVisitId = id,
+                                    otp = "0000",
+                                    photoIds = emptyList(),
+                                    startKm = km,
+                                ),
+                            )
+                        }
+                    }
+                    "on_site" -> {
+                        if (!isExternal) {
+                            com.manjugroups.m_connect.network.GeoTrackApi.create()
+                                .markMmsFleetDriverOnSite(
+                                    auth,
+                                    com.manjugroups.m_connect.network.MmsFleetDriverSiteVisitRequest(id),
+                                )
+                        } else {
+                            fleetApi.driverMarkOnSite(
+                                auth,
+                                com.manjugroups.m_connect.network.TravelDeskDriverTripRequest(id),
+                            )
+                        }
+                    }
+                    "picked_from_site" -> {
+                        if (!isExternal) {
+                            com.manjugroups.m_connect.network.GeoTrackApi.create()
+                                .markMmsFleetDriverPickedFromSite(
+                                    auth,
+                                    com.manjugroups.m_connect.network.MmsFleetDriverSiteVisitRequest(id),
+                                )
+                        } else {
+                            fleetApi.driverMarkPickedFromSite(
+                                auth,
+                                com.manjugroups.m_connect.network.TravelDeskDriverTripRequest(id),
+                            )
+                        }
+                    }
+                    "end" -> {
+                        if (!isExternal) {
+                            com.manjugroups.m_connect.network.GeoTrackApi.create()
+                                .endMmsFleetDriverTrip(
+                                    auth,
+                                    com.manjugroups.m_connect.network.MmsFleetDriverEndRequest(
+                                        siteVisitId = id,
+                                        photoIds = emptyList(),
+                                        endKm = km,
+                                    ),
+                                )
+                        } else {
+                            fleetApi.driverEndTrip(
+                                auth,
+                                com.manjugroups.m_connect.network.TravelDeskEndTripRequest(
+                                    siteVisitId = id,
+                                    photoIds = emptyList(),
+                                    endKm = km,
+                                    tollAmount = toll,
+                                    beta = beta,
+                                ),
+                            )
+                        }
+                    }
+                }
+                android.widget.Toast.makeText(
+                    requireContext(),
+                    "Progress updated",
+                    android.widget.Toast.LENGTH_SHORT,
+                ).show()
+                sheet?.dismissAllowingStateLoss()
+                loadFleetDispatch()
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                val msg = e.localizedMessage ?: "Update failed"
+                sheet?.showProgressError(msg)
             }
         }
     }

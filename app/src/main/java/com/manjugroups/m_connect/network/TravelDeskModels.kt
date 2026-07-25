@@ -95,6 +95,13 @@ data class TravelDeskTrip(
     val travelDeskOnSiteAt: Long? = null,
     val travelDeskPickedFromSiteAt: Long? = null,
     val travelDeskEndedAt: Long? = null,
+    val completedOffline: Boolean? = null,
+    val outcome: String? = null,
+    val travelDeskPricingMode: String? = null,
+    val travelDeskPackageAmount: Double? = null,
+    val travelDeskBeta: Double? = null,
+    val travelDeskTollAmount: Double? = null,
+    val travelDeskTotalAmount: Double? = null,
     // Odometer readings + dashboard photos the driver captured at start/end.
     val travelDeskStartKm: Double? = null,
     val travelDeskEndKm: Double? = null,
@@ -165,6 +172,8 @@ data class TravelDeskEndTripRequest(
     val siteVisitId: String,
     val photoIds: List<String>,
     val endKm: Double? = null,
+    val tollAmount: Double? = null,
+    val beta: Double? = null,
 )
 
 data class TravelDeskStorageResponse(
@@ -253,6 +262,16 @@ data class AllocateTripRequest(
 )
 
 // ── Vehicles create ─────────────────────────────────────────────────────
+
+data class CompleteOfflineTripRequest(
+    val siteVisitId: String,
+    val packageAmount: Double,
+    val distanceKm: Double? = null,
+    val driverName: String? = null,
+    val driverPhone: String? = null,
+    val beta: Double? = null,
+    val tollAmount: Double? = null,
+)
 
 data class CreateVehicleRequest(
     val vehicleNumber: String,

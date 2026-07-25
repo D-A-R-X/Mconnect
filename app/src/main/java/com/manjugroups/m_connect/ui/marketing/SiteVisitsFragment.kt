@@ -537,6 +537,10 @@ class SiteVisitsFragment : Fragment() {
                 paintPill("Cancelled", R.drawable.bg_sv_status_red, "#B42318", "#B42318")
             isPostponed(s) ->
                 paintPill("Postponed", R.drawable.bg_sv_status_orange, "#B54708", "#F79009")
+            // Fleet "completed offline" — the admin marked this SV as done
+            // without a live trip; the site incharge must record the outcome.
+            visit.completedOffline == true && visit.outcome.isNullOrBlank() ->
+                paintPill("Outcome Pending", R.drawable.bg_home_trip_status_progress, "#B54708", "#B54708")
             isCompleted(s) ->
                 paintPill("Completed", R.drawable.bg_sv_status_green, "#027A48", "#027A48")
             isStarted(s) ->
