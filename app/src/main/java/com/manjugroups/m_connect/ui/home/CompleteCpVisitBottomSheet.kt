@@ -1509,7 +1509,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
 
         // ---- Site Visit interactions ----
         view?.findViewById<View>(R.id.rowSvProject)?.setOnClickListener { pickSvProject() }
-        view?.findViewById<View>(R.id.rowSvDate)?.setOnClickListener { openSvDatePicker() }
+        view?.findViewById<View>(R.id.rowSvDate)?.setOnClickListener { pickDate(tvSvDate, minDateMillis = System.currentTimeMillis()) }
         view?.findViewById<View>(R.id.rowSvTime)?.setOnClickListener { pickTime(tvSvTime) }
 
         view?.findViewById<View>(R.id.rowSvIncharge)?.setOnClickListener {
