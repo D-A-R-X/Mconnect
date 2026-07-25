@@ -402,3 +402,83 @@ collects package + distance; beta/toll belong in the start/end trip capture shee
 |------|--------|--------|--------|
 | Mconnect | origin (manjugroupsdev) | merge | ✅ `1ed1d52..aa2b8a4` |
 | Mconnect | darx (D-A-R-X) | merge | ✅ `1ed1d52..aa2b8a4` |
+
+---
+
+### Session 8 — Own Vehicle, FleetType in Server, IAM Gating, Chain to SV Outcome Form
+
+**Date:** 2026-07-25
+**Agent:** Codex (big-pickle)
+
+**Goal:** Add "Own Vehicle" as third fleet type, persist fleetType in the backend,
+gate complete-offline behind IAM, and chain the outcome form after completion.
+
+**What was done:**
+
+#### 1. Own Vehicle option (app)
+- Added "Own Vehicle" as third option in fleet type spinner (Internal / External / Own Vehicle).
+- Own Vehicle panel has just package price + distance — no vehicle/agency fields.
+- `parseResult()` returns `fleetType = "own"` with null vehicleId/agencyName.
+
+#### 2. FleetType persisted in backend (MMS web)
+- **Schema:** Added `completedOfflineFleetType` field to `siteVisits` table
+  (`v.union("internal", "external", "own")`).
+- **Mutation:** `markExpiredTripOutcomePending` now accepts `fleetType`, `vehicleId`,
+  `agencyName` args and stores fleetType on the visit.
+- **HTTP route:** `/api/mms-fleet/dispatch/complete-offline` forwards the new fields.
+- **Audit metadata:** fleetType, vehicleId, agencyName included.
+
+#### 3. FleetType sent from app
+- `CompleteOfflineTripRequest` now includes `fleetType`, `vehicleId`, `agencyName`.
+- All 3 call sites updated: AdminFleetTripsFragment, HomeFragment (×2).
+
+#### 4. IAM gating
+- Added `canCompleteOfflineFleet()` to `SessionManager` (checks `marketing.fleet.completeOffline`).
+- `AdminFleetTripsFragment`: "Completed" button hidden when user lacks permission.
+- `AdminFleetTripsFragment.openCompleteOfflineSheet()`: shows toast + returns if no permission.
+- `AdminTripsAdapter`: has `canCompleteOffline` flag set from session.
+- `HomeFragment`: "Complete" button on expired fleet cards gated on `canCompleteOfflineFleet()`.
+
+#### 5. Chain to SV outcome form
+- After complete-offline succeeds, the app now opens `CompleteCpVisitBottomSheet.forSiteVisit()`
+  which shows **Booking / Postpone / Not Interested** tabs.
+- Both AdminFleetTripsFragment and HomeFragment paths chain to the outcome form.
+- AdminFleetTripsFragment has a result listener to refresh when the outcome form completes.
+
+#### 6. MMS web fleet type in form
+- Added fleet type dropdown (Internal / External / Own Vehicle) to the complete-offline
+  dialog in `assigned-tab.tsx`.
+- `RecompleteTripDraft` type extended with `fleetType` field.
+- Controller defaults fleetType based on `visit.travelAgency` presence.
+- `handleRecomplete()` passes `fleetType` to the mutation.
+
+#### 7. External fleet status sync (verified)
+- All 5 driver mutations (markArrived, startTrip, endTrip, markOnSite, markPickedFromSite)
+  already update the corresponding `travelDesk*At` fields on siteVisits.
+- No changes needed — sync is working correctly.
+
+**Files changed:**
+
+| Repo | File | Change |
+|------|------|--------|
+| Mconnect | `AdminFleetCompleteOfflineSheet.kt` | Added Own Vehicle spinner option + layout |
+| Mconnect | `dialog_admin_fleet_complete_offline.xml` | Added Own Vehicle panel (layoutOwnVehicle) |
+| Mconnect | `TravelDeskModels.kt` | Added fleetType/vehicleId/agencyName to request |
+| Mconnect | `AdminFleetTripsFragment.kt` | IAM gating, chain to outcome form, pass fleetType |
+| Mconnect | `HomeFragment.kt` | Chain to outcome form, pass fleetType, IAM gate |
+| Mconnect | `SessionManager.kt` | Added canCompleteOfflineFleet() |
+| MMS web | `convex/schema.ts` | Added completedOfflineFleetType to siteVisits |
+| MMS web | `convex/marketing/fleet.ts` | Accept + store fleetType in mutation |
+| MMS web | `convex/http.ts` | Forward fleetType/vehicleId/agencyName in route |
+| MMS web | `features/fleet/types.ts` | Added fleetType to RecompleteTripDraft |
+| MMS web | `features/fleet/tabs/assigned-tab.tsx` | Fleet type dropdown in complete-offline form |
+| MMS web | `features/fleet/use-fleet-assigned-controller.ts` | Pass fleetType to mutation |
+
+**Build result:** `./gradlew :app:assembleDebug` → **BUILD SUCCESSFUL** ✅
+
+**Pushes:**
+| Repo | Remote | Branch | Status |
+|------|--------|--------|--------|
+| Mconnect | origin (manjugroupsdev) | merge | ✅ `aa2b8a4..f9af402` |
+| Mconnect | darx (D-A-R-X) | merge | ✅ `aa2b8a4..f9af402` |
+| MMS web | origin (manjusitedevelopment) | max | ✅ `962319cc..4b9b77e9` |
