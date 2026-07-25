@@ -16,17 +16,19 @@ import com.manjugroups.m_connect.R
 
 /**
  * Tap-through for an allocated agency trip. Shows the trip details + who it
- * went to + how far it's progressed, and lets the admin reassign the vehicle
- * or remove the driver — the same actions the travel-desk web offers.
- *
- * Reassign/Remove are hidden once the driver has set off (the backend refuses
- * both then) and for completed/expired trips, which are read-only history.
+ * went to + how far it's progressed, and lets the admin:
+ * - Reassign the vehicle / remove the driver (before start)
+ * - Advance the trip through each stage (reached → start → on-site →
+ *   picked-from-site → end)
+ * - Complete an expired trip offline
  */
 class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
 
     private var trip: AdminFleetTripsFragment.AdminTrip? = null
     private var onReassign: (() -> Unit)? = null
     private var onRemove: (() -> Unit)? = null
+    private var onComplete: (() -> Unit)? = null
+    private var onProgressAction: ((action: String, km: Double?, toll: Double?, beta: Double?) -> Unit)? = null
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val dialog = BottomSheetDialog(requireContext(), theme)
@@ -35,8 +37,6 @@ class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
                 .findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
             sheet?.let {
                 it.setBackgroundResource(android.R.color.transparent)
-                // The host defaults to match_parent, so an EXPANDED sheet leaves
-                // a white gap below short content. Wrap it to the content height.
                 it.layoutParams = it.layoutParams.apply {
                     height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
                 }
@@ -60,13 +60,9 @@ class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
         super.onViewCreated(view, savedInstanceState)
         val t = trip ?: run { dismissAllowingStateLoss(); return }
 
-        view.findViewById<TextView>(R.id.tvManageTitle).text =
-            t.address.takeIf { it.isNotBlank() && !it.startsWith("Project:") }
-                ?.let { "Site visit" } ?: "Site visit"
+        view.findViewById<TextView>(R.id.tvManageTitle).text = "Site visit"
         view.findViewById<TextView>(R.id.tvManageWhen).text = t.time
         view.findViewById<TextView>(R.id.tvManageAddress).text = t.address
-        // Name the source. An external-agency trip has no MFPL vehicle — the
-        // agency provides the cab — so "Vehicle assigned" was misleading there.
         view.findViewById<TextView>(R.id.tvManageVehicle).text = when {
             t.external -> t.agencyName?.let { "External · $it" } ?: "External agency"
             t.allocatedVehicle != null -> "Internal · ${t.allocatedVehicle}"
@@ -82,27 +78,34 @@ class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
 
         bindStatsBar(view, t)
         bindTripRecord(view, t)
+        bindProgressActions(view, t)
 
         val actions = view.findViewById<View>(R.id.manageActions)
         val note = view.findViewById<TextView>(R.id.tvManageNote)
         val completed = t.status == "Completed"
 
-        // Once started (or completed/expired), the assignment is locked: the
-        // backend rejects reassign/unallocate, so offer read-only tracking.
         if (t.started || completed || t.expired) {
-            actions.visibility = View.GONE
+            actions.visibility = if (t.expired && completed) View.VISIBLE else View.GONE
             note.visibility = View.VISIBLE
             note.text = when {
+                t.expired && completed -> "Trip details are pending. Save them before the Site Incharge records the outcome."
                 completed -> "This trip is completed."
                 t.expired -> "This trip's date has passed."
                 else -> "Trip has started — the driver is running it now."
             }
+            if (t.expired && completed) {
+                view.findViewById<android.widget.Button>(R.id.btnManageReassign).apply {
+                    text = "Complete Outcome"
+                    setOnClickListener {
+                        onComplete?.invoke()
+                        dismissAllowingStateLoss()
+                    }
+                }
+                view.findViewById<android.widget.Button>(R.id.btnManageRemove).visibility = View.GONE
+            }
         } else {
             actions.visibility = View.VISIBLE
             note.visibility = View.GONE
-            // An external agency allotment is removed with "Remove agency" (it
-            // clears the agency and drops the SV back to Pending), not "Remove
-            // driver" — there's no in-house driver on it to remove.
             view.findViewById<android.widget.Button>(R.id.btnManageReassign).apply {
                 text = if (t.external) "Change agency" else "Reassign"
                 setOnClickListener {
@@ -111,6 +114,7 @@ class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
                 }
             }
             view.findViewById<android.widget.Button>(R.id.btnManageRemove).apply {
+                visibility = View.VISIBLE
                 text = if (t.external) "Remove agency" else "Remove driver"
                 setOnClickListener {
                     onRemove?.invoke()
@@ -121,19 +125,114 @@ class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
     }
 
     /**
-     * The 5-stage trip stats bar the driver advances live (Assigned → Picked
-     * from CP → On Site → Picked from Site → Dropped). Segments up to and
-     * including the current stage turn green; the current stage's label is
-     * highlighted. Derived from the same progress label the card shows, so it
-     * tracks whatever the driver last reported.
+     * Shows the next progress-action the admin can take for an active trip.
+     *
+     * Stage progression:
+     *   Awaiting pickup → "Mark Reached"
+     *   Reached client  → "Start trip" (needs km)
+     *   Picked from CP  → "Mark On Site"
+     *   On site          → "Mark Picked from Site"
+     *   Picked from Site → "End trip" (needs km + toll + beta)
+     *   Dropped          → nothing (completed)
      */
+    private fun bindProgressActions(view: View, t: AdminFleetTripsFragment.AdminTrip) {
+        val container = view.findViewById<View>(R.id.manageProgressActions)
+        val btnLabel = view.findViewById<TextView>(R.id.tvProgressActionLabel)
+        val hint = view.findViewById<TextView>(R.id.tvProgressActionHint)
+        val kmLayout = view.findViewById<View>(R.id.layoutProgressKm)
+        val tollBetaLayout = view.findViewById<View>(R.id.layoutProgressTollBeta)
+        val btn = view.findViewById<androidx.appcompat.widget.AppCompatButton>(R.id.btnProgressAction)
+        val error = view.findViewById<TextView>(R.id.tvProgressActionError)
+
+        if (t.expired || t.status == "Completed") {
+            container.visibility = View.GONE
+            return
+        }
+
+        val nextAction = nextActionForStage(t.progressLabel)
+        if (nextAction == null) {
+            container.visibility = View.GONE
+            return
+        }
+
+        container.visibility = View.VISIBLE
+        btnLabel.text = nextAction.label
+        hint.text = nextAction.hint
+        error.visibility = View.GONE
+
+        kmLayout.visibility = if (nextAction.needsKm) View.VISIBLE else View.GONE
+        tollBetaLayout.visibility = if (nextAction.needsTollBeta) View.VISIBLE else View.GONE
+
+        btn.text = nextAction.buttonText
+        btn.setOnClickListener {
+            val kmText = view.findViewById<TextView>(R.id.etProgressKm)?.text?.toString()?.trim()
+            val tollText = view.findViewById<TextView>(R.id.etProgressToll)?.text?.toString()?.trim()
+            val betaText = view.findViewById<TextView>(R.id.etProgressBeta)?.text?.toString()?.trim()
+
+            val km = kmText?.toDoubleOrNull()
+            val toll = tollText?.toDoubleOrNull()
+            val beta = betaText?.toDoubleOrNull()
+
+            btn.isEnabled = false
+            onProgressAction?.invoke(nextAction.action, km, toll, beta)
+        }
+    }
+
+    private fun nextActionForStage(progressLabel: String): ProgressAction? {
+        return when (progressLabel.trim().lowercase()) {
+            "awaiting pickup", "" -> ProgressAction(
+                action = "reached",
+                label = "Update progress",
+                hint = "Mark that the driver has reached the client.",
+                buttonText = "Mark Reached",
+            )
+            "reached client" -> ProgressAction(
+                action = "start",
+                label = "Start trip",
+                hint = "Driver has reached and is picking up from CP.",
+                buttonText = "Start trip",
+                needsKm = true,
+            )
+            "picked from cp", "picked up" -> ProgressAction(
+                action = "on_site",
+                label = "Update progress",
+                hint = "Mark that the driver has arrived at the site.",
+                buttonText = "Mark On Site",
+            )
+            "on site" -> ProgressAction(
+                action = "picked_from_site",
+                label = "Update progress",
+                hint = "Mark that the passenger has been picked from site.",
+                buttonText = "Mark Picked from Site",
+            )
+            "picked from site" -> ProgressAction(
+                action = "end",
+                label = "End trip",
+                hint = "Driver is dropping the passenger. Enter final details.",
+                buttonText = "End Trip",
+                needsKm = true,
+                needsTollBeta = true,
+            )
+            else -> null
+        }
+    }
+
+    private data class ProgressAction(
+        val action: String,
+        val label: String,
+        val hint: String,
+        val buttonText: String,
+        val needsKm: Boolean = false,
+        val needsTollBeta: Boolean = false,
+    )
+
     private fun bindStatsBar(view: View, t: AdminFleetTripsFragment.AdminTrip) {
         val stage = when (t.progressLabel.trim().lowercase()) {
             "dropped", "completed", "complete" -> 4
             "picked from site" -> 3
             "on site" -> 2
             "picked from cp", "picked up" -> 1
-            else -> 0 // Assigned / Reached client / Awaiting pickup
+            else -> 0
         }
         val green = android.graphics.Color.parseColor("#12B76A")
         val segs = listOf(
@@ -155,14 +254,8 @@ class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
         }
     }
 
-    /**
-     * The driver's captured record — start/end dashboard photos and km. Shown
-     * once the trip has started (that's when the first photo exists); each half
-     * degrades to an empty state when its photo or km wasn't captured.
-     */
     private fun bindTripRecord(view: View, t: AdminFleetTripsFragment.AdminTrip) {
         val record = view.findViewById<View>(R.id.tripRecord)
-        // No record to show before the trip starts.
         if (!t.started && t.status != "Completed") {
             record.visibility = View.GONE
             return
@@ -197,9 +290,6 @@ class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
     }
 
     private fun bindPhoto(image: ImageView, empty: TextView, storageId: String?) {
-        // The box only looks like a real photo card when there IS a photo.
-        // With none, drop the card chrome so an empty bordered box doesn't read
-        // as a broken / placeholder image.
         val box = image.parent as? View
         if (storageId.isNullOrBlank()) {
             image.visibility = View.GONE
@@ -211,7 +301,6 @@ class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
         image.visibility = View.VISIBLE
         empty.visibility = View.GONE
         box?.setBackgroundResource(R.drawable.bg_trip_detail_map_card)
-        // /api/storage/serve is a public route, so Coil loads it by URL.
         val url = "${BuildConfig.BASE_URL}api/storage/serve?storageId=$storageId"
         image.load(url)
     }
@@ -219,15 +308,29 @@ class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
     private fun fmtKm(v: Double): String =
         if (v == v.toLong().toDouble()) v.toLong().toString() else String.format("%.1f", v)
 
+    /** Called by the host after a progress API call completes. */
+    fun showProgressError(message: String) {
+        val view = view ?: return
+        val error = view.findViewById<TextView>(R.id.tvProgressActionError)
+        val btn = view.findViewById<androidx.appcompat.widget.AppCompatButton>(R.id.btnProgressAction)
+        error.text = message
+        error.visibility = View.VISIBLE
+        btn.isEnabled = true
+    }
+
     companion object {
         fun newInstance(
             trip: AdminFleetTripsFragment.AdminTrip,
             onReassign: () -> Unit,
             onRemove: () -> Unit,
+            onComplete: () -> Unit,
+            onProgressAction: (action: String, km: Double?, toll: Double?, beta: Double?) -> Unit,
         ): AdminFleetTripManageSheet = AdminFleetTripManageSheet().apply {
             this.trip = trip
             this.onReassign = onReassign
             this.onRemove = onRemove
+            this.onComplete = onComplete
+            this.onProgressAction = onProgressAction
         }
     }
 }

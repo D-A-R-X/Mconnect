@@ -463,6 +463,34 @@
             android:textSize="13sp" />
     </LinearLayout>
 
+    <LinearLayout
+        android:id="@+id/rowFormSameAsPersonal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <ImageView
+            android:id="@+id/ivFormSameAsPersonal"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_outcome_checkbox_empty" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:text="Same as personal number"
+            android:textColor="#475467"
+            android:textSize="12sp" />
+    </LinearLayout>
+
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -606,6 +634,12 @@
     <LinearLayout style="@style/OutcomeFieldPill">
         <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_pin" />
         <EditText android:id="@+id/etFormHomeAddressLine2" style="@style/OutcomeFieldEdit" android:hint="Enter address line 2" android:inputType="textPostalAddress|textCapSentences" />
+    </LinearLayout>
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Location on Map" />
+    <LinearLayout style="@style/OutcomeFieldPill">
+        <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_pin" />
+        <EditText android:id="@+id/etFormLocationMap" style="@style/OutcomeFieldEdit" android:hint="Enter Google Maps link" android:inputType="textUri" />
     </LinearLayout>
 
     <!-- Kept as hidden backing fields for existing pincode enrichment and

@@ -197,16 +197,19 @@ class SelfieClockInDetailFragment : Fragment() {
                         inSampleSize = sampleSize.coerceAtLeast(1)
                     }
                     BitmapFactory.decodeFile(file.absolutePath, options)
-                } catch (_: Exception) {
+                } catch (_: Throwable) {
+                    // Throwable, not Exception — a giant image throws
+                    // OutOfMemoryError (an Error), which Exception wouldn't catch.
                     null
                 }
             }
             if (_binding == null) return@launch
             if (bitmap != null) {
                 binding.ivSelfiePreview.setImageBitmap(bitmap)
-            } else {
-                binding.ivSelfiePreview.setImageURI(android.net.Uri.fromFile(file))
             }
+            // No full-res setImageURI fallback: decoding the original on the
+            // main thread was itself an OOM risk. If the downsample failed the
+            // preview just stays empty; the captured file is still used to punch.
             binding.selfiePreviewLoader.visibility = View.GONE
         }
     }

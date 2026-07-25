@@ -137,7 +137,7 @@ class HomeFragment : Fragment() {
         startBannerAnimation()
 
         setupRoleAdaptiveView()
-        setupOverviewTabs()
+        setupMarketingOverview()
         setupDriverTabs()
         // Fleet administrators see the allocation queue in this same
         // Today's Trip surface, so load it alongside the normal home data.
@@ -396,7 +396,7 @@ class HomeFragment : Fragment() {
                         // under the profile row and only the CARD area scrolls
                         // under it (stage 2). Pick whichever section is live.
                         val dashboard = session.canViewVpDashboard()
-                        val stickyHeaderId = if (dashboard) R.id.overviewHeader else R.id.tripHeader
+                        val stickyHeaderId = if (dashboard) 0 else R.id.tripHeader
                         val cardsAreaId = if (dashboard) R.id.overviewCardsArea else R.id.tripCardsArea
                         // overflow = how far the cards extend past the pinned
                         // header's bottom (space between it and the nav bar). If
@@ -414,7 +414,6 @@ class HomeFragment : Fragment() {
                         // list keeps its natural height (no empty gap, no forced
                         // banner-lift).
                         val target = when {
-                            dashboard -> (vp + sLimit - (120 * d).toInt()).coerceAtLeast(0)
                             overflow > 0 -> (vp + sLimit + overflow).coerceAtLeast(0)
                             else -> 0
                         }
@@ -431,6 +430,7 @@ class HomeFragment : Fragment() {
                             b.homeContent.scrollTo(0, 0)
                             b.whiteContentArea.translationY = 0f
                             b.root.findViewById<View>(R.id.overviewCardsArea)?.translationY = 0f
+                            b.root.findViewById<View>(R.id.overviewHeader)?.translationY = 0f
                             b.root.findViewById<View>(R.id.overviewHeader)?.translationZ = 0f
                             b.root.findViewById<View>(R.id.tripCardsArea)?.translationY = 0f
                             b.root.findViewById<View>(R.id.tripHeader)?.translationZ = 0f
@@ -482,11 +482,14 @@ class HomeFragment : Fragment() {
                             if (dashboard) R.id.overviewCardsArea else R.id.tripCardsArea
                         )
                         val stickyHeader = b.root.findViewById<View>(
-                            if (dashboard) R.id.overviewHeader else R.id.tripHeader
+                            if (dashboard) 0 else R.id.tripHeader
                         )
                         val overshoot = (scrollY - sLimit).coerceAtLeast(0f)
                         b.whiteContentArea.translationY = overshoot
                         cardsArea?.translationY = -overshoot
+                        if (dashboard) {
+                            b.root.findViewById<View>(R.id.overviewHeader)?.translationY = -overshoot
+                        }
                         stickyHeader?.translationZ = if (overshoot > 0f) 20f * den else 0f
                         b.whiteContentArea.clipChildren = overshoot > 0f
                     }
@@ -1421,6 +1424,9 @@ class HomeFragment : Fragment() {
             com.manjugroups.m_connect.util.VisitExpiry.isExpired(
                 visit.scheduledDate, visit.scheduledStartTime, isDone = false,
             )
+        // Fleet "completed offline" — the admin marked this SV as done without
+        // a live trip; the site incharge must record the outcome from mobile.
+        val isFleetOutcomePending = visit.completedOffline == true && visit.outcome.isNullOrBlank()
 
         when {
             needsCpDetails -> {
@@ -1472,6 +1478,17 @@ class HomeFragment : Fragment() {
                     "picked_from_site" -> "Returning"
                     else -> "Tracking"
                 }
+            }
+            isFleetOutcomePending -> {
+                statusText.text = "Outcome Pending"
+                statusPill.background = requireContext().getDrawable(R.drawable.bg_home_trip_status_progress)
+                statusText.setTextColor(android.graphics.Color.parseColor("#B54708"))
+                action.text = "Record Outcome"
+                actionBtn.background = requireContext().getDrawable(R.drawable.bg_home_trip_action_ready)
+                action.setTextColor(android.graphics.Color.WHITE)
+                actionIcon.setImageResource(R.drawable.ic_home_trip_play)
+                actionIcon.visibility = View.VISIBLE
+                eta.text = "Action needed"
             }
             isCompleted -> {
                 statusText.text = "Complete"
@@ -1580,7 +1597,18 @@ class HomeFragment : Fragment() {
                 actionBtn.setOnClickListener(openNav)
             }
         } else {
-            if (isCompleted) {
+            if (isFleetOutcomePending) {
+                // Fleet trip completed offline by admin — the site incharge
+                // must record the outcome (booking/postpone/not interested).
+                val openOutcome: (View) -> Unit = {
+                    openCpOutcomeSheetForSiteVisit(visit)
+                }
+                itemView.isClickable = true
+                itemView.isFocusable = true
+                itemView.setOnClickListener(openOutcome)
+                actionBtn.isClickable = true
+                actionBtn.setOnClickListener(openOutcome)
+            } else if (isCompleted) {
                 // Completed visits open a read-only summary instead of the trip flow.
                 val openDetail: (View) -> Unit = { openCompletedVisitDetail(visit) }
                 itemView.isClickable = true
@@ -1824,6 +1852,93 @@ class HomeFragment : Fragment() {
             .showOnce(parentFragmentManager, "cp_visit_complete")
     }
 
+    /**
+     * Open the outcome sheet for a pure site visit (fleet completed offline).
+     * Two-step flow:
+     *   1. AdminFleetCompleteOfflineSheet — trip details (package price,
+     *      distance, driver, phone, toll). Required/optional fields match
+     *      the admin fleet tab.
+     *   2. CompleteCpVisitBottomSheet.forSiteVisit() — outcome (Booking /
+     *      Postpone / Not Interested).
+     *
+     * If trip details were already filled by the admin (e.g. the admin
+     * marked this SV as completed offline), the pre-filled values show
+     * in the sheet; the site incharge can review/update before proceeding.
+     */
+    private fun openCpOutcomeSheetForSiteVisit(visit: TodayVisit) {
+        val svId = visit.id
+        if (svId.isNullOrBlank()) return
+
+        // Build a minimal AdminTrip so the existing sheet can pre-fill.
+        val adminTrip = com.manjugroups.m_connect.ui.library.AdminFleetTripsFragment.AdminTrip(
+            id = svId,
+            time = listOfNotNull(
+                visit.scheduledDate,
+                visit.scheduledStartTime?.takeIf { it.isNotBlank() },
+            ).joinToString(" \u2022 "),
+            clientName = visit.leadName?.trim()?.takeIf { it.isNotBlank() } ?: "Unknown",
+            address = visit.placeAddress?.trim()?.takeIf { it.isNotBlank() }
+                ?: visit.placeName?.trim()?.takeIf { it.isNotBlank() }
+                ?: "Address pending",
+            attendees = "\u2014",
+            vehicleType = visit.vehiclePreference ?: "",
+            lmoName = null,
+            status = "Expired",
+            expired = true,
+        )
+
+        // Step 1: trip details
+        com.manjugroups.m_connect.ui.library.AdminFleetCompleteOfflineSheet
+            .newInstance(adminTrip, emptyList()) { result ->
+                // Submit trip details to backend, then open outcome sheet.
+                val token = session.bearerToken
+                if (token.isBlank()) {
+                    android.widget.Toast.makeText(
+                        requireContext(),
+                        "Session expired \u2014 sign in again.",
+                        android.widget.Toast.LENGTH_SHORT,
+                    ).show()
+                    return@newInstance
+                }
+                viewLifecycleOwner.lifecycleScope.launch {
+                    val resp = runCatching {
+                        fleetApi.completeOfflineMms(
+                            token,
+                            com.manjugroups.m_connect.network.CompleteOfflineTripRequest(
+                                siteVisitId = svId,
+                                packageAmount = result.packageAmount,
+                                distanceKm = result.distanceKm,
+                                driverName = result.driverName,
+                                driverPhone = result.driverPhone,
+                                fleetType = result.fleetType,
+                                vehicleId = result.vehicleId,
+                                agencyName = result.agencyName,
+                            ),
+                        )
+                    }.getOrNull()
+                    if (_binding == null) return@launch
+                    if (resp?.success == true) {
+                        android.widget.Toast.makeText(
+                            requireContext(),
+                            "Trip details saved.",
+                            android.widget.Toast.LENGTH_SHORT,
+                        ).show()
+                        // Step 2: outcome sheet
+                        CompleteCpVisitBottomSheet
+                            .forSiteVisit(siteVisitId = svId)
+                            .showOnce(parentFragmentManager, "fleet_sv_outcome")
+                    } else {
+                        android.widget.Toast.makeText(
+                            requireContext(),
+                            resp?.error ?: "Could not save trip details.",
+                            android.widget.Toast.LENGTH_LONG,
+                        ).show()
+                    }
+                }
+            }
+            .showOnce(parentFragmentManager, "fleet_sv_trip_details")
+    }
+
     private fun openTripNavigationForPlace(place: AssignedPlace) {
         val fragment = TripNavigationFragment.forPlace(
             placeId = place.id,
@@ -1940,37 +2055,188 @@ class HomeFragment : Fragment() {
 
     private var selectedTab = "all"
 
-    private fun setupOverviewTabs() {
-        val tabHr = _binding?.root?.findViewById<TextView>(R.id.tabHr) ?: return
-        val tabMarketing = _binding?.root?.findViewById<TextView>(R.id.tabMarketing) ?: return
-        val layoutHr = _binding?.root?.findViewById<View>(R.id.layoutHr) ?: return
-        val layoutMarketing = _binding?.root?.findViewById<View>(R.id.layoutMarketing) ?: return
+    private fun setupMarketingOverview() {
+        val root = _binding?.root ?: return
+        
+        // Populate Grid Cards
+        fun bindMarketingCard(card: View?, title: String, value: String, trend: String, trendUp: Boolean, iconRes: Int, colorHex: String, animate: Boolean) {
+            card?.findViewById<TextView>(R.id.tvKpiTitle)?.text = title
+            
+            val tvValue = card?.findViewById<TextView>(R.id.tvKpiValue)
+            tvValue?.text = value
+            tvValue?.setTextColor(android.graphics.Color.parseColor(colorHex))
+            
+            card?.findViewById<TextView>(R.id.tvTrendValue)?.text = trend
+            card?.findViewById<ImageView>(R.id.ivKpiIcon)?.setImageResource(iconRes)
+            
+            val tvTrendText = card?.findViewById<TextView>(R.id.tvTrendValue)
+            val arrow = card?.findViewById<ImageView>(R.id.ivTrendArrow)
+            val trendColor = if (trendUp) android.graphics.Color.parseColor("#10B981") else android.graphics.Color.parseColor("#EF4444")
+            arrow?.setColorFilter(trendColor)
+            tvTrendText?.setTextColor(trendColor)
 
-        tabHr.setOnClickListener {
-            layoutHr.visibility = View.VISIBLE
-            layoutMarketing.visibility = View.GONE
-            
-            tabHr.setBackgroundResource(R.drawable.bg_loans_segment_active)
-            tabHr.setTextColor(Color.parseColor("#FFFFFF"))
-            tabHr.typeface = androidx.core.content.res.ResourcesCompat.getFont(requireContext(), R.font.inter_semibold)
-            
-            tabMarketing.setBackgroundResource(0)
-            tabMarketing.setTextColor(Color.parseColor("#475467"))
-            tabMarketing.typeface = androidx.core.content.res.ResourcesCompat.getFont(requireContext(), R.font.inter_medium)
+            // Animation
+            val anim = android.view.animation.AnimationUtils.loadAnimation(requireContext(), R.anim.anim_jump_in)
+            anim.startOffset = ((card?.id ?: 0) % 5) * 50L // Stagger slightly
+            card?.findViewById<ImageView>(R.id.ivKpiIcon)?.startAnimation(anim)
         }
 
-        tabMarketing.setOnClickListener {
-            layoutHr.visibility = View.GONE
-            layoutMarketing.visibility = View.VISIBLE
-            
-            tabMarketing.setBackgroundResource(R.drawable.bg_loans_segment_active)
-            tabMarketing.setTextColor(Color.parseColor("#FFFFFF"))
-            tabMarketing.typeface = androidx.core.content.res.ResourcesCompat.getFont(requireContext(), R.font.inter_semibold)
-            
-            tabHr.setBackgroundResource(0)
-            tabHr.setTextColor(Color.parseColor("#475467"))
-            tabHr.typeface = androidx.core.content.res.ResourcesCompat.getFont(requireContext(), R.font.inter_medium)
+        bindMarketingCard(root.findViewById(R.id.cardTotalCalls), "Total Calls", "984", "12%", true, R.drawable.ic_3d_calls, "#3B82F6", true)
+        bindMarketingCard(root.findViewById(R.id.cardHotLeads), "Hot Leads", "37", "16%", true, R.drawable.ic_3d_hot, "#10B981", true)
+        bindMarketingCard(root.findViewById(R.id.cardSiteVisits), "Site Visits", "15", "25%", true, R.drawable.ic_3d_sv, "#8B5CF6", true)
+        bindMarketingCard(root.findViewById(R.id.cardBookings), "Bookings", "2", "100%", true, R.drawable.ic_3d_bookings, "#F59E0B", true)
+        bindMarketingCard(root.findViewById(R.id.cardCollection), "Collection (Today)", "₹18.60 L", "32%", true, R.drawable.ic_3d_collection, "#10B981", false)
+        bindMarketingCard(root.findViewById(R.id.cardBookingValue), "Booking Value", "₹1.85 Cr", "120%", true, R.drawable.ic_3d_value, "#3B82F6", false)
+
+        // Populate Funnel
+        fun setupFunnelRow(id: Int, label: String, value: String, percent: String, colorHex: String) {
+            val row = root.findViewById<View>(id) ?: return
+            row.findViewById<TextView>(R.id.tvFunnelLabel)?.text = label
+            row.findViewById<TextView>(R.id.tvFunnelValue)?.text = value
+            row.findViewById<TextView>(R.id.tvFunnelPercent)?.text = percent
+            row.findViewById<View>(R.id.vFunnelDot)?.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor(colorHex))
         }
+
+        setupFunnelRow(R.id.rowFunnel1, "Total Calls", "984", "100%", "#3B82F6")
+        setupFunnelRow(R.id.rowFunnel2, "Interested", "541", "55.0%", "#06B6D4")
+        setupFunnelRow(R.id.rowFunnel3, "Warm Leads", "239", "24.3%", "#F59E0B")
+        setupFunnelRow(R.id.rowFunnel4, "Hot Leads", "37", "3.8%", "#EF4444")
+        setupFunnelRow(R.id.rowFunnel5, "Site Visits", "15", "1.5%", "#8B5CF6")
+        setupFunnelRow(R.id.rowFunnel6, "Bookings", "2", "0.2%", "#10B981")
+
+        // Helper to create 3D clay morphism drawable
+        fun createClayDrawable(colorHex: String): android.graphics.drawable.Drawable {
+            val baseColor = android.graphics.Color.parseColor(colorHex)
+            val cornerRadius = 32f
+
+            val baseShape = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                setColor(baseColor)
+                this.cornerRadius = cornerRadius
+            }
+
+            val highlight = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                colors = intArrayOf(android.graphics.Color.parseColor("#4DFFFFFF"), android.graphics.Color.TRANSPARENT)
+                orientation = android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM
+                this.cornerRadius = cornerRadius
+            }
+
+            val shadow = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                colors = intArrayOf(android.graphics.Color.TRANSPARENT, android.graphics.Color.parseColor("#4D000000"))
+                orientation = android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM
+                this.cornerRadius = cornerRadius
+            }
+
+            return android.graphics.drawable.LayerDrawable(arrayOf(baseShape, highlight, shadow))
+        }
+
+        // Animate funnel blocks assembling and apply clay background
+        val funnelChart = root.findViewById<android.view.ViewGroup>(R.id.funnelChart)
+        if (funnelChart != null) {
+            val colors = listOf("#3B82F6", "#06B6D4", "#F59E0B", "#EF4444", "#8B5CF6", "#10B981")
+            val values = listOf("984", "541", "239", "37", "15", "2")
+            
+            // Set up LayoutAnimationController for staggered assembly animation
+            val jumpAnim = android.view.animation.AnimationUtils.loadAnimation(requireContext(), R.anim.anim_jump_in)
+            val controller = android.view.animation.LayoutAnimationController(jumpAnim, 0.2f)
+            funnelChart.layoutAnimation = controller
+
+            for (i in 0 until funnelChart.childCount) {
+                val block = funnelChart.getChildAt(i) as? TextView
+                if (block != null && i < colors.size) {
+                    block.background = createClayDrawable(colors[i])
+                    block.text = values[i]
+                }
+            }
+            funnelChart.startLayoutAnimation()
+            
+            // Add click interaction
+            funnelChart.setOnClickListener {
+                funnelChart.startLayoutAnimation()
+            }
+        }
+        
+        val funnelCard = root.findViewById<View>(R.id.funnelCard)
+        funnelCard?.startAnimation(
+            android.view.animation.AnimationUtils.loadAnimation(requireContext(), R.anim.anim_jump_in)
+        )
+        funnelCard?.setOnClickListener {
+            funnelChart?.startLayoutAnimation()
+        }
+
+        // Date & Team Filters
+        root.findViewById<View>(R.id.llOverviewDateFilter)?.setOnClickListener {
+            com.manjugroups.m_connect.ui.projects.DateFilterBottomSheet.newInstance()
+                .show(childFragmentManager, "DateFilter")
+        }
+        childFragmentManager.setFragmentResultListener(
+            com.manjugroups.m_connect.ui.projects.DateFilterBottomSheet.REQUEST_KEY,
+            viewLifecycleOwner
+        ) { _, bundle ->
+            val from = bundle.getString(com.manjugroups.m_connect.ui.projects.DateFilterBottomSheet.RESULT_FROM) ?: return@setFragmentResultListener
+            try {
+                val date = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).parse(from)
+                if (date != null) {
+                    val formatted = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.US).format(date)
+                    root.findViewById<TextView>(R.id.tvOverviewDateFilter)?.text = formatted.uppercase(java.util.Locale.US)
+                }
+            } catch(e: Exception) {}
+        }
+        
+        root.findViewById<View>(R.id.llOverviewTeamFilter)?.setOnClickListener {
+            com.manjugroups.m_connect.ui.common.AppBottomSheets.showOptions(
+                requireContext(),
+                "Select Team",
+                listOf(
+                    com.manjugroups.m_connect.ui.common.AppBottomSheets.Option("All Teams") {}
+                )
+            )
+        }
+
+        // Populate Conversion KPIs
+        fun setupKpi(id: Int, title: String, value: String, trend: String, iconRes: Int, colorHex: String, index: Int) {
+            val card = root.findViewById<View>(id) ?: return
+            
+            val tintColor = Color.parseColor(colorHex)
+            
+            val tvTitle = card.findViewById<TextView>(R.id.tvConversionTitle)
+            tvTitle?.text = title
+            // DO NOT tint title, leave default color
+            
+            val tvValue = card.findViewById<TextView>(R.id.tvConversionValue)
+            tvValue?.text = value
+            tvValue?.setTextColor(tintColor)
+            
+            val tvTrend = card.findViewById<TextView>(R.id.tvConversionTrendValue)
+            tvTrend?.text = trend
+            // DO NOT tint trend, keep it green
+            
+            val arrowGraph = card.findViewById<ImageView>(R.id.ivConversionChart)
+            arrowGraph?.setColorFilter(tintColor)
+            
+            card.findViewById<ImageView>(R.id.ivConversionBadge)?.setImageResource(iconRes)
+            
+            // Animate graph arrow from start to end
+            if (arrowGraph != null) {
+                arrowGraph.post {
+                    arrowGraph.pivotX = 0f
+                    arrowGraph.scaleX = 0f
+                    
+                    val scaleAnim = android.animation.ObjectAnimator.ofFloat(arrowGraph, "scaleX", 0f, 1f)
+                    scaleAnim.duration = 800
+                    scaleAnim.interpolator = android.view.animation.DecelerateInterpolator()
+                    scaleAnim.startDelay = (200 + index * 100).toLong()
+                    scaleAnim.start()
+                }
+            }
+        }
+
+        setupKpi(R.id.kpiInterest, "Interest\nRate", "55.0%", "3.2%", R.drawable.ic_3d_interest, "#3B82F6", 0)
+        setupKpi(R.id.kpiWarmHot, "Warm to\nHot", "15.5%", "1.8%", R.drawable.ic_3d_warm_hot, "#EF4444", 1)
+        setupKpi(R.id.kpiHotSite, "Hot to\nSite Visit", "40.5%", "5.6%", R.drawable.ic_3d_hot_site, "#F59E0B", 2)
+        setupKpi(R.id.kpiSiteBooking, "Site Visit to\nBooking", "13.3%", "6.2%", R.drawable.ic_3d_site_booking, "#10B981", 3)
     }
 
     /**
@@ -2037,7 +2303,7 @@ class HomeFragment : Fragment() {
                 fleetError = null
                 // Rows with no id can't be opened or allocated; drop them
                 // rather than let one odd record break the screen.
-                fleetPending = pending.rows.filter { !it.id.isNullOrBlank() }
+                val pendingRows = pending.rows.filter { !it.id.isNullOrBlank() }
                 val assignedRows = assigned.rows.filter { !it.id.isNullOrBlank() }
                 // A dispatch trip is done when the driver has ended it
                 // (travelDeskEndedAt), the same signal the backend's "complete"
@@ -2049,8 +2315,9 @@ class HomeFragment : Fragment() {
                         (t.status ?: "").equals("completed", ignoreCase = true)
                 }
                 // A trip that was never started and whose slot has passed is
-                // expired — it can't run, so it shouldn't sit in Assigned as if
-                // it were still live. It moves to the Completed tab, badged.
+                // expired — it can't run, so it shouldn't sit in Assigned (or
+                // Pending) as if it were still live. It moves to the Completed
+                // tab, badged "Expired", and loses the Allocate action.
                 val isExpired = { t: com.manjugroups.m_connect.network.TravelDeskTrip ->
                     !isDone(t) && t.travelDeskStartedAt == null &&
                         com.manjugroups.m_connect.util.VisitExpiry.isExpired(
@@ -2058,8 +2325,11 @@ class HomeFragment : Fragment() {
                             isDone = false,
                         )
                 }
+                // Expired pending trips are terminal too — drop them from Pending
+                // (no Allocate) and reclassify into Completed with the Expired badge.
+                fleetPending = pendingRows.filterNot(isExpired)
                 fleetAssigned = assignedRows.filterNot(isDone).filterNot(isExpired)
-                fleetExpired = assignedRows.filter(isExpired)
+                fleetExpired = assignedRows.filter(isExpired) + pendingRows.filter(isExpired)
                 fleetCompleted = assignedRows.filter(isDone) + fleetExpired
                 fleetVehicles = vehicles.rows
                 fleetAgencies = agencies.filter {
@@ -2166,7 +2436,9 @@ class HomeFragment : Fragment() {
         val isPending = selectedTab != "upcoming" && selectedTab != "completed"
         // Expired trips live in the Completed tab but keep their own badge.
         val isExpiredRow = fleetExpired.any { it.id == trip.id }
+        val isOutcomePendingRow = trip.completedOffline == true && trip.outcome.isNullOrBlank()
         card.tvTripStatus.text = when {
+            isOutcomePendingRow -> "Outcome Pending"
             isExpiredRow -> "Expired"
             selectedTab == "completed" -> "Complete"
             selectedTab == "upcoming" -> "Assigned"
@@ -2176,19 +2448,30 @@ class HomeFragment : Fragment() {
         // that last showed a red "Expired" status must not keep it when rebound
         // to a normal row. #EA580C is the badge's default (from the layout).
         card.tvTripStatus.setTextColor(
-            if (isExpiredRow) android.graphics.Color.parseColor("#B42318")
-            else android.graphics.Color.parseColor("#EA580C"),
+            when {
+                isOutcomePendingRow -> android.graphics.Color.parseColor("#B54708")
+                isExpiredRow -> android.graphics.Color.parseColor("#B42318")
+                else -> android.graphics.Color.parseColor("#EA580C")
+            },
         )
-        // Allocate only makes sense while the trip has no vehicle.
-        card.btnAllocate.visibility = if (isPending) View.VISIBLE else View.GONE
-        // The chip row is three equal thirds ONLY while Allocate is present
-        // (pending). Once Allocate is gone (assigned/completed), leaving the two
+        // Allocate for pending, Complete for expired, hidden for assigned/completed.
+        val showCompleteBtn = isExpiredRow && !isOutcomePendingRow && session.canCompleteOfflineFleet()
+        card.btnAllocate.visibility = if (isPending || showCompleteBtn) View.VISIBLE else View.GONE
+        if (showCompleteBtn) {
+            card.btnAllocate.text = "Complete"
+            card.btnAllocate.setOnClickListener {
+                openHomeFleetCompleteOffline(trip)
+            }
+        }
+        // The chip row is three equal thirds ONLY while Allocate/Complete is present
+        // (pending / expired). Once hidden (assigned/completed), leaving the two
         // survivors weighted stretched the "1" people pill to half the card.
         // Drop their weight so they wrap to content and sit left-aligned instead.
+        val chipVisible = isPending || showCompleteBtn
         val peopleChip = card.tvAttendeesTag.parent as View
         listOf(peopleChip, card.lmoTagContainer).forEach { chip ->
             (chip.layoutParams as android.widget.LinearLayout.LayoutParams).also { lp ->
-                if (isPending) {
+                if (chipVisible) {
                     lp.width = 0
                     lp.weight = 1f
                 } else {
@@ -2202,15 +2485,16 @@ class HomeFragment : Fragment() {
             card.btnAllocate.setOnClickListener { openFleetAllocate(trip) }
             card.assignmentInfo.visibility = View.GONE
             card.root.setOnClickListener { openFleetAllocate(trip) }
+        } else if (isExpiredRow && !isOutcomePendingRow) {
+            // Expired + not yet completed offline: the Complete button is
+            // already wired above. Card tap also opens the complete sheet.
+            card.assignmentInfo.visibility = View.GONE
+            card.root.setOnClickListener { openHomeFleetCompleteOffline(trip) }
         } else {
             card.btnAllocate.setOnClickListener(null)
-            // Assigned / Completed: surface who the trip went to and how
-            // far it's progressed, so the admin can track it — whether it
-            // was allocated to the in-house fleet or an external agency.
+            // Assigned / Completed / Outcome Pending: surface who the trip
+            // went to and how far it's progressed.
             bindFleetAssignmentInfo(card, trip)
-            // Tapping the card opens the manage sheet with the live 5-stage
-            // progress bar (Assigned → Picked from CP → On Site → Picked from
-            // Site → Dropped) + vehicle/driver/agency details.
             card.root.setOnClickListener { openFleetTripManage(trip) }
         }
     }
@@ -2253,8 +2537,15 @@ class HomeFragment : Fragment() {
             expired = expired,
             startKm = trip.travelDeskStartKm,
             endKm = trip.travelDeskEndKm,
+            distanceKm = trip.travelDeskStartKm?.let { start ->
+                trip.travelDeskEndKm?.let { end -> (end - start).takeIf { it >= 0.0 } }
+            },
             startPhotoId = trip.travelDeskStartPhotoIds.firstOrNull(),
             endPhotoId = trip.travelDeskEndPhotoIds.firstOrNull(),
+            packageAmount = trip.travelDeskPackageAmount,
+            beta = trip.travelDeskBeta,
+            tollAmount = trip.travelDeskTollAmount,
+            totalAmount = trip.travelDeskTotalAmount,
             external = trip.travelAgency?.name?.isNotBlank() == true,
             agencyName = trip.travelAgency?.name?.trim()?.ifBlank { null },
         )
@@ -2262,6 +2553,10 @@ class HomeFragment : Fragment() {
             trip = adminTrip,
             onReassign = { openFleetAllocate(trip) },
             onRemove = { removeFleetTripDriver(trip) },
+            onComplete = { openHomeFleetCompleteOffline(trip) },
+            onProgressAction = { action, km, toll, beta ->
+                submitHomeFleetProgressAction(trip, action, km, toll, beta)
+            },
         ).showOnce(parentFragmentManager, "home_fleet_manage")
     }
 
@@ -2294,6 +2589,228 @@ class HomeFragment : Fragment() {
                         else "Could not remove the driver.",
                     android.widget.Toast.LENGTH_LONG,
                 ).show()
+            }
+        }
+    }
+
+    private fun openHomeFleetCompleteOffline(
+        trip: com.manjugroups.m_connect.network.TravelDeskTrip,
+    ) {
+        val date = trip.scheduledDate ?: "—"
+        val timePart = trip.scheduledTime ?: trip.pickupTime ?: ""
+        val timeLabel = if (timePart.isBlank()) date else "$date • $timePart"
+        val pickup = trip.pickupAddress?.trim()?.ifBlank { null }
+        val addressLine = pickup ?: trip.project?.name?.let { "Project: $it" } ?: "Address pending"
+        val adminTrip = com.manjugroups.m_connect.ui.library.AdminFleetTripsFragment.AdminTrip(
+            id = trip.id.orEmpty(),
+            time = timeLabel,
+            clientName = trip.clientName?.trim()?.takeIf { it.isNotBlank() }
+                ?: trip.lead?.contactName?.trim()?.takeIf { it.isNotBlank() }
+                ?: "Unknown",
+            address = addressLine,
+            attendees = trip.expectedAttendeeCount?.toString() ?: "—",
+            vehicleType = trip.vehiclePreference ?: "",
+            lmoName = trip.lmoName?.trim()?.ifBlank { null },
+            status = "Expired",
+            driverName = trip.driverName?.trim()?.ifBlank { null },
+            driverPhone = trip.driverPhone?.trim()?.ifBlank { null },
+            allocatedVehicle = trip.vehicle?.vehicleNumber?.trim()?.ifBlank { null },
+            progressLabel = "Expired",
+            started = trip.travelDeskStartedAt != null,
+            expired = true,
+            packageAmount = trip.travelDeskPackageAmount,
+            beta = trip.travelDeskBeta,
+            tollAmount = trip.travelDeskTollAmount,
+            totalAmount = trip.travelDeskTotalAmount,
+        )
+        com.manjugroups.m_connect.ui.library.AdminFleetCompleteOfflineSheet.newInstance(adminTrip, emptyList()) { result ->
+            submitHomeFleetCompleteOffline(trip, result)
+        }.showOnce(parentFragmentManager, "home_fleet_complete_offline")
+    }
+
+    private fun submitHomeFleetCompleteOffline(
+        trip: com.manjugroups.m_connect.network.TravelDeskTrip,
+        result: com.manjugroups.m_connect.ui.library.CompleteOfflineTripResult,
+    ) {
+        val token = session.bearerToken
+        if (token.isBlank()) {
+            android.widget.Toast.makeText(
+                requireContext(),
+                "Session expired \u2014 sign in again.",
+                android.widget.Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            val resp = runCatching {
+                fleetApi.completeOfflineMms(
+                    token,
+                    com.manjugroups.m_connect.network.CompleteOfflineTripRequest(
+                        siteVisitId = trip.id.orEmpty(),
+                        packageAmount = result.packageAmount,
+                        distanceKm = result.distanceKm,
+                        driverName = result.driverName,
+                        driverPhone = result.driverPhone,
+                        fleetType = result.fleetType,
+                        vehicleId = result.vehicleId,
+                        agencyName = result.agencyName,
+                    ),
+                )
+            }.getOrNull()
+            if (_binding == null) return@launch
+            if (resp?.success == true) {
+                android.widget.Toast.makeText(
+                    requireContext(),
+                    "Trip details saved. Opening outcome form.",
+                    android.widget.Toast.LENGTH_SHORT,
+                ).show()
+                loadFleetDispatch()
+                CompleteCpVisitBottomSheet
+                    .forSiteVisit(siteVisitId = trip.id.orEmpty())
+                    .showOnce(parentFragmentManager, "fleet_sv_outcome")
+            } else {
+                android.widget.Toast.makeText(
+                    requireContext(),
+                    resp?.error ?: "Could not complete this trip.",
+                    android.widget.Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
+    }
+
+    /**
+     * Advance a fleet trip through its lifecycle stage from the home-screen
+     * manage sheet. Internal (MMS) trips use GeoTrackApi mms-fleet endpoints;
+     * external (travel-desk) trips use TravelDeskApi driver endpoints.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    private fun submitHomeFleetProgressAction(
+        trip: com.manjugroups.m_connect.network.TravelDeskTrip,
+        action: String,
+        km: Double?,
+        toll: Double?,
+        beta: Double?,
+    ) {
+        val token = session.bearerToken
+        if (token.isBlank()) {
+            android.widget.Toast.makeText(
+                requireContext(),
+                "Session expired \u2014 sign in again.",
+                android.widget.Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
+        val sheet = parentFragmentManager.findFragmentByTag("home_fleet_manage")
+            as? com.manjugroups.m_connect.ui.library.AdminFleetTripManageSheet
+
+        val isExternal = trip.travelAgency?.name?.isNotBlank() == true
+        val id = trip.id.orEmpty()
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val auth = "Bearer $token"
+                when (action) {
+                    "reached" -> {
+                        if (!isExternal) {
+                            com.manjugroups.m_connect.network.GeoTrackApi.create()
+                                .markMmsFleetDriverArrived(
+                                    auth,
+                                    com.manjugroups.m_connect.network.MmsFleetDriverSiteVisitRequest(id),
+                                )
+                        } else {
+                            fleetApi.driverMarkArrived(
+                                auth,
+                                com.manjugroups.m_connect.network.TravelDeskDriverTripRequest(id),
+                            )
+                        }
+                    }
+                    "start" -> {
+                        if (!isExternal) {
+                            com.manjugroups.m_connect.network.GeoTrackApi.create()
+                                .startMmsFleetDriverTrip(
+                                    auth,
+                                    com.manjugroups.m_connect.network.MmsFleetDriverStartRequest(
+                                        siteVisitId = id,
+                                        photoIds = emptyList(),
+                                        startKm = km,
+                                    ),
+                                )
+                        } else {
+                            fleetApi.driverStartTrip(
+                                auth,
+                                com.manjugroups.m_connect.network.TravelDeskStartTripRequest(
+                                    siteVisitId = id,
+                                    otp = "0000",
+                                    photoIds = emptyList(),
+                                    startKm = km,
+                                ),
+                            )
+                        }
+                    }
+                    "on_site" -> {
+                        if (!isExternal) {
+                            com.manjugroups.m_connect.network.GeoTrackApi.create()
+                                .markMmsFleetDriverOnSite(
+                                    auth,
+                                    com.manjugroups.m_connect.network.MmsFleetDriverSiteVisitRequest(id),
+                                )
+                        } else {
+                            fleetApi.driverMarkOnSite(
+                                auth,
+                                com.manjugroups.m_connect.network.TravelDeskDriverTripRequest(id),
+                            )
+                        }
+                    }
+                    "picked_from_site" -> {
+                        if (!isExternal) {
+                            com.manjugroups.m_connect.network.GeoTrackApi.create()
+                                .markMmsFleetDriverPickedFromSite(
+                                    auth,
+                                    com.manjugroups.m_connect.network.MmsFleetDriverSiteVisitRequest(id),
+                                )
+                        } else {
+                            fleetApi.driverMarkPickedFromSite(
+                                auth,
+                                com.manjugroups.m_connect.network.TravelDeskDriverTripRequest(id),
+                            )
+                        }
+                    }
+                    "end" -> {
+                        if (!isExternal) {
+                            com.manjugroups.m_connect.network.GeoTrackApi.create()
+                                .endMmsFleetDriverTrip(
+                                    auth,
+                                    com.manjugroups.m_connect.network.MmsFleetDriverEndRequest(
+                                        siteVisitId = id,
+                                        photoIds = emptyList(),
+                                        endKm = km,
+                                    ),
+                                )
+                        } else {
+                            fleetApi.driverEndTrip(
+                                auth,
+                                com.manjugroups.m_connect.network.TravelDeskEndTripRequest(
+                                    siteVisitId = id,
+                                    photoIds = emptyList(),
+                                    endKm = km,
+                                    tollAmount = toll,
+                                    beta = beta,
+                                ),
+                            )
+                        }
+                    }
+                }
+                android.widget.Toast.makeText(
+                    requireContext(),
+                    "Progress updated",
+                    android.widget.Toast.LENGTH_SHORT,
+                ).show()
+                sheet?.dismissAllowingStateLoss()
+                loadFleetDispatch()
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                val msg = e.localizedMessage ?: "Update failed"
+                sheet?.showProgressError(msg)
             }
         }
     }

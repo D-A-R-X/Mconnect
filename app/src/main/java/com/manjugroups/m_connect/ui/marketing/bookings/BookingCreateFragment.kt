@@ -273,11 +273,12 @@ class BookingCreateFragment : Fragment() {
                     val sub = listOfNotNull(
                         u.unitType,
                         u.facing?.let { "facing $it" },
-                        u.area?.let { "${it.toInt()} sqft" },
+                        u.area?.takeIf { it.isFinite() }?.let { "${it.toInt()} sqft" },
                     ).joinToString(" · ")
-                    SearchableOption(u, u.unitNumber ?: "Unit", sub)
+                    SearchableOption(u, u.unitNumber ?: u.id, sub)
                 }
-                SearchableSelectionDialog.show(requireContext(), "Select available unit", options) { picked ->
+                val ctx = context ?: return@launch
+                SearchableSelectionDialog.show(ctx, "Select available unit", options) { picked ->
                     // Defensive: never accept anything that is not available
                     // even if the picker drifted (race with another agent).
                     if (picked.status != "available") {

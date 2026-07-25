@@ -59,6 +59,10 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
     // trip progress; mobile re-reads it on every loadEnrichedDetail.
     private var isOwnVehicleSelected: Boolean = false
     private var isOutcomeLocked: Boolean = false
+    // Fleet "completed offline" — the admin marked this SV as done without a
+    // live trip. The site incharge must record the outcome. Bypass the normal
+    // stepper gate so the buttons are immediately usable.
+    private var isFleetOutcomePending: Boolean = false
 
     // UI elements
     private var tvTitle: TextView? = null
@@ -593,7 +597,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
             val onSiteReached = ownActiveIndex >= 2
             if (isOutcomeLocked) {
                 lockOutcomeButtons("This site visit outcome is already completed.")
-            } else if (onSiteReached) {
+            } else if (onSiteReached || isFleetOutcomePending) {
                 btnBooking?.isEnabled = true
                 btnBooking?.alpha = 1.0f
                 btnNotInterested?.isEnabled = true
@@ -688,7 +692,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
             val onSiteReached = activeIndex >= 3
             if (isOutcomeLocked) {
                 lockOutcomeButtons("This site visit outcome is already completed.")
-            } else if (onSiteReached) {
+            } else if (onSiteReached || isFleetOutcomePending) {
                 btnBooking?.isEnabled = true
                 btnBooking?.alpha = 1.0f
                 btnNotInterested?.isEnabled = true
@@ -924,6 +928,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
 
         val effStatus = visit.status ?: ""
         isOutcomeLocked = isTerminalOutcome(visit)
+        isFleetOutcomePending = visit.completedOffline == true && visit.outcome.isNullOrBlank()
         
         // Detect vehicle type and toggle layout visibility
         isOwnVehicleSelected = proposed?.travelMode == "own_vehicle" || visit.vehiclePreference == "own_vehicle"

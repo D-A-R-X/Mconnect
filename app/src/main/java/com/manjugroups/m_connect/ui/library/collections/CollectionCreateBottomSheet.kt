@@ -90,6 +90,20 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
     private lateinit var tvUploadSubtitle: TextView
     private lateinit var ivUploadIcon: android.widget.ImageView
     private lateinit var etBooking: AutoCompleteTextView
+    private lateinit var etAmount: TextInputEditText
+    private lateinit var etPaymentMode: AutoCompleteTextView
+    private lateinit var etRefId: TextInputEditText
+    private lateinit var etNotes: TextInputEditText
+    private lateinit var btnRemoveProof: TextView
+
+    // Device-level draft (NOT keyed to the logged-in account) so a form
+    // interrupted by a crash resumes on this device regardless of who is
+    // signed in. Cleared on a successful submit.
+    private val draftPrefs by lazy {
+        requireContext().getSharedPreferences("collection_form_draft", android.content.Context.MODE_PRIVATE)
+    }
+    private val defaultUploadSubtitle =
+        "To avoid reject, ensure Aadhaar photo size is max 2MB\n(Supports: JPG,PNG,PDF)"
 
     private val galleryLauncher = registerForActivityResult(
         ActivityResultContracts.GetContent(),
@@ -173,10 +187,10 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
         session = SessionManager(requireContext())
 
         etBooking = view.findViewById(R.id.etBooking)
-        val etAmount = view.findViewById<TextInputEditText>(R.id.etAmount)
-        val etPaymentMode = view.findViewById<AutoCompleteTextView>(R.id.etPaymentMode)
-        val etRefId = view.findViewById<TextInputEditText>(R.id.etRefId)
-        val etNotes = view.findViewById<TextInputEditText>(R.id.etNotes)
+        etAmount = view.findViewById(R.id.etAmount)
+        etPaymentMode = view.findViewById(R.id.etPaymentMode)
+        etRefId = view.findViewById(R.id.etRefId)
+        etNotes = view.findViewById(R.id.etNotes)
         val btnSubmit = view.findViewById<MaterialButton>(R.id.btnSubmit)
         val btnCamera = view.findViewById<View>(R.id.btnCamera)
         val btnUploadImage = view.findViewById<View>(R.id.btnUploadImage)
@@ -184,6 +198,8 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
         tvUploadTitle = view.findViewById(R.id.tvUploadTitle)
         tvUploadSubtitle = view.findViewById(R.id.tvUploadSubtitle)
         ivUploadIcon = view.findViewById(R.id.ivUploadIcon)
+        btnRemoveProof = view.findViewById(R.id.btnRemoveProof)
+        btnRemoveProof.setOnClickListener { clearAttachedImage() }
 
         @Suppress("DEPRECATION")
         rectifyItem = arguments?.getSerializable(ARG_RECTIFY_ITEM) as? CollectionItem
@@ -221,22 +237,10 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
             etBooking.isFocusable = false
             etBooking.isCursorVisible = false
             etBooking.keyListener = null
-            etBooking.setOnClickListener {
-                if (allBookings.isEmpty()) {
-                    toast("Loading bookings…")
-                    loadOpenBookings()
-                } else {
-                    etBooking.showDropDown()
-                }
-            }
-            etBooking.setOnItemClickListener { _, _, position, _ ->
-                allBookings.getOrNull(position)?.let { picked ->
-                    selectedCase = picked
-                    selectedCaseId = picked.id
-                    selectedCaseLabel = bookingDisplayLabel(picked)
-                    etBooking.setText(selectedCaseLabel)
-                }
-            }
+            // Our searchable picker (with a search bar) instead of the native
+            // AutoCompleteTextView dropdown — each row shows the client and the
+            // project, and the search matches name / number / project / plot.
+            etBooking.setOnClickListener { openBookingPicker() }
             loadOpenBookings()
         }
 
@@ -254,6 +258,7 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
             paymentModes.getOrNull(position)?.let {
                 selectedMode = it
                 etPaymentMode.setText(it.label)
+                if (!rectifyLocked) saveDraft()
             }
         }
 
@@ -269,6 +274,22 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
             }
         }
         btnUploadImage.setOnClickListener { galleryLauncher.launch("image/*") }
+
+        // Restore an interrupted draft (device-level), then save on every edit
+        // so a crash mid-fill can be resumed. Skipped in rectify mode, which
+        // pre-fills from the rejected row instead.
+        if (!rectifyLocked) {
+            restoreDraft()
+            val watcher = object : android.text.TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+                override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+                override fun afterTextChanged(s: android.text.Editable?) = saveDraft()
+            }
+            etAmount.addTextChangedListener(watcher)
+            etRefId.addTextChangedListener(watcher)
+            etNotes.addTextChangedListener(watcher)
+            etPaymentMode.addTextChangedListener(watcher)
+        }
 
         btnSubmit.setOnClickListener {
             val caseId = selectedCaseId
@@ -313,6 +334,7 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
                     KEY_PROOF_MIME to (selectedPhotoMime ?: ""),
                 ),
             )
+            if (!rectifyLocked) clearDraft()
             dismissAllowingStateLoss()
         }
     }
@@ -331,51 +353,88 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
     // intent. Tap → list shows under the field; pick → field text
     // updates and selectedCaseId locks in the right caseId.
 
-    private fun loadOpenBookings() {
+    private fun loadOpenBookings(openAfter: Boolean = false) {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val resp = withContext(Dispatchers.IO) {
                     api.listOpenBookings(session.bearerToken)
                 }
+                if (!isAdded) return@launch
                 if (!resp.success) {
                     toast(resp.error ?: "Could not load bookings")
                     return@launch
                 }
                 allBookings = resp.cases
-                applyBookingsToDropdown()
+                // Reconnect a restored draft's booking to its full record so the
+                // submitted result carries the ref/client name, not just the id.
+                if (selectedCase == null && !selectedCaseId.isNullOrBlank()) {
+                    allBookings.firstOrNull { it.id == selectedCaseId }?.let { selectedCase = it }
+                }
+                if (openAfter) openBookingPicker()
             } catch (e: Exception) {
                 toast(e.message ?: "Could not load bookings")
             }
         }
     }
 
-    private fun applyBookingsToDropdown() {
-        val labels = allBookings.map { bookingDisplayLabel(it) }
-        etBooking.setAdapter(
-            ArrayAdapter(
-                requireContext(),
-                android.R.layout.simple_list_item_1,
-                labels,
-            ),
-        )
-        // After the adapter swaps in, the dropdown's measured width
-        // can stay at zero (the field hasn't been laid out with the
-        // new data yet) so the first showDropDown() call comes out
-        // blank. Forcing the width keeps the panel anchored to the
-        // field width across rebuilds.
-        etBooking.setDropDownWidth(android.view.ViewGroup.LayoutParams.MATCH_PARENT)
+    /**
+     * Searchable booking picker (our SearchableSelectionDialog). Each row leads
+     * with the client — name, or their number when the name is blank — and shows
+     * the project (and plot) beneath, so field staff can find a booking by
+     * whichever they remember. Search matches name / number / project / plot / ref.
+     */
+    private fun openBookingPicker() {
+        if (allBookings.isEmpty()) {
+            toast("Loading bookings…")
+            loadOpenBookings(openAfter = true)
+            return
+        }
+        val options = allBookings.map { c ->
+            com.manjugroups.m_connect.ui.common.SearchableOption(
+                item = c,
+                title = bookingClientLabel(c),
+                subtitle = bookingProjectLabel(c).takeIf { it.isNotBlank() },
+                keywords = listOf(
+                    c.clientName, c.mobileNumber,
+                    c.projectName.orEmpty(), c.plotNo.orEmpty(), c.bookingRefNo,
+                ).joinToString(" "),
+            )
+        }
+        com.manjugroups.m_connect.ui.common.SearchableSelectionDialog.show(
+            context = requireContext(),
+            title = "Select Booking",
+            options = options,
+            emptyMessage = "No open bookings",
+        ) { picked ->
+            selectedCase = picked
+            selectedCaseId = picked.id
+            selectedCaseLabel = bookingSelectedLabel(picked)
+            etBooking.setText(selectedCaseLabel)
+            if (!rectifyLocked) saveDraft()
+        }
     }
 
-    private fun bookingDisplayLabel(c: PostSaleCaseSummary): String {
+    /** Client identity for a booking row — name, else number, else ref. */
+    private fun bookingClientLabel(c: PostSaleCaseSummary): String =
+        c.clientName.trim().ifBlank { c.mobileNumber.trim() }.ifBlank { c.bookingRefNo }
+
+    /** Project (+ plot) for a booking row; blank when neither is set. */
+    private fun bookingProjectLabel(c: PostSaleCaseSummary): String {
         val project = c.projectName.orEmpty().trim()
         val plot = c.plotNo.orEmpty().trim()
         return when {
             project.isNotBlank() && plot.isNotBlank() -> "$project - Plot $plot"
             project.isNotBlank() -> project
             plot.isNotBlank() -> "Plot $plot"
-            c.clientName.isNotBlank() -> c.clientName
-            else -> c.bookingRefNo
+            else -> ""
         }
+    }
+
+    /** What fills the field once a booking is picked: client + project. */
+    private fun bookingSelectedLabel(c: PostSaleCaseSummary): String {
+        val client = bookingClientLabel(c)
+        val project = bookingProjectLabel(c)
+        return if (project.isNotBlank()) "$client · $project" else client
     }
 
     private fun showImageAttached(fileName: String) {
@@ -385,6 +444,80 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
         ivUploadIcon.imageTintList = android.content.res.ColorStateList.valueOf(
             Color.parseColor("#12B76A"),
         )
+        btnRemoveProof.visibility = View.VISIBLE
+        if (!rectifyLocked) saveDraft()
+    }
+
+    /** Clear the attached proof and reset the upload card to its empty state. */
+    private fun clearAttachedImage() {
+        // Drop the temp we copied in; the caller's original (gallery uri) is
+        // untouched, and the camera temp lives in our own cache dir.
+        selectedPhotoFile?.let { f -> runCatching { if (f.exists()) f.delete() } }
+        selectedPhotoFile = null
+        selectedPhotoMime = null
+        cameraFile = null
+        tvUploadTitle.text = "Upload Image"
+        tvUploadSubtitle.text = defaultUploadSubtitle
+        ivUploadIcon.setImageResource(R.drawable.ic_upload_cloud)
+        ivUploadIcon.imageTintList = null
+        btnRemoveProof.visibility = View.GONE
+        if (!rectifyLocked) saveDraft()
+    }
+
+    // ── Device-level form draft (crash resume) ────────────────────────
+    private fun saveDraft() {
+        draftPrefs.edit()
+            .putString("caseId", selectedCaseId)
+            .putString("caseLabel", selectedCaseLabel)
+            .putString("amount", etAmount.text?.toString())
+            .putString("modeId", selectedMode.id)
+            .putString("refId", etRefId.text?.toString())
+            .putString("notes", etNotes.text?.toString())
+            .putString("proofPath", selectedPhotoFile?.absolutePath)
+            .putString("proofName", selectedPhotoFile?.name)
+            .putString("proofMime", selectedPhotoMime)
+            .apply()
+    }
+
+    private fun clearDraft() {
+        draftPrefs.edit().clear().apply()
+    }
+
+    private fun restoreDraft() {
+        // Nothing meaningful saved yet → leave the fresh form alone.
+        val caseId = draftPrefs.getString("caseId", null)
+        val amount = draftPrefs.getString("amount", null)
+        val refId = draftPrefs.getString("refId", null)
+        val notes = draftPrefs.getString("notes", null)
+        val hasData = !caseId.isNullOrBlank() || !amount.isNullOrBlank() ||
+            !refId.isNullOrBlank() || !notes.isNullOrBlank()
+        if (!hasData) return
+
+        if (!caseId.isNullOrBlank()) {
+            selectedCaseId = caseId
+            selectedCaseLabel = draftPrefs.getString("caseLabel", null)
+            etBooking.setText(selectedCaseLabel.orEmpty())
+        }
+        if (!amount.isNullOrBlank()) etAmount.setText(amount)
+        draftPrefs.getString("modeId", null)?.let { id ->
+            paymentModes.firstOrNull { it.id == id }?.let {
+                selectedMode = it
+                etPaymentMode.setText(it.label)
+            }
+        }
+        if (!refId.isNullOrBlank()) etRefId.setText(refId)
+        if (!notes.isNullOrBlank()) etNotes.setText(notes)
+
+        // Restore the proof only if the temp file is still on disk.
+        val proofPath = draftPrefs.getString("proofPath", null)
+        if (!proofPath.isNullOrBlank()) {
+            val f = File(proofPath)
+            if (f.exists() && f.length() > 0) {
+                selectedPhotoFile = f
+                selectedPhotoMime = draftPrefs.getString("proofMime", null) ?: "image/jpeg"
+                showImageAttached(draftPrefs.getString("proofName", null) ?: f.name)
+            }
+        }
     }
 
     private fun launchCamera() {

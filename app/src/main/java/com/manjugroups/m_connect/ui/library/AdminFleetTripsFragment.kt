@@ -15,6 +15,8 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentAdminFleetTripsBinding
 import com.manjugroups.m_connect.databinding.ItemAdminFleetTripBinding
 import com.manjugroups.m_connect.network.AllocateTripRequest
+import com.manjugroups.m_connect.network.CompleteOfflineTripRequest
+import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.TravelDeskApi
 import com.manjugroups.m_connect.network.TravelDeskTrip
 import com.manjugroups.m_connect.network.TravelDeskVehicle
@@ -22,6 +24,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import com.manjugroups.m_connect.ui.common.showOnce
 import com.manjugroups.m_connect.ui.common.InfiniteScrollPager
+import com.manjugroups.m_connect.ui.home.CompleteCpVisitBottomSheet
 
 class AdminFleetTripsFragment : Fragment() {
 
@@ -112,6 +115,13 @@ class AdminFleetTripsFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
+
+        // When the SV outcome form (Booking/Postpone/Not Interested) completes,
+        // refresh the trips list so the completed-offline trip disappears.
+        parentFragmentManager.setFragmentResultListener(
+            CompleteCpVisitBottomSheet.RESULT_KEY,
+            viewLifecycleOwner,
+        ) { _, _ -> refresh() }
 
         binding.homeHeader.setup(this)
         binding.homeHeader.setFleetBannerMode()
@@ -213,10 +223,10 @@ class AdminFleetTripsFragment : Fragment() {
                 // Completed (badged separately), NOT sitting in Assigned as if
                 // it were still live. Everything else is in-flight ("Assigned").
                 assignedActive = assignedRows.filter {
-                    tripEndedAt(it) == null && !isExpiredTrip(it)
+                    tripEndedAt(it) == null && (!isExpiredTrip(it) || isOutcomePending(it))
                 }
                 assignedCompleted = assignedRows.filter {
-                    tripEndedAt(it) != null || isExpiredTrip(it)
+                    tripEndedAt(it) != null || (isExpiredTrip(it) && !isOutcomePending(it))
                 }
                 vehicles = vehiclesResp.rows
                 activeVehicleCount = vehicles.count {
@@ -250,6 +260,9 @@ class AdminFleetTripsFragment : Fragment() {
                 isDone = false,
             )
 
+    private fun isOutcomePending(trip: TravelDeskTrip): Boolean =
+        trip.completedOffline == true && trip.outcome.isNullOrBlank()
+
     /** Surfaces the trip end timestamp regardless of which field the backend uses. */
     private fun tripEndedAt(trip: TravelDeskTrip): Long? {
         // Both fields can appear depending on the trip's phase in travel-desk.
@@ -280,8 +293,9 @@ class AdminFleetTripsFragment : Fragment() {
     private fun setupRecyclerView() {
         tripsAdapter = AdminTripsAdapter(
             onAllocateClick = { trip -> openAllocateSheet(trip) },
-            onManageClick = { trip -> openManageSheet(trip) }
-        )
+            onManageClick = { trip -> openManageSheet(trip) },
+            onCompleteClick = { trip -> openCompleteOfflineSheet(trip) },
+        ).also { it.canCompleteOffline = session.canCompleteOfflineFleet() }
         binding.rvAdminTrips.layoutManager = LinearLayoutManager(requireContext())
         binding.rvAdminTrips.adapter = tripsAdapter
         binding.rvAdminTrips.isNestedScrollingEnabled = false
@@ -292,7 +306,195 @@ class AdminFleetTripsFragment : Fragment() {
             trip = trip,
             onReassign = { openAllocateSheet(trip) },
             onRemove = { removeDriver(trip) },
+            onComplete = { openCompleteOfflineSheet(trip) },
+            onProgressAction = { action, km, toll, beta ->
+                submitProgressAction(trip, action, km, toll, beta)
+            },
         ).showOnce(parentFragmentManager, "AdminFleetTripManageSheet")
+    }
+
+    /**
+     * Advance the trip through its lifecycle stage. The admin can mark each
+     * step on behalf of the driver:
+     *   reached / start / on_site / picked_from_site / end
+     *
+     * Internal (MMS fleet) trips use GeoTrackApi's mms-fleet driver endpoints.
+     * External (travel-desk) trips use TravelDeskApi's driver endpoints.
+     * Both accept a staff token for admin-initiated progress updates.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    private fun submitProgressAction(
+        trip: AdminTrip,
+        action: String,
+        km: Double?,
+        toll: Double?,
+        beta: Double?,
+    ) {
+        val token = session.bearerToken
+        if (token.isBlank()) {
+            Toast.makeText(requireContext(), "Session expired — sign in again.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val sheet = parentFragmentManager.findFragmentByTag("AdminFleetTripManageSheet")
+            as? AdminFleetTripManageSheet
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val auth = "Bearer $token"
+                val id = trip.id
+                when (action) {
+                    "reached" -> {
+                        if (useMmsFleet) {
+                            val geoApi = GeoTrackApi.create()
+                            geoApi.markMmsFleetDriverArrived(
+                                auth,
+                                com.manjugroups.m_connect.network.MmsFleetDriverSiteVisitRequest(id),
+                            )
+                        } else {
+                            api.driverMarkArrived(
+                                auth,
+                                com.manjugroups.m_connect.network.TravelDeskDriverTripRequest(id),
+                            )
+                        }
+                    }
+                    "start" -> {
+                        if (useMmsFleet) {
+                            val geoApi = GeoTrackApi.create()
+                            geoApi.startMmsFleetDriverTrip(
+                                auth,
+                                com.manjugroups.m_connect.network.MmsFleetDriverStartRequest(
+                                    siteVisitId = id,
+                                    photoIds = emptyList(),
+                                    startKm = km,
+                                ),
+                            )
+                        } else {
+                            api.driverStartTrip(
+                                auth,
+                                com.manjugroups.m_connect.network.TravelDeskStartTripRequest(
+                                    siteVisitId = id,
+                                    otp = "0000",
+                                    photoIds = emptyList(),
+                                    startKm = km,
+                                ),
+                            )
+                        }
+                    }
+                    "on_site" -> {
+                        if (useMmsFleet) {
+                            val geoApi = GeoTrackApi.create()
+                            geoApi.markMmsFleetDriverOnSite(
+                                auth,
+                                com.manjugroups.m_connect.network.MmsFleetDriverSiteVisitRequest(id),
+                            )
+                        } else {
+                            api.driverMarkOnSite(
+                                auth,
+                                com.manjugroups.m_connect.network.TravelDeskDriverTripRequest(id),
+                            )
+                        }
+                    }
+                    "picked_from_site" -> {
+                        if (useMmsFleet) {
+                            val geoApi = GeoTrackApi.create()
+                            geoApi.markMmsFleetDriverPickedFromSite(
+                                auth,
+                                com.manjugroups.m_connect.network.MmsFleetDriverSiteVisitRequest(id),
+                            )
+                        } else {
+                            api.driverMarkPickedFromSite(
+                                auth,
+                                com.manjugroups.m_connect.network.TravelDeskDriverTripRequest(id),
+                            )
+                        }
+                    }
+                    "end" -> {
+                        if (useMmsFleet) {
+                            val geoApi = GeoTrackApi.create()
+                            geoApi.endMmsFleetDriverTrip(
+                                auth,
+                                com.manjugroups.m_connect.network.MmsFleetDriverEndRequest(
+                                    siteVisitId = id,
+                                    photoIds = emptyList(),
+                                    endKm = km,
+                                ),
+                            )
+                        } else {
+                            api.driverEndTrip(
+                                auth,
+                                com.manjugroups.m_connect.network.TravelDeskEndTripRequest(
+                                    siteVisitId = id,
+                                    photoIds = emptyList(),
+                                    endKm = km,
+                                    tollAmount = toll,
+                                    beta = beta,
+                                ),
+                            )
+                        }
+                    }
+                }
+                Toast.makeText(requireContext(), "Progress updated", Toast.LENGTH_SHORT).show()
+                sheet?.dismissAllowingStateLoss()
+                refresh()
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                val msg = e.localizedMessage ?: "Update failed"
+                sheet?.showProgressError(msg)
+            }
+        }
+    }
+
+    private fun openCompleteOfflineSheet(trip: AdminTrip) {
+        if (!session.canCompleteOfflineFleet()) {
+            Toast.makeText(requireContext(), "You don't have permission to complete trips offline.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        AdminFleetCompleteOfflineSheet.newInstance(trip, vehicles) { result ->
+            submitCompleteOffline(trip, result)
+        }.showOnce(parentFragmentManager, "AdminFleetCompleteOfflineSheet")
+    }
+
+    private fun submitCompleteOffline(trip: AdminTrip, result: CompleteOfflineTripResult) {
+        val token = session.bearerToken
+        if (token.isBlank()) {
+            Toast.makeText(requireContext(), "Session expired â€” sign in again.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        allocateJob?.cancel()
+        allocateJob = viewLifecycleOwner.lifecycleScope.launch {
+            val resp = runCatching {
+                api.completeOfflineMms(
+                    token,
+                    CompleteOfflineTripRequest(
+                        siteVisitId = trip.id,
+                        packageAmount = result.packageAmount,
+                        distanceKm = result.distanceKm,
+                        driverName = result.driverName,
+                        driverPhone = result.driverPhone,
+                        fleetType = result.fleetType,
+                        vehicleId = result.vehicleId,
+                        agencyName = result.agencyName,
+                    ),
+                )
+            }.getOrNull()
+            if (_binding == null) return@launch
+            if (resp?.success == true) {
+                Toast.makeText(
+                    requireContext(),
+                    "Trip details saved. Opening outcome form.",
+                    Toast.LENGTH_SHORT,
+                ).show()
+                CompleteCpVisitBottomSheet
+                    .forSiteVisit(siteVisitId = trip.id)
+                    .showOnce(parentFragmentManager, "fleet_sv_outcome")
+            } else {
+                Toast.makeText(
+                    requireContext(),
+                    resp?.error ?: "Could not complete this trip.",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
     }
 
     private fun removeDriver(trip: AdminTrip) {
@@ -597,8 +799,17 @@ class AdminFleetTripsFragment : Fragment() {
             expired = expired,
             startKm = trip.travelDeskStartKm,
             endKm = trip.travelDeskEndKm,
+            distanceKm = trip.travelDeskStartKm?.let { start ->
+                trip.travelDeskEndKm?.let { end -> (end - start).takeIf { it >= 0.0 } }
+            },
             startPhotoId = trip.travelDeskStartPhotoIds.firstOrNull(),
             endPhotoId = trip.travelDeskEndPhotoIds.firstOrNull(),
+            packageAmount = trip.travelDeskPackageAmount,
+            beta = trip.travelDeskBeta,
+            tollAmount = trip.travelDeskTollAmount,
+            totalAmount = trip.travelDeskTotalAmount,
+            external = trip.travelAgency?.name?.isNotBlank() == true,
+            agencyName = trip.travelAgency?.name?.trim()?.ifBlank { null },
         )
     }
 
@@ -629,8 +840,13 @@ class AdminFleetTripsFragment : Fragment() {
         var expired: Boolean = false,
         var startKm: Double? = null,
         var endKm: Double? = null,
+        var distanceKm: Double? = null,
         var startPhotoId: String? = null,
         var endPhotoId: String? = null,
+        var packageAmount: Double? = null,
+        var beta: Double? = null,
+        var tollAmount: Double? = null,
+        var totalAmount: Double? = null,
         // An external-agency allotment vs the in-house (Internal / MFPL) fleet.
         // Drives the manage sheet's wording — an agency trip is removed with
         // "Remove agency", not "Remove driver".
@@ -640,10 +856,12 @@ class AdminFleetTripsFragment : Fragment() {
 
     private class AdminTripsAdapter(
         private val onAllocateClick: (AdminTrip) -> Unit,
-        private val onManageClick: (AdminTrip) -> Unit
+        private val onManageClick: (AdminTrip) -> Unit,
+        private val onCompleteClick: (AdminTrip) -> Unit,
     ) : RecyclerView.Adapter<AdminTripsAdapter.ViewHolder>() {
 
         private var items: List<AdminTrip> = emptyList()
+        var canCompleteOffline: Boolean = false
 
         fun submitList(newList: List<AdminTrip>) {
             items = newList
@@ -688,12 +906,22 @@ class AdminFleetTripsFragment : Fragment() {
                     item.expired -> {
                         binding.tvTripStatus.setBackgroundResource(R.drawable.bg_badge_pending)
                         binding.tvTripStatus.setTextColor(Color.parseColor("#B42318"))
-                        binding.btnAllocate.visibility = View.GONE
+                        if (canCompleteOffline) {
+                            binding.btnAllocate.visibility = View.VISIBLE
+                            binding.btnAllocate.text = "Completed"
+                            binding.btnAllocate.setBackgroundResource(R.drawable.bg_allocate_button_green)
+                            binding.btnAllocate.setOnClickListener { onCompleteClick(item) }
+                        } else {
+                            binding.btnAllocate.visibility = View.GONE
+                        }
                     }
                     item.status == "Pending" -> {
                         binding.tvTripStatus.setBackgroundResource(R.drawable.bg_badge_pending)
                         binding.tvTripStatus.setTextColor(Color.parseColor("#EA580C"))
                         binding.btnAllocate.visibility = View.VISIBLE
+                        binding.btnAllocate.text = "Allocate >"
+                        binding.btnAllocate.setBackgroundResource(R.drawable.bg_admin_fleet_btn_allocate)
+                        binding.btnAllocate.setOnClickListener { onAllocateClick(item) }
                     }
                     item.status == "Assigned" -> {
                         binding.tvTripStatus.setBackgroundResource(R.drawable.bg_badge_info)
@@ -720,8 +948,6 @@ class AdminFleetTripsFragment : Fragment() {
                     binding.tvAssignedProgress.text =
                         if (item.expired) "Expired" else item.progressLabel
                 }
-
-                binding.btnAllocate.setOnClickListener { onAllocateClick(item) }
 
                 // Any allocated trip opens the manage sheet (details + progress
                 // + reassign / remove driver). Pending cards keep Allocate only.

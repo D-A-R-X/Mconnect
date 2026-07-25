@@ -127,7 +127,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
                     android:fontFamily="@font/inter_semibold"
-                    android:text="Capture photo"
+                    android:text="Capture or upload photo"
                     android:textColor="#0B61CA"
                     android:textSize="12sp" />
 

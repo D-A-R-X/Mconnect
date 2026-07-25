@@ -552,6 +552,18 @@ class SessionManager(context: Context) {
     }
 
     /**
+     * Whether the current user can mark an expired fleet trip as completed offline.
+     *
+     * Mirrors the server-side gating on markExpiredTripOutcomePending which
+     * requires `marketing.fleet.completeOffline`. Fleet dispatchers get this
+     * by designation grant; super-admins get it automatically.
+     */
+    fun canCompleteOfflineFleet(): Boolean {
+        if ((role ?: "").trim().equals("super-admin", ignoreCase = true)) return true
+        return iamPermissions.contains("marketing.fleet.completeOffline")
+    }
+
+    /**
      * Who sees the company-wide Home dashboard (everyone else gets Today's Trip).
      *
      * The dashboard was wrongly showing for ALL users: it was gated on

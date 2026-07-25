@@ -84,6 +84,16 @@ class SelfieCameraFragment : Fragment(), OnMapReadyCallback {
         }
 
         viewLifecycleOwner.lifecycleScope.launch {
+            // Compress the raw camera selfie up front. A full-res capture
+            // (multi-MB, several megapixels) was large enough to OOM the
+            // preview / upload on some devices — the reported clock-in crash.
+            // Downscaling here means every downstream step gets a small file.
+            val photoFile = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                val out = com.manjugroups.m_connect.util.ImageCompressor.compress(imageFile)
+                if (out !== imageFile) runCatching { imageFile.delete() }
+                out
+            }
+
             val location = latestLocation ?: getCurrentLocationOrNull()
             if (location == null) {
                 setProcessing(false)
@@ -98,7 +108,7 @@ class SelfieCameraFragment : Fragment(), OnMapReadyCallback {
             val address = resolveAddress(location)
             setProcessing(false)
             navigateToSelfieDetail(
-                photoPath = imageFile.absolutePath,
+                photoPath = photoFile.absolutePath,
                 latitude = location.latitude,
                 longitude = location.longitude,
                 address = address,

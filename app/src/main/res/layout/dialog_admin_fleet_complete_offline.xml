@@ -1,0 +1,311 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@android:color/transparent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_leave_sheet"
+        android:orientation="vertical"
+        android:paddingHorizontal="20dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="24dp">
+
+        <View
+            android:layout_width="40dp"
+            android:layout_height="4dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="16dp"
+            android:background="#E4E7EC" />
+
+        <TextView
+            android:id="@+id/tvCompleteTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Complete Outcome"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textSize="18sp" />
+
+        <TextView
+            android:id="@+id/tvCompleteSubtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:fontFamily="@font/inter_regular"
+            android:text="Save trip details, then the Site Incharge can record the final outcome."
+            android:textColor="#667085"
+            android:textSize="12sp" />
+
+        <!-- Fleet type dropdown -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:fontFamily="@font/inter_medium"
+            android:text="Fleet type *"
+            android:textColor="#344054"
+            android:textSize="12sp" />
+
+        <Spinner
+            android:id="@+id/spinnerFleetType"
+            android:layout_width="match_parent"
+            android:layout_height="46dp"
+            android:layout_marginTop="6dp"
+            android:background="@drawable/bg_input"
+            android:paddingHorizontal="8dp" />
+
+        <!-- Internal fleet: vehicle picker -->
+        <LinearLayout
+            android:id="@+id/layoutInternalFleet"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="Vehicle *"
+                android:textColor="#344054"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/tvVehicleSelector"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input"
+                android:drawableEnd="@android:drawable/arrow_down_float"
+                android:gravity="center_vertical"
+                android:fontFamily="@font/inter_regular"
+                android:hint="Select vehicle"
+                android:paddingHorizontal="12dp"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/tvSelectedDriver"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:fontFamily="@font/inter_regular"
+                android:textColor="#667085"
+                android:textSize="11sp"
+                android:visibility="gone" />
+
+            <!-- Package price (required) -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="Package price *"
+                android:textColor="#344054"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/etPackageAmount"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input"
+                android:fontFamily="@font/inter_regular"
+                android:hint="Enter package price"
+                android:inputType="numberDecimal"
+                android:paddingHorizontal="12dp"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textSize="14sp" />
+
+            <!-- Distance (optional) -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="Distance travelled"
+                android:textColor="#344054"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/etDistanceKm"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input"
+                android:fontFamily="@font/inter_regular"
+                android:hint="Km (optional)"
+                android:inputType="numberDecimal"
+                android:paddingHorizontal="12dp"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <!-- External fleet: agency name + package + distance -->
+        <LinearLayout
+            android:id="@+id/layoutExternalFleet"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="Agency name"
+                android:textColor="#344054"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/etAgencyName"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input"
+                android:fontFamily="@font/inter_regular"
+                android:hint="Agency name"
+                android:inputType="textPersonName"
+                android:paddingHorizontal="12dp"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textSize="14sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="Package price *"
+                android:textColor="#344054"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/etPackageAmountExternal"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input"
+                android:fontFamily="@font/inter_regular"
+                android:hint="Enter package price"
+                android:inputType="numberDecimal"
+                android:paddingHorizontal="12dp"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textSize="14sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="Distance travelled"
+                android:textColor="#344054"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/etDistanceKmExternal"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input"
+                android:fontFamily="@font/inter_regular"
+                android:hint="Km (optional)"
+                android:inputType="numberDecimal"
+                android:paddingHorizontal="12dp"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <!-- Own vehicle: package + distance only -->
+        <LinearLayout
+            android:id="@+id/layoutOwnVehicle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="Package price *"
+                android:textColor="#344054"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/etPackageAmountOwn"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input"
+                android:fontFamily="@font/inter_regular"
+                android:hint="Enter package price"
+                android:inputType="numberDecimal"
+                android:paddingHorizontal="12dp"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textSize="14sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="Distance travelled"
+                android:textColor="#344054"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/etDistanceKmOwn"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input"
+                android:fontFamily="@font/inter_regular"
+                android:hint="Km (optional)"
+                android:inputType="numberDecimal"
+                android:paddingHorizontal="12dp"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:orientation="horizontal">
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btnCancelComplete"
+                android:layout_width="0dp"
+                android:layout_height="46dp"
+                android:layout_marginEnd="6dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_btn_reject_outline_red"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Cancel"
+                android:textAllCaps="false"
+                android:textColor="#B42318"
+                android:textSize="14sp" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btnSubmitComplete"
+                android:layout_width="0dp"
+                android:layout_height="46dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_button_primary"
+                android:backgroundTint="#0B61CA"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Save"
+                android:textAllCaps="false"
+                android:textColor="@android:color/white"
+                android:textSize="14sp" />
+        </LinearLayout>
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>
