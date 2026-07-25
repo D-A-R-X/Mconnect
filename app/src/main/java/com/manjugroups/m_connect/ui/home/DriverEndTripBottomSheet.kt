@@ -2,6 +2,7 @@ package com.manjugroups.m_connect.ui.home
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
 import android.app.Dialog
 import android.content.ActivityNotFoundException
 import android.content.Intent
@@ -73,12 +74,21 @@ class DriverEndTripBottomSheet : BottomSheetDialogFragment() {
         }
         val file = currentPhotoFile
         if (result.resultCode == Activity.RESULT_OK && file != null && file.exists()) {
-            layoutUploadPlaceholder.visibility = View.GONE
-            ivUploadedPhoto.visibility = View.VISIBLE
-            ivUploadedPhoto.load(file)
+            showCapturedPhoto(file)
         } else {
             if (isAdded) Toast.makeText(requireContext(), "Camera capture cancelled", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private val galleryLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (!isAdded || uri == null) return@registerForActivityResult
+        val file = copyUriToTempFile(uri) ?: run {
+            if (isAdded) Toast.makeText(requireContext(), "Could not read image", Toast.LENGTH_SHORT).show()
+            return@registerForActivityResult
+        }
+        showCapturedPhoto(file)
     }
 
     private val permissionLauncher = registerForActivityResult(
@@ -131,11 +141,46 @@ class DriverEndTripBottomSheet : BottomSheetDialogFragment() {
         btnSubmit = view.findViewById(R.id.btnSubmit)
 
         btnUploadImage.setOnClickListener {
-            checkCameraPermissionAndLaunch()
+            showPhotoSourceChooser()
         }
 
         btnSubmit.setOnClickListener {
             performSubmit()
+        }
+    }
+
+    private fun showPhotoSourceChooser() {
+        AlertDialog.Builder(requireContext())
+            .setTitle("Add odometer photo")
+            .setItems(arrayOf("Take photo", "Choose from gallery")) { _, which ->
+                if (which == 0) {
+                    checkCameraPermissionAndLaunch()
+                } else {
+                    galleryLauncher.launch("image/*")
+                }
+            }
+            .show()
+    }
+
+    private fun showCapturedPhoto(file: File) {
+        currentPhotoFile = file
+        layoutUploadPlaceholder.visibility = View.GONE
+        ivUploadedPhoto.visibility = View.VISIBLE
+        ivUploadedPhoto.load(file)
+    }
+
+    private fun copyUriToTempFile(uri: Uri): File? {
+        return try {
+            val dir = File(requireContext().cacheDir, "arrival_photos").apply {
+                if (!exists()) mkdirs()
+            }
+            val file = File.createTempFile("end_gallery_", ".jpg", dir)
+            requireContext().contentResolver.openInputStream(uri)?.use { input ->
+                file.outputStream().use { output -> input.copyTo(output) }
+            }
+            if (file.exists() && file.length() > 0) file else null
+        } catch (_: Exception) {
+            null
         }
     }
 
