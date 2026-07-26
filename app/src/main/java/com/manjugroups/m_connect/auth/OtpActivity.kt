@@ -298,7 +298,11 @@ class OtpActivity : AppCompatActivity() {
         val jobFleet = launch {
             session.fleetDriverByBackend = runCatching {
                 geoApi.getMmsFleetDriverTrips(session.bearerToken)
-            }.map { it.success }.getOrDefault(false)
+            }.map { response ->
+                response.success &&
+                    response.diagnostics?.notDriver != true &&
+                    response.diagnostics?.reason != "staff_not_driver"
+            }.getOrDefault(false)
         }
 
         val jobIam = launch {
