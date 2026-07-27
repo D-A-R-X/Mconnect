@@ -549,7 +549,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
                     android:fontFamily="@font/inter_medium"
-                    android:text="Tap to open Front Desk Scanner"
+                    android:text="Tap to open QR Scanner"
                     android:textColor="#94A3B8"
                     android:textSize="13sp" />
             </LinearLayout>

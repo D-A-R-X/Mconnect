@@ -265,7 +265,7 @@ class SiteVisitsFragment : Fragment() {
     // "Picked Up" — client collected from the CP and the trip is in transit
     // through to the site and back. "arrived" is the collapsed-bucket fallback.
     private fun isPickedUp(s: String): Boolean = s in setOf(
-        "picked_up", "on_site", "picked_from_site", "arrived",
+        "picked_up", "on_site", "consulting", "picked_from_site", "arrived",
     )
 
     private fun isCompleted(s: String): Boolean = s in setOf(
@@ -290,6 +290,7 @@ class SiteVisitsFragment : Fragment() {
         if (!isScheduledState(effStatus(visit))) return false
         return com.manjugroups.m_connect.util.VisitExpiry.isExpired(
             visit.scheduledDate, visit.scheduledStartTime, isDone = false,
+            createdAtMillis = visit.creationTime?.toLong(),
         )
     }
 
@@ -548,6 +549,7 @@ class SiteVisitsFragment : Fragment() {
             isPickedUp(s) -> {
                 val label = when (s) {
                     "on_site" -> "On site"
+                    "consulting" -> "Consulting"
                     "picked_from_site" -> "Picked from site"
                     "arrived" -> "Reaching"
                     else -> "Picked up"

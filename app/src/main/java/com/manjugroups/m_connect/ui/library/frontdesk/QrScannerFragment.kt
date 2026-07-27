@@ -19,6 +19,7 @@ import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.setFragmentResultListener
 import androidx.activity.result.contract.ActivityResultContracts
 import com.google.mlkit.vision.barcode.BarcodeScanner
 import com.google.mlkit.vision.barcode.BarcodeScanning
@@ -31,6 +32,9 @@ import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.CheckinInvitationRequest
 import com.manjugroups.m_connect.network.CheckoutInvitationRequest
 import com.manjugroups.m_connect.network.InvitationDetail
+import com.manjugroups.m_connect.network.GeoTrackApi
+import com.manjugroups.m_connect.network.SiteVisitIdRequest
+import com.manjugroups.m_connect.network.SiteVisitQrScanRequest
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -51,6 +55,9 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.manjugroups.m_connect.ui.common.commitOnce
+import com.manjugroups.m_connect.ui.common.showOnce
+import com.manjugroups.m_connect.ui.home.CompleteCpVisitBottomSheet
+import com.manjugroups.m_connect.ui.marketing.SiteVisitCounsellingConfirmBottomSheet
 
 
 class QrScannerFragment : Fragment() {
@@ -66,6 +73,7 @@ class QrScannerFragment : Fragment() {
     private var statusBarHeight = 0
 
     private val api by lazy { ApiService.create() }
+    private val geoTrackApi by lazy { GeoTrackApi.create() }
     private val session by lazy { SessionManager(requireContext()) }
     // Set when a real invitation is loaded; needed for the Confirm -> check-in call.
     private var currentInvitationId: String? = null
@@ -98,6 +106,12 @@ class QrScannerFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         cameraExecutor = Executors.newSingleThreadExecutor()
+
+        setFragmentResultListener(SiteVisitCounsellingConfirmBottomSheet.RESULT_KEY) { _, result ->
+            result.getString(SiteVisitCounsellingConfirmBottomSheet.KEY_SITE_VISIT_ID)
+                ?.takeIf { it.isNotBlank() }
+                ?.let(::markSiteVisitOnCounselling)
+        }
 
         binding.btnBack.setOnClickListener {
             parentFragmentManager.popBackStack()
@@ -293,8 +307,11 @@ class QrScannerFragment : Fragment() {
             // A Front Desk invite QR encodes <origin>/frontdesk/invite/<token>.
             // For those we resolve real visitor data from the backend; any other
             // QR falls back to the legacy local/mock parsing.
+            val siteVisitId = extractSiteVisitId(value)
             val inviteToken = extractInviteToken(value)
-            if (inviteToken != null) {
+            if (siteVisitId != null) {
+                confirmSiteVisitConsulting(siteVisitId)
+            } else if (inviteToken != null) {
                 fetchInvitation(inviteToken)
             } else {
                 showVerificationModal(value)
@@ -313,6 +330,99 @@ class QrScannerFragment : Fragment() {
             .trim()
             .trimEnd('/')
         return token.ifEmpty { null }
+    }
+
+    /** Accept both the current `SV:<id>` payload and the legacy client QR URL. */
+    private fun extractSiteVisitId(value: String): String? {
+        val raw = value.trim()
+        if (raw.startsWith("SV:", ignoreCase = true)) {
+            return raw.substringAfter(':').trim().ifEmpty { null }
+        }
+        val marker = "/site-visit/consulting/"
+        val idx = raw.indexOf(marker)
+        if (idx < 0) return null
+        val id = raw.substring(idx + marker.length)
+            .substringBefore('?')
+            .substringBefore('#')
+            .trim()
+            .trimEnd('/')
+        return id.ifEmpty { null }
+    }
+
+    private fun confirmSiteVisitConsulting(siteVisitId: String) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val response = geoTrackApi.scanSiteVisitQr(
+                    session.bearerToken,
+                    SiteVisitQrScanRequest("SV:$siteVisitId"),
+                )
+                val visit = response.visit
+                if (!response.success || visit == null) {
+                    throw IllegalStateException(response.error ?: "Unable to validate this SV QR")
+                }
+                if (_binding == null) return@launch
+                val projectName = visit.project?.projectName ?: visit.project?.name
+                val clientName =
+                    visit.lead?.clientName
+                        ?: visit.lead?.contactName
+                        ?: visit.client?.clientName
+                val bdoName = visit.bdoStaff?.name ?: visit.telecallerStaff?.name
+                val scheduledAt = listOfNotNull(
+                    visit.scheduledDate?.takeIf { it.isNotBlank() },
+                    visit.scheduledTime?.takeIf { it.isNotBlank() },
+                ).joinToString(" - ")
+                SiteVisitCounsellingConfirmBottomSheet.newInstance(
+                    siteVisitId = visit._id,
+                    projectName = projectName,
+                    clientName = clientName,
+                    bdoName = bdoName,
+                    inchargeName = visit.inchargeStaff?.name,
+                    scheduledAt = scheduledAt,
+                    canStartCounselling = visit.canStartCounselling,
+                ).showOnce(parentFragmentManager, "SiteVisitCounsellingConfirmBottomSheet")
+            } catch (error: Exception) {
+                if (_binding == null) return@launch
+                Toast.makeText(
+                    requireContext(),
+                    error.message ?: "This SV QR could not be confirmed",
+                    Toast.LENGTH_LONG,
+                ).show()
+                resumeScanning()
+            }
+        }
+    }
+
+    private fun markSiteVisitOnCounselling(siteVisitId: String) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val response = geoTrackApi.markSiteVisitOnCounselling(
+                    session.bearerToken,
+                    SiteVisitIdRequest(siteVisitId),
+                )
+                if (!response.success) {
+                    throw IllegalStateException(response.error ?: "Unable to start counselling")
+                }
+                if (_binding == null) return@launch
+                Toast.makeText(
+                    requireContext(),
+                    "Counselling started",
+                    Toast.LENGTH_SHORT,
+                ).show()
+                CompleteCpVisitBottomSheet
+                    .forSiteVisit(siteVisitId)
+                    .showOnce(parentFragmentManager, "SiteVisitOutcomeAfterQr")
+                // Keep the shared scanner usable if the outcome sheet is dismissed.
+                resumeScanning()
+            } catch (error: Exception) {
+                if (_binding == null) return@launch
+                Toast.makeText(
+                    requireContext(),
+                    error.message ?: "Unable to start counselling",
+                    Toast.LENGTH_LONG,
+                ).show()
+                resumeScanning()
+            }
+        }
     }
 
     private fun fetchInvitation(inviteToken: String) {
@@ -478,7 +588,6 @@ class QrScannerFragment : Fragment() {
     private val canCheckin get() = session.hasPermission("frontdesk.checkin")
     private val canCheckout get() = session.hasPermission("frontdesk.checkout")
     private val canViewHistory get() = session.hasPermission("frontdesk.view")
-
     /**
      * Show or hide the primary action (Confirm / Check Out) and keep the layout
      * responsive: when it's hidden (no permission or checked-out), Rescan is the

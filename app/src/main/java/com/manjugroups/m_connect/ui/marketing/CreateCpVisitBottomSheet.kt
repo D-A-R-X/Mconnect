@@ -23,6 +23,7 @@ import com.manjugroups.m_connect.network.PostSaleCaseSummary
 import com.manjugroups.m_connect.util.ongoingOnly
 import com.manjugroups.m_connect.network.TelecallerLeadSearchData
 import com.manjugroups.m_connect.R
+import com.manjugroups.m_connect.util.EditableTimeFormat
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.CreateCpVisitRequest
@@ -716,9 +717,9 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             TimePickerDialog(
                 requireContext(),
                 { _, h, m ->
-                    val timeStr = String.format(Locale.US, "%02d:%02d", h, m)
-                    selectedTime = timeStr
-                    label.setText("$selectedDate $selectedTime")
+                    val (storageTime, displayTime) = EditableTimeFormat.fromPicker(h, m)
+                    selectedTime = storageTime
+                    label.setText("$selectedDate $displayTime")
                 },
                 hour,
                 minute,

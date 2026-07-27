@@ -268,5 +268,29 @@
         <item name="android:clickable">true</item>
         <item name="android:focusable">true</item>
     </style>
+
+    <style name="TravelDeskRateLabel">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">14dp</item>
+        <item name="android:fontFamily">@font/inter_semibold</item>
+        <item name="android:textColor">?attr/colorForegroundPrimary</item>
+        <item name="android:textSize">13sp</item>
+    </style>
+
+    <style name="TravelDeskRateInput">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:layout_marginTop">6dp</item>
+        <item name="android:background">@drawable/bg_input</item>
+        <item name="android:drawableStart">@drawable/ic_custom_rate</item>
+        <item name="android:drawablePadding">10dp</item>
+        <item name="android:fontFamily">@font/inter_regular</item>
+        <item name="android:inputType">numberDecimal</item>
+        <item name="android:paddingHorizontal">14dp</item>
+        <item name="android:textColor">?attr/colorForegroundPrimary</item>
+        <item name="android:textColorHint">?attr/colorForegroundMuted</item>
+        <item name="android:textSize">14sp</item>
+    </style>
 </resources>
 

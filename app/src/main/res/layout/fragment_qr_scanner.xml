@@ -118,7 +118,7 @@
                 android:layout_weight="1"
                 android:gravity="center"
                 android:fontFamily="@font/inter_bold"
-                android:text="Front Desk Scanner"
+                android:text="QR Scanner"
                 android:textColor="#FFFFFF"
                 android:textSize="18sp" />
 
@@ -142,7 +142,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="24dp"
         android:fontFamily="@font/inter_semibold"
-        android:text="Align QR code inside the box to scan"
+        android:text="Scan a visitor or site visit QR code"
         android:textColor="#FFFFFF"
         android:textSize="14sp"
         android:elevation="4dp"

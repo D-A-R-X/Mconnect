@@ -10,6 +10,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import com.manjugroups.m_connect.R
+import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentAdminFleetContainerBinding
 
 class AdminFleetContainerFragment : Fragment() {
@@ -20,6 +21,15 @@ class AdminFleetContainerFragment : Fragment() {
     private var previousTabIndex = 0
     private lateinit var backCallback: androidx.activity.OnBackPressedCallback
     private var isBottomNavVisible = true
+    private lateinit var session: SessionManager
+
+    private companion object {
+        const val TAB_TRIPS = 0
+        const val TAB_VEHICLES = 1
+        const val TAB_DRIVERS = 2
+        const val TAB_STAFF = 3
+        const val TAB_SETTINGS = 4
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -45,6 +55,11 @@ class AdminFleetContainerFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        session = SessionManager(requireContext())
+        binding.tabStaff.visibility =
+            if (session.isExternalFleetAgency) View.VISIBLE else View.GONE
+        binding.tabSettings.visibility =
+            if (session.isExternalFleetStaff) View.GONE else View.VISIBLE
 
         // Listen for window insets to lift bottom navigation bar safely above system gesture handle
         ViewCompat.setOnApplyWindowInsetsListener(binding.tabBarContainer) { v, insets ->
@@ -61,10 +76,11 @@ class AdminFleetContainerFragment : Fragment() {
         ViewCompat.requestApplyInsets(binding.tabBarContainer)
 
         // Setup bottom tab clicks
-        binding.tabTrips.setOnClickListener { selectTab(0) }
-        binding.tabVehicles.setOnClickListener { selectTab(1) }
-        binding.tabDriver.setOnClickListener { selectTab(2) }
-        binding.tabSettings.setOnClickListener { selectTab(3) }
+        binding.tabTrips.setOnClickListener { selectTab(TAB_TRIPS) }
+        binding.tabVehicles.setOnClickListener { selectTab(TAB_VEHICLES) }
+        binding.tabDriver.setOnClickListener { selectTab(TAB_DRIVERS) }
+        binding.tabStaff.setOnClickListener { selectTab(TAB_STAFF) }
+        binding.tabSettings.setOnClickListener { selectTab(TAB_SETTINGS) }
 
         // Handle back press to switch back to previous tab when on Settings tab
         backCallback = object : androidx.activity.OnBackPressedCallback(false) {
@@ -75,7 +91,7 @@ class AdminFleetContainerFragment : Fragment() {
         requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, backCallback)
 
         // Start with Trips tab
-        selectTab(0)
+        selectTab(TAB_TRIPS)
     }
 
     fun goBackToPreviousTab() {
@@ -86,17 +102,26 @@ class AdminFleetContainerFragment : Fragment() {
      *  (e.g. Trips fragment routing the profile-avatar tap to Settings). */
     fun openTab(index: Int) = selectTab(index)
 
+    fun openSettings() {
+        if (!session.isExternalFleetStaff) selectTab(TAB_SETTINGS)
+    }
+
     private fun selectTab(index: Int) {
-        if (index != 3) {
+        if ((index == TAB_STAFF && !session.isExternalFleetAgency) ||
+            (index == TAB_SETTINGS && session.isExternalFleetStaff)
+        ) {
+            return
+        }
+        if (index != TAB_SETTINGS) {
             previousTabIndex = index
         }
         currentTabIndex = index
         if (::backCallback.isInitialized) {
-            backCallback.isEnabled = (index == 3)
+            backCallback.isEnabled = (index == TAB_SETTINGS)
         }
 
         // Toggle bottom navigation bar visibility
-        if (index == 3) {
+        if (index == TAB_SETTINGS) {
             binding.tabBarContainer.visibility = View.GONE
             binding.bottomNavFadeOverlay.visibility = View.GONE
         } else {
@@ -112,7 +137,8 @@ class AdminFleetContainerFragment : Fragment() {
             0 -> "admin_tab_trips"
             1 -> "admin_tab_vehicles"
             2 -> "admin_tab_driver"
-            3 -> "admin_tab_settings"
+            3 -> "admin_tab_staff"
+            4 -> "admin_tab_settings"
             else -> "admin_tab_trips"
         }
 
@@ -120,11 +146,13 @@ class AdminFleetContainerFragment : Fragment() {
         val trips = childFragmentManager.findFragmentByTag("admin_tab_trips")
         val vehicles = childFragmentManager.findFragmentByTag("admin_tab_vehicles")
         val driver = childFragmentManager.findFragmentByTag("admin_tab_driver")
+        val staff = childFragmentManager.findFragmentByTag("admin_tab_staff")
         val settings = childFragmentManager.findFragmentByTag("admin_tab_settings")
 
         trips?.let { transaction.hide(it) }
         vehicles?.let { transaction.hide(it) }
         driver?.let { transaction.hide(it) }
+        staff?.let { transaction.hide(it) }
         settings?.let { transaction.hide(it) }
 
         var target = childFragmentManager.findFragmentByTag(tag)
@@ -133,7 +161,8 @@ class AdminFleetContainerFragment : Fragment() {
                 0 -> AdminFleetTripsFragment()
                 1 -> AdminFleetVehiclesFragment()
                 2 -> AdminFleetDriversFragment()
-                3 -> AdminFleetSettingsFragment()
+                3 -> AdminFleetStaffFragment()
+                4 -> AdminFleetSettingsFragment()
                 else -> AdminFleetTripsFragment()
             }
             transaction.add(R.id.adminFleetContainer, target, tag)
@@ -147,7 +176,7 @@ class AdminFleetContainerFragment : Fragment() {
 
         // Dynamically adjust status bar to be white with dark icons on Vehicles, Drivers, and Settings list tabs
         (activity as? com.manjugroups.m_connect.MainActivity)?.let { main ->
-            if (index == 1 || index == 2 || index == 3) {
+            if (index != TAB_TRIPS) {
                 main.setTopBarAppearance(Color.parseColor("#FFFFFF"), true, fullBleed = true)
             } else {
                 main.setTopBarAppearance(Color.parseColor("#0B61CA"), false, fullBleed = true)
@@ -164,6 +193,7 @@ class AdminFleetContainerFragment : Fragment() {
             Pair(binding.tabTripsIcon, binding.tabTripsText),
             Pair(binding.tabVehiclesIcon, binding.tabVehiclesText),
             Pair(binding.tabDriverIcon, binding.tabDriverText),
+            Pair(binding.tabStaffIcon, binding.tabStaffText),
             Pair(binding.tabSettingsIcon, binding.tabSettingsText)
         )
 
@@ -179,13 +209,13 @@ class AdminFleetContainerFragment : Fragment() {
         super.onResume()
         (activity as? com.manjugroups.m_connect.MainActivity)?.let { main ->
             main.setTabBarVisible(false) // Hide parent MainActivity tab bar since we replicate it locally
-            if (currentTabIndex == 1 || currentTabIndex == 2 || currentTabIndex == 3) {
+            if (currentTabIndex != TAB_TRIPS) {
                 main.setTopBarAppearance(Color.parseColor("#FFFFFF"), true, fullBleed = true)
             } else {
                 main.setTopBarAppearance(Color.parseColor("#0B61CA"), false, fullBleed = true)
             }
         }
-        if (currentTabIndex != 3) {
+        if (currentTabIndex != TAB_SETTINGS) {
             binding.tabBarContainer.translationY = 0f
             binding.tabBarContainer.alpha = 1f
             binding.bottomNavFadeOverlay.translationY = 0f

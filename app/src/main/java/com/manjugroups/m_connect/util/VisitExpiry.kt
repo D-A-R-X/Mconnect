@@ -79,18 +79,22 @@ object VisitExpiry {
      *   rows are never "expired", they're just done.
      */
     /** 24 hours in millis — grace period before a slot is treated as expired. */
-    private const val ONE_DAY_MS = 24L * 60 * 60 * 1000
+    private const val EXPIRY_GRACE_MS = 48L * 60 * 60 * 1000
 
     fun isExpired(
         scheduledDate: String?,
         scheduledTime: String?,
         isDone: Boolean,
+        createdAtMillis: Long? = null,
     ): Boolean {
         if (isDone) return false
+        if (createdAtMillis != null && createdAtMillis > 0L) {
+            return createdAtMillis + EXPIRY_GRACE_MS <= System.currentTimeMillis()
+        }
         val slot = slotMillis(scheduledDate, scheduledTime) ?: return false
         // A trip is only considered expired after 1 full day has passed since
         // its scheduled slot, so e.g. a 09:30 trip stays valid until 09:30
         // the following day rather than expiring the instant the time passes.
-        return slot + ONE_DAY_MS < System.currentTimeMillis()
+        return slot + EXPIRY_GRACE_MS <= System.currentTimeMillis()
     }
 }

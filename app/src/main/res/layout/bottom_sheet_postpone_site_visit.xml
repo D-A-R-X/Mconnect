@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_bottom_sheet"
+    android:orientation="vertical"
+    android:padding="24dp">
+
+    <View
+        android:layout_width="40dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:background="@drawable/bg_sheet_handle" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:fontFamily="@font/inter_bold"
+        android:text="Postpone site visit"
+        android:textColor="?attr/colorForegroundPrimary"
+        android:textSize="20sp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:fontFamily="@font/inter_regular"
+        android:text="The current SV will be closed as postponed and a new active SV will be created for the selected date."
+        android:textColor="?attr/colorForegroundSecondary"
+        android:textSize="14sp" />
+
+    <TextView
+        style="@style/OutcomeFieldLabel"
+        android:layout_marginTop="20dp"
+        android:text="New date *" />
+
+    <LinearLayout
+        android:id="@+id/rowPostponeSvDate"
+        style="@style/OutcomeFieldPillClickable"
+        android:layout_marginTop="6dp">
+
+        <ImageView
+            style="@style/OutcomeFieldIcon"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_outcome_calendar" />
+
+        <TextView
+            android:id="@+id/tvPostponeSvDate"
+            style="@style/OutcomeFieldValue"
+            android:text="Select date" />
+    </LinearLayout>
+
+    <TextView
+        style="@style/OutcomeFieldLabel"
+        android:layout_marginTop="16dp"
+        android:text="New time (optional)" />
+
+    <LinearLayout
+        android:id="@+id/rowPostponeSvTime"
+        style="@style/OutcomeFieldPillClickable"
+        android:layout_marginTop="6dp">
+
+        <ImageView
+            style="@style/OutcomeFieldIcon"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_clock" />
+
+        <TextView
+            android:id="@+id/tvPostponeSvTime"
+            style="@style/OutcomeFieldValue"
+            android:text="Select time" />
+    </LinearLayout>
+
+    <TextView
+        style="@style/OutcomeFieldLabel"
+        android:layout_marginTop="16dp"
+        android:text="Reason (optional)" />
+
+    <EditText
+        android:id="@+id/etPostponeSvReason"
+        android:layout_width="match_parent"
+        android:layout_height="88dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_outcome_field_pill"
+        android:fontFamily="@font/inter_regular"
+        android:gravity="top"
+        android:hint="Why is the SV being postponed?"
+        android:inputType="textCapSentences|textMultiLine"
+        android:padding="14dp"
+        android:textColor="?attr/colorForegroundPrimary"
+        android:textColorHint="?attr/colorForegroundSecondary"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/tvPostponeSvError"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:fontFamily="@font/inter_medium"
+        android:textColor="#D92D20"
+        android:textSize="12sp"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="22dp"
+        android:gravity="end"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btnCancelPostponeSv"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:text="Cancel"
+            android:textAllCaps="false" />
+
+        <Button
+            android:id="@+id/btnConfirmPostponeSv"
+            style="@style/Widget.MaterialComponents.Button"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:layout_marginStart="10dp"
+            android:text="Postpone SV"
+            android:textAllCaps="false" />
+    </LinearLayout>
+</LinearLayout>

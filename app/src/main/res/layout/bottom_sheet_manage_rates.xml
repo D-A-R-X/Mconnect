@@ -1,15 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
+    android:layout_height="match_parent"
     android:background="@drawable/bg_bottom_sheet"
     android:orientation="vertical"
     android:paddingHorizontal="24dp"
     android:paddingTop="8dp"
     android:paddingBottom="24dp">
 
-    <!-- Bottom Sheet Drag Handle -->
     <View
         android:layout_width="48dp"
         android:layout_height="4dp"
@@ -17,7 +15,6 @@
         android:layout_marginBottom="16dp"
         android:background="#D1D5DB" />
 
-    <!-- Title -->
     <TextView
         android:id="@+id/tvManageRatesTitle"
         android:layout_width="wrap_content"
@@ -27,76 +24,133 @@
         android:textColor="#111827"
         android:textSize="18sp" />
 
-    <!-- Subtitle -->
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="2dp"
         android:fontFamily="@font/inter_regular"
-        android:text="Information about Rates System"
+        android:text="Agency trip pricing and allowances"
         android:textColor="#6B7280"
         android:textSize="13sp" />
 
-    <!-- Per km amount label -->
-    <TextView
-        android:id="@+id/tvLabelPerKm"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:fontFamily="@font/inter_semibold"
-        android:textColor="#374151"
-        android:textSize="13sp" />
-
-    <!-- Per km amount input -->
-    <EditText
-        android:id="@+id/etPerKmAmount"
+    <ScrollView
         android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:layout_marginTop="6dp"
-        android:background="@drawable/bg_input"
-        android:drawableStart="@drawable/ic_custom_rate"
-        android:drawablePadding="10dp"
-        android:fontFamily="@font/inter_regular"
-        android:hint="Enter amount"
-        android:inputType="numberDecimal"
-        android:paddingHorizontal="14dp"
-        android:textColor="#111827"
-        android:textColorHint="#9CA3AF"
-        android:textSize="14sp" />
+        android:layout_height="0dp"
+        android:layout_marginTop="8dp"
+        android:layout_weight="1"
+        android:fillViewport="true"
+        android:overScrollMode="never">
 
-    <!-- Package amount label -->
-    <TextView
-        android:id="@+id/tvLabelPackage"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:fontFamily="@font/inter_semibold"
-        android:textColor="#374151"
-        android:textSize="13sp" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
 
-    <!-- Package amount input -->
-    <EditText
-        android:id="@+id/etPackageAmount"
-        android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:layout_marginTop="6dp"
-        android:background="@drawable/bg_input"
-        android:drawableStart="@drawable/ic_custom_rate"
-        android:drawablePadding="10dp"
-        android:fontFamily="@font/inter_regular"
-        android:hint="Enter amount"
-        android:inputType="numberDecimal"
-        android:paddingHorizontal="14dp"
-        android:textColor="#111827"
-        android:textColorHint="#9CA3AF"
-        android:textSize="14sp" />
+            <TextView
+                android:id="@+id/tvLabelPerKm"
+                style="@style/TextAppearance.AppCompat.Body1"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:fontFamily="@font/inter_semibold"
+                android:textColor="#374151"
+                android:textSize="13sp" />
 
-    <!-- Save Button -->
+            <EditText
+                android:id="@+id/etPerKmAmount"
+                style="@style/TravelDeskRateInput"
+                android:hint="Enter per km amount" />
+
+            <TextView
+                android:id="@+id/tvLabelPackage"
+                style="@style/TravelDeskRateLabel"
+                android:text="Package amount (₹) *" />
+
+            <EditText
+                android:id="@+id/etPackageAmount"
+                style="@style/TravelDeskRateInput"
+                android:hint="Enter package amount" />
+
+            <TextView
+                style="@style/TravelDeskRateLabel"
+                android:text="Betta amount (₹)" />
+
+            <EditText
+                android:id="@+id/etBettaAmount"
+                style="@style/TravelDeskRateInput"
+                android:hint="Optional" />
+
+            <TextView
+                style="@style/TravelDeskRateLabel"
+                android:text="Permit charge (₹)" />
+
+            <EditText
+                android:id="@+id/etPermitCharge"
+                style="@style/TravelDeskRateInput"
+                android:hint="Optional" />
+
+            <TextView
+                style="@style/TravelDeskRateLabel"
+                android:text="Permit tax (₹)" />
+
+            <EditText
+                android:id="@+id/etPermitTax"
+                style="@style/TravelDeskRateInput"
+                android:hint="Optional" />
+
+            <TextView
+                style="@style/TravelDeskRateLabel"
+                android:text="Standing charge with AC (₹)" />
+
+            <EditText
+                android:id="@+id/etStandingChargeWithAc"
+                style="@style/TravelDeskRateInput"
+                android:hint="Optional" />
+
+            <TextView
+                style="@style/TravelDeskRateLabel"
+                android:text="Standing duration (minutes)" />
+
+            <EditText
+                android:id="@+id/etStandingChargeDurationMinutes"
+                style="@style/TravelDeskRateInput"
+                android:hint="Optional"
+                android:inputType="number" />
+
+            <TextView
+                style="@style/TravelDeskRateLabel"
+                android:text="Waiting allowance (₹)" />
+
+            <EditText
+                android:id="@+id/etWaitingAllowance"
+                style="@style/TravelDeskRateInput"
+                android:hint="Optional" />
+
+            <TextView
+                style="@style/TravelDeskRateLabel"
+                android:text="Cancellation allowance (₹)" />
+
+            <EditText
+                android:id="@+id/etCancellationAllowance"
+                style="@style/TravelDeskRateInput"
+                android:hint="Optional" />
+
+            <TextView
+                style="@style/TravelDeskRateLabel"
+                android:text="Toll charge (₹)" />
+
+            <EditText
+                android:id="@+id/etTollCharge"
+                style="@style/TravelDeskRateInput"
+                android:hint="Optional" />
+        </LinearLayout>
+    </ScrollView>
+
     <androidx.appcompat.widget.AppCompatButton
         android:id="@+id/btnSaveRates"
         android:layout_width="match_parent"
         android:layout_height="48dp"
-        android:layout_marginTop="32dp"
+        android:layout_marginTop="16dp"
         android:background="@drawable/bg_allocate_button_green"
         android:fontFamily="@font/inter_semibold"
         android:text="Save"

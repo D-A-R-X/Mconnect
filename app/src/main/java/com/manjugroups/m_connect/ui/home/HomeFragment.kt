@@ -171,7 +171,15 @@ class HomeFragment : Fragment() {
         // only wire it for staff who hold a frontdesk permission (web
         // parity: /frontdesk is gated the same way). Everyone else keeps
         // an artifact-free home edge.
-        if (listOf("frontdesk.view", "frontdesk.checkin", "frontdesk.invite")
+        if (listOf(
+                "frontdesk.view",
+                "frontdesk.checkin",
+                "frontdesk.invite",
+                "marketing.siteVisits.view",
+                "marketing.siteVisits.viewTeam",
+                "marketing.siteVisits.viewAll",
+                "marketing.siteVisits.scanConsulting",
+            )
                 .any { session.hasPermission(it) }
         ) {
             setupEdgeDragQr()
@@ -886,6 +894,7 @@ class HomeFragment : Fragment() {
                 return s !in doneSet && s !in inProgressSet &&
                     com.manjugroups.m_connect.util.VisitExpiry.isExpired(
                         v.scheduledDate, v.scheduledStartTime, isDone = false,
+                        createdAtMillis = v.creationTime?.toLong(),
                     )
             }
             when (selectedTab) {
@@ -1423,6 +1432,7 @@ class HomeFragment : Fragment() {
         val isExpired = !isCompleted && !isInProgress &&
             com.manjugroups.m_connect.util.VisitExpiry.isExpired(
                 visit.scheduledDate, visit.scheduledStartTime, isDone = false,
+                createdAtMillis = visit.creationTime?.toLong(),
             )
         // Fleet "completed offline" — the admin marked this SV as done without
         // a live trip; the site incharge must record the outcome from mobile.
@@ -2323,6 +2333,7 @@ class HomeFragment : Fragment() {
                         com.manjugroups.m_connect.util.VisitExpiry.isExpired(
                             t.scheduledDate, t.scheduledTime ?: t.pickupTime,
                             isDone = false,
+                            createdAtMillis = t.createdAt,
                         )
                 }
                 // Expired pending trips are terminal too — drop them from Pending
@@ -2623,7 +2634,7 @@ class HomeFragment : Fragment() {
             tollAmount = trip.travelDeskTollAmount,
             totalAmount = trip.travelDeskTotalAmount,
         )
-        com.manjugroups.m_connect.ui.library.AdminFleetCompleteOfflineSheet.newInstance(adminTrip, emptyList()) { result ->
+        com.manjugroups.m_connect.ui.library.AdminFleetCompleteOfflineSheet.newInstance(adminTrip, fleetVehicles) { result ->
             submitHomeFleetCompleteOffline(trip, result)
         }.showOnce(parentFragmentManager, "home_fleet_complete_offline")
     }

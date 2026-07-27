@@ -47,6 +47,7 @@ class AuthViewModel : ViewModel() {
     // travel-desk driver login into the stripped agency-driver shell.
     private companion object {
         const val AGENCY_DRIVER_DESIGNATION = "External Fleet Driver"
+        const val AGENCY_STAFF_DESIGNATION = "External Fleet Staff"
         const val AGENCY_DRIVER_DEPARTMENT = "Fleet"
     }
 
@@ -149,15 +150,14 @@ class AuthViewModel : ViewModel() {
                 _uiState.value = AuthUiState.Error(td.error ?: "Invalid OTP")
                 return
             }
-            if (!td.user?.role.equals("driver", ignoreCase = true)) {
-                // Agencies belong on the travel-desk web, not the app.
+            val travelDeskRole = td.user?.role?.trim()?.lowercase()
+            if (travelDeskRole != "driver" && travelDeskRole != "agency_staff") {
                 _uiState.value = AuthUiState.Error(
                     "External fleet agencies sign in on the travel-desk web, not the app."
                 )
                 return
             }
-            // The travel-desk payload carries no designation, so synthesise the
-            // one MainActivity keys the stripped driver shell off.
+            val isAgencyStaff = travelDeskRole == "agency_staff"
             _uiState.value = AuthUiState.Verified(
                 VerifyOtpResponse(
                     success = true,
@@ -167,8 +167,12 @@ class AuthViewModel : ViewModel() {
                         staffId = td.user?.id,
                         name = td.user?.name,
                         phone = td.user?.phone ?: phone,
-                        role = "external_fleet_driver",
-                        designation = AGENCY_DRIVER_DESIGNATION,
+                        role = if (isAgencyStaff) "agency_staff" else "external_fleet_driver",
+                        designation = if (isAgencyStaff) {
+                            AGENCY_STAFF_DESIGNATION
+                        } else {
+                            AGENCY_DRIVER_DESIGNATION
+                        },
                         department = AGENCY_DRIVER_DEPARTMENT,
                         status = "active",
                     ),

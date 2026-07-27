@@ -186,6 +186,14 @@ class AdminFleetCompleteOfflineSheet : BottomSheetDialogFragment() {
                     val activeVehicles = vehicles
                         .filter { (it.status ?: "active").equals("active", ignoreCase = true) }
                     val selectedVehicle = activeVehicles.getOrNull(selectedVehicleIndex)
+                        ?: run {
+                            Toast.makeText(
+                                requireContext(),
+                                "Select an internal vehicle",
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                            throw IllegalArgumentException("Vehicle")
+                        }
                     CompleteOfflineTripResult(
                         fleetType = "internal",
                         vehicleId = selectedVehicle?.id,

@@ -161,6 +161,7 @@ class AgencyDriverTripsFragment : Fragment() {
             scheduledDate = trip.scheduledDate,
             scheduledTime = trip.pickupTime ?: trip.scheduledTime,
             isDone = isCompleted(trip),
+            createdAtMillis = trip.createdAt,
         )
 
     private fun render() {

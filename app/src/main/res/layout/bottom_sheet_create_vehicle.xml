@@ -89,7 +89,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
                 android:fontFamily="@font/inter_semibold"
-                android:text="Vehicle Number *"
+                android:text="Vehicle Number"
                 android:textColor="#374151"
                 android:textSize="13sp" />
 
@@ -147,7 +147,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="14dp"
                 android:fontFamily="@font/inter_semibold"
-                android:text="Model"
+                android:text="Model *"
                 android:textColor="#374151"
                 android:textSize="13sp" />
 
@@ -174,7 +174,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="14dp"
                 android:fontFamily="@font/inter_semibold"
-                android:text="Model Year"
+                android:text="Model Year *"
                 android:textColor="#374151"
                 android:textSize="13sp" />
 
@@ -233,7 +233,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="14dp"
                 android:fontFamily="@font/inter_semibold"
-                android:text="Capacity *"
+                android:text="Seating Capacity"
                 android:textColor="#374151"
                 android:textSize="13sp" />
 
@@ -245,8 +245,9 @@
                 android:background="@drawable/bg_input"
                 android:drawableStart="@drawable/ic_custom_capacity"
                 android:drawablePadding="10dp"
+                android:enabled="false"
                 android:fontFamily="@font/inter_regular"
-                android:hint="Enter Capacity"
+                android:hint="Auto-filled from vehicle type"
                 android:inputType="number"
                 android:paddingHorizontal="14dp"
                 android:textColor="#111827"
