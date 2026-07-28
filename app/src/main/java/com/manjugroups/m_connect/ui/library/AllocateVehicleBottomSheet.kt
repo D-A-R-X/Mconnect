@@ -11,6 +11,7 @@ import android.widget.Toast
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.databinding.BottomSheetAllocateVehicleBinding
+import com.manjugroups.m_connect.util.EditableTimeFormat
 import java.util.Calendar
 import java.util.Locale
 
@@ -36,6 +37,7 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
     private var lockDriverToVehicleDefault: Boolean = false
     // Pre-fills the pickup time from the SV's scheduled time.
     private var fixedPickupTime: String? = null
+    private var selectedPickupTime: String? = null
     private var onAllocateCallback: ((AllocateVehicleResult) -> Unit)? = null
     // Opens the add-driver form with the typed name; the completion callback
     // hands back the created driver so this sheet can select it and resume.
@@ -164,7 +166,8 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
         }
         // Pickup time imported from the SV's scheduled time.
         fixedPickupTime?.takeIf { it.isNotBlank() }?.let {
-            binding.etPickupTime.setText(it)
+            selectedPickupTime = EditableTimeFormat.toStorage(it)
+            binding.etPickupTime.setText(EditableTimeFormat.toDisplay(it))
         }
 
         binding.btnSubmitAllocate.setOnClickListener {
@@ -308,15 +311,9 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
             val hour = calendar.get(Calendar.HOUR_OF_DAY)
             val minute = calendar.get(Calendar.MINUTE)
             TimePickerDialog(requireContext(), { _, h, m ->
-                val format = if (h >= 12) "PM" else "AM"
-                val displayHour = when {
-                    h == 0 -> 12
-                    h > 12 -> h - 12
-                    else -> h
-                }
-                binding.etPickupTime.setText(
-                    String.format(Locale.getDefault(), "%02d:%02d %s", displayHour, m, format)
-                )
+                val (storageTime, displayTime) = EditableTimeFormat.fromPicker(h, m)
+                selectedPickupTime = storageTime
+                binding.etPickupTime.setText(displayTime)
             }, hour, minute, false).show()
         }
     }
@@ -428,7 +425,8 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
         val vehicle = vehicles.getOrNull(selectedVehicleIndex)
         val driverName = binding.etDriverName.text.toString().trim()
         val driverPhone = binding.etDriverPhone.text.toString().trim()
-        val pickupTime = binding.etPickupTime.text.toString().trim()
+        val pickupTime = selectedPickupTime
+            ?: EditableTimeFormat.toStorage(binding.etPickupTime.text.toString())
 
         if (vehicle == null) {
             Toast.makeText(requireContext(), "Select a vehicle", Toast.LENGTH_SHORT).show()

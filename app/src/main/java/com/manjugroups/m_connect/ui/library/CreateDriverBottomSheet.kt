@@ -17,13 +17,13 @@ class CreateDriverBottomSheet : BottomSheetDialogFragment() {
     private var _binding: BottomSheetCreateDriverBinding? = null
     private val binding get() = _binding!!
 
-    private var onCreateCallback: ((String, String, String) -> Unit)? = null
+    private var onCreateCallback: ((String, String, String, String) -> Unit)? = null
     private var prefillName: String = ""
 
     /** Seed the name field (create mode) — used when the dispatcher typed a
      *  driver that wasn't on the roster and chose "Add new driver". */
     fun prefillName(name: String) { prefillName = name.trim() }
-    private var onSaveCallback: ((String, String, String) -> Unit)? = null
+    private var onSaveCallback: ((String, String, String, String) -> Unit)? = null
     private var onDeactivateCallback: (() -> Unit)? = null
 
     private var originalNameKeyListener: KeyListener? = null
@@ -35,9 +35,10 @@ class CreateDriverBottomSheet : BottomSheetDialogFragment() {
         private const val ARG_NAME = "arg_name"
         private const val ARG_PHONE = "arg_phone"
         private const val ARG_ADDRESS = "arg_address"
+        private const val ARG_CATEGORY = "arg_category"
         private const val ARG_STATUS = "arg_status"
 
-        fun newInstance(onCreate: (String, String, String) -> Unit): CreateDriverBottomSheet {
+        fun newInstance(onCreate: (String, String, String, String) -> Unit): CreateDriverBottomSheet {
             val sheet = CreateDriverBottomSheet()
             sheet.onCreateCallback = onCreate
             return sheet
@@ -47,8 +48,9 @@ class CreateDriverBottomSheet : BottomSheetDialogFragment() {
             name: String,
             phone: String,
             address: String,
+            category: String,
             status: String,
-            onSave: (String, String, String) -> Unit,
+            onSave: (String, String, String, String) -> Unit,
             onDeactivate: () -> Unit
         ): CreateDriverBottomSheet {
             val sheet = CreateDriverBottomSheet()
@@ -59,6 +61,7 @@ class CreateDriverBottomSheet : BottomSheetDialogFragment() {
                 putString(ARG_NAME, name)
                 putString(ARG_PHONE, phone)
                 putString(ARG_ADDRESS, address)
+                putString(ARG_CATEGORY, category)
                 putString(ARG_STATUS, status)
             }
             sheet.arguments = args
@@ -112,6 +115,8 @@ class CreateDriverBottomSheet : BottomSheetDialogFragment() {
         binding.tvLabelName.text = Html.fromHtml("Name <font color='#EF4444'>*</font>")
         binding.tvLabelPhone.text = Html.fromHtml("Phone Number <font color='#EF4444'>*</font>")
         binding.tvLabelAddress.text = Html.fromHtml("Address <font color='#EF4444'>*</font>")
+        binding.tvLabelCategory.text = Html.fromHtml("Category <font color='#EF4444'>*</font>")
+        binding.etDriverCategory.setOnClickListener { showCategoryPicker() }
 
         isEditModeFlag = arguments?.getBoolean(ARG_IS_EDIT_MODE, false) ?: false
         if (isEditModeFlag) {
@@ -122,11 +127,16 @@ class CreateDriverBottomSheet : BottomSheetDialogFragment() {
             val initialName = arguments?.getString(ARG_NAME) ?: ""
             val initialPhone = arguments?.getString(ARG_PHONE) ?: ""
             val initialAddress = arguments?.getString(ARG_ADDRESS) ?: ""
+            val initialCategory = arguments?.getString(ARG_CATEGORY)
+                ?.uppercase()
+                ?.takeIf { it == "OLD" || it == "NEW" }
+                ?: "NEW"
             val status = arguments?.getString(ARG_STATUS) ?: "Active"
 
             binding.etDriverName.setText(initialName)
             binding.etDriverPhone.setText(initialPhone)
             binding.etDriverAddress.setText(initialAddress)
+            binding.etDriverCategory.setText(initialCategory)
 
             // Deactivate / Activate stays available (independent of edits).
             if (status == "Inactive") {
@@ -149,11 +159,12 @@ class CreateDriverBottomSheet : BottomSheetDialogFragment() {
                 val name = binding.etDriverName.text.toString().trim()
                 val phone = binding.etDriverPhone.text.toString().trim()
                 val address = binding.etDriverAddress.text.toString().trim()
-                if (name.isEmpty() || phone.isEmpty() || address.isEmpty()) {
+                val category = binding.etDriverCategory.text.toString().trim()
+                if (name.isEmpty() || phone.isEmpty() || address.isEmpty() || category.isEmpty()) {
                     Toast.makeText(requireContext(), "Please fill all fields", Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
                 }
-                onSaveCallback?.invoke(name, phone, address)
+                onSaveCallback?.invoke(name, phone, address, category.lowercase())
                 dismiss()
             }
         } else {
@@ -164,11 +175,13 @@ class CreateDriverBottomSheet : BottomSheetDialogFragment() {
             binding.etDriverName.setText(prefillName)
             binding.etDriverPhone.setText("")
             binding.etDriverAddress.setText("")
+            binding.etDriverCategory.setText("NEW")
 
             binding.btnSubmitCreate.setOnClickListener {
                 val name = binding.etDriverName.text.toString().trim()
                 val phone = binding.etDriverPhone.text.toString().trim()
                 val address = binding.etDriverAddress.text.toString().trim()
+                val category = binding.etDriverCategory.text.toString().trim()
                 if (name.isEmpty()) {
                     Toast.makeText(requireContext(), "Please enter name", Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
@@ -181,7 +194,11 @@ class CreateDriverBottomSheet : BottomSheetDialogFragment() {
                     Toast.makeText(requireContext(), "Please enter address", Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
                 }
-                onCreateCallback?.invoke(name, phone, address)
+                if (category.isEmpty()) {
+                    Toast.makeText(requireContext(), "Please select category", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                onCreateCallback?.invoke(name, phone, address, category.lowercase())
                 dismiss()
             }
         }
@@ -193,14 +210,35 @@ class CreateDriverBottomSheet : BottomSheetDialogFragment() {
             override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
             override fun afterTextChanged(s: android.text.Editable?) = refreshSaveState()
         }
-        listOf(binding.etDriverName, binding.etDriverPhone, binding.etDriverAddress)
+        listOf(
+            binding.etDriverName,
+            binding.etDriverPhone,
+            binding.etDriverAddress,
+            binding.etDriverCategory,
+        )
             .forEach { it.addTextChangedListener(watcher) }
         refreshSaveState()
     }
 
     private fun driverSnapshot(): String =
-        listOf(binding.etDriverName, binding.etDriverPhone, binding.etDriverAddress)
+        listOf(
+            binding.etDriverName,
+            binding.etDriverPhone,
+            binding.etDriverAddress,
+            binding.etDriverCategory,
+        )
             .joinToString("|") { it.text.toString().trim() }
+
+    private fun showCategoryPicker() {
+        val categories = listOf("OLD", "NEW")
+        com.manjugroups.m_connect.ui.common.SearchableSelectionDialog.show(
+            context = requireContext(),
+            title = "Select driver category",
+            options = categories.map {
+                com.manjugroups.m_connect.ui.common.SearchableOption(item = it, title = it)
+            },
+        ) { binding.etDriverCategory.setText(it) }
+    }
 
     /** Grey + disabled Save until something changes, then green + clickable.
      *  Only applies in edit mode; create mode's Submit is always active. */

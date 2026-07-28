@@ -30,6 +30,7 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.manjugroups.m_connect.R
+import com.manjugroups.m_connect.util.EditableTimeFormat
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.BookingExchangeSource
@@ -806,6 +807,13 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         // already a site visit — fade + disable it.
         tabSiteVisit.cell?.isClickable = false
         tabSiteVisit.cell?.alpha = 0.35f
+        tabPostpone.label?.text = "Follow up"
+        view?.findViewById<TextView>(R.id.tvPostDateLabel)?.text = "Follow-up date"
+        view?.findViewById<TextView>(R.id.tvPostDateHelp)?.text =
+            "When should the client be followed up."
+        view?.findViewById<TextView>(R.id.tvPostReasonHelp)?.text =
+            "Why does this client need a follow up."
+        etPostNotes?.hint = "Reason for follow up"
 
         // When launched from a specific SV outcome button, keep the
         // same shared form UI but remove the outcome switcher so the
@@ -815,13 +823,13 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             view?.findViewById<View>(R.id.outcomeTopTabs)?.visibility = View.GONE
             view?.findViewById<TextView>(R.id.tvOutcomeTitle)?.text = when (lockedOutcome) {
                 Outcome.BOOKING -> "Converted as Booking"
-                Outcome.POSTPONE -> "Its Been Postponed"
+                Outcome.POSTPONE -> "Follow up"
                 Outcome.NOT_INTERESTED -> "Client Not Interested"
                 Outcome.SITE_VISIT -> "Site Visit"
             }
             view?.findViewById<TextView>(R.id.tvOutcomeSubtitle)?.text = when (lockedOutcome) {
                 Outcome.BOOKING -> "Booking form"
-                Outcome.POSTPONE -> "Postponed reason"
+                Outcome.POSTPONE -> "Follow-up details"
                 Outcome.NOT_INTERESTED -> "Not interested reason"
                 Outcome.SITE_VISIT -> "Site visit form"
             }
@@ -3515,7 +3523,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         android.app.TimePickerDialog(
             requireContext(),
             { _, hour, minute ->
-                target?.text = String.format(Locale.US, "%02d:%02d", hour, minute)
+                target?.text = EditableTimeFormat.fromPicker(hour, minute).second
             },
             cal.get(Calendar.HOUR_OF_DAY),
             cal.get(Calendar.MINUTE),
@@ -4270,7 +4278,9 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         val project = svProject ?: return showError("Please select a project")
         val date = tvSvDate?.text?.toString()?.trim().orEmpty()
         if (date.isEmpty()) return showError("Please pick a date")
-        val time = tvSvTime?.text?.toString()?.trim().takeIf { !it.isNullOrEmpty() }
+        val time = tvSvTime?.text?.toString()?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?.let(EditableTimeFormat::toStorage)
 
         btnSubmit?.isClickable = false
         btnSubmit?.text = "Saving…"
@@ -4389,7 +4399,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
         val reason = etPostNotes?.text?.toString()?.trim().orEmpty()
         if (reason.isBlank()) {
-            showError("Enter a reason for postponement")
+            showError(
+                if (isSiteVisitMode) "Enter a reason for follow up"
+                else "Enter a reason for postponement",
+            )
             return
         }
         // The next-visit date rides in the human-readable notes blob (the
@@ -4397,7 +4410,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         // separately via postponeReasons.
         finalizeTerminalOutcome(
             cpVisitId = cpVisitId.orEmpty(),
-            outcomeEnum = OUTCOME_POSTPONED,
+            outcomeEnum = if (isSiteVisitMode) OUTCOME_FOLLOW_UP else OUTCOME_POSTPONED,
             notes = "Next visit: $nextDate — $reason",
         )
     }
@@ -5721,7 +5734,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private fun outcomeFromArg(value: String): Outcome? = when (value) {
         OUTCOME_BOOKING -> Outcome.BOOKING
         OUTCOME_SITE_VISIT -> Outcome.SITE_VISIT
-        OUTCOME_POSTPONED -> Outcome.POSTPONE
+        OUTCOME_POSTPONED, OUTCOME_FOLLOW_UP -> Outcome.POSTPONE
         OUTCOME_NOT_INTERESTED -> Outcome.NOT_INTERESTED
         // Map rejected → NOT_INTERESTED for the UI enum since both
         // are terminal-decline tabs; the actual outcome string saved
@@ -5951,7 +5964,9 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         //    fields (attendees, food prefs, pickup address from the
         //    client place if we have it).
         tvSvDate?.text = proposed.scheduledDate ?: visit.scheduledDate ?: ""
-        tvSvTime?.text = proposed.scheduledTime ?: visit.scheduledTime ?: ""
+        tvSvTime?.text = EditableTimeFormat.toDisplay(
+            proposed.scheduledTime ?: visit.scheduledTime
+        )
 
         // Cache lead + attendee context for the visitor-row auto-fill.
         // Order: client.clientName (canonical, manually entered) →
@@ -6278,6 +6293,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         // the Fixed tab.
         private const val OUTCOME_INTERESTED = "interested"
         private const val OUTCOME_POSTPONED = "postponed"
+        private const val OUTCOME_FOLLOW_UP = "follow_up"
         private const val OUTCOME_NOT_INTERESTED = "not_interested"
         // SV-cum-CP rejection (distinct from not_interested). Set by
         // the RejectReasonBottomSheet sub-flow with the captured reason

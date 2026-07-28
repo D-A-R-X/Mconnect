@@ -1,9 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/completeFormScroll"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:background="@android:color/transparent"
-    android:fillViewport="true">
+    android:clipToPadding="false"
+    android:fillViewport="true"
+    android:overScrollMode="never">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -40,23 +43,31 @@
             android:textColor="#667085"
             android:textSize="12sp" />
 
-        <!-- Fleet type dropdown -->
-        <TextView
+        <!-- Staff can choose a fleet type. Agency sessions are already
+             external, so this entire selector is hidden for them. -->
+        <LinearLayout
+            android:id="@+id/layoutFleetTypeSelector"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:fontFamily="@font/inter_medium"
-            android:text="Fleet type *"
-            android:textColor="#344054"
-            android:textSize="12sp" />
+            android:orientation="vertical">
 
-        <Spinner
-            android:id="@+id/spinnerFleetType"
-            android:layout_width="match_parent"
-            android:layout_height="46dp"
-            android:layout_marginTop="6dp"
-            android:background="@drawable/bg_input"
-            android:paddingHorizontal="8dp" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_medium"
+                android:text="Fleet type *"
+                android:textColor="#344054"
+                android:textSize="12sp" />
+
+            <Spinner
+                android:id="@+id/spinnerFleetType"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input"
+                android:paddingHorizontal="8dp" />
+        </LinearLayout>
 
         <!-- Internal fleet: vehicle picker -->
         <LinearLayout
@@ -128,22 +139,80 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
                 android:fontFamily="@font/inter_medium"
-                android:text="Distance travelled"
+                android:text="Start km *"
                 android:textColor="#344054"
                 android:textSize="12sp" />
 
             <EditText
-                android:id="@+id/etDistanceKm"
+                android:id="@+id/etStartKm"
                 android:layout_width="match_parent"
                 android:layout_height="46dp"
                 android:layout_marginTop="6dp"
                 android:background="@drawable/bg_input"
                 android:fontFamily="@font/inter_regular"
-                android:hint="Km (optional)"
+                android:hint="Start odometer"
                 android:inputType="numberDecimal"
                 android:paddingHorizontal="12dp"
                 android:textColor="?attr/colorForegroundPrimary"
                 android:textSize="14sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="End km *"
+                android:textColor="#344054"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/etEndKm"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input"
+                android:fontFamily="@font/inter_regular"
+                android:hint="End odometer"
+                android:inputType="numberDecimal"
+                android:paddingHorizontal="12dp"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textSize="14sp" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btnStartDashboardImage"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/bg_input"
+                android:text="Select start dashboard image"
+                android:textAllCaps="false" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btnEndDashboardImage"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_input"
+                android:text="Select end dashboard image"
+                android:textAllCaps="false" />
+
+            <EditText
+                android:id="@+id/etStandingMinutesInternal"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/bg_input"
+                android:hint="Standing minutes (optional)"
+                android:inputType="number"
+                android:paddingHorizontal="12dp" />
+
+            <CheckBox
+                android:id="@+id/checkStandingWithAcInternal"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:enabled="false"
+                android:minHeight="46dp"
+                android:text="Standing with AC" />
         </LinearLayout>
 
         <!-- External fleet: agency name + package + distance -->
@@ -171,6 +240,7 @@
                 android:background="@drawable/bg_input"
                 android:fontFamily="@font/inter_regular"
                 android:hint="Agency name"
+                android:imeOptions="actionNext"
                 android:inputType="textPersonName"
                 android:paddingHorizontal="12dp"
                 android:textColor="?attr/colorForegroundPrimary"
@@ -193,6 +263,7 @@
                 android:background="@drawable/bg_input"
                 android:fontFamily="@font/inter_regular"
                 android:hint="Enter package price"
+                android:imeOptions="actionNext"
                 android:inputType="numberDecimal"
                 android:paddingHorizontal="12dp"
                 android:textColor="?attr/colorForegroundPrimary"
@@ -205,7 +276,8 @@
                 android:fontFamily="@font/inter_medium"
                 android:text="Distance travelled"
                 android:textColor="#344054"
-                android:textSize="12sp" />
+                android:textSize="12sp"
+                android:visibility="gone" />
 
             <EditText
                 android:id="@+id/etDistanceKmExternal"
@@ -215,10 +287,96 @@
                 android:background="@drawable/bg_input"
                 android:fontFamily="@font/inter_regular"
                 android:hint="Km (optional)"
+                android:imeOptions="actionNext"
                 android:inputType="numberDecimal"
                 android:paddingHorizontal="12dp"
                 android:textColor="?attr/colorForegroundPrimary"
+                android:textSize="14sp"
+                android:visibility="gone" />
+
+            <EditText
+                android:id="@+id/etStartKmExternal"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/bg_input"
+                android:hint="Start km *"
+                android:inputType="numberDecimal"
+                android:paddingHorizontal="12dp" />
+
+            <EditText
+                android:id="@+id/etEndKmExternal"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_input"
+                android:hint="End km *"
+                android:inputType="numberDecimal"
+                android:paddingHorizontal="12dp" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btnStartDashboardImageExternal"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/bg_input"
+                android:text="Select start dashboard image"
+                android:textAllCaps="false" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btnEndDashboardImageExternal"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_input"
+                android:text="Select end dashboard image"
+                android:textAllCaps="false" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="Standing time"
+                android:textColor="#344054"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/etStandingMinutesExternal"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input"
+                android:fontFamily="@font/inter_regular"
+                android:hint="Minutes (optional)"
+                android:imeOptions="actionDone"
+                android:inputType="number"
+                android:paddingHorizontal="12dp"
+                android:textColor="?attr/colorForegroundPrimary"
                 android:textSize="14sp" />
+
+            <CheckBox
+                android:id="@+id/checkStandingWithAcExternal"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:buttonTint="?attr/colorAccentPrimary"
+                android:enabled="false"
+                android:fontFamily="@font/inter_medium"
+                android:minHeight="46dp"
+                android:paddingHorizontal="8dp"
+                android:text="Standing with AC"
+                android:textColor="#344054"
+                android:textSize="13sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="40dp"
+                android:fontFamily="@font/inter_regular"
+                android:text="Leave unchecked for without AC"
+                android:textColor="#667085"
+                android:textSize="11sp" />
         </LinearLayout>
 
         <!-- Own vehicle: package + distance only -->

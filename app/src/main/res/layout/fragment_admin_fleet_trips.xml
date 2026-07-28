@@ -28,6 +28,7 @@
         android:layout_height="match_parent"
         android:background="@android:color/transparent"
         android:fillViewport="true"
+        android:focusableInTouchMode="true"
         android:overScrollMode="never">
 
         <LinearLayout
@@ -45,6 +46,7 @@
             <!-- Content panel: page grey with rounded top corners, pulled up
                  over the blue so it overlays the banner as it rises. -->
             <LinearLayout
+                android:id="@+id/tripsContentPanel"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="-28dp"
@@ -100,6 +102,20 @@
                         android:text="Assigned"
                         android:textColor="#475467"
                         android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/btnTabInProgress"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:fontFamily="@font/inter_medium"
+                        android:gravity="center"
+                        android:paddingVertical="8dp"
+                        android:text="In progress"
+                        android:textColor="#475467"
+                        android:textSize="12sp" />
 
                     <TextView
                         android:id="@+id/btnTabCompleted"

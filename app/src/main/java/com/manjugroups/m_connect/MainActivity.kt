@@ -1840,7 +1840,7 @@ class MainActivity : AppCompatActivity() {
      * staff tab shell.
      */
     private fun isExternalFleetPrincipal(): Boolean =
-        session.designation?.trim()?.equals("External Fleet", ignoreCase = true) == true
+        session.isExternalFleetAgencyOperator
 
     /**
      * Who opens straight into the Admin Fleet portal.

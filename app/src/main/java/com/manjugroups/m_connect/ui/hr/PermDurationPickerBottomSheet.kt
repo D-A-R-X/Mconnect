@@ -13,6 +13,7 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.manjugroups.m_connect.R
+import com.manjugroups.m_connect.util.EditableTimeFormat
 import java.util.Calendar
 import java.util.Locale
 
@@ -87,7 +88,7 @@ class PermDurationPickerBottomSheet : BottomSheetDialogFragment() {
             selectedFromTime = String.format(Locale.US, "%02d:%02d", h, m)
             updateLabels()
             updateSubmitButtonState()
-        }, hour, minute, true).show()
+        }, hour, minute, false).show()
     }
 
     private fun showToTimePicker() {
@@ -100,7 +101,7 @@ class PermDurationPickerBottomSheet : BottomSheetDialogFragment() {
             selectedToTime = String.format(Locale.US, "%02d:%02d", h, m)
             updateLabels()
             updateSubmitButtonState()
-        }, hour, minute, true).show()
+        }, hour, minute, false).show()
     }
 
     private fun updateLabels() {
@@ -113,7 +114,7 @@ class PermDurationPickerBottomSheet : BottomSheetDialogFragment() {
             tvFrom.text = "Select From Time"
             tvFrom.setTextColor(Color.parseColor("#9CA3AF"))
         } else {
-            tvFrom.text = from
+            tvFrom.text = EditableTimeFormat.toDisplay(from)
             tvFrom.setTextColor(Color.parseColor("#101828"))
         }
 
@@ -122,7 +123,7 @@ class PermDurationPickerBottomSheet : BottomSheetDialogFragment() {
             tvTo.text = "Select To Time"
             tvTo.setTextColor(Color.parseColor("#9CA3AF"))
         } else {
-            tvTo.text = to
+            tvTo.text = EditableTimeFormat.toDisplay(to)
             tvTo.setTextColor(Color.parseColor("#101828"))
         }
     }

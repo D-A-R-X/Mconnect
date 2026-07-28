@@ -21,6 +21,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.ApplyPermissionRequest
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
+import com.manjugroups.m_connect.util.EditableTimeFormat
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
 import java.text.SimpleDateFormat
@@ -153,7 +154,8 @@ class ApplyPermissionBottomSheet : BottomSheetDialogFragment() {
             tvDurationValue.text = "Select Duration"
             tvDurationValue.setTextColor(Color.parseColor("#9CA3AF"))
         } else {
-            tvDurationValue.text = "$from - $to"
+            tvDurationValue.text =
+                "${EditableTimeFormat.toDisplay(from)} - ${EditableTimeFormat.toDisplay(to)}"
             tvDurationValue.setTextColor(Color.parseColor("#101828"))
         }
     }

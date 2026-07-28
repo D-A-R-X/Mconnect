@@ -141,7 +141,7 @@
                             android:textSize="12sp" />
                     </LinearLayout>
 
-                    <!-- Type/Destination -->
+                    <!-- Lead temperature -->
                     <LinearLayout
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
@@ -149,22 +149,17 @@
                         android:gravity="center_vertical|end"
                         android:orientation="horizontal">
 
-                        <ImageView
-                            android:layout_width="16dp"
-                            android:layout_height="16dp"
-                            android:contentDescription="@null"
-                            android:src="@drawable/ic_map_pin"
-                            app:tint="#667085" />
-
                         <TextView
                             android:id="@+id/tvOverviewType"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginStart="8dp"
-                            android:fontFamily="@font/inter_medium"
-                            android:text="Client Place Visit"
-                            android:textColor="#475467"
-                            android:textSize="12sp" />
+                            android:fontFamily="@font/inter_semibold"
+                            android:paddingHorizontal="10dp"
+                            android:paddingVertical="5dp"
+                            android:textSize="11sp"
+                            android:visibility="gone"
+                            tools:text="HOT LEAD"
+                            tools:visibility="visible" />
                     </LinearLayout>
                 </LinearLayout>
 
@@ -218,6 +213,12 @@
                             android:background="#EAECF0" />
                         <View
                             android:id="@+id/stepLine6"
+                            android:layout_width="0dp"
+                            android:layout_height="2dp"
+                            android:layout_weight="1"
+                            android:background="#EAECF0" />
+                        <View
+                            android:id="@+id/stepLine7"
                             android:layout_width="0dp"
                             android:layout_height="2dp"
                             android:layout_weight="1"
@@ -368,6 +369,41 @@
                                 android:textSize="8sp" />
                         </LinearLayout>
 
+                        <!-- CONSULTING -->
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:gravity="center_horizontal"
+                            android:orientation="vertical">
+
+                            <FrameLayout
+                                android:id="@+id/frameStepConsulting"
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
+                                android:background="@drawable/bg_trip_progress_figma_inactive">
+
+                                <ImageView
+                                    android:id="@+id/ivStepConsulting"
+                                    android:layout_width="14dp"
+                                    android:layout_height="14dp"
+                                    android:layout_gravity="center"
+                                    android:contentDescription="@null"
+                                    android:src="@drawable/ic_auth_user" />
+                            </FrameLayout>
+
+                            <TextView
+                                android:id="@+id/tvStepConsulting"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="6dp"
+                                android:fontFamily="@font/inter_semibold"
+                                android:text="CONSULTING"
+                                android:textAlignment="center"
+                                android:textColor="#98A2B3"
+                                android:textSize="8sp" />
+                        </LinearLayout>
+
                         <!-- PICKED FROM SITE -->
                         <LinearLayout
                             android:layout_width="0dp"
@@ -509,6 +545,12 @@
                             android:layout_height="2dp"
                             android:layout_weight="1"
                             android:background="#EAECF0" />
+                        <View
+                            android:id="@+id/stepLineOwn4"
+                            android:layout_width="0dp"
+                            android:layout_height="2dp"
+                            android:layout_weight="1"
+                            android:background="#EAECF0" />
                     </LinearLayout>
 
                     <!-- Step Circles and Text -->
@@ -616,6 +658,40 @@
                                 android:layout_marginTop="6dp"
                                 android:fontFamily="@font/inter_semibold"
                                 android:text="ON SITE"
+                                android:textColor="#98A2B3"
+                                android:textSize="8sp" />
+                        </LinearLayout>
+
+                        <!-- CONSULTING -->
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:gravity="center_horizontal"
+                            android:orientation="vertical">
+
+                            <FrameLayout
+                                android:id="@+id/frameStepOwnConsulting"
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
+                                android:background="@drawable/bg_trip_progress_figma_inactive">
+
+                                <ImageView
+                                    android:id="@+id/ivStepOwnConsulting"
+                                    android:layout_width="14dp"
+                                    android:layout_height="14dp"
+                                    android:layout_gravity="center"
+                                    android:contentDescription="@null"
+                                    android:src="@drawable/ic_auth_user" />
+                            </FrameLayout>
+
+                            <TextView
+                                android:id="@+id/tvStepOwnConsulting"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="6dp"
+                                android:fontFamily="@font/inter_semibold"
+                                android:text="CONSULTING"
                                 android:textColor="#98A2B3"
                                 android:textSize="8sp" />
                         </LinearLayout>
@@ -1304,7 +1380,7 @@
                                 android:textSize="13sp" />
                         </LinearLayout>
 
-                        <!-- Its Been Postponed -->
+                        <!-- Follow up outcome -->
                         <LinearLayout
                             android:id="@+id/btnOutcomePostponed"
                             android:layout_width="match_parent"
@@ -1328,8 +1404,36 @@
                                 android:layout_height="wrap_content"
                                 android:layout_marginStart="8dp"
                                 android:fontFamily="@font/inter_semibold"
-                                android:text="Its Been Postponed"
+                                android:text="Follow up"
                                 android:textColor="@android:color/white"
+                                android:textSize="13sp" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/btnPostponeSiteVisit"
+                            android:layout_width="match_parent"
+                            android:layout_height="44dp"
+                            android:layout_marginTop="18dp"
+                            android:background="@drawable/bg_dialog_btn_cancel"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center"
+                            android:orientation="horizontal">
+
+                            <ImageView
+                                android:layout_width="14dp"
+                                android:layout_height="14dp"
+                                android:contentDescription="@null"
+                                android:src="@drawable/ic_outcome_calendar"
+                                app:tint="?attr/colorForegroundPrimary" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="8dp"
+                                android:fontFamily="@font/inter_semibold"
+                                android:text="Postpone SV"
+                                android:textColor="?attr/colorForegroundPrimary"
                                 android:textSize="13sp" />
                         </LinearLayout>
                     </LinearLayout>

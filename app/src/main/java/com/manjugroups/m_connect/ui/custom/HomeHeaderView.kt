@@ -266,9 +266,8 @@ class HomeHeaderView @JvmOverloads constructor(
             session.department?.trim()?.takeIf { it.isNotEmpty() },
         ).joinToString(" • ")
         binding.tvHeaderRole.text = when {
-            session.designation
-                ?.trim()
-                ?.equals("External Fleet", ignoreCase = true) == true -> "Agency"
+            session.isExternalFleetAgency -> "Agency"
+            session.isExternalFleetStaff -> "Agency Staff"
             cachedRole.isNotEmpty() -> cachedRole
             session.isAdmin -> "Administrator"
             else -> "Staff"
@@ -278,10 +277,7 @@ class HomeHeaderView @JvmOverloads constructor(
         // Skip the staff-detail refresh for external-fleet agency principals
         // — their session.staffId points at a travelAgencies row, not a real
         // staff record, so the call would fail and could blank the role.
-        val isExternalFleet = session.designation
-            ?.trim()
-            ?.equals("External Fleet", ignoreCase = true) == true
-        if (!isExternalFleet) {
+        if (!session.isExternalFleetAgencyOperator) {
             loadHeaderDesignation(onDesignationChanged)
         }
     }

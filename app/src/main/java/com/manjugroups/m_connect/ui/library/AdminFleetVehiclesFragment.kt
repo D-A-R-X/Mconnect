@@ -40,8 +40,7 @@ class AdminFleetVehiclesFragment : Fragment() {
      * would 401 on the agency ones, which the watchdog reads as a dead session).
      */
     private val useMmsFleet: Boolean
-        get() = !session.designation.orEmpty()
-            .trim().equals("External Fleet", ignoreCase = true)
+        get() = !session.isExternalFleetAgencyOperator
 
     /**
      * Human-readable load failure.
@@ -221,12 +220,12 @@ class AdminFleetVehiclesFragment : Fragment() {
                 val resp = api.createVehicle(
                     token,
                     CreateVehicleRequest(
-                        vehicleNumber = form.vehicleNumber.trim(),
+                        vehicleNumber = form.vehicleNumber.trim().takeIf { it.isNotBlank() },
                         make = form.make.trim().takeIf { it.isNotBlank() },
-                        model = form.model.trim().takeIf { it.isNotBlank() },
-                        modelYear = form.modelYear.trim().toIntOrNull(),
-                        type = form.type.trim().takeIf { it.isNotBlank() },
-                        capacity = form.capacity.trim().toIntOrNull(),
+                        model = form.model.trim(),
+                        modelYear = form.modelYear.trim().toInt(),
+                        type = form.type.trim(),
+                        capacity = form.capacity.trim().toInt(),
                         defaultDriverName = form.driverName.trim().takeIf { it.isNotBlank() },
                         defaultDriverPhone = form.driverPhone.trim().takeIf { it.isNotBlank() },
                         defaultDriverWhatsapp = form.driverWhatsapp.trim().takeIf { it.isNotBlank() },

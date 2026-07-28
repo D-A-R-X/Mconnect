@@ -171,7 +171,15 @@ class HomeFragment : Fragment() {
         // only wire it for staff who hold a frontdesk permission (web
         // parity: /frontdesk is gated the same way). Everyone else keeps
         // an artifact-free home edge.
-        if (listOf("frontdesk.view", "frontdesk.checkin", "frontdesk.invite")
+        if (listOf(
+                "frontdesk.view",
+                "frontdesk.checkin",
+                "frontdesk.invite",
+                "marketing.siteVisits.view",
+                "marketing.siteVisits.viewTeam",
+                "marketing.siteVisits.viewAll",
+                "marketing.siteVisits.scanConsulting",
+            )
                 .any { session.hasPermission(it) }
         ) {
             setupEdgeDragQr()
@@ -886,6 +894,7 @@ class HomeFragment : Fragment() {
                 return s !in doneSet && s !in inProgressSet &&
                     com.manjugroups.m_connect.util.VisitExpiry.isExpired(
                         v.scheduledDate, v.scheduledStartTime, isDone = false,
+                        createdAtMillis = v.creationTime?.toLong(),
                     )
             }
             when (selectedTab) {
@@ -1423,6 +1432,7 @@ class HomeFragment : Fragment() {
         val isExpired = !isCompleted && !isInProgress &&
             com.manjugroups.m_connect.util.VisitExpiry.isExpired(
                 visit.scheduledDate, visit.scheduledStartTime, isDone = false,
+                createdAtMillis = visit.creationTime?.toLong(),
             )
         // Fleet "completed offline" — the admin marked this SV as done without
         // a live trip; the site incharge must record the outcome from mobile.
@@ -1913,6 +1923,8 @@ class HomeFragment : Fragment() {
                                 fleetType = result.fleetType,
                                 vehicleId = result.vehicleId,
                                 agencyName = result.agencyName,
+                                standingTimeMinutes = result.standingTimeMinutes,
+                                standingWithAc = result.standingWithAc,
                             ),
                         )
                     }.getOrNull()
@@ -2311,8 +2323,10 @@ class HomeFragment : Fragment() {
                 // travel-desk trip, so testing it here never matched and left
                 // the Completed tab permanently empty.
                 val isDone = { t: com.manjugroups.m_connect.network.TravelDeskTrip ->
-                    t.travelDeskEndedAt != null ||
-                        (t.status ?: "").equals("completed", ignoreCase = true)
+                    t.travelDeskTaskStatus.equals("completed", ignoreCase = true) ||
+                        (t.travelDeskTaskStatus == null &&
+                            t.travelDeskEndedAt != null &&
+                            t.travelDeskProofPending != true)
                 }
                 // A trip that was never started and whose slot has passed is
                 // expired — it can't run, so it shouldn't sit in Assigned (or
@@ -2323,14 +2337,15 @@ class HomeFragment : Fragment() {
                         com.manjugroups.m_connect.util.VisitExpiry.isExpired(
                             t.scheduledDate, t.scheduledTime ?: t.pickupTime,
                             isDone = false,
+                            createdAtMillis = t.createdAt,
                         )
                 }
                 // Expired pending trips are terminal too — drop them from Pending
                 // (no Allocate) and reclassify into Completed with the Expired badge.
-                fleetPending = pendingRows.filterNot(isExpired)
-                fleetAssigned = assignedRows.filterNot(isDone).filterNot(isExpired)
-                fleetExpired = assignedRows.filter(isExpired) + pendingRows.filter(isExpired)
-                fleetCompleted = assignedRows.filter(isDone) + fleetExpired
+                fleetPending = pendingRows
+                fleetAssigned = assignedRows.filterNot(isDone)
+                fleetExpired = emptyList()
+                fleetCompleted = assignedRows.filter(isDone)
                 fleetVehicles = vehicles.rows
                 fleetAgencies = agencies.filter {
                     (it.status ?: "active").equals("active", ignoreCase = true)
@@ -2623,7 +2638,7 @@ class HomeFragment : Fragment() {
             tollAmount = trip.travelDeskTollAmount,
             totalAmount = trip.travelDeskTotalAmount,
         )
-        com.manjugroups.m_connect.ui.library.AdminFleetCompleteOfflineSheet.newInstance(adminTrip, emptyList()) { result ->
+        com.manjugroups.m_connect.ui.library.AdminFleetCompleteOfflineSheet.newInstance(adminTrip, fleetVehicles) { result ->
             submitHomeFleetCompleteOffline(trip, result)
         }.showOnce(parentFragmentManager, "home_fleet_complete_offline")
     }
@@ -2654,6 +2669,8 @@ class HomeFragment : Fragment() {
                         fleetType = result.fleetType,
                         vehicleId = result.vehicleId,
                         agencyName = result.agencyName,
+                        standingTimeMinutes = result.standingTimeMinutes,
+                        standingWithAc = result.standingWithAc,
                     ),
                 )
             }.getOrNull()

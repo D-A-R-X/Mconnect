@@ -7,10 +7,169 @@
 
 ---
 
+## READ FIRST: Reuse the Mconnect UI System
+
+Before creating or changing Android UI, search for and reuse the app's existing
+components, XML styles, drawables, semantic theme attributes, and interaction
+patterns. This applies to buttons, form inputs, dropdowns, bottom sheets,
+dialogs, chips, selectors, date/time controls, empty/loading/error states, and
+list rows. Extend a shared component or style when the same pattern is needed
+in more than one place; do not create a visually similar one-off control.
+
+- Use Material button and text-field styles already present in the app.
+- Use semantic colors such as `?attr/colorAccentPrimary`,
+  `?attr/colorForegroundPrimary`, `?attr/colorSuccess`, `?attr/colorWarning`,
+  and `?attr/colorError`; do not introduce hardcoded UI colors when a semantic
+  token exists.
+- Use shared fonts, dimensions, backgrounds, icons, and reusable dialogs such
+  as the searchable selection component before building a replacement.
+- Keep XML + ViewBinding and the surrounding screen's established behavior.
+- When adding a genuinely reusable pattern, name and document the shared
+  component/style so later agents use it instead of duplicating it.
+
+---
+
+## READ FIRST: Three-Repository Project Map
+
+This product is split across **three separate Git repositories**. They share
+Fleet and Travel Desk workflows, but they are not interchangeable. Before
+editing, confirm the target repository, read its `AGENTS.md`, inspect its dirty
+worktree, and preserve changes made by other agents/users.
+
+### 1. Mconnect - Android App
+
+| Detail | Value |
+|--------|-------|
+| Local path | `C:\Users\surya\Projects\Mconnect` |
+| GitHub | `https://github.com/manjugroupsdev/Mconnect.git` |
+| Current working branch (2026-07-27) | `merge` |
+| Additional remote | `darx` -> `https://github.com/D-A-R-X/Mconnect.git` |
+| Technology | Kotlin Android, XML layouts, ViewBinding, Retrofit |
+| Build | `.\gradlew.bat :app:assembleDebug` |
+
+**Owns:**
+- The Mconnect Android application used by internal staff.
+- The Travel Desk mobile experience for external agency admins, agency staff,
+  and external drivers.
+- Mobile CP/SV trip cards, Fleet operations, driver trip lifecycle, external
+  agency Drivers/Vehicles/Trips/Staff/Settings screens.
+
+**Does not own:**
+- Convex schema or server-side authorization.
+- The standalone Travel Desk browser portal.
+- The MMS web Fleet dashboard.
+
+### 2. MMS / Manju Site Development - Web + Shared Backend
+
+| Detail | Value |
+|--------|-------|
+| Local path | `C:\Users\surya\Projects\manjusitedevelopment` |
+| GitHub | `https://github.com/manjugroupsdev/manjusitedevelopment.git` |
+| Current working branch (2026-07-27) | `max` |
+| Technology | Next.js, React, TypeScript, Convex |
+| Build | `npm run build` |
+
+**Owns:**
+- The MMS website, including Marketing -> Fleet, CP, and SV web screens.
+- The shared Convex schema, queries, mutations, actions, IAM permissions, and
+  HTTP endpoints consumed by both web clients and Mconnect.
+- Server-side source of truth for Travel Desk authentication, agency scoping,
+  vehicles, drivers, staff, settings, trips, expiry, pricing, and approvals.
+
+**Important locations:**
+- `convex/schema.ts` - shared database schema.
+- `convex/http.ts` - HTTP routes used by Travel Desk web and Mconnect.
+- `convex/travelDesk*.ts` - external Travel Desk backend.
+- `convex/marketing/fleet.ts` - internal MMS Fleet backend.
+- `features/fleet/` - MMS Fleet web UI.
+- `features/marketing/` - CP/SV web UI.
+- `lib/iam-model.ts` and `lib/iam-client.ts` - IAM permission definitions.
+
+**Deployment rule:**
+- A successful Next.js build does **not** deploy Convex.
+- Convex schema/function changes require an administrator to run the approved
+  deployment process. Do not claim a backend feature is live until deployment
+  is confirmed.
+
+### 3. Travel Desk - Standalone Web Portal
+
+| Detail | Value |
+|--------|-------|
+| Local path | `C:\Users\surya\Projects\travel-desk` |
+| GitHub | `https://github.com/manjugroupsdev/travel-desk.git` |
+| Current working branch (2026-07-27) | `aizen` |
+| Technology | Next.js, React, TypeScript |
+| Build | `npm run build` |
+
+**Owns:**
+- The standalone browser portal for external fleet agencies, agency staff, and
+  external drivers.
+- Travel Desk web pages for Drivers, Vehicles, Trips, Staff, and Settings.
+- Next.js proxy routes that forward authenticated requests to the MMS/Convex
+  `/api/travel-desk/*` contract.
+
+**Does not own:**
+- The shared database schema or authoritative business rules.
+- MMS internal Fleet screens.
+- Android screens.
+
+### Source-of-Truth Matrix
+
+| Concern | Repository that owns it |
+|---------|-------------------------|
+| Convex tables and validators | MMS (`manjusitedevelopment`) |
+| Travel Desk HTTP API contract | MMS (`manjusitedevelopment`) |
+| IAM / Transport Manager permissions | MMS (`manjusitedevelopment`) |
+| Internal MMS Fleet web UI | MMS (`manjusitedevelopment`) |
+| CP and SV web UI | MMS (`manjusitedevelopment`) |
+| External agency browser UI | Travel Desk (`travel-desk`) |
+| Internal staff Android UI | Mconnect |
+| External agency/driver Android UI | Mconnect |
+| Cross-client session persistence | Backend in MMS; client handling in both Travel Desk and Mconnect |
+
+### Required Cross-Repository Workflow
+
+For a feature that must work on Travel Desk web and app:
+
+1. Define or verify the schema, authorization, mutation/query, and HTTP route
+   in MMS first.
+2. Update the standalone Travel Desk web types, proxy route, and UI.
+3. Update Mconnect Retrofit models/endpoints, session capability, and Android
+   UI.
+4. Build all affected repositories.
+5. Record whether Convex deployment is still pending.
+
+For a Fleet-only MMS feature, do not edit Travel Desk or Mconnect unless the
+requested behavior must also appear on those clients.
+
+### Terminology
+
+- **MMS / web** means `manjusitedevelopment`, unless the user explicitly says
+  "Travel Desk web".
+- **TD / Travel Desk web** means the standalone `travel-desk` repository.
+- **App / Mconnect** means the Android `Mconnect` repository.
+- **Fleet module** usually means Marketing -> Fleet inside MMS.
+- **Travel Desk app feature** means the external fleet experience inside
+  Mconnect, not a separate Android repository.
+
+### Safety Rules for All AI Agents
+
+- Never run destructive Git commands or reset unrelated dirty changes.
+- Never assume all three repositories are on the same branch.
+- Never copy business logic independently into both clients when it belongs in
+  the MMS backend.
+- Keep client expiry, role, pricing, and status displays aligned with the
+  backend contract.
+- Update this log after cross-repository work with files, validation results,
+  deployment status, and remaining provider/admin dependencies.
+
+---
+
 ## What Is This File?
 
-`AGENT_LOG.md` is a **local AI agent session log** for the **Mconnect / Manju Groups PMS** Android app
-and its companion web backend (`C:\Users\surya\Projects\manjusitedevelopment`).
+`AGENT_LOG.md` is the shared local AI session log for the three connected
+repositories: Mconnect Android, MMS web/shared Convex backend, and the
+standalone Travel Desk web portal.
 
 ### Why It Was Made
 
@@ -58,18 +217,22 @@ in-progress work from scratch. This file solves that by acting as:
 
 ## Current State (as of last session)
 
-**Date:** 2026-07-25
-**Agent:** Google Antigravity (Gemini / Claude Sonnet 4.6 Thinking)
-**Conversation ID:** `d74cf9ca-c170-4525-9e09-0709fa204589`
+**Date:** 2026-07-27
+**Agent:** Codex (continuing Antigravity handoff)
 
 ### What Is Working
 - Full booking form field wiring between web and mobile (API → app fields).
 - Home address / phone number fetching correctly.
 - Recomplete / Offline-Completed flow fully implemented (see Session 4 below).
+- External Fleet Drivers, Vehicles, Trips, Staff, Settings, 48-hour expiry,
+  and extra-km approval flows are implemented across all three repositories.
+- CP/SV web forms share the unified address parser, pincode lookup, and map
+  fields.
 
 ### Open Items / Next Steps
-- None critical. The recomplete flow is end-to-end and the Android debug build passes.
-- If the Convex backend schema migration hasn't been deployed yet (`npx convex deploy`), run it.
+- Convex changes from Sessions 12-15 still require administrator deployment.
+- Driver WhatsApp assignment and inbound dashboard-photo/start-km ingestion
+  still require an approved template and provider webhook contract.
 - QA test: mark an expired fleet SV as "Completed" from the web Fleet dashboard and verify
   the Site Incharge sees the outcome prompt on both web detail page and mobile home card.
 
@@ -482,3 +645,1503 @@ gate complete-offline behind IAM, and chain the outcome form after completion.
 | Mconnect | origin (manjugroupsdev) | merge | ✅ `aa2b8a4..f9af402` |
 | Mconnect | darx (D-A-R-X) | merge | ✅ `aa2b8a4..f9af402` |
 | MMS web | origin (manjusitedevelopment) | max | ✅ `962319cc..4b9b77e9` |
+
+---
+
+### Session 9 — Gallery Upload Option for Fleet Trip Odometer Photos
+
+**Date:** 2026-07-27
+**Agent:** Codex (big-pickle)
+
+**Goal:** Add "Choose from gallery" option alongside camera capture for speedometer/odometer
+photos in all fleet trip action sheets (agency driver, start trip, end trip).
+
+**What was done:**
+
+#### Gallery upload pattern
+Each of the 3 trip photo sheets now shows a source chooser dialog ("Take photo" / "Choose from
+gallery") when the user taps the upload area. Gallery images are copied to a temp file in the
+app's cache dir before use.
+
+**Pattern (same in all 3 sheets):**
+1. `galleryLauncher = registerForActivityResult(GetContent())` — picks image from device.
+2. `showPhotoSourceChooser()` — AlertDialog with "Take photo" / "Choose from gallery".
+3. `showCapturedPhoto(file)` — extracted from both camera and gallery paths to reuse.
+4. `copyUriToTempFile(uri)` — copies gallery URI to a cache file.
+
+**Files changed (Android):**
+
+| File | Change |
+|------|--------|
+| `AgencyDriverTripActionSheet.kt` | Added `galleryLauncher`, `showPhotoSourceChooser()`, `showCapturedPhoto()`, `copyUriToTempFile()`; changed `btnUpload` click to show source chooser |
+| `DriverStartTripBottomSheet.kt` | Same pattern — gallery launcher, source chooser, extracted helpers |
+| `DriverEndTripBottomSheet.kt` | Same pattern — gallery launcher, source chooser, extracted helpers |
+| `dialog_agency_trip_capture.xml` | Placeholder text "Capture photo" → "Capture or upload photo" |
+| `dialog_driver_start_trip.xml` | Placeholder text "Upload Image" → "Capture or upload photo" |
+| `dialog_driver_end_trip.xml` | Placeholder text "Upload Image" → "Capture or upload photo" |
+
+**Build result:** `./gradlew :app:assembleDebug` → **BUILD SUCCESSFUL** ✅
+
+**Pushes:**
+| Repo | Remote | Branch | Status |
+|------|--------|--------|--------|
+| Mconnect | origin (manjugroupsdev) | merge | ✅ `913ede8..62890a9` |
+| Mconnect | darx (D-A-R-X) | merge | ✅ `913ede8..62890a9` |
+
+---
+
+### Session 10 — External Driver Travel-Desk Website Login + SV Flow + MMS Status Sync
+
+**Date:** 2026-07-27
+**Agent:** Codex (big-pickle)
+
+**Goal:** Ensure external drivers can log into the travel-desk website with the same SV flow
+(OTP, image upload, stats updates) as the app, and that their stats sync back to MMS so
+internal site incharge staff can fill the outcome form properly.
+
+**Problem identified:**
+1. External driver mutations (`travelDeskDriverTrips.ts`) only wrote `travelDesk*At` timestamps —
+   they did NOT advance the `status` field on siteVisits. MMS fleet driver mutations DID advance
+   `status` (picked_up → on_site → picked_from_site → dropped). Result: internal MMS staff
+   couldn't see external driver trip progress because status stayed "scheduled".
+2. `listForDriver` query only fetched `status === "scheduled"` trips — once status advanced,
+   in-progress trips disappeared from the driver's list entirely.
+3. Travel-desk website was missing the "Picked from Site" step that the app had.
+
+**What was done:**
+
+#### 1. Backend — Status sync with MMS (`manjusitedevelopment`)
+Updated `convex/travelDeskDriverTrips.ts` mutations to also advance the `status` field,
+matching `mmsFleetDriverTrips.ts` behavior:
+
+| Mutation | Status set | Additional fields |
+|----------|-----------|-------------------|
+| `startTrip` | `"picked_up"` | `pickedUpAt` |
+| `markOnSite` | `"on_site"` | `arrivedSiteAt`, `clientArrived: true` |
+| `markPickedFromSite` | `"picked_from_site"` | `pickedFromSiteAt` |
+| `endTrip` | `"dropped"` | `droppedAt`, `pickedFromSiteAt` backfill |
+
+#### 2. Backend — Fix `listForDriver` query
+Changed from querying only `status === "scheduled"` to querying across all operational statuses
+(`scheduled`, `picked_up`, `on_site`, `picked_from_site`, `dropped`) with deduplication by `_id`.
+This prevents in-progress trips from vanishing after status advancement.
+
+#### 3. Travel-desk website — "Picked from Site" step
+- Added `markTravelDeskTripPickedFromSite` API function to `travel-desk-api.ts`.
+- Created `/api/travel-desk/trips/picked-from-site` Next.js proxy route.
+- Added `PickedFromSiteStep` component in `DriverTripsPanel` between "On Site" and "End Trip".
+- Full driver lifecycle on web now matches the app: Arrive → Start → On Site → Picked from Site → End.
+
+**Files changed:**
+
+| Repo | File | Change |
+|------|------|--------|
+| MMS web (backend) | `convex/travelDeskDriverTrips.ts` | Status advancement in all mutations; multi-status `listForDriver` query |
+| travel-desk | `src/lib/travel-desk-api.ts` | Added `markTravelDeskTripPickedFromSite()` |
+| travel-desk | `src/components/driver-trips-panel.tsx` | Added `PickedFromSiteStep`, handler, and import; updated `TripActionModal` props |
+| travel-desk | `src/app/api/travel-desk/trips/picked-from-site/route.ts` | New proxy route (created) |
+
+**Build results:**
+- `npx next build` (travel-desk) → **BUILD SUCCESSFUL** ✅
+- `./gradlew :app:assembleDebug` (Mconnect) → **BUILD SUCCESSFUL** ✅
+
+**Pushes:**
+| Repo | Remote | Branch | Status |
+|------|--------|--------|--------|
+| MMS web | origin (manjugroupsdev) | max | ✅ `c6bfb397..373a84b8` |
+| travel-desk | origin (manjugroupsdev) | aizen | ✅ `cb4c8b5..7190bd6` |
+| Mconnect | — | merge | No changes (unchanged) |
+
+### Session 11 - Expired Fleet Trips Open SV Outcome Flow
+
+**Date:** 2026-07-27
+**Agent:** Codex
+
+**Goal:** Finish the expired-trip flow so Fleet can open the Site Incharge outcome form intentionally, keep the expired trip in an outcome-pending state, and show that opened state clearly on the SV detail page. The fleet completion sheet also needed date/time fields.
+
+**What changed:**
+- Added a confirmation step before the Fleet "Completed" button opens the trip completion sheet.
+- Added completion date and time fields to the Fleet completion sheet and stored them as `completedOfflineOpenedAt`.
+- Threaded `completedOfflineOpenedAt` through Convex schema, Fleet mutation, and the site-visit query used by the SV detail page.
+- Updated the SV detail page to explicitly show "Outcome form opened for Site Incharge" with the opened timestamp when present.
+- Kept the existing assigned/complete bucketing intact so outcome-pending expired trips still stay in the dispatcher queue until the Site Incharge records the outcome.
+- Added a narrow Convex Workpool type shim plus one local narrowing in `reportQueue.ts` to restore the repo's Next.js type-check/build.
+
+**Validation:**
+- `npm run build` → **BUILD SUCCESSFUL** ✅
+
+**Files changed:**
+| File | Change |
+|------|--------|
+| `convex/schema.ts` | Added `completedOfflineOpenedAt` to site visits |
+| `convex/marketing/fleet.ts` | Saved `completedOfflineOpenedAt` in the offline-complete mutation |
+| `convex/http.ts` | Accepted `completedOfflineOpenedAt` in the POST route |
+| `convex/marketing/siteVisits.ts` | Exposed `completedOfflineOpenedAt` in the mobile/site visit payload |
+| `features/fleet/types.ts` | Added `completedOfflineOpenedAt` and completion date/time draft fields |
+| `features/fleet/use-fleet-assigned-controller.ts` | Added confirm prompt, date/time draft, and timestamp parsing |
+| `features/fleet/tabs/assigned-tab.tsx` | Added confirmation dialog, date/time inputs, and opened-form summary state |
+| `features/marketing/pages/site-visit-detail-page.tsx` | Show opened-for-site-incharge state and timestamp |
+| `convex/convex-config-modules.d.ts` | Added Workpool ambient declarations |
+| `convex/reportQueue.ts` | Narrowed the report job lookup for type-checking |
+
+---
+
+### Session 12 - Internal Vehicle Fetch + External Fleet Offline Completion
+
+**Date:** 2026-07-27
+**Agent:** Codex
+
+**Goal:** Make the expired-trip completion form fetch internal vehicles when
+Internal is selected, and expose the same Completed flow to external travel
+agencies in both the Mconnect app and Travel Desk website.
+
+**What changed:**
+
+#### 1. MMS web completion form
+- Added a permission-scoped query that returns active MFPL/internal-agency
+  vehicles for offline completion.
+- Internal fleet selection now shows a required vehicle dropdown instead of
+  editable driver fields.
+- The selected vehicle ID is persisted on the site visit. Its default driver
+  name/phone are resolved server-side from the vehicle record.
+- The completion mutation validates that the selected vehicle is active and
+  belongs to MFPL or an internal agency.
+
+#### 2. External agency backend
+- Added `travelDeskTrips.completeExpiredOffline`, authenticated with the agency
+  session and restricted to trips allotted to that exact agency.
+- Added `/api/travel-desk/trips/complete-offline`.
+- Stores package price, optional distance/beta/toll, completion date/time,
+  `completedOfflineFleetType = "external"`, and opens the Site Incharge outcome
+  state.
+- Expanded the agency assigned query across operational statuses so finished
+  external trips remain visible in Travel Desk.
+
+#### 3. Travel Desk website
+- Expired rows in the Complete tab now show a `Completed` action.
+- Added the confirmation prompt and completion form. Package price is the only
+  required field; date/time, distance, beta and toll are optional.
+- Added the Next.js proxy route and client API call for agency offline
+  completion.
+- Completed-offline summaries show `Outcome form opened for Site Incharge`.
+
+#### 4. Mconnect app
+- External agency accounts can now see the Completed action for their own
+  expired trips and submit through the agency-auth endpoint.
+- Internal Home completion now passes the fetched internal vehicle list into
+  the form instead of an empty list.
+- Internal completion requires a selected vehicle.
+- External completion does not open the staff-only outcome form for the agency;
+  it confirms that the form was opened for the Site Incharge.
+- Pending/expired external rows are rebucketed correctly, and an already opened
+  outcome displays `Outcome Pending` without offering Completed again.
+
+**Validation:**
+- MMS web: `npm run build` -> **SUCCESS**
+- Travel Desk web: `npm run build` -> **SUCCESS**
+- Mconnect Android: `./gradlew :app:assembleDebug` -> **SUCCESS**
+- Targeted lint still reports pre-existing repository issues: legacy
+  `no-explicit-any` findings in large Convex files and two existing
+  `react-hooks/set-state-in-effect` findings in Travel Desk `trips/page.tsx`.
+
+**Files changed in this session:**
+
+| Repo | File | Change |
+|------|------|--------|
+| MMS web | `convex/marketing/fleet.ts` | Internal vehicle query, vehicle validation and persistence |
+| MMS web | `convex/travelDeskTrips.ts` | Agency-scoped expired completion and multi-status listing |
+| MMS web | `convex/http.ts` | Agency completion HTTP route and typed MMS vehicle ID |
+| MMS web | `features/fleet/types.ts` | Vehicle ID in completion draft/visit type |
+| MMS web | `features/fleet/use-fleet-assigned-controller.ts` | Load vehicles and submit selected vehicle |
+| MMS web | `features/fleet/tabs/assigned-tab.tsx` | Internal vehicle dropdown; hide internal driver inputs |
+| Travel Desk | `src/lib/travel-desk-api.ts` | Offline completion API and completed-offline fields |
+| Travel Desk | `src/app/trips/page.tsx` | Completed action, confirmation, form and summary state |
+| Travel Desk | `src/app/api/travel-desk/trips/complete-offline/route.ts` | Next.js proxy route |
+| Mconnect | `TravelDeskApi.kt` | External agency completion endpoint |
+| Mconnect | `SessionManager.kt` | Allow external agency completion capability |
+| Mconnect | `AdminFleetTripsFragment.kt` | Agency submit path and outcome-pending bucketing |
+| Mconnect | `AdminFleetCompleteOfflineSheet.kt` | Require internal vehicle selection |
+| Mconnect | `HomeFragment.kt` | Pass fetched internal vehicles to completion sheet |
+
+---
+
+### Session 13 - Shared CP/SV Address Autofill and Map Form
+
+**Date:** 2026-07-27
+**Agent:** Codex
+
+**Goal:** Reuse the working CP create address form in CP edit and Site Visit
+create/edit, restore pincode-based location autofill, and prefill addresses
+already captured by telecaller analysis or client-place records.
+
+**What changed:**
+- Added India Post pincode lookup to `UnifiedAddressFields`. A valid six-digit
+  pincode now fills locality, city/district, and authoritative state data, then
+  lets the existing geocoder position the map.
+- Added a shared free-text-to-unified-address initializer so saved legacy or
+  telecaller address strings are parsed into the seven structured fields.
+- Replaced the legacy CP edit address form with the same unified component used
+  by CP create. It now seeds from the saved client place first and falls back to
+  the CP visit address, coordinates, and map link.
+- Replaced the plain SV create pickup-address textarea and manual coordinate
+  block with the unified component.
+- SV create now hydrates the address from saved client-place data, latest call
+  analysis, or the lead fallback address without overwriting later user edits.
+- Replaced the SV detail edit textarea with the unified component and persists
+  its joined address, coordinates, and Google Maps link.
+
+**Validation:**
+- MMS web: `npm run build` -> **SUCCESS**
+- Focused CP edit lint: **SUCCESS**
+- `git diff --check` -> **SUCCESS**
+- Built server `/api/pincode?pin=600083` -> HTTP 200, `Success`, two offices,
+  district `Chennai`, state `Tamil Nadu`
+- Full focused lint still reports pre-existing findings in the large SV detail
+  page and existing pin-dialog effects inside `UnifiedAddressFields`; no new
+  pincode or SV-create lint finding was introduced.
+
+**Files changed in this session:**
+
+| Repo | File | Change |
+|------|------|--------|
+| MMS web | `components/unified-address-fields.tsx` | Pincode lookup, loader, and saved-address initializer |
+| MMS web | `components/lead/edit-cp-visit-dialog.tsx` | Unified CP edit address/map form with saved-data prefill |
+| MMS web | `features/marketing/pages/site-visits-list-page.tsx` | Unified SV create form and telecaller/client-place prefill |
+| MMS web | `features/marketing/pages/site-visit-detail-page.tsx` | Unified SV edit form with coordinate/map persistence |
+
+---
+
+### Session 14 - External Fleet Contract Across MMS, Travel Desk, and Mconnect
+
+**Date:** 2026-07-27
+**Agent:** Codex
+
+**Goal:** Implement the External Fleet requirements across the shared MMS
+backend, Travel Desk web, and the Mconnect Travel Desk app while applying the
+VP overrides.
+
+**VP overrides applied:**
+- Vehicle Model and Model Year remain present and are mandatory.
+- Extra-kilometre claims remain pending until a Transport Manager approves or
+  rejects them.
+- Driver identity has first priority for OTP. Agency-administrator OTP is
+  routed to an active Transport Manager instead of the agency contact.
+
+**Shared MMS backend and Fleet module:**
+- Restricted external vehicles to SUV, Sedan, and Hatchback with server-owned
+  capacities (7, 5, and 5 respectively).
+- Made vehicle number optional at the client/API boundary while retaining
+  Model and Model Year validation.
+- Added OLD/NEW driver category.
+- Expanded agency settings with package, per-km, betta, permit, tax, standing
+  charge/duration, waiting, cancellation, and toll values.
+- Added agency staff records and `agency_staff` sessions. Staff can operate the
+  same agency's trips, drivers, and vehicles; settings/staff administration is
+  agency-admin only.
+- Added assignment revision metadata so reassigned cards can be highlighted.
+- Added extra-km claim calculation and pending/approved/rejected state.
+  Approved claims alone are added to the trip total.
+- Added `marketing.fleet.reviewExtraKm` to IAM and Transport Manager review
+  controls in MMS Fleet.
+
+**Travel Desk web:**
+- Added the Staff page and role-based navigation guards.
+- Added OLD/NEW driver category and expanded Settings.
+- Added compact vehicle creation inside allocation/reassignment.
+- Added reassignment highlighting and extra-km claim submission/status.
+- Preserved scheduled date/time display and offline completion behavior.
+
+**Mconnect app:**
+- Added the agency Staff tab, create/edit/status flows, and `agency_staff`
+  routing.
+- Agency staff see Trips, Vehicles, and Drivers only.
+- Added OLD/NEW driver category, expanded agency settings, and extra-km claim
+  submission/status.
+- Updated external vehicle create/edit rules to match Travel Desk web.
+
+**Validation:**
+- MMS web: `npm run build` -> **SUCCESS**
+- Travel Desk web: `npm run build` -> **SUCCESS**
+- Mconnect Android: `./gradlew :app:assembleDebug` -> **SUCCESS**
+
+**Deployment note:**
+- Convex was not deployed from this workspace. The shared schema/functions and
+  HTTP routes must be deployed by the administrator before the new clients use
+  the contract.
+- WhatsApp assignment and inbound dashboard-photo/start-km ingestion remain
+  pending because the approved driver template and provider webhook payload/
+  verification contract are not present in the repository.
+
+---
+
+### Session 15 - 48-Hour Visit Expiry and Fast CP Pincode Lookup
+
+**Date:** 2026-07-27
+**Agent:** Codex
+
+**Goal:** Give CP, SV, and Travel Desk trips a consistent 48-hour grace from
+record creation, and remove the repeated slow pincode lookup in CP edit.
+
+**What changed:**
+- MMS Fleet and Travel Desk backend expiry now use
+  `createdAt + 48 hours` for unstarted trips.
+- Travel Desk web uses the same creation-based expiry rule.
+- Mconnect's shared `VisitExpiry` accepts the Convex creation timestamp and is
+  used by CP, SV, internal Fleet, agency Fleet, and driver trip screens.
+- Older payloads without creation time retain a 48-hour scheduled-slot
+  fallback until the backend update is deployed.
+- The pincode proxy now uses HTTPS keep-alive, a six-second upstream timeout,
+  in-flight request deduplication, and a 24-hour server cache.
+- Pincode responses now carry browser/CDN cache headers, and the shared client
+  helper retains results for 24 hours. Reopening a CP no longer repeats the
+  same India Post request.
+
+**Validation:**
+- MMS web: targeted pincode proxy/helper ESLint -> **SUCCESS**
+- MMS web: `npm run build` -> **SUCCESS**
+- Travel Desk web: `npm run build` -> **SUCCESS**
+- Mconnect Android: `./gradlew :app:assembleDebug` -> **SUCCESS**
+- Full `UnifiedAddressFields` lint still reports the two pre-existing
+  pin-dialog synchronous-effect findings; the changed proxy/helper files pass.
+
+---
+
+### Session 16 - CP Address Approximate Map Focus Before Pin Drop
+
+**Date:** 2026-07-27
+**Agent:** Codex
+
+**Goal:** Center CP create/edit maps on the best approximate result from a
+searched or pasted address, then let staff refine the exact point by dragging
+or dropping the pin.
+
+**What changed:**
+- Promoted the existing map-service address search from the pin dialog into
+  the shared address form's automatic forward-geocoding flow.
+- Pasted/typed structured addresses now try the map search first, then Google
+  Geocoder, then the existing OSM fallback.
+- Successful approximate coordinates immediately update the inline preview
+  and become the initial center of the Drop pin dialog.
+- Added per-address coordinate caching, request cancellation, and stale-result
+  guards so an older lookup cannot move the map away from the latest address.
+- Async coordinate updates now merge into the latest form value instead of a
+  stale render snapshot.
+
+**Validation:**
+- MMS web: `npm run build` -> **SUCCESS**
+- Full component lint still reports the two pre-existing pin-dialog
+  synchronous-effect findings; no new lint category was introduced.
+
+---
+
+### Session 17 - CP Map Marker Crash and Suggestion Dismissal
+
+**Date:** 2026-07-27
+**Agent:** Codex
+
+**Goal:** Fix the Google Maps `AdvancedMarker` `getRootNode` crash after
+selecting an address and ensure suggestions close after selection.
+
+**What changed:**
+- Replaced `AdvancedMarker` with the stable `Marker` component for the shared
+  address preview and draggable pin dialog.
+- Selecting a suggestion now closes the suggestion popup, clears its results,
+  and stops the search loader before recentering the map.
+- Kept the selected result's coordinates as the draggable starting point.
+
+**Validation:**
+- MMS web: `npm run build` -> **SUCCESS**
+
+---
+
+### Session 18 - Assigned-BDO QR Consulting Status and Fleet Backfill
+
+**Date:** 2026-07-27
+**Agent:** Codex
+
+**Goal:** Add a Consulting stage after On Site for every Site Visit travel
+category. Let only the BDO assigned to the SV confirm Consulting by scanning
+the client's QR. When an internal/external fleet missed pickup and reached-site
+updates, let the responsible fleet backfill the actual start with a dashboard
+image, start kilometer, and start date/time.
+
+**Backend / MMS shared contract:**
+- Added `consulting` to the `siteVisits.status` schema and validators.
+- Added `consultingAt` and `consultingVerifiedByStaffId`.
+- Added authenticated `markConsultingFromQr`; it strictly verifies the signed-in
+  staff id against `siteVisit.bdoStaffId`.
+- The QR transition records only the verified Consulting time. It does not
+  invent pickup or fleet timestamps.
+- Added internal and external fleet backfill mutations. They require a dashboard
+  image, non-negative start kilometer, and actual start date/time before the
+  Consulting scan. Pickup uses the entered time; reached-site uses the verified
+  QR scan time.
+- Consulting visits are not treated as expired while fleet backfill is pending.
+- Added the external Travel Desk HTTP/proxy contract for the same backfill.
+
+**MMS web:**
+- Added Consulting to Site Visit list badges and both progress strips.
+- Own vehicle progression is Scheduled -> Client Departure -> Onsite ->
+  Consulting -> Completed, with no fleet-pending state.
+- Internal/external cab progress shows missed Picked from CP and On Site stages
+  as pending after a Consulting scan until fleet backfill is saved.
+- Added the internal Fleet "Fill pending trip" form.
+- Added a Client QR dialog on the SV detail page. It renders the canonical
+  `/site-visit/consulting/<siteVisitId>` QR and supports copying its link.
+
+**Travel Desk web:**
+- Added the external-agency "Fill pending trip" form and upload flow.
+- Added `/api/travel-desk/trips/consulting-start-backfill`.
+- Reused the existing authenticated Travel Desk photo uploader.
+
+**Mconnect app:**
+- Replaced the unused "Site Visit" header label with a Scan action.
+- Added a dedicated CameraX + ML Kit SV scanner.
+- Scanner accepts only the currently opened SV's client QR and relies on the
+  backend for the final assigned-BDO authorization.
+- Added Consulting to the app status badge, list badge, cab stepper, and own
+  vehicle stepper.
+- Cab scans leave missing fleet pickup/on-site stages pending; own-vehicle scans
+  show Consulting without fleet pending.
+
+**Validation:**
+- MMS web: `npm run build` -> **SUCCESS** (167 routes/pages)
+- MMS TypeScript: `npx tsc --noEmit` -> **SUCCESS**
+- Travel Desk web: `npm run build` -> **SUCCESS**
+- Mconnect: `:app:assembleDebug` -> **SUCCESS**
+- Focused Convex tests: 23 passed, 1 existing reassignment-contract mismatch.
+  `fleet.test.ts` expects a second `assignVehicle` call to reassign, while the
+  implementation rejects already-assigned cabs and uses the dedicated
+  reassignment path. No Consulting test failed.
+
+**Deployment / provider dependency:**
+- Convex schema, mutations, and HTTP routes in `manjusitedevelopment` must be
+  deployed by an administrator before the app and Travel Desk can use this flow.
+- The MMS page can generate/copy the client QR now. Automatic WhatsApp delivery
+  is not claimed as complete because the approved client-QR template/provider
+  payload is not present in the repositories.
+
+---
+
+### Session 19 - CP Pin Dialog Blank Map Regression
+
+**Date:** 2026-07-27
+**Agent:** Codex
+
+**Goal:** Restore the Google base map in the shared CP address Drop pin dialog
+after the marker crash fix left the map canvas blank.
+
+**What changed:**
+- Removed the custom cloud `mapId` from both maps in the shared
+  `UnifiedAddressFields` component.
+- The shared address preview and Drop pin dialog now use the standard Google
+  base map, which is compatible with the stable legacy `Marker` introduced in
+  Session 17.
+- Kept address search, suggestion dismissal, map recentering, click-to-drop,
+  draggable marker, and reverse-geocoding behavior unchanged.
+
+**Validation:**
+- Confirmed the configured Google Maps browser script remains reachable for
+  the localhost origin.
+- MMS web: `npm run build` -> **SUCCESS** (167 routes/pages).
+
+---
+
+### Session 20 - 12-Hour Time Entry Across MMS, Travel Desk, and Mconnect
+
+**Date:** 2026-07-27
+**Agent:** Codex
+
+**Goal:** Make every editable time-setting control use an explicit 12-hour
+hour/minute/AM-PM experience without changing the backend time contracts.
+
+**MMS web:**
+- Upgraded the shared `Input` primitive so all existing `type="time"` usages
+  render hour, minute, and AM/PM selectors.
+- Kept controlled values, change events, named form values, and API payloads
+  normalized as 24-hour `HH:mm`.
+- Migrated the three legacy Telecaller flow time fields that used raw HTML
+  inputs to the shared component.
+- This covers the existing time controls across Attendance, Marketing CP/SV,
+  Fleet, Telecaller, HR, Frontdesk, MOM, Land Procurement, Shifts, Task
+  Manager, Handoffs, and Project Management.
+- Added focused component tests for 24-hour-to-12-hour rendering, AM/PM
+  conversion, and uncontrolled form submission.
+
+**Travel Desk web:**
+- Added a reusable 12-hour time input with separate hour, minute, and AM/PM
+  selectors.
+- Replaced the four editable trip fields: allocation pickup, reassignment
+  pickup, Consulting start, and offline trip completion time.
+- Travel Desk API values remain `HH:mm`.
+
+**Mconnect Android:**
+- Added `EditableTimeFormat` as the shared conversion helper.
+- All active `TimePickerDialog` controls now open in 12-hour mode.
+- CP visit creation, SV time selection, vehicle pickup allocation, permission
+  duration, and attendance correction show AM/PM labels.
+- Internal selected values remain `HH:mm`; attendance submission continues to
+  use the existing ISO contract.
+
+**Validation:**
+- MMS focused time-input tests: **3 passed**
+- MMS TypeScript: `npx tsc --noEmit` -> **SUCCESS**
+- MMS web: `npm run build` -> **SUCCESS** (167 routes/pages)
+- Travel Desk web: `npm run build` -> **SUCCESS**
+- Mconnect Android: `.\gradlew.bat :app:assembleDebug --no-daemon` ->
+  **SUCCESS**
+
+---
+
+### Session 21 - Travel Desk Staff 404 / Invalid JSON Handling
+
+**Date:** 2026-07-27
+**Agent:** Codex
+
+**Goal:** Stop the Travel Desk Agency Staff page from hanging and repeatedly
+throwing `Unexpected token 'N'` when the configured Convex deployment returns
+plain-text `No matching routes found`.
+
+**Root cause:**
+- The local Next routes for staff list/create/update exist and compile.
+- The configured Convex production deployment does not yet contain
+  `/api/travel-desk/staff`, `/staff/create`, or `/staff/update`.
+- Convex therefore returns a plain-text 404. The proxy incorrectly labelled
+  that text as JSON, and the client called `response.json()`, causing an
+  unhandled syntax error and leaving the page in `Loading staff...`.
+
+**What changed:**
+- Added a shared Travel Desk Convex proxy-response helper.
+- Staff list/create/update proxies now preserve valid upstream JSON but convert
+  missing Convex actions into valid JSON `503 Service Unavailable` responses
+  with `backendDeploymentRequired: true`.
+- Hardened the shared Travel Desk response parser so non-JSON server responses
+  become stable `{ success: false, error }` results instead of rejected
+  promises.
+- The Staff page now exits its loading state and shows the deployment-specific
+  error instead of generating repeated console exceptions.
+
+**Validation:**
+- Local staff list/create/update endpoints each return valid JSON and correctly
+  report the missing backend deployment.
+- Travel Desk web: `npm run build` -> **SUCCESS** (10 pages/routes plus API
+  routes).
+
+**Required admin action:**
+- Deploy the pending Convex source from `manjusitedevelopment` using the
+  approved production process. Until that deployment occurs, Agency Staff
+  records cannot be listed, created, updated, or used for authentication.
+
+---
+
+### Session 22 - SV Consulting QR Access for BDO and Site Incharge
+
+**Date:** 2026-07-27
+**Agent:** Codex
+
+**Goal:** Allow either staff member assigned to an SV as its BDO or Site
+Incharge to scan the client QR and move the visit to Consulting.
+
+**What changed:**
+- Updated `markConsultingFromQr` in the MMS/Convex backend to authorize the
+  authenticated staff member when their staff ID matches either
+  `bdoStaffId` or `inchargeStaffId` on that exact site visit.
+- Unrelated staff remain blocked with HTTP 403; terminal SV statuses remain
+  protected by the existing lifecycle validation.
+- The scanner continues to record the actual scanning staff member in
+  `consultingVerifiedByStaffId`.
+- No Android UI change was required. The SV overview already exposes the QR
+  scanner action without a BDO-only visibility condition and calls the same
+  authenticated endpoint.
+- Added focused Convex authorization tests for assigned BDO access, assigned
+  Site Incharge access, and unrelated-staff rejection.
+
+**Validation:**
+- Convex focused tests: **3 passed**
+- MMS web: `npm run build` -> **SUCCESS** (TypeScript + 167 routes/pages)
+
+**Required admin action:**
+- Deploy the pending Convex source from `manjusitedevelopment` using the
+  approved production process. Until that deployment occurs, the live backend
+  will continue enforcing its previously deployed BDO-only rule.
+
+---
+
+### Session 23 - Shared QR Scanner for SV Consulting with IAM
+
+**Date:** 2026-07-27
+**Agent:** Codex
+
+**Goal:** Use the app's existing QR Scanner for both Front Desk invitations and
+SV Consulting instead of maintaining a second scanner inside each SV.
+
+**What changed in Mconnect:**
+- The existing Home/App Library QR Scanner now recognizes both supported URL
+  formats:
+  - `/frontdesk/invite/<token>` keeps the existing visitor workflow.
+  - `/site-visit/consulting/<siteVisitId>` confirms SV Consulting.
+- The shared scanner entry is visible when staff have a Front Desk scanner
+  permission or the new `marketing.siteVisits.scanConsulting` permission.
+- Removed the dedicated SV Consulting scanner fragment, layout, SV-detail
+  button, and result listener.
+- Restored the SV overview header label to `Site Visit`.
+- Renamed scanner-facing text from `Front Desk Scanner` to the generic
+  `QR Scanner`.
+
+**IAM and backend enforcement:**
+- Added `marketing.siteVisits.scanConsulting` to the MMS IAM permission model,
+  client permission descriptions, Site Visits taxonomy, and permission matrix.
+- `markConsultingFromQr` now requires that IAM permission and still requires
+  the authenticated staff member to be either the exact assigned BDO or exact
+  assigned Site Incharge for the scanned SV.
+- Missing IAM permission and unrelated-staff attempts both return HTTP 403.
+- Updated the MMS client-QR description to name both assigned roles and the
+  IAM requirement.
+
+**Validation:**
+- Convex + IAM focused tests: **10 passed**
+- Mconnect Android: `:app:assembleDebug` -> **SUCCESS**
+- MMS web: `npm run build` -> **SUCCESS** (TypeScript + 167 routes/pages)
+- Confirmed no dedicated SV scanner references remain in the Android source.
+
+**Required admin action:**
+- Deploy the pending Convex/MMS source from `manjusitedevelopment`.
+- Grant `marketing.siteVisits.scanConsulting` in IAM to the BDO and Site
+  Incharge staff/designations that should use the scanner. Assignment to the SV
+  remains mandatory even when the permission is granted.
+
+---
+
+### Session 24 - SV QR Counselling, Follow Up Outcome, and Real Postpone
+
+**Date:** 2026-07-27
+**Agent:** Codex
+
+**Goal:** Align the Android SV scanner and outcome flow with the manager-provided
+web endpoints and keep outcome Follow Up separate from rescheduling an SV.
+
+**What changed in Mconnect:**
+- The shared QR Scanner accepts both `SV:<siteVisitId>` and the legacy
+  `/site-visit/consulting/<siteVisitId>` URL format.
+- Scanning now calls the read-only
+  `POST /api/marketing/siteVisits/scanQr` endpoint first. The app no longer
+  changes the SV status as a side effect of reading the QR.
+- A bottom sheet shows the validated SV and asks the assigned user to confirm
+  `Start counselling`.
+- Confirmation calls
+  `POST /api/marketing/siteVisits/markOnCounselling`; only after that succeeds
+  does the shared SV outcome form open.
+- In pure-SV mode, the old `Postpone` outcome is now displayed and submitted as
+  `Follow up` / `follow_up`. CP outcome behavior remains unchanged and still
+  uses `postponed`.
+- Added a separate `Postpone SV` action in the SV overview for staff with
+  `marketing.siteVisits.edit`. Its sheet collects a required new date plus an
+  optional 12-hour time and reason, then calls
+  `POST /api/marketing/siteVisits/postpone`.
+- Real postpone therefore closes the current SV and lets the backend create the
+  replacement SV for the chosen date; it is not stored as an outcome.
+
+**Validation:**
+- Confirmed there are no remaining Android references to the obsolete
+  `markConsultingFromQr` endpoint.
+- `:app:compileDebugKotlin` -> **SUCCESS**
+- `:app:assembleDebug` -> **SUCCESS**
+- The build needed a one-off 4 GB Gradle/Kotlin heap because parallel stale
+  compiler daemons exhausted the default 2 GB heap; no project memory setting
+  was changed.
+
+**Backend dependency:**
+- These mobile paths require the manager-provided `scanQr`,
+  `markOnCounselling`, `setOutcome` follow-up support, and `postpone` routes to
+  be deployed on the configured MMS/Convex backend.
+
+---
+
+### Session 25 - Travel Desk Deferred Trip Evidence
+
+**Date:** 2026-07-27
+**Agent:** Codex
+
+**Goal:** Let an external Travel Desk operator finish every trip status even
+when dashboard images or odometer readings are unavailable, while keeping the
+completed trip pending until all required evidence is supplied.
+
+**What changed in the standalone Travel Desk web repo:**
+- After `Mark Reached`, the existing start form now asks for the start
+  dashboard image and start km but permits continuing without either.
+- The Dropped/end form likewise asks for the end dashboard image and end km but
+  permits completing without either.
+- Missing proof shows a clear warning before each lifecycle action.
+- Completed trips with missing proof show `Pending verification`, list the
+  exact missing items, and provide inputs to upload them later.
+- Added the Next.js proxy and client API for
+  `POST /api/travel-desk/trips/evidence`.
+
+**What changed in MMS / shared Convex:**
+- External driver, agency admin, and agency staff sessions can operate an
+  allocated trip belonging to their agency.
+- Start/end lifecycle mutations accept deferred images and km readings and set
+  the existing proof-required marker when evidence is incomplete.
+- Verification requires all four items:
+  - start dashboard image
+  - start km
+  - end dashboard image
+  - end km
+- Added `travelDeskDriverTrips.submitEvidence` and the
+  `/api/travel-desk/trips/evidence` HTTP endpoint.
+- Evidence submission fills only missing proof, validates non-negative km and
+  `endKm >= startKm`, recalculates the trip amount when possible, and clears
+  Pending verification only when all four items exist.
+- Legacy completed trips without the deferred-proof marker retain their prior
+  completion behavior.
+
+**Validation:**
+- Travel Desk `npm run build` -> **SUCCESS** (10 pages/routes).
+- MMS `npm run build` -> **SUCCESS** (167 pages/routes).
+- Focused proof-state tests -> **3 passed**.
+- No Convex deployment was performed.
+
+**Required admin action:**
+- Deploy the pending MMS/Convex source before testing deferred proof against the
+  live Travel Desk portal.
+
+---
+
+### Session 26 - Read-Only SV QR Details and Protected Counselling Start
+
+**Date:** 2026-07-27
+**Agent:** Codex
+
+**Goal:** Fix the SV QR 404 for non-assigned scanners, show useful visit
+details to every authenticated scanner, and change status only after an
+authorised user explicitly starts counselling.
+
+**Root cause:**
+- `getByQrPayload` reused the normal SV list scope and returned `null` for staff
+  outside the SV assignment, which the HTTP route translated to 404.
+- Android also blocked the scan before calling the read-only endpoint unless
+  the user had `marketing.siteVisits.scanConsulting`.
+
+**What changed in MMS / shared Convex:**
+- QR lookup no longer applies the normal assignment visibility filter.
+  Authenticated staff can read the scanned visit details.
+- The scan response now includes server-derived `canStartCounselling`.
+- Start permission is granted when the scanner is:
+  - the assigned BDO
+  - the assigned Site Incharge
+  - superadmin/admin
+  - explicitly granted `marketing.siteVisits.scanConsulting`
+- Added `markOnCounsellingFromQr`, which independently enforces the same rule.
+  The mobile HTTP route now uses this protected mutation and returns HTTP 403
+  for unauthorised attempts.
+- QR counselling can intentionally recover from `scheduled`,
+  `client_started`, `picked_up`, or `on_site` to `on_counselling`. This keeps
+  the previously requested fallback behavior when fleet stages were missed.
+- Merely scanning remains read-only and never changes the SV status.
+
+**What changed in Mconnect:**
+- Removed the permission pre-block from QR reading.
+- The scan sheet now highlights the client name and separately shows project,
+  BDO, Site Incharge, and schedule.
+- Unauthorised scanners see a read-only access explanation and only a Close
+  button.
+- The Start counselling button is rendered only when the server returns
+  `canStartCounselling=true`; the server still rechecks on click.
+- Staff with standard Site Visit view permissions can open the shared scanner,
+  allowing assigned BDO/Site Incharge users to use it without needing a
+  separate Front Desk permission.
+
+**Validation:**
+- Android `:app:assembleDebug` -> **SUCCESS**.
+- MMS `npm run build` -> **SUCCESS** (167 pages/routes).
+- Focused QR access test -> **1 passed**:
+  unrelated staff can read details but cannot mutate; BDO, Site Incharge,
+  admin, and IAM-granted staff receive action access.
+
+**Required admin action:**
+- Deploy the pending MMS/Convex source. Until deployment, the configured live
+  Convex site can still return HTTP 404 because it is running the older QR
+  route/query.
+
+---
+
+### Session 27 - Rich SV QR Client Details and Shared UI Rule
+
+**Date:** 2026-07-28
+**Agent:** Codex
+
+**Goal:** Expand the read-only SV QR confirmation sheet with the client details
+needed by site staff while preserving the protected counselling action.
+
+**What changed in MMS / shared Convex:**
+- The enriched SV lead/client payload now exposes the display mobile number and
+  profession.
+- Profession resolution prefers the lead's manual profile, then the canonical
+  client profile, then the latest linked call analysis.
+- Lead temperature resolves only to a real `hot`, `warm`, or `cold` value from
+  the canonical lead temperature, AI lead status, or linked call analysis.
+- The existing SV attendee list, expected attendee count, and food preferences
+  remain the source of truth for visit-party details.
+- Extended the focused QR contract test to cover mobile number, profession,
+  temperature, attendees, and food preferences.
+
+**What changed in Mconnect:**
+- The QR counselling sheet now shows mobile number, occupation, additional
+  visitors, food preferences, BDO, Site Incharge, project, and schedule.
+- A Hot/Warm/Cold lead badge appears at the top right only when the backend
+  provides a canonical temperature; the UI does not invent a fallback status.
+- Additional visitor rows show available name, relation, and age, with a
+  count-only fallback when only expected headcount was captured.
+- The sheet is scroll-safe and continues to use the existing Material button,
+  bottom-sheet, semantic color, font, and drawable system.
+- Added reusable `SiteVisitQrDetailLabel` and `SiteVisitQrDetailValue` styles.
+- Added the repository-level UI rule near the top of this log: future agents
+  must reuse existing Mconnect components/styles for buttons, forms,
+  dropdowns, dialogs, chips, selectors, and common states.
+
+**Validation:**
+- Android clean `:app:assembleDebug` -> **SUCCESS**.
+- MMS `npm run build` -> **SUCCESS** (167 routes).
+- Focused SV QR contract test -> **1 passed**.
+
+**Required admin action:**
+- Deploy the updated MMS/Convex source before expecting the new profession and
+  temperature fields in the live mobile QR response.
+
+---
+
+### Session 28 - External Travel Desk Live Proof and Return Pickup Details
+
+**Date:** 2026-07-28
+**Agent:** Codex
+
+**Goal:** Keep start/end dashboard proof in the external live-trip progress UI
+and give Picked from Site its own action with optional standing details.
+
+**What changed in Travel Desk web:**
+- The agency trip detail page keeps start km + start dashboard upload inside
+  the Reached client/start step of the `Mark progress` card.
+- End km + end dashboard upload remain inside the Dropped step; the final
+  button is now labelled `Mark Dropped`.
+- Split the previous combined Picked from Site / Dropped action into two real
+  lifecycle steps. A trip can no longer be ended directly from On Site through
+  either external web UI.
+- Picked from Site now accepts optional standing time in whole minutes and a
+  binary `Standing with AC` checkbox; unchecked means without AC.
+- Applied the same return-pickup form and stage gating to the external driver
+  trip modal, not only the agency-admin trip detail page.
+- Removed stale driver-modal validation that required a dashboard image. Both
+  external roles may continue without an image or km reading; OCR is attempted
+  only when an image is supplied, and missing proof stays Pending verification.
+- Completed driver summaries show captured standing minutes and AC mode.
+
+**What changed in MMS / shared Convex:**
+- Added `travelDeskStandingTimeMinutes` and
+  `travelDeskStandingWithAc` to `siteVisits`.
+- Extended the protected external `markPickedFromSite` mutation and HTTP route
+  to validate and store those fields.
+- Standing time is optional, non-negative, and must be a whole number.
+- Start/end proof remains deferable. Missing dashboard images or km readings
+  keep a completed trip in Pending verification until evidence is supplied.
+- Updated lifecycle coverage to verify standing/AC persistence and the current
+  complete-now, submit-evidence-later behavior.
+
+**Validation:**
+- Travel Desk `npm run build` -> **SUCCESS** (10 pages/routes).
+- MMS `npm run build` -> **SUCCESS** (167 routes).
+- Focused lifecycle/QR/proof tests -> **11 passed** across 3 test files.
+
+**Required admin action:**
+- Deploy MMS/Convex before testing standing time and AC persistence against the
+  live Travel Desk portal.
+
+---
+
+### Session 29 - SV QR Redirect and Lead Temperature Badge
+
+**Date:** 2026-07-28
+**Agent:** Codex
+
+**Goal:** Open the normal SV overview/outcome screen after counselling starts
+from the shared QR scanner and replace the unused Scan label with lead status.
+
+**What changed in Mconnect:**
+- Successful `markOnCounselling` now closes the scanner and opens the existing
+  `SiteVisitOverviewFragment`, where the authorised staff can record the SV
+  outcome.
+- The scanned lead temperature is carried into the overview immediately, then
+  refreshed from the enriched SV detail response.
+- Removed the top-right location icon and `Scan` text from the SV overview.
+- The same position now shows `HOT LEAD`, `WARM LEAD`, or `COLD LEAD` using the
+  existing semantic status drawables. It stays hidden when no real temperature
+  exists.
+
+**Validation:**
+- Android `:app:assembleDebug` -> **SUCCESS**.
+
+---
+
+### Session 30 - CP Completion Proof Enforcement
+
+**Date:** 2026-07-28
+**Agent:** Codex
+
+**Goal:** Prevent CP visits from reaching Completed without both arrival OTP
+verification and the client selfie/proof upload.
+
+**Root cause:**
+- `clientPlaceVisits.setOutcome` converted every non-postponed outcome directly
+  to `completed` without reading the linked `fieldVisits` proof.
+- `fieldVisits.completeVisit` also allowed CP-linked trips to close without
+  checking `arrivalVerifiedAt` or `arrivalPhotoStorageId`.
+- The CP detail page called any one of photo, OTP, or GPS `Captured`, which hid
+  partial and invalid completion states.
+
+**What changed in MMS / shared Convex:**
+- Added one shared CP proof rule requiring both `arrivalVerifiedAt` and a
+  non-empty `arrivalPhotoStorageId`.
+- Enforced it in CP outcome completion, booking conversion, SV conversion,
+  financial rejection, and CP-linked field-trip completion.
+- Kept postponement non-terminal, so postponing does not require completion
+  proof.
+- Added `repairUnverifiedCompletionsBatch` for existing unconverted bad rows.
+  It restores them to `in_progress`, clears the false terminal outcome/time,
+  corrects rollups, and reports converted booking/SV rows for manual review.
+- The web detail and list now show `Proof missing` for legacy completed rows
+  missing either requirement. Partial proof is labelled `Incomplete proof`;
+  only OTP + selfie together is labelled `Captured`.
+- Added focused proof-contract coverage.
+
+**Validation:**
+- Focused CP completion proof test -> **1 passed**.
+- MMS `npm run build` -> **SUCCESS** (167 routes).
+
+**Required admin action:**
+- Deploy MMS/Convex.
+- Run `marketing/clientPlaceVisits:repairUnverifiedCompletionsBatch` repeatedly
+  with `confirm: "REPAIR_UNVERIFIED_CP_COMPLETIONS"` and the returned cursor
+  until `isDone` is true. Review rows counted under `manualReview` rather than
+  automatically undoing linked bookings or site visits.
+
+---
+
+### Session 31 - Assignment Push Notifications
+
+**Date:** 2026-07-28
+**Agent:** Codex
+
+**Goal:** Send Android push notifications when staff or drivers are assigned a
+CP visit, SV, land inspection, or Fleet trip.
+
+**Existing infrastructure confirmed:**
+- Mconnect already requests `POST_NOTIFICATIONS`, registers/refreshed FCM
+  tokens after login, declares `MconnectFirebaseMessagingService`, and handles
+  notification taps.
+- MMS/Convex already owns the shared FCM/APNS delivery actions. Assignment
+  mutations must schedule those actions; do not add a second mobile push stack.
+
+**What changed in MMS / shared Convex:**
+- CP assignments now include a canonical entity ID, reference type, CP detail
+  action URL, and Home target in the push payload.
+- SV create and reassignment notifications now include the SV detail action URL
+  and Home target.
+- Land inspection assignment notifications now use the dedicated
+  `land-inspection-assigned` type and send push as well as the inbox
+  notification. This covers both direct assignment and VP review assignment.
+- The post-MD inspection workflow notification now also reaches the assigned
+  inspectors by push instead of inbox only.
+- Internal Fleet staff-driver assignment pushes now include Fleet routing.
+- External Travel Desk driver assignment pushes now include string-safe trip
+  routing metadata.
+- Fleet allocator alerts now include canonical entity/reference fields and the
+  Home target.
+- Exported the shared push-data builder and added a contract test covering CP,
+  SV, inspection, and Fleet assignment payloads.
+
+**What changed in Mconnect:**
+- `land-inspection-assigned` and `fleet-trip-assigned` now use the operational
+  Visits notification channel instead of the generic fallback channel.
+- Assignment pushes target the Home operational screen when opened. Existing
+  notification permission and token-registration flows remain unchanged.
+
+**Validation:**
+- Assignment payload contract tests -> **5 passed**.
+- MMS `npm run build` -> **SUCCESS** (167 routes).
+- Android `:app:assembleDebug` -> **SUCCESS**.
+- `git diff --check` -> no whitespace errors.
+
+**Required admin action:**
+- Deploy MMS/Convex before live assignment pushes can use the new send paths
+  and routing payloads. Codex must not deploy Convex.
+
+---
+
+### Session 32 - External Driver No-Login Trip Link
+
+**Date:** 2026-07-28
+**Agent:** Codex
+
+**Goal:** Give an externally allocated Fleet driver one WhatsApp-delivered
+Travel Desk link that runs the full trip without asking the driver to sign in,
+while allowing the external agency admin to open or copy that same link.
+
+**Existing security model reused:**
+- Every allocated SV already receives a random 128-bit
+  `driverAccessToken`, indexed on `siteVisits`.
+- Unassigning rotates that token, so an already shared link immediately stops
+  resolving.
+- The new flow extends this bearer-token model; it does not create a second
+  token or expose an agency session.
+
+**What changed in MMS / shared Convex:**
+- Added a token-scoped Travel Desk trip query for allocated external trips.
+- Travel Desk lifecycle mutations now accept either the existing authenticated
+  agency/driver session or the exact access token belonging to that one trip.
+- The access token cannot operate another trip and is rejected for internal or
+  own-vehicle work.
+- Dashboard proof upload accepts a valid trip token, while still accepting
+  existing Travel Desk sessions.
+- Allocation accepts the real Travel Desk request origin and returns the exact
+  `/driver/trips/{token}` URL.
+- External driver push data now carries the same public trip URL.
+- Allocation schedules the `driver_trip_assigned` WhatsApp utility template to
+  the selected driver's WhatsApp number. If the selected driver differs from
+  the vehicle default, it correctly uses the selected driver's phone instead
+  of sending to the old default driver.
+- The WhatsApp body parameters are driver name, project, visit date, pickup
+  time, pickup location, and the Travel Desk trip URL.
+
+**What changed in Travel Desk web:**
+- Added public `/driver/trips/[token]`; it is exempt from the login redirect
+  and does not render the authenticated sidebar.
+- The page supports Reached client -> Start trip -> Reached site -> Picked
+  from site -> Dropped.
+- Start captures client OTP plus optional dashboard image/start kilometer.
+- Return pickup captures optional standing minutes and with/without AC.
+- Drop captures optional dashboard image/end kilometer, toll, and beta.
+  Missing evidence continues through the existing Pending verification flow.
+- Assigned-trip cards and the trip detail page show `Open driver link` and
+  `Copy link` for the external agency admin.
+- The allocation proxy derives the link origin from the actual Travel Desk
+  host, so localhost, preview, and production do not accidentally point to MMS.
+
+**Validation:**
+- Driver token + cab lifecycle suites -> **16 passed** across 2 test files.
+- Travel Desk `npm run build` -> **SUCCESS** (public driver route included).
+- MMS `npm run build` -> **SUCCESS** (167 routes).
+- Direct local request to the public driver route -> **HTTP 200**, no login
+  redirect.
+- `git diff --check` -> no whitespace errors.
+- A visual browser screenshot was not completed because the in-app browser
+  connection was unavailable; compilation and direct route checks passed.
+
+**Required admin action:**
+- Approve/publish the WhatsApp utility template named
+  `driver_trip_assigned` with six body parameters in the order documented
+  above.
+- Deploy MMS/Convex, then deploy Travel Desk. Convex must be deployed first so
+  the new public query and lifecycle authorization exist when the page opens.
+
+---
+
+### Session 33 - External Agency Fleet UI Recovery
+
+**Date:** 2026-07-28
+**Agent:** Codex
+
+**Goal:** Fix the external agency Trips screen collapsing into a short empty
+panel, exposing the blue hero underneath and making the fleet bottom navigation
+disappear.
+
+**Root cause:**
+- The sticky fleet hero calculates its spacer after window insets are applied.
+  `NestedScrollView` could retain that programmatic layout movement as an
+  initial scroll offset, clipping the `Todays Trips` title and filters.
+- The same non-user scroll was treated as a downward gesture and animated the
+  fleet navigation off-screen.
+- With no rows, the rounded trips panel used only `wrap_content`, so it ended
+  immediately after the empty message instead of covering the viewport.
+
+**What changed in Mconnect:**
+- The trips scroll surface now owns initial touch focus and is reset to the top
+  while the sticky hero completes its first layout.
+- Fleet navigation auto-hide now responds only to an actual touch gesture, not
+  header measurement or data refresh movement.
+- The rounded trips content panel receives a responsive minimum height based on
+  the current viewport and hero spacer, keeping empty tabs full-height across
+  device sizes.
+- Existing agency trip filters, allocation cards, APIs, and other roles were
+  left unchanged.
+
+**Validation:**
+- Android `:app:assembleDebug` -> **SUCCESS**.
+- Debug APK installed successfully on the connected agency test device.
+- Physical-device screenshots verified the complete hero, trip filters,
+  pending/completed cards, and five-item fleet navigation.
+- `git diff --check` -> no whitespace errors.
+
+---
+
+### Session 34 - External Agency Completion Form Cleanup
+
+**Date:** 2026-07-28
+**Agent:** Codex
+
+**Goal:** Simplify the expired-trip completion sheet for external agencies,
+make its numeric fields usable with the keyboard open, capture standing
+details, and remove the extra-kilometer claim controls from the agency app.
+
+**What changed in Mconnect:**
+- External agency sessions no longer see or choose `Fleet type`; the sheet is
+  forced to the external fleet form using the authenticated principal.
+- Added optional standing time in whole minutes and a `Standing with AC`
+  checkbox. Unchecked means without AC, and the checkbox stays disabled until
+  standing time is entered.
+- Package price remains the only required amount. Distance and standing details
+  remain optional.
+- Added IME next/done actions, `adjustResize`, and focus-aware sheet scrolling
+  so the active field remains visible above the numeric keyboard.
+- Removed the extra-kilometer claim section from Android agency trip cards.
+  Existing backend/web claim and Transport Manager approval data was not
+  deleted.
+- Fixed initialization ordering so hiding the fleet selector cannot leave all
+  form bodies hidden.
+
+**What changed in MMS / shared Convex:**
+- The Travel Desk expired-trip completion endpoint now accepts, validates, and
+  stores `standingTimeMinutes` and `standingWithAc`.
+- Standing time must be a non-negative whole number; without a checked AC box,
+  it is stored as without AC.
+
+**Validation:**
+- Android `:app:assembleDebug` -> **SUCCESS** after the final visibility fix.
+- MMS `npm run build` -> **SUCCESS** (167 routes).
+- Connected agency-device check confirmed the extra-kilometer section is gone.
+- The device disconnected before the final APK could be reinstalled for a
+  second form screenshot; the final form/resource state is compile-verified.
+- `git diff --check` -> no whitespace errors in both repositories.
+
+**Required admin action:**
+- Deploy MMS/Convex before standing details submitted by the new app form can
+  persist in production. Codex did not deploy Convex.
+
+---
+
+### Session 35 - Non-Expiring Fleet In-Progress Lifecycle
+
+**Date:** 2026-07-28
+**Agent:** Codex
+
+**Goal:** Remove fleet trip expiry, add an In Progress tab across fleet
+surfaces, separate Ongoing work from Pending proof/details, and ensure fleet
+recovery never opens or changes the Site Incharge SV outcome.
+
+**Lifecycle contract:**
+- `Assigned`: allocated, but no fleet lifecycle action has started.
+- `In Progress / Ongoing`: reached, started, on-site, or return pickup has
+  started and the fleet task is not complete.
+- `In Progress / Pending`: an older untouched allocation or a trip missing
+  required start/end dashboard proof or kilometre readings.
+- `Completed`: the trip has ended and, when proof is required, both dashboard
+  images and both kilometre readings exist.
+- Trip age no longer creates an Expired terminal state.
+
+**What changed in MMS / shared Convex:**
+- Added the `in_progress` assigned subtab and server-derived
+  `fleetProgressState` (`assigned`, `ongoing`, `pending`, `completed`).
+- Completed lists now use only `isTravelDeskTaskComplete`; old untouched trips
+  stay recoverable under In Progress / Pending.
+- The compatibility `markExpiredTripOutcomePending` mutation now saves
+  internal fleet details only. It requires start/end km and dashboard images,
+  records completion/proof timestamps, pricing, standing minutes and AC mode,
+  and explicitly does not set an SV outcome-opening state.
+- MMS mobile dispatch now returns Assigned, In Progress, and Completed rows.
+- Removed the external Travel Desk mutation's expiry gate and outcome-opening
+  `completedOffline` behavior.
+- No Convex deployment was performed.
+
+**What changed in MMS web:**
+- Added `In progress` between Assigned and Complete.
+- Added `Ongoing` and `Pending` tags.
+- Internal In Progress rows expose Complete; external rows do not.
+- The Complete form has no fleet type selector and captures package price,
+  completion date/time, start/end km, start/end dashboard images, standing
+  minutes, with/without AC, beta, and toll.
+- Saving the form updates only trip details and never opens the SV outcome.
+
+**What changed in Travel Desk web:**
+- Disabled the Expired classification.
+- Added the In Progress tab and Ongoing/Pending tags.
+- Only proof-complete trips enter Complete.
+
+**What changed in Mconnect:**
+- Added the fourth In Progress tab to the fleet trips screen.
+- Removed `VisitExpiry` from fleet-admin bucketing and uses the API progress
+  state/proof status instead.
+- Removed the duplicate date-expiry bucketing from the legacy internal fleet
+  cards in `HomeFragment`; only proof-complete rows enter its Completed view.
+- Added Ongoing and Pending details card tags.
+- Internal Pending details rows expose Complete; external rows do not.
+- The internal completion sheet hides fleet type and captures start/end km,
+  start/end dashboard images, standing minutes, and AC mode.
+- Images upload through the existing `StorageUploader`; the request sends the
+  resulting storage IDs.
+- Successful fleet detail completion refreshes the list and does not launch
+  `CompleteCpVisitBottomSheet`.
+
+**Validation:**
+- Mconnect `:app:compileDebugKotlin --offline` -> **SUCCESS**.
+- Mconnect `:app:assembleDebug --offline` -> **SUCCESS**.
+- Travel Desk `npx tsc --noEmit --pretty false` -> **SUCCESS**.
+- MMS fleet frontend targeted ESLint -> **SUCCESS**.
+- `convex/travelDeskProof.test.ts` -> **3 tests passed**.
+- Full MMS TypeScript reaches one pre-existing unrelated error in
+  `convex/lib/attendanceMobilePunchEdit.test.ts:124` (`totalMinutes` missing);
+  no fleet type errors remain.
+
+**Required admin action:**
+- Deploy MMS/Convex before testing the new API classification and proof save.
+- Then deploy Travel Desk and ship the updated Android APK.
+
+---
+
+### Session 36 - External Agency Proof Completion Ownership
+
+**Date:** 2026-07-28
+**Agent:** Codex
+
+**Correction to Session 35:** The internal-only completion rule applies to the
+MMS internal admin: they must not fill an external agency's trip details. The
+external agency admin must be able to complete its own trip from Travel Desk
+web or the external-agency Mconnect session.
+
+**What changed:**
+- External Travel Desk completion now requires start dashboard image, start
+  kilometer, end dashboard image, and end kilometer.
+- External web and Android forms also capture package price, completion
+  date/time where available, standing minutes, with/without AC, beta, and toll.
+- External proof uploads use the existing agency-authenticated Travel Desk
+  upload route. Internal uploads continue to use the existing MMS
+  `StorageUploader`.
+- The external Convex mutation validates agency ownership, validates both
+  odometer readings and both image IDs, stores the proof, and marks the Travel
+  Desk task ended without opening or changing the SV outcome.
+- An external trip remains In Progress / Pending for both external and internal
+  admins until the external agency submits complete evidence.
+- MMS internal admins still cannot open Complete for an external agency row.
+- External agency admins can open Complete for their own Pending row on both
+  app and web.
+
+**Validation:**
+- Mconnect `:app:assembleDebug --offline` -> **SUCCESS**.
+
+---
+
+### Session 39 - MMS Fleet Tab Order
+
+**Date:** 2026-07-28
+**Agent:** Codex
+
+**What changed:**
+- Reordered the MMS Fleet tabs to follow the trip lifecycle:
+  `Assigned` -> `In progress` -> `Complete`.
+- Filtering and the default `Assigned` selection remain unchanged.
+
+**Validation:**
+- Targeted ESLint for `features/fleet/tabs/assigned-tab.tsx` -> **SUCCESS**.
+- `git diff --check` for the touched web file -> no whitespace errors.
+
+---
+
+### Session 40 - Read-only SV QR Lifecycle Details
+
+**Date:** 2026-07-28
+**Agent:** Codex
+
+**What changed:**
+- The mobile SV QR model now consumes the existing `status`, `outcome`, and
+  outcome `notes` returned by the MMS scan endpoint.
+- An `on_counselling` scan shows an `ONGOING` status and visit details with no
+  action buttons.
+- A completed scan shows `COMPLETED`, the human-readable outcome, and outcome
+  notes when present, with no action buttons.
+- Scheduled visits preserve the existing access-controlled Start counselling
+  action. Scanning remains read-only; status changes only after confirmation.
+
+**Validation:**
+- Mconnect `:app:assembleDebug --offline` -> **SUCCESS**.
+- `git diff --check` for all touched Android files -> no whitespace errors.
+
+---
+
+### Session 41 - Fleet Start OTP Compatibility
+
+**Date:** 2026-07-28
+**Agent:** Codex
+
+**What changed:**
+- External fleet trip start now accepts the original OTP configured through
+  `TRAVEL_DESK_CLIENT_OTP`; it falls back to the existing `0000` code when no
+  value is configured.
+- Fleet also accepts the CP-style `1111` bypass when
+  `DEV_OTP_BYPASS=true`. The bypass is not enabled as an unconditional
+  production master code.
+- Updated the Travel Desk agency panel, unauthenticated driver trip page, and
+  Mconnect fleet capture sheet to identify `1111` as the bypass code.
+- No login, CP verification, or unrelated OTP behavior was changed.
+
+**Validation:**
+- `siteVisitCabLifecycleOverride.test.ts` -> **10 tests passed**, including
+  configured-original and `1111` bypass coverage.
+- Travel Desk `npx tsc --noEmit --pretty false` -> **SUCCESS**.
+- Mconnect `:app:assembleDebug --offline` -> **SUCCESS**.
+- Targeted Travel Desk ESLint still reports only the existing
+  `react-hooks/set-state-in-effect` findings in the two edited screens.
+- `git diff --check` -> no whitespace errors in the touched files.
+
+**Required admin action:**
+- Set `TRAVEL_DESK_CLIENT_OTP` when a custom original fleet OTP is required.
+- Keep `DEV_OTP_BYPASS=true` only in environments where the `1111` QA bypass
+  is intentionally allowed, then deploy MMS/Convex and the Travel Desk UI.
+- Travel Desk `npx tsc --noEmit --pretty false` -> **SUCCESS**.
+- Full MMS TypeScript still reports only the pre-existing unrelated
+  `attendanceMobilePunchEdit.test.ts:124` `totalMinutes` type error.
+
+**Required admin action:**
+- Deploy MMS/Convex first, then Travel Desk, then distribute the updated APK.
+
+---
+
+### Session 37 - Assigned Fleet Timeout Fix
+
+**Date:** 2026-07-28
+**Agent:** Codex
+
+**Symptom:** In the external agency app, Pending and fleet summary data loaded
+but the Assigned tab displayed "No internet connection."
+
+**Root cause:**
+- The external Assigned Convex query scanned up to 400 rows for each of seven
+  statuses (up to 2,800 historical SV rows), retained 400, then enriched every
+  row with several additional database reads.
+- The MMS mobile Assigned route separately ran the full shared query once for
+  Assigned, once for In Progress, and once for Completed.
+- Both paths could cross the Android client's 30-second read timeout. The app
+  mislabeled every socket timeout as no internet even though the host was
+  reachable and other endpoints were healthy.
+
+**What changed:**
+- External agency Assigned now reads the newest 80 rows per visible status,
+  includes `on_counselling`, sorts them, and enriches at most 160 recent rows.
+- The MMS mobile dispatch route now requests one `all` result from the shared
+  query instead of executing three full scans. Each returned row still carries
+  `fleetProgressState`, so Android can bucket it locally.
+- Android's Travel Desk read timeout is 60 seconds as a fallback for slower
+  mobile networks.
+- A socket timeout now says "Assigned trips took too long to load. Pull to
+  retry." `No internet` is reserved for DNS and connection failures.
+
+**Validation:**
+- Mconnect `:app:assembleDebug --offline` -> **SUCCESS**.
+- Travel Desk `npx tsc --noEmit --pretty false` -> **SUCCESS**.
+- `convex/travelDeskProof.test.ts` -> **3 tests passed**.
+- `git diff --check` -> no whitespace errors in the touched files.
+
+**Required admin action:**
+- Deploy MMS/Convex for the query optimization to affect live Assigned data.
+- Then install the new Android APK for the corrected timeout handling.
+
+---
+
+### Session 38 - Duplicate Expired Badge Cleanup
+
+**Date:** 2026-07-28
+**Agent:** Codex
+
+**Symptom:** Completed external-fleet cards displayed `Expired` twice: once in
+the top-right trip status badge and again in the compact progress row.
+
+**What changed:**
+- Kept the top-right `Expired` badge as the single trip status indicator.
+- The compact lower badge is now reserved for actual trip progress and is
+  hidden for expired rows.
+- Visibility is reset while binding each card so recycled rows render
+  correctly.
+
+**Validation:**
+- Mconnect `:app:assembleDebug --offline` -> **SUCCESS**.
+
+---
+
+### Session 42 - External Agency Staff Website Access
+
+**Date:** 2026-07-28
+**Agent:** Codex
+
+**What changed:**
+- A mobile number explicitly added by an external agency admin as agency staff
+  now logs in to Travel Desk as `agency_staff`, even when the same number also
+  exists in the agency's driver list.
+- Staff lookup supports both normalized numbers and legacy formatted numbers,
+  so existing staff records continue to authenticate.
+- Logged-in agency staff can use the existing Travel Desk website screens to
+  add, edit, and view their agency's drivers and vehicles, view and manage
+  trips, and assign or unassign agency vehicles and drivers.
+- Vehicle creation and updates are restricted to the authenticated staff
+  member's own external agency. Cross-agency vehicle access is rejected.
+- Agency staff and settings administration remain restricted to the external
+  agency admin.
+- The login error now tells unregistered users to ask the agency admin to add
+  their mobile number as staff or a driver.
+- The Travel Desk login page now explicitly identifies external agency staff
+  as supported users of their agency-registered mobile number.
+
+**Validation:**
+- New end-to-end agency staff access test -> **PASSED**.
+- Travel Desk focused suite -> **4 tests passed**.
+- Travel Desk `npx tsc --noEmit --pretty false` -> **SUCCESS**.
+- MMS `git diff --check` -> no whitespace errors.
+
+**Required admin action:**
+- Deploy MMS/Convex for the updated phone authentication precedence and agency
+  ownership enforcement to take effect on the Travel Desk website.
+
+---
+
+### Session 43 - Fleet Source Cascade And External Driver WhatsApp
+
+**Date:** 2026-07-28
+**Agent:** Codex
+
+**What changed:**
+- The MMS Fleet assignment dialog now starts with `External` and `Internal`
+  choices instead of `Travel agency` and `MFPL`.
+- External keeps the existing travel-agency allotment flow. The agency assigns
+  its driver and vehicle later in Travel Desk.
+- Internal now requires a company, then shows only that company's active
+  branches, then shows only active vehicles owned by the selected branch.
+- Changing company or branch clears stale branch and vehicle selections.
+- When an external agency allocates a driver and vehicle in Travel Desk, the
+  driver receives the approved `sv_driver_trip_allotted` WhatsApp template.
+- The WhatsApp body contains driver, agency, vehicle, client, project, visit
+  schedule, pickup, and site contact details. The URL button receives only the
+  secure unauthenticated trip token as its dynamic suffix.
+- The WhatsApp call uses `https://api-whatsapp.theairix.com/api/v1/messages`,
+  the configured Airix account, bearer API key, and an assignment-revision
+  idempotency key.
+- Internal MMS vehicle assignments do not invoke this driver-link WhatsApp
+  template.
+
+**Validation:**
+- Fleet assignment dialog component suite -> **7 tests passed**.
+- WhatsApp, external agency access, and trip-proof suites -> **7 tests passed**.
+- Targeted ESLint for the dialog and WhatsApp helpers -> **SUCCESS**.
+- Full MMS TypeScript reaches only the pre-existing unrelated
+  `attendanceMobilePunchEdit.test.ts:124` `totalMinutes` type error.
+- `git diff --check` -> no whitespace errors.
+
+**Required admin action:**
+- Ensure the Meta template `sv_driver_trip_allotted` is approved with 11 body
+  variables and URL button index `0`.
+- Set `WHATSAPP_API_KEY` (or `AIRIX_WHATSAPP_TOKEN`) and
+  `TRAVEL_DESK_PUBLIC_URL`, then deploy MMS/Convex.

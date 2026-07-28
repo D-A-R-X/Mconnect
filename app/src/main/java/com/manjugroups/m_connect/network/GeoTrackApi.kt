@@ -358,6 +358,24 @@ interface GeoTrackApi {
         @Body body: SetSiteVisitOutcomeRequest,
     ): GeoTrackResponse
 
+    @POST("api/marketing/siteVisits/scanQr")
+    suspend fun scanSiteVisitQr(
+        @Header("Authorization") token: String,
+        @Body body: SiteVisitQrScanRequest,
+    ): SiteVisitQrScanResponse
+
+    @POST("api/marketing/siteVisits/markOnCounselling")
+    suspend fun markSiteVisitOnCounselling(
+        @Header("Authorization") token: String,
+        @Body body: SiteVisitIdRequest,
+    ): GeoTrackResponse
+
+    @POST("api/marketing/siteVisits/postpone")
+    suspend fun postponeSiteVisit(
+        @Header("Authorization") token: String,
+        @Body body: PostponeSiteVisitRequest,
+    ): GeoTrackResponse
+
     @POST("api/marketing/siteVisits/convertToBooking")
     suspend fun convertSiteVisitToBooking(
         @Header("Authorization") token: String,
@@ -1233,12 +1251,79 @@ data class LoanCaseEnvelope(
 // allows. `id` is a siteVisits._id.
 data class SetSiteVisitOutcomeRequest(
     val id: String,
-    /** interested | not_interested | postponed | converted_to_booking | other */
+    /** interested | not_interested | follow_up | converted_to_booking | other */
     val outcome: String,
     val postponeReasons: List<String>? = null,
     val notInterestedReasons: List<String>? = null,
     val notInterestedDetails: List<SvNotInterestedDetail>? = null,
     val notes: String? = null,
+)
+
+data class SiteVisitQrScanRequest(val qrData: String)
+
+data class SiteVisitQrScanResponse(
+    val success: Boolean = false,
+    val visit: ScannedSiteVisit? = null,
+    val error: String? = null,
+)
+
+data class ScannedSiteVisit(
+    val _id: String,
+    val status: String? = null,
+    val outcome: String? = null,
+    val notes: String? = null,
+    val scheduledDate: String? = null,
+    val scheduledTime: String? = null,
+    val canStartCounselling: Boolean = false,
+    val expectedAttendeeCount: Int? = null,
+    val attendees: List<ScannedSiteVisitAttendee> = emptyList(),
+    val foodPreferences: String? = null,
+    val project: ScannedSiteVisitProject? = null,
+    val lead: ScannedSiteVisitLead? = null,
+    val client: ScannedSiteVisitClient? = null,
+    val bdoStaff: ScannedSiteVisitStaff? = null,
+    val telecallerStaff: ScannedSiteVisitStaff? = null,
+    val inchargeStaff: ScannedSiteVisitStaff? = null,
+)
+
+data class ScannedSiteVisitProject(
+    val name: String? = null,
+    val projectName: String? = null,
+)
+
+data class ScannedSiteVisitLead(
+    val clientName: String? = null,
+    val contactName: String? = null,
+    val mobileNumber: String? = null,
+    val mobileNumberNormalized: String? = null,
+    val profession: String? = null,
+    val temperature: String? = null,
+)
+
+data class ScannedSiteVisitClient(
+    val clientName: String? = null,
+    val mobileNumber: String? = null,
+    val mobileNumberNormalized: String? = null,
+    val profession: String? = null,
+)
+
+data class ScannedSiteVisitStaff(
+    val name: String? = null,
+)
+
+data class ScannedSiteVisitAttendee(
+    val name: String? = null,
+    val relation: String? = null,
+    val age: String? = null,
+    val isVeg: Boolean? = null,
+    val notes: String? = null,
+)
+
+data class PostponeSiteVisitRequest(
+    val id: String,
+    val scheduledDate: String,
+    val scheduledTime: String? = null,
+    val reason: String? = null,
 )
 
 data class SvNotInterestedDetail(
@@ -1402,6 +1487,8 @@ data class ProposedSiteVisit(
     val travelAgencyId: String? = null,
     val pickedUpAt: Long? = null,
     val arrivedSiteAt: Long? = null,
+    val consultingAt: Long? = null,
+    val consultingVerifiedByStaffId: String? = null,
     val pickedFromSiteAt: Long? = null,
     val droppedAt: Long? = null,
     val completedAt: Long? = null,
@@ -1522,6 +1609,7 @@ data class CpVisitLead(
     val city: String? = null,
     val preferredArea: String? = null,
     val followUpStatus: String? = null,
+    val temperature: String? = null,
     val manualProfile: CpVisitLeadManualProfile? = null,
 )
 
