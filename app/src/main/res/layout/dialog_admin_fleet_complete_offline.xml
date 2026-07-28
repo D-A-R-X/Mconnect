@@ -116,7 +116,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
                 android:fontFamily="@font/inter_medium"
-                android:text="Package price *"
+                android:text="Package price"
                 android:textColor="#344054"
                 android:textSize="12sp" />
 
@@ -178,13 +178,32 @@
                 android:textColor="?attr/colorForegroundPrimary"
                 android:textSize="14sp" />
 
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="Total km travelled"
+                android:textColor="#344054"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/etTotalKmInternal"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input"
+                android:focusable="false"
+                android:hint="Calculated automatically"
+                android:paddingHorizontal="12dp" />
+
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/btnStartDashboardImage"
                 android:layout_width="match_parent"
                 android:layout_height="46dp"
                 android:layout_marginTop="12dp"
                 android:background="@drawable/bg_input"
-                android:text="Select start dashboard image"
+                android:text="Select start dashboard image (optional)"
                 android:textAllCaps="false" />
 
             <androidx.appcompat.widget.AppCompatButton
@@ -193,7 +212,7 @@
                 android:layout_height="46dp"
                 android:layout_marginTop="8dp"
                 android:background="@drawable/bg_input"
-                android:text="Select end dashboard image"
+                android:text="Select end dashboard image (optional)"
                 android:textAllCaps="false" />
 
             <EditText
@@ -228,30 +247,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
                 android:fontFamily="@font/inter_medium"
-                android:text="Agency name"
-                android:textColor="#344054"
-                android:textSize="12sp" />
-
-            <EditText
-                android:id="@+id/etAgencyName"
-                android:layout_width="match_parent"
-                android:layout_height="46dp"
-                android:layout_marginTop="6dp"
-                android:background="@drawable/bg_input"
-                android:fontFamily="@font/inter_regular"
-                android:hint="Agency name"
-                android:imeOptions="actionNext"
-                android:inputType="textPersonName"
-                android:paddingHorizontal="12dp"
-                android:textColor="?attr/colorForegroundPrimary"
-                android:textSize="14sp" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:fontFamily="@font/inter_medium"
-                android:text="Package price *"
+                android:text="Package price"
                 android:textColor="#344054"
                 android:textSize="12sp" />
 
@@ -274,10 +270,10 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
                 android:fontFamily="@font/inter_medium"
-                android:text="Distance travelled"
+                android:text="Total km travelled"
                 android:textColor="#344054"
                 android:textSize="12sp"
-                android:visibility="gone" />
+                android:visibility="visible" />
 
             <EditText
                 android:id="@+id/etDistanceKmExternal"
@@ -286,13 +282,14 @@
                 android:layout_marginTop="6dp"
                 android:background="@drawable/bg_input"
                 android:fontFamily="@font/inter_regular"
-                android:hint="Km (optional)"
+                android:focusable="false"
+                android:hint="Calculated automatically"
                 android:imeOptions="actionNext"
                 android:inputType="numberDecimal"
                 android:paddingHorizontal="12dp"
                 android:textColor="?attr/colorForegroundPrimary"
                 android:textSize="14sp"
-                android:visibility="gone" />
+                android:visibility="visible" />
 
             <EditText
                 android:id="@+id/etStartKmExternal"
@@ -320,7 +317,7 @@
                 android:layout_height="46dp"
                 android:layout_marginTop="12dp"
                 android:background="@drawable/bg_input"
-                android:text="Select start dashboard image"
+                android:text="Select start dashboard image (optional)"
                 android:textAllCaps="false" />
 
             <androidx.appcompat.widget.AppCompatButton
@@ -329,7 +326,7 @@
                 android:layout_height="46dp"
                 android:layout_marginTop="8dp"
                 android:background="@drawable/bg_input"
-                android:text="Select end dashboard image"
+                android:text="Select end dashboard image (optional)"
                 android:textAllCaps="false" />
 
             <TextView
@@ -392,7 +389,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
                 android:fontFamily="@font/inter_medium"
-                android:text="Package price *"
+                android:text="Package price"
                 android:textColor="#344054"
                 android:textSize="12sp" />
 
@@ -431,6 +428,55 @@
                 android:textColor="?attr/colorForegroundPrimary"
                 android:textSize="14sp" />
         </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Additional charges (optional)"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textSize="13sp" />
+
+        <EditText
+            android:id="@+id/etHillCharge"
+            android:layout_width="match_parent"
+            android:layout_height="46dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_input"
+            android:hint="Hill charge"
+            android:inputType="numberDecimal"
+            android:paddingHorizontal="12dp" />
+
+        <EditText
+            android:id="@+id/etOutstationCharge"
+            android:layout_width="match_parent"
+            android:layout_height="46dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_input"
+            android:hint="Outstation charge"
+            android:inputType="numberDecimal"
+            android:paddingHorizontal="12dp" />
+
+        <EditText
+            android:id="@+id/etPermitCharge"
+            android:layout_width="match_parent"
+            android:layout_height="46dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_input"
+            android:hint="Permit charge"
+            android:inputType="numberDecimal"
+            android:paddingHorizontal="12dp" />
+
+        <EditText
+            android:id="@+id/etPermitTax"
+            android:layout_width="match_parent"
+            android:layout_height="46dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_input"
+            android:hint="Permit tax"
+            android:inputType="numberDecimal"
+            android:paddingHorizontal="12dp" />
 
         <LinearLayout
             android:layout_width="match_parent"

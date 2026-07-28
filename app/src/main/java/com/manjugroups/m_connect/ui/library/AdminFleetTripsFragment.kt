@@ -302,30 +302,35 @@ class AdminFleetTripsFragment : Fragment() {
         }
     }
 
+    private fun hasRecordedOutcome(trip: TravelDeskTrip): Boolean =
+        !trip.outcome.isNullOrBlank()
+
     private fun isTripComplete(trip: TravelDeskTrip): Boolean =
-        trip.travelDeskTaskStatus.equals("completed", ignoreCase = true) ||
-            (trip.travelDeskTaskStatus == null && tripEndedAt(trip) != null &&
-                trip.travelDeskProofPending != true)
+        hasRecordedOutcome(trip) &&
+            (
+                trip.travelDeskTaskStatus.equals("completed", ignoreCase = true) ||
+                    (
+                        trip.travelDeskTaskStatus == null &&
+                            tripEndedAt(trip) != null &&
+                            trip.travelDeskProofPending != true
+                        )
+                )
 
     private fun progressState(trip: TravelDeskTrip): String {
-        trip.fleetProgressState?.lowercase()?.let { return it }
-        if (trip.travelDeskProofPending == true || trip.completedOffline == true) {
+        if (hasRecordedOutcome(trip) && !isTripComplete(trip)) {
             return "pending"
         }
         if (
             trip.travelDeskArrivedAt != null ||
             trip.travelDeskStartedAt != null ||
             trip.travelDeskOnSiteAt != null ||
-            trip.travelDeskPickedFromSiteAt != null
+            trip.travelDeskPickedFromSiteAt != null ||
+            trip.travelDeskEndedAt != null
         ) {
             return "ongoing"
         }
-        val today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")).toString()
-        return if ((trip.scheduledDate ?: today) < today) "pending" else "assigned"
+        return "assigned"
     }
-
-    private fun isOutcomePending(trip: TravelDeskTrip): Boolean =
-        trip.completedOffline == true && trip.outcome.isNullOrBlank()
 
     /** Surfaces the trip end timestamp regardless of which field the backend uses. */
     private fun tripEndedAt(trip: TravelDeskTrip): Long? {
@@ -369,11 +374,17 @@ class AdminFleetTripsFragment : Fragment() {
     }
 
     private fun openManageSheet(trip: AdminTrip) {
+        val canCompleteThisFleet =
+            session.isExternalFleetAgencyOperator || !trip.external
         AdminFleetTripManageSheet.newInstance(
             trip = trip,
             onReassign = { openAllocateSheet(trip) },
             onRemove = { removeDriver(trip) },
-            onComplete = { openCompleteOfflineSheet(trip) },
+            onComplete = if (canCompleteThisFleet) {
+                { openCompleteOfflineSheet(trip) }
+            } else {
+                null
+            },
             onProgressAction = { action, km, toll, beta ->
                 submitProgressAction(trip, action, km, toll, beta)
             },
@@ -516,6 +527,14 @@ class AdminFleetTripsFragment : Fragment() {
             Toast.makeText(requireContext(), "You don't have permission to complete trips offline.", Toast.LENGTH_SHORT).show()
             return
         }
+        if (!trip.outcomeRecorded) {
+            Toast.makeText(
+                requireContext(),
+                "Complete the Site Visit outcome before adding final fleet details.",
+                Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
         if (useMmsFleet && trip.external) {
             Toast.makeText(
                 requireContext(),
@@ -572,6 +591,10 @@ class AdminFleetTripsFragment : Fragment() {
                 val request = CompleteOfflineTripRequest(
                     siteVisitId = trip.id,
                     packageAmount = result.packageAmount,
+                    hillCharge = result.hillCharge,
+                    outstationCharge = result.outstationCharge,
+                    permitCharge = result.permitCharge,
+                    permitTax = result.permitTax,
                     distanceKm = result.distanceKm,
                     driverName = result.driverName,
                     driverPhone = result.driverPhone,
@@ -888,7 +911,12 @@ class AdminFleetTripsFragment : Fragment() {
             else -> "Address pending"
         }
 
-        val started = trip.travelDeskStartedAt != null
+        val started =
+            trip.travelDeskArrivedAt != null ||
+                trip.travelDeskStartedAt != null ||
+                trip.travelDeskOnSiteAt != null ||
+                trip.travelDeskPickedFromSiteAt != null ||
+                trip.travelDeskEndedAt != null
         val progress = when {
             trip.travelDeskEndedAt != null -> "Dropped"
             trip.travelDeskPickedFromSiteAt != null -> "Picked from site"
@@ -897,9 +925,6 @@ class AdminFleetTripsFragment : Fragment() {
             trip.travelDeskArrivedAt != null -> "Reached client"
             else -> "Awaiting pickup"
         }
-        // Independent of which tab the trip lands in — an expired trip now
-        // lives in the Completed tab but must still read "Expired", not
-        // "Completed".
         val progressState = progressState(trip)
         val displayStatus = if (statusLabel == "In Progress") {
             if (progressState == "ongoing") "Ongoing" else "Pending details"
@@ -924,7 +949,7 @@ class AdminFleetTripsFragment : Fragment() {
             progressLabel = progress,
             started = started,
             expired = false,
-            outcomePending = isOutcomePending(trip),
+            outcomeRecorded = hasRecordedOutcome(trip),
             startKm = trip.travelDeskStartKm,
             endKm = trip.travelDeskEndKm,
             distanceKm = trip.travelDeskStartKm?.let { start ->
@@ -971,7 +996,7 @@ class AdminFleetTripsFragment : Fragment() {
         var progressLabel: String = "",
         var started: Boolean = false,
         var expired: Boolean = false,
-        var outcomePending: Boolean = false,
+        var outcomeRecorded: Boolean = false,
         var startKm: Double? = null,
         var endKm: Double? = null,
         var distanceKm: Double? = null,
@@ -1043,12 +1068,6 @@ class AdminFleetTripsFragment : Fragment() {
                 binding.tvTripStatus.text = if (item.expired) "Expired" else item.status
 
                 when {
-                    item.outcomePending -> {
-                        binding.tvTripStatus.text = "Outcome Pending"
-                        binding.tvTripStatus.setBackgroundResource(R.drawable.bg_badge_pending)
-                        binding.tvTripStatus.setTextColor(Color.parseColor("#B54708"))
-                        binding.btnAllocate.visibility = View.GONE
-                    }
                     item.expired -> {
                         binding.tvTripStatus.setBackgroundResource(R.drawable.bg_badge_pending)
                         binding.tvTripStatus.setTextColor(Color.parseColor("#B42318"))
@@ -1071,6 +1090,7 @@ class AdminFleetTripsFragment : Fragment() {
                         binding.tvTripStatus.setTextColor(Color.parseColor("#B54708"))
                         if (
                             canCompleteOffline &&
+                            item.outcomeRecorded &&
                             (isExternalAgencySession || !item.external)
                         ) {
                             binding.btnAllocate.visibility = View.VISIBLE

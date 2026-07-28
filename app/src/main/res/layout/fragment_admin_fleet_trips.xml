@@ -64,7 +64,7 @@
                     android:textColor="#111827"
                     android:textSize="18sp" />
 
-                <!-- Toggle selector tabs: Pending / Assigned / Completed -->
+                <!-- Toggle selector tabs: Pending / Assigned / In progress / Completed -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
