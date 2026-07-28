@@ -96,6 +96,9 @@ data class TravelDeskTrip(
     val travelDeskOnSiteAt: Long? = null,
     val travelDeskPickedFromSiteAt: Long? = null,
     val travelDeskEndedAt: Long? = null,
+    val travelDeskTaskStatus: String? = null,
+    val travelDeskProofPending: Boolean? = null,
+    val fleetProgressState: String? = null,
     val completedOffline: Boolean? = null,
     val outcome: String? = null,
     val travelDeskPricingMode: String? = null,
@@ -281,6 +284,12 @@ data class CompleteOfflineTripRequest(
     val fleetType: String? = null,
     val vehicleId: String? = null,
     val agencyName: String? = null,
+    val standingTimeMinutes: Int? = null,
+    val standingWithAc: Boolean? = null,
+    val startKm: Double? = null,
+    val endKm: Double? = null,
+    val startPhotoIds: List<String>? = null,
+    val endPhotoIds: List<String>? = null,
 )
 
 data class CreateVehicleRequest(

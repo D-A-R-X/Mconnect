@@ -56,8 +56,8 @@ import androidx.core.view.WindowInsetsCompat
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.manjugroups.m_connect.ui.common.commitOnce
 import com.manjugroups.m_connect.ui.common.showOnce
-import com.manjugroups.m_connect.ui.home.CompleteCpVisitBottomSheet
 import com.manjugroups.m_connect.ui.marketing.SiteVisitCounsellingConfirmBottomSheet
+import com.manjugroups.m_connect.ui.marketing.SiteVisitOverviewFragment
 
 
 class QrScannerFragment : Fragment() {
@@ -108,9 +108,15 @@ class QrScannerFragment : Fragment() {
         cameraExecutor = Executors.newSingleThreadExecutor()
 
         setFragmentResultListener(SiteVisitCounsellingConfirmBottomSheet.RESULT_KEY) { _, result ->
-            result.getString(SiteVisitCounsellingConfirmBottomSheet.KEY_SITE_VISIT_ID)
-                ?.takeIf { it.isNotBlank() }
-                ?.let(::markSiteVisitOnCounselling)
+            val siteVisitId =
+                result.getString(SiteVisitCounsellingConfirmBottomSheet.KEY_SITE_VISIT_ID)
+                    ?.takeIf { it.isNotBlank() }
+                    ?: return@setFragmentResultListener
+            markSiteVisitOnCounselling(
+                siteVisitId = siteVisitId,
+                leadTemperature =
+                    result.getString(SiteVisitCounsellingConfirmBottomSheet.KEY_LEAD_TEMPERATURE),
+            )
         }
 
         binding.btnBack.setOnClickListener {
@@ -371,6 +377,25 @@ class QrScannerFragment : Fragment() {
                     visit.scheduledDate?.takeIf { it.isNotBlank() },
                     visit.scheduledTime?.takeIf { it.isNotBlank() },
                 ).joinToString(" - ")
+                val additionalVisitors = visit.attendees
+                    .filterNot {
+                        it.name?.trim()?.equals(clientName?.trim(), ignoreCase = true) == true
+                    }
+                    .mapIndexed { index, attendee ->
+                        val identity = attendee.name?.trim().takeUnless { it.isNullOrBlank() }
+                            ?: "Visitor ${index + 1}"
+                        val details = listOfNotNull(
+                            attendee.relation?.trim()?.takeIf { it.isNotBlank() },
+                            attendee.age?.trim()?.takeIf { it.isNotBlank() }?.let { "Age $it" },
+                        )
+                        if (details.isEmpty()) identity else "$identity (${details.joinToString(", ")})"
+                    }
+                    .ifEmpty {
+                        val count = (visit.expectedAttendeeCount ?: 1).minus(1).coerceAtLeast(0)
+                        if (count > 0) listOf("$count additional visitor${if (count == 1) "" else "s"}")
+                        else emptyList()
+                    }
+                    .joinToString("\n")
                 SiteVisitCounsellingConfirmBottomSheet.newInstance(
                     siteVisitId = visit._id,
                     projectName = projectName,
@@ -378,6 +403,18 @@ class QrScannerFragment : Fragment() {
                     bdoName = bdoName,
                     inchargeName = visit.inchargeStaff?.name,
                     scheduledAt = scheduledAt,
+                    mobileNumber = visit.lead?.mobileNumber
+                        ?: visit.lead?.mobileNumberNormalized
+                        ?: visit.client?.mobileNumber
+                        ?: visit.client?.mobileNumberNormalized,
+                    additionalVisitors = additionalVisitors,
+                    foodPreferences = visit.foodPreferences,
+                    occupation = visit.lead?.profession
+                        ?: visit.client?.profession,
+                    leadTemperature = visit.lead?.temperature,
+                    visitStatus = visit.status,
+                    outcome = visit.outcome,
+                    outcomeNotes = visit.notes,
                     canStartCounselling = visit.canStartCounselling,
                 ).showOnce(parentFragmentManager, "SiteVisitCounsellingConfirmBottomSheet")
             } catch (error: Exception) {
@@ -392,7 +429,10 @@ class QrScannerFragment : Fragment() {
         }
     }
 
-    private fun markSiteVisitOnCounselling(siteVisitId: String) {
+    private fun markSiteVisitOnCounselling(
+        siteVisitId: String,
+        leadTemperature: String?,
+    ) {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val response = geoTrackApi.markSiteVisitOnCounselling(
@@ -408,11 +448,10 @@ class QrScannerFragment : Fragment() {
                     "Counselling started",
                     Toast.LENGTH_SHORT,
                 ).show()
-                CompleteCpVisitBottomSheet
-                    .forSiteVisit(siteVisitId)
+                parentFragmentManager.popBackStackImmediate()
+                SiteVisitOverviewFragment
+                    .forScannedVisit(siteVisitId, leadTemperature)
                     .showOnce(parentFragmentManager, "SiteVisitOutcomeAfterQr")
-                // Keep the shared scanner usable if the outcome sheet is dismissed.
-                resumeScanning()
             } catch (error: Exception) {
                 if (_binding == null) return@launch
                 Toast.makeText(

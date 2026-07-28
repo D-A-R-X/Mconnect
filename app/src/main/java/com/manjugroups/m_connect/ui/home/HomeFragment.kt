@@ -1923,6 +1923,8 @@ class HomeFragment : Fragment() {
                                 fleetType = result.fleetType,
                                 vehicleId = result.vehicleId,
                                 agencyName = result.agencyName,
+                                standingTimeMinutes = result.standingTimeMinutes,
+                                standingWithAc = result.standingWithAc,
                             ),
                         )
                     }.getOrNull()
@@ -2321,8 +2323,10 @@ class HomeFragment : Fragment() {
                 // travel-desk trip, so testing it here never matched and left
                 // the Completed tab permanently empty.
                 val isDone = { t: com.manjugroups.m_connect.network.TravelDeskTrip ->
-                    t.travelDeskEndedAt != null ||
-                        (t.status ?: "").equals("completed", ignoreCase = true)
+                    t.travelDeskTaskStatus.equals("completed", ignoreCase = true) ||
+                        (t.travelDeskTaskStatus == null &&
+                            t.travelDeskEndedAt != null &&
+                            t.travelDeskProofPending != true)
                 }
                 // A trip that was never started and whose slot has passed is
                 // expired — it can't run, so it shouldn't sit in Assigned (or
@@ -2338,10 +2342,10 @@ class HomeFragment : Fragment() {
                 }
                 // Expired pending trips are terminal too — drop them from Pending
                 // (no Allocate) and reclassify into Completed with the Expired badge.
-                fleetPending = pendingRows.filterNot(isExpired)
-                fleetAssigned = assignedRows.filterNot(isDone).filterNot(isExpired)
-                fleetExpired = assignedRows.filter(isExpired) + pendingRows.filter(isExpired)
-                fleetCompleted = assignedRows.filter(isDone) + fleetExpired
+                fleetPending = pendingRows
+                fleetAssigned = assignedRows.filterNot(isDone)
+                fleetExpired = emptyList()
+                fleetCompleted = assignedRows.filter(isDone)
                 fleetVehicles = vehicles.rows
                 fleetAgencies = agencies.filter {
                     (it.status ?: "active").equals("active", ignoreCase = true)
@@ -2665,6 +2669,8 @@ class HomeFragment : Fragment() {
                         fleetType = result.fleetType,
                         vehicleId = result.vehicleId,
                         agencyName = result.agencyName,
+                        standingTimeMinutes = result.standingTimeMinutes,
+                        standingWithAc = result.standingWithAc,
                     ),
                 )
             }.getOrNull()

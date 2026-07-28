@@ -59,7 +59,7 @@
             android:layout_height="44dp"
             android:layout_marginTop="6dp"
             android:background="@drawable/bg_input"
-            android:hint="Enter the client OTP"
+            android:hint="Client OTP or 1111"
             android:inputType="number"
             android:maxLength="6"
             android:paddingHorizontal="14dp"

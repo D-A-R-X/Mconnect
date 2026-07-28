@@ -297,7 +297,7 @@ interface TravelDeskApi {
                 .addInterceptor(authWatchdog)
                 .addInterceptor(logging)
                 .connectTimeout(30, TimeUnit.SECONDS)
-                .readTimeout(30, TimeUnit.SECONDS)
+                .readTimeout(60, TimeUnit.SECONDS)
                 .build()
             return Retrofit.Builder()
                 .baseUrl(BuildConfig.BASE_URL)

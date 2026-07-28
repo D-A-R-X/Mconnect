@@ -63,6 +63,7 @@ object PushTokenManager {
         // instead of the quiet general fallback.
         "cp-visit-assigned", "site-visit-assigned", "field-visit",
         "client-place-visit",
+        "land-inspection-assigned", "fleet-trip-assigned",
         "marketing-fleet-new-trip-assigner",
         "marketing-fleet-unassigned-reporting-officer" -> CHANNEL_VISITS
         // Approvals / requests (leave, permission, WFH, attendance)

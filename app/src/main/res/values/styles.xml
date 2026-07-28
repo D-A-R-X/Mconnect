@@ -292,5 +292,22 @@
         <item name="android:textColorHint">?attr/colorForegroundMuted</item>
         <item name="android:textSize">14sp</item>
     </style>
+
+    <style name="SiteVisitQrDetailLabel">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:fontFamily">@font/inter_medium</item>
+        <item name="android:textColor">?attr/colorForegroundSecondary</item>
+        <item name="android:textSize">11sp</item>
+    </style>
+
+    <style name="SiteVisitQrDetailValue">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">4dp</item>
+        <item name="android:fontFamily">@font/inter_semibold</item>
+        <item name="android:textColor">?attr/colorForegroundPrimary</item>
+        <item name="android:textSize">14sp</item>
+    </style>
 </resources>
 

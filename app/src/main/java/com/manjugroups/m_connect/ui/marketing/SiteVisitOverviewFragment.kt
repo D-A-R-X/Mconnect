@@ -2,6 +2,7 @@ package com.manjugroups.m_connect.ui.marketing
 
 import android.graphics.Color
 import android.os.Bundle
+import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -391,6 +392,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         val schedTime = args.getString(ARG_SCHEDULED_START_TIME)
         val rawStatus = args.getString(ARG_STATUS).orEmpty()
         isOutcomeLocked = isTerminalOutcomeStatus(rawStatus)
+        bindLeadTemperature(args.getString(ARG_LEAD_TEMPERATURE))
 
         // First-frame bind from list-row arguments. Real values land
         // shortly after via bindEnriched() once the detail fetch
@@ -416,8 +418,6 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         val dateLabel = schedDate?.let { formatDateOnly(it) } ?: schedDate ?: ""
         val timeLabel = schedTime ?: ""
         tvDateTime?.text = if (dateLabel.isNotEmpty() && timeLabel.isNotEmpty()) "$dateLabel, $timeLabel" else dateLabel.ifEmpty { timeLabel.ifEmpty { "—" } }
-
-        tvType?.text = "Scan"
 
         // Seed the vehicle mode from the list-row args so the FIRST frame
         // already shows the right stepper. Defaulting to Cab and flipping in
@@ -874,6 +874,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         val phone = visit.client?.mobileNumber?.takeIf { it.isNotBlank() }
             ?: visit.lead?.mobileNumber?.takeIf { it.isNotBlank() }
         tvPhone?.text = phone ?: "—"
+        bindLeadTemperature(visit.lead?.temperature)
 
         // --- Project / title ------------------------------------------
         // Resolution order:
@@ -1040,6 +1041,29 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         }
     }
 
+    private fun bindLeadTemperature(rawTemperature: String?) {
+        val badge = when (rawTemperature?.trim()?.lowercase(Locale.US)) {
+            "hot" -> Triple("HOT LEAD", R.drawable.bg_sv_status_red, R.attr.colorError)
+            "warm" -> Triple("WARM LEAD", R.drawable.bg_sv_status_orange, R.attr.colorWarning)
+            "cold" -> Triple("COLD LEAD", R.drawable.bg_sv_status_blue, R.attr.colorAccentPrimary)
+            else -> null
+        }
+        tvType?.apply {
+            visibility = if (badge == null) View.GONE else View.VISIBLE
+            badge?.let { (label, backgroundRes, colorAttr) ->
+                text = label
+                setBackgroundResource(backgroundRes)
+                setTextColor(resolveThemeColor(colorAttr))
+            }
+        }
+    }
+
+    private fun resolveThemeColor(attr: Int): Int {
+        val value = TypedValue()
+        requireContext().theme.resolveAttribute(attr, value, true)
+        return value.data
+    }
+
     private fun saveOutcome(outcomeValue: String, label: String) {
         val targetVisitId = visitId ?: return
         if (isOutcomeLocked) {
@@ -1185,6 +1209,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         private const val ARG_VISIT_CATEGORY = "arg_visit_category"
         private const val ARG_TRAVEL_MODE = "arg_travel_mode"
         private const val ARG_VEHICLE_PREFERENCE = "arg_vehicle_preference"
+        private const val ARG_LEAD_TEMPERATURE = "arg_lead_temperature"
 
         fun forVisit(visit: TodayVisit): SiteVisitOverviewFragment {
             return SiteVisitOverviewFragment().apply {
@@ -1201,6 +1226,19 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
                     putString(ARG_VISIT_CATEGORY, visit.visitCategory)
                     putString(ARG_TRAVEL_MODE, visit.travelMode)
                     putString(ARG_VEHICLE_PREFERENCE, visit.vehiclePreference)
+                }
+            }
+        }
+
+        fun forScannedVisit(
+            siteVisitId: String,
+            leadTemperature: String?,
+        ): SiteVisitOverviewFragment {
+            return SiteVisitOverviewFragment().apply {
+                arguments = Bundle().apply {
+                    putString(ARG_VISIT_ID, siteVisitId)
+                    putString(ARG_STATUS, "consulting")
+                    putString(ARG_LEAD_TEMPERATURE, leadTemperature)
                 }
             }
         }

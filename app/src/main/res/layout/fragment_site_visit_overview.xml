@@ -141,7 +141,7 @@
                             android:textSize="12sp" />
                     </LinearLayout>
 
-                    <!-- Type/Destination -->
+                    <!-- Lead temperature -->
                     <LinearLayout
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
@@ -149,22 +149,17 @@
                         android:gravity="center_vertical|end"
                         android:orientation="horizontal">
 
-                        <ImageView
-                            android:layout_width="16dp"
-                            android:layout_height="16dp"
-                            android:contentDescription="@null"
-                            android:src="@drawable/ic_map_pin"
-                            app:tint="#667085" />
-
                         <TextView
                             android:id="@+id/tvOverviewType"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginStart="8dp"
-                            android:fontFamily="@font/inter_medium"
-                            android:text="Site Visit"
-                            android:textColor="#475467"
-                            android:textSize="12sp" />
+                            android:fontFamily="@font/inter_semibold"
+                            android:paddingHorizontal="10dp"
+                            android:paddingVertical="5dp"
+                            android:textSize="11sp"
+                            android:visibility="gone"
+                            tools:text="HOT LEAD"
+                            tools:visibility="visible" />
                     </LinearLayout>
                 </LinearLayout>
 

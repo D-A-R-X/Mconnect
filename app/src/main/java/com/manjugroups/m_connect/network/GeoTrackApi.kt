@@ -1270,9 +1270,14 @@ data class SiteVisitQrScanResponse(
 data class ScannedSiteVisit(
     val _id: String,
     val status: String? = null,
+    val outcome: String? = null,
+    val notes: String? = null,
     val scheduledDate: String? = null,
     val scheduledTime: String? = null,
     val canStartCounselling: Boolean = false,
+    val expectedAttendeeCount: Int? = null,
+    val attendees: List<ScannedSiteVisitAttendee> = emptyList(),
+    val foodPreferences: String? = null,
     val project: ScannedSiteVisitProject? = null,
     val lead: ScannedSiteVisitLead? = null,
     val client: ScannedSiteVisitClient? = null,
@@ -1289,14 +1294,29 @@ data class ScannedSiteVisitProject(
 data class ScannedSiteVisitLead(
     val clientName: String? = null,
     val contactName: String? = null,
+    val mobileNumber: String? = null,
+    val mobileNumberNormalized: String? = null,
+    val profession: String? = null,
+    val temperature: String? = null,
 )
 
 data class ScannedSiteVisitClient(
     val clientName: String? = null,
+    val mobileNumber: String? = null,
+    val mobileNumberNormalized: String? = null,
+    val profession: String? = null,
 )
 
 data class ScannedSiteVisitStaff(
     val name: String? = null,
+)
+
+data class ScannedSiteVisitAttendee(
+    val name: String? = null,
+    val relation: String? = null,
+    val age: String? = null,
+    val isVeg: Boolean? = null,
+    val notes: String? = null,
 )
 
 data class PostponeSiteVisitRequest(
@@ -1585,6 +1605,7 @@ data class CpVisitLead(
     val city: String? = null,
     val preferredArea: String? = null,
     val followUpStatus: String? = null,
+    val temperature: String? = null,
     val manualProfile: CpVisitLeadManualProfile? = null,
 )
 

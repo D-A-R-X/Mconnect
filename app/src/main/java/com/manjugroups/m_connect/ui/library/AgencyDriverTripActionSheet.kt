@@ -55,8 +55,8 @@ import java.io.File
  *
  * START uploads the odometer photo and calls arrive → start (the backend
  * requires arrival before start, so we chain them). END uploads the closing
- * odometer photo and calls end. The client OTP the backend checks is a fixed
- * dummy ("0000") on this deployment, so the driver never has to type it.
+ * odometer photo and calls end. External starts accept the original fleet OTP
+ * or the same 1111 bypass used by the CP verification flow.
  */
 class AgencyDriverTripActionSheet : BottomSheetDialogFragment() {
 
@@ -379,8 +379,6 @@ class AgencyDriverTripActionSheet : BottomSheetDialogFragment() {
         private const val ARG_VISIT_ID = "arg_visit_id"
         private const val ARG_MODE = "arg_mode"
         private const val ARG_INTERNAL = "arg_internal"
-        private const val CLIENT_OTP = "0000"
-
         fun newInstance(
             visitId: String,
             mode: Mode,
