@@ -1,5 +1,6 @@
 package com.manjugroups.m_connect.ui.library
 
+import android.app.AlertDialog
 import android.app.Dialog
 import android.graphics.Rect
 import android.net.Uri
@@ -17,12 +18,15 @@ import android.widget.Toast
 import androidx.core.widget.NestedScrollView
 import androidx.core.widget.doAfterTextChanged
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.FileProvider
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.TravelDeskVehicle
+import com.manjugroups.m_connect.util.fleetTripDistanceKm
+import java.io.File
 
 data class CompleteOfflineTripResult(
     val fleetType: String,
@@ -31,7 +35,7 @@ data class CompleteOfflineTripResult(
     val driverName: String?,
     val driverPhone: String?,
     val agencyName: String?,
-    val packageAmount: Double,
+    val packageAmount: Double?,
     val distanceKm: Double?,
     val standingTimeMinutes: Int?,
     val standingWithAc: Boolean?,
@@ -39,6 +43,10 @@ data class CompleteOfflineTripResult(
     val endKm: Double? = null,
     val startImageUri: Uri? = null,
     val endImageUri: Uri? = null,
+    val hillCharge: Double? = null,
+    val outstationCharge: Double? = null,
+    val permitCharge: Double? = null,
+    val permitTax: Double? = null,
 )
 
 class AdminFleetCompleteOfflineSheet : BottomSheetDialogFragment() {
@@ -50,25 +58,35 @@ class AdminFleetCompleteOfflineSheet : BottomSheetDialogFragment() {
     private var selectedVehicleIndex: Int = -1
     private var startImageUri: Uri? = null
     private var endImageUri: Uri? = null
+    private var pendingStartCameraUri: Uri? = null
+    private var pendingEndCameraUri: Uri? = null
     private val startImagePicker = registerForActivityResult(
         ActivityResultContracts.GetContent(),
     ) { uri ->
         startImageUri = uri
-        listOf(R.id.btnStartDashboardImage, R.id.btnStartDashboardImageExternal)
-            .forEach { id ->
-                view?.findViewById<android.widget.Button>(id)?.text =
-                    if (uri == null) "Select start dashboard image" else "Start image selected"
-            }
+        updateImageButton(true, uri)
     }
     private val endImagePicker = registerForActivityResult(
         ActivityResultContracts.GetContent(),
     ) { uri ->
         endImageUri = uri
-        listOf(R.id.btnEndDashboardImage, R.id.btnEndDashboardImageExternal)
-            .forEach { id ->
-                view?.findViewById<android.widget.Button>(id)?.text =
-                    if (uri == null) "Select end dashboard image" else "End image selected"
-            }
+        updateImageButton(false, uri)
+    }
+    private val startCameraPicker = registerForActivityResult(
+        ActivityResultContracts.TakePicture(),
+    ) { captured ->
+        if (captured) {
+            startImageUri = pendingStartCameraUri
+            updateImageButton(true, startImageUri)
+        }
+    }
+    private val endCameraPicker = registerForActivityResult(
+        ActivityResultContracts.TakePicture(),
+    ) { captured ->
+        if (captured) {
+            endImageUri = pendingEndCameraUri
+            updateImageButton(false, endImageUri)
+        }
     }
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
@@ -139,13 +157,13 @@ class AdminFleetCompleteOfflineSheet : BottomSheetDialogFragment() {
         setupOwnVehicle(view, t)
         setupKeyboardAwareScrolling(view)
         view.findViewById<View>(R.id.btnStartDashboardImage)
-            .setOnClickListener { startImagePicker.launch("image/*") }
+            .setOnClickListener { showImageSourceChooser(true) }
         view.findViewById<View>(R.id.btnEndDashboardImage)
-            .setOnClickListener { endImagePicker.launch("image/*") }
+            .setOnClickListener { showImageSourceChooser(false) }
         view.findViewById<View>(R.id.btnStartDashboardImageExternal)
-            .setOnClickListener { startImagePicker.launch("image/*") }
+            .setOnClickListener { showImageSourceChooser(true) }
         view.findViewById<View>(R.id.btnEndDashboardImageExternal)
-            .setOnClickListener { endImagePicker.launch("image/*") }
+            .setOnClickListener { showImageSourceChooser(false) }
         val standingInternal = view.findViewById<EditText>(R.id.etStandingMinutesInternal)
         val standingAcInternal = view.findViewById<CheckBox>(R.id.checkStandingWithAcInternal)
         standingInternal.doAfterTextChanged {
@@ -164,6 +182,60 @@ class AdminFleetCompleteOfflineSheet : BottomSheetDialogFragment() {
         }
     }
 
+    private fun updateImageButton(isStart: Boolean, uri: Uri?) {
+        val ids = if (isStart) {
+            listOf(R.id.btnStartDashboardImage, R.id.btnStartDashboardImageExternal)
+        } else {
+            listOf(R.id.btnEndDashboardImage, R.id.btnEndDashboardImageExternal)
+        }
+        val emptyLabel = if (isStart) {
+            "Select start dashboard image (optional)"
+        } else {
+            "Select end dashboard image (optional)"
+        }
+        ids.forEach { id ->
+            view?.findViewById<android.widget.Button>(id)?.text =
+                if (uri == null) emptyLabel else if (isStart) "Start image selected" else "End image selected"
+        }
+    }
+
+    private fun showImageSourceChooser(isStart: Boolean) {
+        AlertDialog.Builder(requireContext())
+            .setTitle(if (isStart) "Add start dashboard image" else "Add end dashboard image")
+            .setItems(arrayOf("Take photo", "Choose from gallery")) { _, choice ->
+                if (choice == 0) {
+                    launchDashboardCamera(isStart)
+                } else if (isStart) {
+                    startImagePicker.launch("image/*")
+                } else {
+                    endImagePicker.launch("image/*")
+                }
+            }
+            .show()
+    }
+
+    private fun launchDashboardCamera(isStart: Boolean) {
+        val directory = File(requireContext().cacheDir, "fleet_dashboard_photos")
+            .apply { mkdirs() }
+        val file = File.createTempFile(
+            if (isStart) "fleet_start_" else "fleet_end_",
+            ".jpg",
+            directory,
+        )
+        val uri = FileProvider.getUriForFile(
+            requireContext(),
+            "${requireContext().packageName}.fileprovider",
+            file,
+        )
+        if (isStart) {
+            pendingStartCameraUri = uri
+            startCameraPicker.launch(uri)
+        } else {
+            pendingEndCameraUri = uri
+            endCameraPicker.launch(uri)
+        }
+    }
+
     private fun setupInternalFleet(view: View, t: AdminFleetTripsFragment.AdminTrip) {
         val tvVehicle = view.findViewById<android.widget.TextView>(R.id.tvVehicleSelector)
         val tvDriver = view.findViewById<android.widget.TextView>(R.id.tvSelectedDriver)
@@ -174,6 +246,11 @@ class AdminFleetCompleteOfflineSheet : BottomSheetDialogFragment() {
         etPackage.setText(t.packageAmount?.toDisplayText().orEmpty())
         etStartKm.setText(t.startKm?.toDisplayText().orEmpty())
         etEndKm.setText(t.endKm?.toDisplayText().orEmpty())
+        bindTotalKm(
+            etStartKm,
+            etEndKm,
+            view.findViewById(R.id.etTotalKmInternal),
+        )
 
         val vehicleOptions = vehicles
             .filter { (it.status ?: "active").equals("active", ignoreCase = true) }
@@ -232,15 +309,14 @@ class AdminFleetCompleteOfflineSheet : BottomSheetDialogFragment() {
     }
 
     private fun setupExternalFleet(view: View, t: AdminFleetTripsFragment.AdminTrip) {
-        view.findViewById<EditText>(R.id.etAgencyName).setText(t.agencyName.orEmpty())
         view.findViewById<EditText>(R.id.etPackageAmountExternal)
             .setText(t.packageAmount?.toDisplayText().orEmpty())
-        view.findViewById<EditText>(R.id.etDistanceKmExternal)
-            .setText(t.distanceKm?.toDisplayText().orEmpty())
-        view.findViewById<EditText>(R.id.etStartKmExternal)
-            .setText(t.startKm?.toDisplayText().orEmpty())
-        view.findViewById<EditText>(R.id.etEndKmExternal)
-            .setText(t.endKm?.toDisplayText().orEmpty())
+        val totalKm = view.findViewById<EditText>(R.id.etDistanceKmExternal)
+        val startKm = view.findViewById<EditText>(R.id.etStartKmExternal)
+        val endKm = view.findViewById<EditText>(R.id.etEndKmExternal)
+        startKm.setText(t.startKm?.toDisplayText().orEmpty())
+        endKm.setText(t.endKm?.toDisplayText().orEmpty())
+        bindTotalKm(startKm, endKm, totalKm)
 
         val standingMinutes = view.findViewById<EditText>(R.id.etStandingMinutesExternal)
         val standingWithAc = view.findViewById<CheckBox>(R.id.checkStandingWithAcExternal)
@@ -254,12 +330,15 @@ class AdminFleetCompleteOfflineSheet : BottomSheetDialogFragment() {
     private fun setupKeyboardAwareScrolling(view: View) {
         val scroll = view.findViewById<NestedScrollView>(R.id.completeFormScroll)
         val fields: List<EditText> = listOf(
-            R.id.etAgencyName,
             R.id.etPackageAmountExternal,
             R.id.etDistanceKmExternal,
             R.id.etStartKmExternal,
             R.id.etEndKmExternal,
             R.id.etStandingMinutesExternal,
+            R.id.etHillCharge,
+            R.id.etOutstationCharge,
+            R.id.etPermitCharge,
+            R.id.etPermitTax,
         ).map { id -> view.findViewById(id) }
 
         fields.forEach { field ->
@@ -285,9 +364,32 @@ class AdminFleetCompleteOfflineSheet : BottomSheetDialogFragment() {
             .setText(t.distanceKm?.toDisplayText().orEmpty())
     }
 
+    private fun bindTotalKm(start: EditText, end: EditText, total: EditText) {
+        fun update() {
+            val startValue = start.text.toString().toDoubleOrNull()
+            val endValue = end.text.toString().toDoubleOrNull()
+            total.setText(
+                if (startValue != null && endValue != null && endValue >= startValue) {
+                    (endValue - startValue).toDisplayText()
+                } else {
+                    ""
+                },
+            )
+        }
+        start.doAfterTextChanged { update() }
+        end.doAfterTextChanged { update() }
+        update()
+    }
+
     private fun parseResult(view: View, fleetTypeIndex: Int): CompleteOfflineTripResult? {
         return try {
             val t = trip!!
+            val hillCharge = optionalNumber(view, R.id.etHillCharge, "Hill charge")
+            val outstationCharge = optionalNumber(
+                view, R.id.etOutstationCharge, "Outstation charge",
+            )
+            val permitCharge = optionalNumber(view, R.id.etPermitCharge, "Permit charge")
+            val permitTax = optionalNumber(view, R.id.etPermitTax, "Permit tax")
             when (fleetTypeIndex) {
                 0 -> {
                     val activeVehicles = vehicles
@@ -301,6 +403,17 @@ class AdminFleetCompleteOfflineSheet : BottomSheetDialogFragment() {
                             ).show()
                             throw IllegalArgumentException("Vehicle")
                         }
+                    val startKm = requiredNumber(view, R.id.etStartKm, "Start kilometer")
+                    val endKm = requiredNumber(view, R.id.etEndKm, "End kilometer")
+                    val distanceKm = fleetTripDistanceKm(startKm, endKm)
+                    if (distanceKm == null) {
+                        Toast.makeText(
+                            requireContext(),
+                            "Check the odometer readings. Trip distance cannot exceed 5,000 km.",
+                            Toast.LENGTH_LONG,
+                        ).show()
+                        throw IllegalArgumentException("End kilometer")
+                    }
                     CompleteOfflineTripResult(
                         fleetType = "internal",
                         vehicleId = selectedVehicle?.id,
@@ -312,8 +425,8 @@ class AdminFleetCompleteOfflineSheet : BottomSheetDialogFragment() {
                         driverName = selectedVehicle?.defaultDriverName?.trim()?.takeIf { s -> s.isNotBlank() },
                         driverPhone = selectedVehicle?.defaultDriverPhone?.trim()?.takeIf { s -> s.isNotBlank() },
                         agencyName = null,
-                        packageAmount = requiredNumber(view, R.id.etPackageAmount, "Package price"),
-                        distanceKm = null,
+                        packageAmount = optionalNumber(view, R.id.etPackageAmount, "Package price"),
+                        distanceKm = distanceKm,
                         standingTimeMinutes = optionalWholeNumber(
                             view, R.id.etStandingMinutesInternal, "Standing time",
                         ),
@@ -324,30 +437,43 @@ class AdminFleetCompleteOfflineSheet : BottomSheetDialogFragment() {
                                 R.id.etStandingMinutesInternal,
                             ).text.isNotBlank()
                         },
-                        startKm = requiredNumber(view, R.id.etStartKm, "Start kilometer"),
-                        endKm = requiredNumber(view, R.id.etEndKm, "End kilometer"),
-                        startImageUri = startImageUri ?: run {
-                            Toast.makeText(requireContext(), "Start dashboard image is required", Toast.LENGTH_SHORT).show()
-                            throw IllegalArgumentException("Start image")
-                        },
-                        endImageUri = endImageUri ?: run {
-                            Toast.makeText(requireContext(), "End dashboard image is required", Toast.LENGTH_SHORT).show()
-                            throw IllegalArgumentException("End image")
-                        },
+                        startKm = startKm,
+                        endKm = endKm,
+                        startImageUri = startImageUri,
+                        endImageUri = endImageUri,
+                        hillCharge = hillCharge,
+                        outstationCharge = outstationCharge,
+                        permitCharge = permitCharge,
+                        permitTax = permitTax,
                     )
                 }
                 1 -> {
-                    val agencyName = view.findViewById<EditText>(R.id.etAgencyName)
-                        .text.toString().trim().takeIf { it.isNotBlank() }
+                    val startKm = requiredNumber(
+                        view, R.id.etStartKmExternal, "Start kilometer",
+                    )
+                    val endKm = requiredNumber(
+                        view, R.id.etEndKmExternal, "End kilometer",
+                    )
+                    val distanceKm = fleetTripDistanceKm(startKm, endKm)
+                    if (distanceKm == null) {
+                        Toast.makeText(
+                            requireContext(),
+                            "Check the odometer readings. Trip distance cannot exceed 5,000 km.",
+                            Toast.LENGTH_LONG,
+                        ).show()
+                        throw IllegalArgumentException("End kilometer")
+                    }
                     CompleteOfflineTripResult(
                         fleetType = "external",
                         vehicleId = null,
                         vehicleLabel = null,
                         driverName = null,
                         driverPhone = null,
-                        agencyName = agencyName,
-                        packageAmount = requiredNumber(view, R.id.etPackageAmountExternal, "Package price"),
-                        distanceKm = optionalNumber(view, R.id.etDistanceKmExternal, "Distance travelled"),
+                        agencyName = null,
+                        packageAmount = optionalNumber(
+                            view, R.id.etPackageAmountExternal, "Package price",
+                        ),
+                        distanceKm = distanceKm,
                         standingTimeMinutes = optionalWholeNumber(
                             view,
                             R.id.etStandingMinutesExternal,
@@ -360,20 +486,14 @@ class AdminFleetCompleteOfflineSheet : BottomSheetDialogFragment() {
                                 R.id.etStandingMinutesExternal,
                             ).text.isNotBlank()
                         },
-                        startKm = requiredNumber(
-                            view, R.id.etStartKmExternal, "Start kilometer",
-                        ),
-                        endKm = requiredNumber(
-                            view, R.id.etEndKmExternal, "End kilometer",
-                        ),
-                        startImageUri = startImageUri ?: run {
-                            Toast.makeText(requireContext(), "Start dashboard image is required", Toast.LENGTH_SHORT).show()
-                            throw IllegalArgumentException("Start image")
-                        },
-                        endImageUri = endImageUri ?: run {
-                            Toast.makeText(requireContext(), "End dashboard image is required", Toast.LENGTH_SHORT).show()
-                            throw IllegalArgumentException("End image")
-                        },
+                        startKm = startKm,
+                        endKm = endKm,
+                        startImageUri = startImageUri,
+                        endImageUri = endImageUri,
+                        hillCharge = hillCharge,
+                        outstationCharge = outstationCharge,
+                        permitCharge = permitCharge,
+                        permitTax = permitTax,
                     )
                 }
                 else -> {

@@ -13,6 +13,7 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.manjugroups.m_connect.R
+import com.manjugroups.m_connect.util.fleetTripDistanceKm
 
 /**
  * Tap-through for an allocated agency trip. Shows the trip details + who it
@@ -20,7 +21,7 @@ import com.manjugroups.m_connect.R
  * - Reassign the vehicle / remove the driver (before start)
  * - Advance the trip through each stage (reached → start → on-site →
  *   picked-from-site → end)
- * - Complete an expired trip offline
+ * - Complete final fleet details after the Site Visit outcome is recorded
  */
 class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
 
@@ -83,19 +84,21 @@ class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
         val actions = view.findViewById<View>(R.id.manageActions)
         val note = view.findViewById<TextView>(R.id.tvManageNote)
         val completed = t.status == "Completed"
+        val canCompleteDetails = t.outcomeRecorded && !completed && onComplete != null
 
-        if (t.started || completed || t.expired) {
-            actions.visibility = if (t.expired && completed) View.VISIBLE else View.GONE
+        if (t.started || completed || t.expired || t.outcomeRecorded) {
+            actions.visibility = if (canCompleteDetails) View.VISIBLE else View.GONE
             note.visibility = View.VISIBLE
             note.text = when {
-                t.expired && completed -> "Trip details are pending. Save them before the Site Incharge records the outcome."
+                canCompleteDetails -> "The Site Visit outcome is recorded. Complete the remaining fleet details."
                 completed -> "This trip is completed."
+                t.outcomeRecorded -> "Waiting for the responsible fleet to complete the remaining trip details."
                 t.expired -> "This trip's date has passed."
                 else -> "Trip has started — the driver is running it now."
             }
-            if (t.expired && completed) {
+            if (canCompleteDetails) {
                 view.findViewById<android.widget.Button>(R.id.btnManageReassign).apply {
-                    text = "Complete Outcome"
+                    text = "Complete trip details"
                     setOnClickListener {
                         onComplete?.invoke()
                         dismissAllowingStateLoss()
@@ -144,7 +147,7 @@ class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
         val btn = view.findViewById<androidx.appcompat.widget.AppCompatButton>(R.id.btnProgressAction)
         val error = view.findViewById<TextView>(R.id.tvProgressActionError)
 
-        if (t.expired || t.status == "Completed") {
+        if (t.expired || t.status == "Completed" || t.outcomeRecorded) {
             container.visibility = View.GONE
             return
         }
@@ -281,9 +284,14 @@ class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
         val total = view.findViewById<TextView>(R.id.tvTotalKm)
         val start = t.startKm
         val end = t.endKm
-        if (start != null && end != null && end >= start) {
+        val distanceKm =
+            if (start != null && end != null) fleetTripDistanceKm(start, end) else null
+        if (distanceKm != null) {
             total.visibility = View.VISIBLE
-            total.text = "Distance: ${fmtKm(end - start)} km"
+            total.text = "Total km travelled: ${fmtKm(distanceKm)} km"
+        } else if (start != null && end != null) {
+            total.visibility = View.VISIBLE
+            total.text = "Check odometer readings"
         } else {
             total.visibility = View.GONE
         }
@@ -323,7 +331,7 @@ class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
             trip: AdminFleetTripsFragment.AdminTrip,
             onReassign: () -> Unit,
             onRemove: () -> Unit,
-            onComplete: () -> Unit,
+            onComplete: (() -> Unit)?,
             onProgressAction: (action: String, km: Double?, toll: Double?, beta: Double?) -> Unit,
         ): AdminFleetTripManageSheet = AdminFleetTripManageSheet().apply {
             this.trip = trip

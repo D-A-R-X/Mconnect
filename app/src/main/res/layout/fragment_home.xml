@@ -208,7 +208,7 @@
 
                     <!-- Trip filter. Transport drivers get All / Upcoming /
                          Completed over their own trips; fleet administrators
-                         get Pending / Assigned / Completed over the whole
+                         get Pending / Assigned / In progress / Completed over the whole
                          allocation queue (relabelled + restyled at runtime as
                          the segmented control used on the fleet screen). -->
                     <LinearLayout
@@ -250,6 +250,23 @@
                             android:text="Upcoming"
                             android:textColor="#344054"
                             android:textSize="12sp" />
+
+                        <TextView
+                            android:id="@+id/tabInProgress"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:background="@drawable/bg_cpv_filter_pill_inactive"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:fontFamily="@font/inter_medium"
+                            android:gravity="center"
+                            android:paddingHorizontal="16dp"
+                            android:paddingVertical="8dp"
+                            android:text="In progress"
+                            android:textColor="#344054"
+                            android:textSize="12sp"
+                            android:visibility="gone" />
 
                         <TextView
                             android:id="@+id/tabCompleted"

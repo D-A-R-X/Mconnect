@@ -168,8 +168,8 @@ class AgencyDriverTripActionSheet : BottomSheetDialogFragment() {
         view.findViewById<TextView>(R.id.tvKmLabel).text =
             if (isStart) "Start Km *" else "End Km *"
         view.findViewById<TextView>(R.id.tvCaptureHint).text =
-            if (isStart) "Document the dashboard odometer at trip start."
-            else "Document the dashboard odometer at trip end."
+            if (isStart) "Optionally add a dashboard photo at trip start."
+            else "Optionally add a dashboard photo at trip end."
         (btnSubmit as? android.widget.Button)?.text =
             if (isStart) "Start Trip" else "End Trip"
 
@@ -265,16 +265,13 @@ class AgencyDriverTripActionSheet : BottomSheetDialogFragment() {
             Toast.makeText(requireContext(), "Enter the client OTP", Toast.LENGTH_SHORT).show()
             return
         }
-        val file = currentPhotoFile
-        if (file == null || !file.exists()) {
-            Toast.makeText(requireContext(), "Capture the odometer photo first", Toast.LENGTH_SHORT).show()
-            return
-        }
+        val file = currentPhotoFile?.takeIf { it.exists() }
 
         btnSubmit.isEnabled = false
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val storageId = uploadPhoto(file)
+                val storageId = file?.let { uploadPhoto(it) }
+                val photoIds = listOfNotNull(storageId)
                 val ok: Pair<Boolean, String?> = if (internal) {
                     if (mode == Mode.START) {
                         // Backend requires arrival before start; chain them. The
@@ -287,7 +284,7 @@ class AgencyDriverTripActionSheet : BottomSheetDialogFragment() {
                             session.bearerToken,
                             MmsFleetDriverStartRequest(
                                 siteVisitId = visitId,
-                                photoIds = listOf(storageId),
+                                photoIds = photoIds,
                                 startKm = km,
                             ),
                         )
@@ -297,7 +294,7 @@ class AgencyDriverTripActionSheet : BottomSheetDialogFragment() {
                             session.bearerToken,
                             MmsFleetDriverEndRequest(
                                 siteVisitId = visitId,
-                                photoIds = listOf(storageId),
+                                photoIds = photoIds,
                                 endKm = km,
                             ),
                         )
@@ -313,7 +310,7 @@ class AgencyDriverTripActionSheet : BottomSheetDialogFragment() {
                         TravelDeskStartTripRequest(
                             siteVisitId = visitId,
                             otp = otp,
-                            photoIds = listOf(storageId),
+                            photoIds = photoIds,
                             startKm = km,
                         ),
                     )
@@ -325,7 +322,7 @@ class AgencyDriverTripActionSheet : BottomSheetDialogFragment() {
                         session.bearerToken,
                         TravelDeskEndTripRequest(
                             siteVisitId = visitId,
-                            photoIds = listOf(storageId),
+                            photoIds = photoIds,
                             endKm = km,
                         ),
                     )

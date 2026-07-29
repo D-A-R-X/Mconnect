@@ -35,6 +35,7 @@ import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.MmsFleetDriverEndRequest
 import com.manjugroups.m_connect.network.MmsFleetDriverSiteVisitRequest
+import com.manjugroups.m_connect.util.fleetTripDistanceKm
 import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.asRequestBody
@@ -237,10 +238,10 @@ class DriverEndTripBottomSheet : BottomSheetDialogFragment() {
             return
         }
         val endKmVal = kmText.toDoubleOrNull() ?: 0.0
-        if (endKmVal < startKm) {
+        if (fleetTripDistanceKm(startKm, endKmVal) == null) {
             Toast.makeText(
                 requireContext(),
-                "Ending Km cannot be less than starting Km (${startKm.toInt()} Km)",
+                "Check the odometer readings. Trip distance cannot exceed 5,000 km.",
                 Toast.LENGTH_LONG
             ).show()
             return
