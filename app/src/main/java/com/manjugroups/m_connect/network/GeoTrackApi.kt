@@ -1510,6 +1510,8 @@ data class MmsFleetDriverTripsResponse(
 /** Counts explaining an empty driver trip list. See diagnoseForStaff. */
 data class MmsFleetDriverTripsDiagnostics(
     val searchedPhone: String? = null,
+    val notDriver: Boolean? = null,
+    val reason: String? = null,
     val indexedRows: Int? = null,
     val scannedRows: Int? = null,
     val phoneMatched: Int? = null,
@@ -1520,6 +1522,8 @@ data class MmsFleetDriverTripsDiagnostics(
 ) {
     /** One-line summary for the empty state. */
     fun summary(): String = when {
+        notDriver == true || reason == "staff_not_driver" ->
+            "This staff account is not configured as a fleet driver."
         (phoneMatched ?: 0) == 0 ->
             "No trip is assigned to $searchedPhone (checked ${scannedRows ?: 0} visits)."
         (droppedExternalAgency ?: 0) > 0 ->

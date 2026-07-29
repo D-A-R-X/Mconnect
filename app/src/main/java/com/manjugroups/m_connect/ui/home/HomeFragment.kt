@@ -1426,7 +1426,7 @@ class HomeFragment : Fragment() {
         val needsCpDetails = isCpVisit && status == "arrived" && visit.cpVisit?.outcome.isNullOrBlank()
         val isInProgress = status in setOf(
             "in-progress", "in_progress", "ongoing", "started", "active", "arrived",
-            "on_site", "on-site", "picked_from_site"
+            "on_site", "on-site", "on_counselling", "on-counselling", "picked_from_site"
         )
         // A visit that was never started and whose slot has passed is expired —
         // the source of the "still shows Start after the date is lost" bug.
@@ -1469,6 +1469,7 @@ class HomeFragment : Fragment() {
                 statusText.text = when (status) {
                     "arrived" -> "Reaching"
                     "on_site", "on-site" -> "On Site"
+                    "on_counselling", "on-counselling" -> "On Counselling"
                     "picked_from_site" -> "Picked from Site"
                     else -> "Enroute"
                 }
@@ -1477,6 +1478,7 @@ class HomeFragment : Fragment() {
                 action.text = when (status) {
                     "arrived" -> "Complete Trip"
                     "on_site", "on-site" -> "Picked from Site"
+                    "on_counselling", "on-counselling" -> "Record Outcome"
                     "picked_from_site" -> "End Trip"
                     else -> "Enroute"
                 }
@@ -1486,6 +1488,7 @@ class HomeFragment : Fragment() {
                 eta.text = when (status) {
                     "arrived" -> "At client place"
                     "on_site", "on-site" -> "At site"
+                    "on_counselling", "on-counselling" -> "Counselling started"
                     "picked_from_site" -> "Returning"
                     else -> "Tracking"
                 }

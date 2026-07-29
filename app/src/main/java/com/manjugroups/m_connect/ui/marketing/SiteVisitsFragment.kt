@@ -265,7 +265,7 @@ class SiteVisitsFragment : Fragment() {
     // "Picked Up" — client collected from the CP and the trip is in transit
     // through to the site and back. "arrived" is the collapsed-bucket fallback.
     private fun isPickedUp(s: String): Boolean = s in setOf(
-        "picked_up", "on_site", "consulting", "picked_from_site", "arrived",
+        "picked_up", "on_site", "consulting", "on_counselling", "picked_from_site", "arrived",
     )
 
     private fun isCompleted(s: String): Boolean = s in setOf(
@@ -549,7 +549,7 @@ class SiteVisitsFragment : Fragment() {
             isPickedUp(s) -> {
                 val label = when (s) {
                     "on_site" -> "On site"
-                    "consulting" -> "Consulting"
+                    "consulting", "on_counselling" -> "On counselling"
                     "picked_from_site" -> "Picked from site"
                     "arrived" -> "Reaching"
                     else -> "Picked up"
