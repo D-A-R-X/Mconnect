@@ -119,6 +119,22 @@ class QrScannerFragment : Fragment() {
             )
         }
 
+        // Ongoing visit + authorised viewer chose "Go to outcome page": counselling
+        // is already started, so navigate straight to the SV outcome page.
+        setFragmentResultListener(
+            SiteVisitCounsellingConfirmBottomSheet.RESULT_KEY_OPEN_OUTCOME,
+        ) { _, result ->
+            val siteVisitId =
+                result.getString(SiteVisitCounsellingConfirmBottomSheet.KEY_SITE_VISIT_ID)
+                    ?.takeIf { it.isNotBlank() }
+                    ?: return@setFragmentResultListener
+            openSiteVisitOutcome(
+                siteVisitId = siteVisitId,
+                leadTemperature =
+                    result.getString(SiteVisitCounsellingConfirmBottomSheet.KEY_LEAD_TEMPERATURE),
+            )
+        }
+
         binding.btnBack.setOnClickListener {
             parentFragmentManager.popBackStack()
         }
@@ -416,6 +432,12 @@ class QrScannerFragment : Fragment() {
                     outcome = visit.outcome,
                     outcomeNotes = visit.notes,
                     canStartCounselling = visit.canStartCounselling,
+                    // Fall back to a client-side authorisation check so superadmins
+                    // (and scanConsulting-granted staff) get the outcome button on
+                    // an ongoing visit even before the backend's canRecordOutcome
+                    // flag is deployed. hasPermission() is true for isAdmin.
+                    canRecordOutcome = visit.canRecordOutcome ||
+                        session.hasPermission("marketing.siteVisits.scanConsulting"),
                 ).showOnce(parentFragmentManager, "SiteVisitCounsellingConfirmBottomSheet")
             } catch (error: Exception) {
                 if (_binding == null) return@launch
@@ -429,38 +451,50 @@ class QrScannerFragment : Fragment() {
         }
     }
 
+    /** Open the SV outcome page for a visit already on counselling — no status
+     *  change, just navigation (the authorised viewer records the outcome there). */
+    private fun openSiteVisitOutcome(siteVisitId: String, leadTemperature: String?) {
+        val root = _binding?.root ?: return
+        // This can be invoked synchronously from a setFragmentResult dispatch (the
+        // countdown's onFinish), during which this fragment may be mid-transition and
+        // not yet associated with a fragment manager. Defer to the next frame and
+        // re-check isAdded so parentFragmentManager is safe to touch.
+        root.post {
+            if (!isAdded || _binding == null) return@post
+            val fm = parentFragmentManager
+            fm.popBackStackImmediate()
+            SiteVisitOverviewFragment
+                .forScannedVisit(siteVisitId, leadTemperature)
+                .showOnce(fm, "SiteVisitOutcomeAfterQr")
+        }
+    }
+
     private fun markSiteVisitOnCounselling(
         siteVisitId: String,
         leadTemperature: String?,
     ) {
         viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val response = geoTrackApi.markSiteVisitOnCounselling(
+            val outcome = runCatching {
+                geoTrackApi.markSiteVisitOnCounselling(
                     session.bearerToken,
                     SiteVisitIdRequest(siteVisitId),
                 )
-                if (!response.success) {
-                    throw IllegalStateException(response.error ?: "Unable to start counselling")
-                }
-                if (_binding == null) return@launch
-                Toast.makeText(
-                    requireContext(),
-                    "Counselling started",
-                    Toast.LENGTH_SHORT,
-                ).show()
-                parentFragmentManager.popBackStackImmediate()
-                SiteVisitOverviewFragment
-                    .forScannedVisit(siteVisitId, leadTemperature)
-                    .showOnce(parentFragmentManager, "SiteVisitOutcomeAfterQr")
-            } catch (error: Exception) {
-                if (_binding == null) return@launch
-                Toast.makeText(
-                    requireContext(),
-                    error.message ?: "Unable to start counselling",
-                    Toast.LENGTH_LONG,
-                ).show()
-                resumeScanning()
             }
+            if (_binding == null) return@launch
+            val response = outcome.getOrNull()
+            if (response?.success == true) {
+                Toast.makeText(requireContext(), "Counselling started", Toast.LENGTH_SHORT).show()
+            } else {
+                // Surface the reason, but still open the SV outcome page so the
+                // flow is never dead-ended (e.g. the markOnCounselling route not
+                // yet deployed on the live backend). The overview loads the real
+                // SV status and unlocks the outcome buttons when eligible.
+                val msg = response?.error
+                    ?: outcome.exceptionOrNull()?.message
+                    ?: "Couldn't start counselling — opening the outcome page."
+                Toast.makeText(requireContext(), msg, Toast.LENGTH_LONG).show()
+            }
+            openSiteVisitOutcome(siteVisitId, leadTemperature)
         }
     }
 

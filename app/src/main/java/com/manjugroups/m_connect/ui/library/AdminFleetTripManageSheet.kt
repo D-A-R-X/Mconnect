@@ -84,13 +84,16 @@ class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
         val actions = view.findViewById<View>(R.id.manageActions)
         val note = view.findViewById<TextView>(R.id.tvManageNote)
         val completed = t.status == "Completed"
-        val canCompleteDetails = t.outcomeRecorded && !completed && onComplete != null
+        val canCompleteDetails = t.outcomeRecorded && onComplete != null
 
         if (t.started || completed || t.expired || t.outcomeRecorded) {
             actions.visibility = if (canCompleteDetails) View.VISIBLE else View.GONE
             note.visibility = View.VISIBLE
             note.text = when {
-                canCompleteDetails -> "The Site Visit outcome is recorded. Complete the remaining fleet details."
+                completed && canCompleteDetails ->
+                    "This trip is completed. You can correct its fleet and billing details."
+                canCompleteDetails ->
+                    "The Site Visit outcome is recorded. Complete the remaining fleet details."
                 completed -> "This trip is completed."
                 t.outcomeRecorded -> "Waiting for the responsible fleet to complete the remaining trip details."
                 t.expired -> "This trip's date has passed."
@@ -98,7 +101,7 @@ class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
             }
             if (canCompleteDetails) {
                 view.findViewById<android.widget.Button>(R.id.btnManageReassign).apply {
-                    text = "Complete trip details"
+                    text = if (completed) "Edit trip details" else "Complete trip details"
                     setOnClickListener {
                         onComplete?.invoke()
                         dismissAllowingStateLoss()
@@ -295,6 +298,21 @@ class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
         } else {
             total.visibility = View.GONE
         }
+
+        val billing = view.findViewById<TextView>(R.id.tvBillingDetails)
+        val billingLines = listOfNotNull(
+            t.packageAmount?.let { "Package: ${fmtMoney(it)}" },
+            t.beta?.let { "Beta: ${fmtMoney(it)}" },
+            t.tollAmount?.let { "Toll: ${fmtMoney(it)}" },
+            t.hillCharge?.let { "Hill charge: ${fmtMoney(it)}" },
+            t.outstationCharge?.let { "Outstation charge: ${fmtMoney(it)}" },
+            t.permitCharge?.let { "Permit charge: ${fmtMoney(it)}" },
+            t.permitTax?.let { "Permit tax: ${fmtMoney(it)}" },
+            t.standingCharge?.let { "Standing charge: ${fmtMoney(it)}" },
+            t.totalAmount?.let { "Total: ${fmtMoney(it)}" },
+        )
+        billing.visibility = if (billingLines.isEmpty()) View.GONE else View.VISIBLE
+        billing.text = billingLines.joinToString("\n")
     }
 
     private fun bindPhoto(image: ImageView, empty: TextView, storageId: String?) {
@@ -315,6 +333,13 @@ class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
 
     private fun fmtKm(v: Double): String =
         if (v == v.toLong().toDouble()) v.toLong().toString() else String.format("%.1f", v)
+
+    private fun fmtMoney(value: Double): String =
+        "₹" + if (value == value.toLong().toDouble()) {
+            value.toLong().toString()
+        } else {
+            String.format("%.2f", value)
+        }
 
     /** Called by the host after a progress API call completes. */
     fun showProgressError(message: String) {

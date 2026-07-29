@@ -3897,20 +3897,12 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
+    @Suppress("UNUSED_PARAMETER")
     private fun filterBookingStaff(roleKey: String, items: List<StaffData>): List<StaffData> {
-        fun StaffData.haystack(): String = listOfNotNull(name, role, designation, department)
-            .joinToString(" ")
-            .lowercase(Locale.US)
-        val tokens = when (roleKey) {
-            "avp" -> listOf("avp", "assistant vice president")
-            "gm" -> listOf("gm", "general manager")
-            "seniorManager" -> listOf("senior manager", "sm")
-            "bdo" -> listOf("bdo", "business development")
-            "telecaller" -> listOf("telecaller", "tele caller", "telesales")
-            else -> emptyList()
-        }
-        val filtered = items.filter { staff -> tokens.any { staff.haystack().contains(it) } }
-        return filtered.ifEmpty { items }
+        // Show ALL active staff in the booking role pickers (BDO / AVP / GM /
+        // Senior Manager), not only designation-matching staff — same as the SV
+        // role pickers. The assigner picks any staff regardless of designation.
+        return items
     }
 
     private fun showBookingStaffPicker(
@@ -4011,13 +4003,13 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
         viewLifecycleOwner.lifecycleScope.launch {
             try {
+                // Show ALL active staff in the SV role pickers (Site Incharge /
+                // HOD / AVP / GM / Senior Manager), not just sales/telesales — the
+                // assigner should be able to pick any staff regardless of dept.
                 val resp = api.getStaff(session.bearerToken, status = "active")
-                val filtered = resp.staff.filter {
-                    val dept = it.department.orEmpty().lowercase(Locale.US)
-                    dept.contains("telesales") || dept.contains("sales")
-                }
+                val filtered = resp.staff
                 if (filtered.isEmpty()) {
-                    showError("No Sales / Telesales staff found")
+                    showError("No staff found")
                     return@launch
                 }
                 svStaffCache = filtered
