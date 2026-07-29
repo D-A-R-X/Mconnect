@@ -25,6 +25,7 @@ import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.TravelDeskVehicle
+import com.manjugroups.m_connect.util.fleetTripDistanceKm
 import java.io.File
 
 data class CompleteOfflineTripResult(
@@ -404,11 +405,12 @@ class AdminFleetCompleteOfflineSheet : BottomSheetDialogFragment() {
                         }
                     val startKm = requiredNumber(view, R.id.etStartKm, "Start kilometer")
                     val endKm = requiredNumber(view, R.id.etEndKm, "End kilometer")
-                    if (endKm < startKm) {
+                    val distanceKm = fleetTripDistanceKm(startKm, endKm)
+                    if (distanceKm == null) {
                         Toast.makeText(
                             requireContext(),
-                            "End kilometer cannot be less than start kilometer",
-                            Toast.LENGTH_SHORT,
+                            "Check the odometer readings. Trip distance cannot exceed 5,000 km.",
+                            Toast.LENGTH_LONG,
                         ).show()
                         throw IllegalArgumentException("End kilometer")
                     }
@@ -424,7 +426,7 @@ class AdminFleetCompleteOfflineSheet : BottomSheetDialogFragment() {
                         driverPhone = selectedVehicle?.defaultDriverPhone?.trim()?.takeIf { s -> s.isNotBlank() },
                         agencyName = null,
                         packageAmount = optionalNumber(view, R.id.etPackageAmount, "Package price"),
-                        distanceKm = endKm - startKm,
+                        distanceKm = distanceKm,
                         standingTimeMinutes = optionalWholeNumber(
                             view, R.id.etStandingMinutesInternal, "Standing time",
                         ),
@@ -452,11 +454,12 @@ class AdminFleetCompleteOfflineSheet : BottomSheetDialogFragment() {
                     val endKm = requiredNumber(
                         view, R.id.etEndKmExternal, "End kilometer",
                     )
-                    if (endKm < startKm) {
+                    val distanceKm = fleetTripDistanceKm(startKm, endKm)
+                    if (distanceKm == null) {
                         Toast.makeText(
                             requireContext(),
-                            "End kilometer cannot be less than start kilometer",
-                            Toast.LENGTH_SHORT,
+                            "Check the odometer readings. Trip distance cannot exceed 5,000 km.",
+                            Toast.LENGTH_LONG,
                         ).show()
                         throw IllegalArgumentException("End kilometer")
                     }
@@ -470,7 +473,7 @@ class AdminFleetCompleteOfflineSheet : BottomSheetDialogFragment() {
                         packageAmount = optionalNumber(
                             view, R.id.etPackageAmountExternal, "Package price",
                         ),
-                        distanceKm = endKm - startKm,
+                        distanceKm = distanceKm,
                         standingTimeMinutes = optionalWholeNumber(
                             view,
                             R.id.etStandingMinutesExternal,

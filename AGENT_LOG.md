@@ -2371,6 +2371,167 @@ the top-right trip status badge and again in the compact progress row.
 
 ---
 
+### Session 57 - External Driver WhatsApp Delivery Recovery
+
+**Date:** 2026-07-29
+**Agent:** Codex
+
+**Repositories:**
+- MMS web and Convex backend:
+  `C:\Users\surya\Projects\manjusitedevelopment` (`max`)
+- Travel Desk web:
+  `C:\Users\surya\Projects\travel-desk` (`aizen`)
+
+**Root cause:**
+- External trip allocation did not consistently use the selected roster
+  driver's saved WhatsApp number. It could fall back to the ordinary mobile
+  number even when a separate WhatsApp number existed.
+- WhatsApp dispatch ran asynchronously and swallowed provider/configuration
+  failures, so the allocation appeared successful with no delivery state or
+  recovery action.
+
+**What changed:**
+- External allocation now selects the recipient in this order: selected
+  driver's saved WhatsApp, matching vehicle default-driver WhatsApp, then
+  driver mobile.
+- Driver message delivery is stored on the SV as Pending, Sent, Failed, or
+  Not sent, including recipient, provider message ID, failure detail, attempt
+  time, and accepted time.
+- Provider sends retry up to three times with the same idempotency key.
+- Delivery updates are assignment-revision guarded so a late response from an
+  old assignment cannot overwrite the current driver's state.
+- Added an authenticated resend endpoint and a `Resend WhatsApp` action on the
+  Travel Desk trip detail page. Manual resend uses a fresh idempotency key and
+  keeps the existing secure driver-trip URL.
+- The operator UI shows the recipient and delivery/error state instead of
+  silently treating allocation as message delivery.
+
+**Validation:**
+- Public driver trip URL returned HTTP 200 before the change.
+- MMS/Convex production build with TypeScript -> **SUCCESS**.
+- Travel Desk production build with TypeScript -> **SUCCESS**.
+- WhatsApp template helper tests -> **3 passed**.
+- `git diff --check` -> no whitespace errors.
+
+**Required admin action:**
+- Deploy MMS/Convex and Travel Desk together.
+- Confirm `WHATSAPP_API_KEY` (or `AIRIX_WHATSAPP_TOKEN`) is configured in the
+  production Convex environment.
+- Open the assigned trip in Travel Desk and use `Resend WhatsApp` for any
+  assignment that was created before this deployment.
+
+---
+
+### Session 58 - Dropped Trip Billing Finalization
+
+**Date:** 2026-07-29
+**Agent:** Codex
+
+**Repositories:**
+- MMS web and Convex backend:
+  `C:\Users\surya\Projects\manjusitedevelopment` (`max`)
+- Travel Desk web:
+  `C:\Users\surya\Projects\travel-desk` (`aizen`)
+
+**What changed:**
+- Separated operational `Dropped` state from external-agency billing
+  completion.
+- A dropped external trip now stays in In progress with a `Pending details`
+  tag and a `Complete` action until agency billing is finalized.
+- The billing form requires start and end odometer readings, calculates total
+  kilometers as end minus start, and includes package/per-km base pricing,
+  toll, beta, standing, hill, outstation, permit, and permit-tax charges.
+- The form calculates and previews the final billing total before submission.
+- Existing start/end dashboard images are previewed and open full-size.
+  Replacement or missing image uploads remain optional.
+- The driver and agency end-trip screens now show the recorded start
+  kilometer and start dashboard image while end details are being entered.
+- Missing required kilometer readings are identified explicitly. Only a
+  dropped trip with valid readings and finalized agency billing moves to the
+  Completed tab.
+- Added one authenticated `finalize-billing` API shared by Travel Desk and the
+  Convex fleet state.
+
+**Validation:**
+- Travel Desk production build with TypeScript -> **SUCCESS**.
+- MMS/Convex production build with TypeScript -> **SUCCESS**.
+- Travel Desk proof and completion-state tests -> **6 passed**.
+
+**Required admin action:**
+- Deploy MMS/Convex and Travel Desk together.
+
+---
+
+### Session 56 - Driver Link Gallery And Camera Proof
+
+**Date:** 2026-07-29
+**Agent:** Codex
+
+**Repository:**
+- Travel Desk web:
+  `C:\Users\surya\Projects\travel-desk` (`aizen`)
+
+**What changed:**
+- Replaced the single camera-oriented file input on the public driver trip
+  link with explicit `Gallery / files` and `Camera` controls.
+- Applied the control to both start-dashboard and end-dashboard proof.
+- The selected image filename is shown below the controls.
+- Native Mconnect driver completion already provides `Take photo` and
+  `Choose from gallery`, so no Android change was required for this request.
+
+**Validation:**
+- Travel Desk targeted ESLint -> **SUCCESS**.
+- Travel Desk production build with TypeScript -> **SUCCESS**.
+
+---
+
+### Session 55 - Odometer Sanity And Incorrect Fare Prevention
+
+**Date:** 2026-07-29
+**Agent:** Codex
+
+**Repositories:**
+- MMS web and Convex backend:
+  `C:\Users\surya\Projects\manjusitedevelopment` (`max`)
+- Travel Desk web:
+  `C:\Users\surya\Projects\travel-desk` (`aizen`)
+- Mconnect Android:
+  `C:\Users\surya\Projects\Mconnect` (`merge`)
+
+**Root cause:**
+- The subtraction formula was already `end km - start km`.
+- The failing row contained start `233453` and end `568878`, which
+  mathematically produces `335425 km`.
+- Any two non-negative readings were previously accepted as complete, so a
+  mistyped odometer value could create and display an impossible fare.
+
+**What changed:**
+- Added one authoritative maximum same-trip distance of 5,000 km.
+- New internal, external, driver, recovery, and deferred-proof submissions
+  reject impossible or reversed odometer readings before saving or pricing.
+- Legacy rows with impossible readings are no longer considered complete;
+  they return to Pending details so the readings can be corrected.
+- Correcting a kilometer-priced legacy trip preserves kilometer pricing and
+  recalculates the fare from the corrected distance instead of converting it
+  to package pricing.
+- MMS and Travel Desk summaries show `Check odometer readings` and suppress
+  the invalid kilometer price and total.
+- Mconnect internal/external completion, driver end-trip, and trip summaries
+  apply the same validation.
+
+**Regression examples:**
+- `200050 - 200020 = 30 km` is accepted.
+- `568878 - 233453 = 335425 km` is rejected and remains pending correction.
+
+**Validation:**
+- Convex proof and fleet lifecycle suites -> **16 tests passed**.
+- Focused legacy-invalid-row proof suite -> **5 tests passed**.
+- MMS production build with TypeScript, 167 routes -> **SUCCESS**.
+- Travel Desk ESLint and production build -> **SUCCESS**.
+- Mconnect `:app:assembleDebug --no-daemon` -> **SUCCESS**.
+
+---
+
 ### Session 54 - Fleet Backend Release-Readiness Audit
 
 **Date:** 2026-07-28

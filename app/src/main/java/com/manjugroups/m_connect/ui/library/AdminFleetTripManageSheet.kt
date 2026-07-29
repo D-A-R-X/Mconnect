@@ -13,6 +13,7 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.manjugroups.m_connect.R
+import com.manjugroups.m_connect.util.fleetTripDistanceKm
 
 /**
  * Tap-through for an allocated agency trip. Shows the trip details + who it
@@ -283,9 +284,14 @@ class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
         val total = view.findViewById<TextView>(R.id.tvTotalKm)
         val start = t.startKm
         val end = t.endKm
-        if (start != null && end != null && end >= start) {
+        val distanceKm =
+            if (start != null && end != null) fleetTripDistanceKm(start, end) else null
+        if (distanceKm != null) {
             total.visibility = View.VISIBLE
-            total.text = "Total km travelled: ${fmtKm(end - start)} km"
+            total.text = "Total km travelled: ${fmtKm(distanceKm)} km"
+        } else if (start != null && end != null) {
+            total.visibility = View.VISIBLE
+            total.text = "Check odometer readings"
         } else {
             total.visibility = View.GONE
         }
