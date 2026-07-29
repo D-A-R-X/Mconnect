@@ -312,7 +312,11 @@ class AdminFleetTripsFragment : Fragment() {
                     (
                         trip.travelDeskTaskStatus == null &&
                             tripEndedAt(trip) != null &&
-                            trip.travelDeskProofPending != true
+                            trip.travelDeskProofPending != true &&
+                            (
+                                trip.travelAgency == null ||
+                                    trip.travelDeskBillingCompletedAt != null
+                                )
                         )
                 )
 
@@ -591,10 +595,15 @@ class AdminFleetTripsFragment : Fragment() {
                 val request = CompleteOfflineTripRequest(
                     siteVisitId = trip.id,
                     packageAmount = result.packageAmount,
+                    kmRate = result.kmRate,
+                    beta = result.beta,
+                    beta2 = result.beta2,
+                    tollAmount = result.tollAmount,
                     hillCharge = result.hillCharge,
                     outstationCharge = result.outstationCharge,
                     permitCharge = result.permitCharge,
                     permitTax = result.permitTax,
+                    standingCharge = result.standingCharge,
                     distanceKm = result.distanceKm,
                     driverName = result.driverName,
                     driverPhone = result.driverPhone,
@@ -958,8 +967,16 @@ class AdminFleetTripsFragment : Fragment() {
             startPhotoId = trip.travelDeskStartPhotoIds.firstOrNull(),
             endPhotoId = trip.travelDeskEndPhotoIds.firstOrNull(),
             packageAmount = trip.travelDeskPackageAmount,
+            pricingMode = trip.travelDeskPricingMode,
+            kmRate = trip.travelDeskKmRate,
             beta = trip.travelDeskBeta,
+            beta2 = trip.travelDeskBeta2,
             tollAmount = trip.travelDeskTollAmount,
+            hillCharge = trip.travelDeskHillCharge,
+            outstationCharge = trip.travelDeskOutstationCharge,
+            permitCharge = trip.travelDeskPermitCharge,
+            permitTax = trip.travelDeskPermitTax,
+            standingCharge = trip.travelDeskStandingCharge,
             totalAmount = trip.travelDeskTotalAmount,
             extraKm = trip.travelDeskExtraKm,
             extraKmRate = trip.travelDeskExtraKmRate,
@@ -1003,8 +1020,16 @@ class AdminFleetTripsFragment : Fragment() {
         var startPhotoId: String? = null,
         var endPhotoId: String? = null,
         var packageAmount: Double? = null,
+        var pricingMode: String? = null,
+        var kmRate: Double? = null,
         var beta: Double? = null,
+        var beta2: Double? = null,
         var tollAmount: Double? = null,
+        var hillCharge: Double? = null,
+        var outstationCharge: Double? = null,
+        var permitCharge: Double? = null,
+        var permitTax: Double? = null,
+        var standingCharge: Double? = null,
         var totalAmount: Double? = null,
         var extraKm: Double? = null,
         var extraKmRate: Double? = null,
@@ -1117,7 +1142,23 @@ class AdminFleetTripsFragment : Fragment() {
                     item.status == "Completed" -> {
                         binding.tvTripStatus.setBackgroundResource(R.drawable.bg_badge_success)
                         binding.tvTripStatus.setTextColor(Color.parseColor("#047857"))
-                        binding.btnAllocate.visibility = View.GONE
+                        val canEditCompleted =
+                            canCompleteOffline &&
+                                (
+                                    (isExternalAgencySession && item.external) ||
+                                        (!isExternalAgencySession && !item.external)
+                                    )
+                        binding.btnAllocate.visibility =
+                            if (canEditCompleted) View.VISIBLE else View.GONE
+                        if (canEditCompleted) {
+                            binding.btnAllocate.text = "Edit details"
+                            binding.btnAllocate.setBackgroundResource(
+                                R.drawable.bg_allocate_button_green,
+                            )
+                            binding.btnAllocate.setOnClickListener {
+                                onCompleteClick(item)
+                            }
+                        }
                     }
                 }
 

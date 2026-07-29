@@ -1275,6 +1275,9 @@ data class ScannedSiteVisit(
     val scheduledDate: String? = null,
     val scheduledTime: String? = null,
     val canStartCounselling: Boolean = false,
+    // The assigned BDO / Site Incharge / admin can open the outcome page while
+    // counselling is already in progress (on_counselling).
+    val canRecordOutcome: Boolean = false,
     val expectedAttendeeCount: Int? = null,
     val attendees: List<ScannedSiteVisitAttendee> = emptyList(),
     val foodPreferences: String? = null,

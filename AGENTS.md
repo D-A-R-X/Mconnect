@@ -1,5 +1,22 @@
 # AGENTS.md
 
+## Mandatory Agent Log Protocol
+
+Every AI agent working on this project must read `AGENT_LOG.md` before doing
+work and update it during **every response/turn**, without exception.
+
+- Record every code, configuration, documentation, schema, API, UI, build,
+  test, Git, deployment, and investigation change made in that turn.
+- If no files were changed, still add a concise entry describing what was
+  inspected, learned, answered, or why no change was required.
+- Update the log incrementally after meaningful steps, not only at the end of
+  a long task.
+- Before sending any final response, confirm the current turn is represented
+  accurately in `AGENT_LOG.md`, including validation performed, failures,
+  remaining risks, and required follow-up actions.
+- Never claim work is complete when the corresponding log entry is missing.
+- Keep `AGENT_LOG.md` local-only. Do not commit or push it.
+
 ## Repo Overview
 
 This repository contains a single Android app module for **Mconnect / Manju Groups PMS**.

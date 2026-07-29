@@ -2628,6 +2628,7 @@ class HomeFragment : Fragment() {
             endPhotoId = trip.travelDeskEndPhotoIds.firstOrNull(),
             packageAmount = trip.travelDeskPackageAmount,
             beta = trip.travelDeskBeta,
+            beta2 = trip.travelDeskBeta2,
             tollAmount = trip.travelDeskTollAmount,
             totalAmount = trip.travelDeskTotalAmount,
             external = external,
@@ -2724,6 +2725,7 @@ class HomeFragment : Fragment() {
             endPhotoId = trip.travelDeskEndPhotoIds.firstOrNull(),
             packageAmount = trip.travelDeskPackageAmount,
             beta = trip.travelDeskBeta,
+            beta2 = trip.travelDeskBeta2,
             tollAmount = trip.travelDeskTollAmount,
             totalAmount = trip.travelDeskTotalAmount,
         )

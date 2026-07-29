@@ -110,8 +110,9 @@
                 android:textSize="11sp"
                 android:visibility="gone" />
 
-            <!-- Package price (required) -->
+            <!-- Base rate: "Per km rate" for km-priced trips, else "Package price" -->
             <TextView
+                android:id="@+id/tvInternalBaseLabel"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
@@ -241,6 +242,45 @@
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:visibility="gone">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="Vehicle sent"
+                android:textColor="#344054"
+                android:textSize="12sp" />
+
+            <Spinner
+                android:id="@+id/spinnerExternalVehicle"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input"
+                android:paddingHorizontal="12dp" />
+
+            <EditText
+                android:id="@+id/etExternalDriverName"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_input"
+                android:hint="Driver name (optional)"
+                android:imeOptions="actionNext"
+                android:inputType="textPersonName"
+                android:paddingHorizontal="12dp" />
+
+            <EditText
+                android:id="@+id/etExternalDriverPhone"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_input"
+                android:hint="Driver phone (optional)"
+                android:imeOptions="actionNext"
+                android:inputType="phone"
+                android:paddingHorizontal="12dp" />
 
             <TextView
                 android:layout_width="match_parent"
@@ -439,6 +479,36 @@
             android:textSize="13sp" />
 
         <EditText
+            android:id="@+id/etBeta"
+            android:layout_width="match_parent"
+            android:layout_height="46dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_input"
+            android:hint="Beta"
+            android:inputType="numberDecimal"
+            android:paddingHorizontal="12dp" />
+
+        <EditText
+            android:id="@+id/etBeta2"
+            android:layout_width="match_parent"
+            android:layout_height="46dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_input"
+            android:hint="Beta 2"
+            android:inputType="numberDecimal"
+            android:paddingHorizontal="12dp" />
+
+        <EditText
+            android:id="@+id/etTollAmount"
+            android:layout_width="match_parent"
+            android:layout_height="46dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_input"
+            android:hint="Toll charge"
+            android:inputType="numberDecimal"
+            android:paddingHorizontal="12dp" />
+
+        <EditText
             android:id="@+id/etHillCharge"
             android:layout_width="match_parent"
             android:layout_height="46dp"
@@ -477,6 +547,27 @@
             android:hint="Permit tax"
             android:inputType="numberDecimal"
             android:paddingHorizontal="12dp" />
+
+        <EditText
+            android:id="@+id/etStandingCharge"
+            android:layout_width="match_parent"
+            android:layout_height="46dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_input"
+            android:hint="Standing charge"
+            android:inputType="numberDecimal"
+            android:paddingHorizontal="12dp" />
+
+        <!-- Live billing total: base (km rate × distance, or package) + charges -->
+        <TextView
+            android:id="@+id/tvBillingTotal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Billing total: —"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textSize="14sp" />
 
         <LinearLayout
             android:layout_width="match_parent"
