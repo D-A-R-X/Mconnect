@@ -294,8 +294,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         btnNotInterested = view.findViewById(R.id.btnOutcomeNotInterested)
         btnPostponed = view.findViewById(R.id.btnOutcomePostponed)
         btnPostponeSiteVisit = view.findViewById(R.id.btnPostponeSiteVisit)
-        btnPostponeSiteVisit?.visibility =
-            if (session.hasPermission("marketing.siteVisits.edit")) View.VISIBLE else View.GONE
+        btnPostponeSiteVisit?.visibility = View.GONE
         btnPostponeSiteVisit?.setOnClickListener {
             if (isOutcomeLocked) {
                 Toast.makeText(
@@ -392,6 +391,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         val schedTime = args.getString(ARG_SCHEDULED_START_TIME)
         val rawStatus = args.getString(ARG_STATUS).orEmpty()
         isOutcomeLocked = isTerminalOutcomeStatus(rawStatus)
+        updatePostponeVisibility(rawStatus)
         bindLeadTemperature(args.getString(ARG_LEAD_TEMPERATURE))
 
         // First-frame bind from list-row arguments. Real values land
@@ -457,7 +457,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
             lower in setOf("cancelled", "canceled", "no_show") -> "CANCELLED"
             lower in setOf("picked_up", "client_started") -> "PICKED FROM CP"
             lower in setOf("on_site", "arrived") -> "ON SITE"
-            lower == "consulting" -> "CONSULTING"
+            lower in setOf("consulting", "on_counselling", "on counselling") -> "ON COUNSELLING"
             lower == "picked_from_site" -> "PICKED FROM SITE"
             lower == "dropped" -> "DROPPED"
             lower == "assigned" -> "ASSIGNED"
@@ -468,7 +468,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         val color = when (displayName) {
             "COMPLETED" -> Color.parseColor("#027A48")
             "CANCELLED" -> Color.parseColor("#B42318")
-            "PICKED FROM CP", "ON SITE", "CONSULTING", "PICKED FROM SITE", "DROPPED" ->
+            "PICKED FROM CP", "ON SITE", "ON COUNSELLING", "PICKED FROM SITE", "DROPPED" ->
                 Color.parseColor("#B54708")
             else -> Color.parseColor("#004EEB")
         }
@@ -482,7 +482,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
             "completed", "complete", "done", "closed" -> 7
             "dropped" -> 6
             "picked_from_site", "picked from site" -> 5
-            "consulting" -> 4
+            "consulting", "on_counselling", "on counselling" -> 4
             "on_site", "on site", "arrived" -> 3
             "picked_up", "picked up", "client_started", "client started" -> 2
             "assigned" -> 1
@@ -494,7 +494,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         val lower = status.lowercase(Locale.US)
         return when (lower) {
             "completed", "complete", "done", "closed" -> 4
-            "consulting" -> 3
+            "consulting", "on_counselling", "on counselling" -> 3
             "dropped" -> 2
             "picked_from_site", "picked from site" -> 2
             "on_site", "on site", "arrived" -> 2
@@ -988,12 +988,20 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         tvNotes?.text = visit.notes?.takeIf { it.isNotBlank() }
             ?: "No notes recorded yet."
 
-        val effStatus = visit.status ?: ""
-        isConsultingStatus = effStatus.equals("consulting", ignoreCase = true)
+        val effStatus = visit.proposedSiteVisit?.status
+            ?.takeIf { it.isNotBlank() }
+            ?: visit.status
+            ?: ""
+        isConsultingStatus = effStatus.lowercase(Locale.US) in setOf(
+            "consulting",
+            "on_counselling",
+            "on counselling",
+        )
         hasFleetStart = proposed?.travelDeskStartedAt != null
         hasFleetOnSite = proposed?.travelDeskOnSiteAt != null
         isOutcomeLocked = isTerminalOutcome(visit)
         isFleetOutcomePending = visit.completedOffline == true && visit.outcome.isNullOrBlank()
+        updatePostponeVisibility(effStatus)
         
         // Detect vehicle type and toggle layout visibility
         isOwnVehicleSelected = proposed?.travelMode == "own_vehicle" || visit.vehiclePreference == "own_vehicle"
@@ -1031,7 +1039,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
                     7 -> "completed"
                     6 -> "dropped"
                     5 -> "picked_from_site"
-                    4 -> "consulting"
+                    4 -> "on_counselling"
                     3 -> "on_site"
                     2 -> "picked_up"
                     1 -> "assigned"
@@ -1188,6 +1196,28 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
             "postponed",
             "other",
         )
+    }
+
+    private fun updatePostponeVisibility(status: String?) {
+        val lower = status?.trim()?.lowercase(Locale.US).orEmpty()
+        val canEdit = session.hasPermission("marketing.siteVisits.edit")
+        val counsellingStarted = lower in setOf(
+            "consulting",
+            "on_counselling",
+            "on counselling",
+            "picked_from_site",
+            "picked from site",
+            "dropped",
+            "completed",
+            "complete",
+            "done",
+            "closed",
+            "cancelled",
+            "canceled",
+            "no_show",
+        )
+        btnPostponeSiteVisit?.visibility =
+            if (canEdit && !isOutcomeLocked && !counsellingStarted) View.VISIBLE else View.GONE
     }
 
     private fun formatDateOnly(scheduledDate: String): String {
