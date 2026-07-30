@@ -155,11 +155,16 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
                 behavior.state = BottomSheetBehavior.STATE_EXPANDED
                 behavior.skipCollapsed = true
                 behavior.isDraggable = false
-                
-                // Force wrap_content on sheet container to prevent stretching to full height
+
+                // Force wrap_content so the sheet hugs its content on tall
+                // screens, but cap it to ~92% of the screen so on short devices
+                // the content scrolls inside (the layout root is a
+                // NestedScrollView) instead of clipping the last rows.
                 val lp = it.layoutParams
                 lp.height = ViewGroup.LayoutParams.WRAP_CONTENT
                 it.layoutParams = lp
+                behavior.maxHeight =
+                    (resources.displayMetrics.heightPixels * 0.92f).toInt()
             }
         }
         return dialog
