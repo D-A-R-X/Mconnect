@@ -110,6 +110,7 @@ class CollectionsFragment : Fragment() {
             onAcceptClick = { /* executive can't approve */ }
             onRejectClick = { /* executive can't reject */ }
             onRectifyClick = { item -> startRectifyFlow(item) }
+            onEditClick = { item -> startEditFlow(item) }
             onImageClick = { item -> showFullscreenImagePreview(item) }
             proofLoader = { storageId, target -> loadProofThumbnail(storageId, target) }
         }
@@ -223,6 +224,69 @@ class CollectionsFragment : Fragment() {
             caseId = row.caseId,
             bookingLabel = bookingLabel,
         ).showOnce(parentFragmentManager, "CollectionCreateBottomSheet")
+    }
+
+    /**
+     * Edit an own still-pending collection — fixes a wrong amount (e.g. 48,000
+     * entered instead of 4,80,000). Allowed until Accounts acts on it; the
+     * backend re-checks ownership + pending status. The row shows an "Edited"
+     * tag afterward.
+     */
+    private fun startEditFlow(item: CollectionItem) {
+        val input = android.widget.EditText(requireContext()).apply {
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER or
+                android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
+            setText(
+                if (item.amount == item.amount.toLong().toDouble())
+                    item.amount.toLong().toString()
+                else item.amount.toString()
+            )
+            hint = "Corrected amount (₹)"
+            setSelection(text.length)
+        }
+        val container = android.widget.FrameLayout(requireContext()).apply {
+            val pad = (20 * resources.displayMetrics.density).toInt()
+            setPadding(pad, pad / 2, pad, 0)
+            addView(input)
+        }
+        android.app.AlertDialog.Builder(requireContext())
+            .setTitle("Edit collection amount")
+            .setMessage("Correct the amount before it reaches Accounts.")
+            .setView(container)
+            .setPositiveButton("Save") { _, _ ->
+                val newAmount = input.text?.toString()?.trim()?.toDoubleOrNull()
+                if (newAmount == null || newAmount <= 0.0) {
+                    toast("Enter a valid amount greater than zero")
+                    return@setPositiveButton
+                }
+                submitCollectionEdit(item, newAmount)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun submitCollectionEdit(item: CollectionItem, newAmount: Double) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = withContext(Dispatchers.IO) {
+                    api.correctCustomerCollection(
+                        session.bearerToken,
+                        com.manjugroups.m_connect.network.CorrectCollectionRequest(
+                            collectionId = item.id,
+                            amount = newAmount,
+                        ),
+                    )
+                }
+                if (resp.success) {
+                    toast("Collection updated")
+                    refreshFromApi()
+                } else {
+                    toast(resp.error ?: "Could not update collection")
+                }
+            } catch (e: Exception) {
+                toast(e.message ?: "Network error")
+            }
+        }
     }
 
     private fun buildBookingLabel(row: CustomerCollectionRow): String {

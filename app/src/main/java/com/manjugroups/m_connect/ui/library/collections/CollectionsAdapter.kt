@@ -22,6 +22,8 @@ class CollectionsAdapter : RecyclerView.Adapter<CollectionsAdapter.CollectionVH>
     var onAcceptClick: ((CollectionItem) -> Unit)? = null
     var onRejectClick: ((CollectionItem) -> Unit)? = null
     var onRectifyClick: ((CollectionItem) -> Unit)? = null
+    // Collector edits their own still-pending row (fix a wrong amount, etc.).
+    var onEditClick: ((CollectionItem) -> Unit)? = null
     var onImageClick: ((CollectionItem) -> Unit)? = null
     // Fragment-provided hook: takes the server-side _storage id, resolves
     // it to a signed URL (/api/storage/get-url), and loads the result
@@ -54,7 +56,9 @@ class CollectionsAdapter : RecyclerView.Adapter<CollectionsAdapter.CollectionVH>
             b.tvSiteName.text = item.bookingName.split(" - ").firstOrNull() ?: item.bookingName
             b.tvPaymentMode.text = item.paymentMode
             b.tvRefId.text = item.refId
-            b.tvDate.text = item.dateString
+            // Append an "Edited" marker inline (no dedicated tag view in the row).
+            b.tvDate.text =
+                if (item.edited) "${item.dateString}  ·  Edited" else item.dateString
 
             // Status Badge styling
             when (item.status) {
@@ -115,16 +119,28 @@ class CollectionsAdapter : RecyclerView.Adapter<CollectionsAdapter.CollectionVH>
                 b.layoutRemarks.visibility = View.GONE
             }
 
-            if (!isAccountantRole && item.status == CollectionStatus.REJECTED) {
-                b.btnRectify.visibility = View.VISIBLE
-            } else {
-                b.btnRectify.visibility = View.GONE
+            // Rectify (rejected) OR Edit (own, still-pending). The executive's
+            // "My Collections" feed only contains their own rows, so any pending
+            // row here is editable by them until Accounts acts on it.
+            when {
+                !isAccountantRole && item.status == CollectionStatus.REJECTED -> {
+                    b.btnRectify.visibility = View.VISIBLE
+                    b.tvRectifyLabel.text = "Re-submit"
+                }
+                !isAccountantRole && item.status == CollectionStatus.PENDING -> {
+                    b.btnRectify.visibility = View.VISIBLE
+                    b.tvRectifyLabel.text = "Edit amount"
+                }
+                else -> b.btnRectify.visibility = View.GONE
             }
 
             // Event bindings
             b.btnAccept.setOnClickListener { onAcceptClick?.invoke(item) }
             b.btnReject.setOnClickListener { onRejectClick?.invoke(item) }
-            b.btnRectify.setOnClickListener { onRectifyClick?.invoke(item) }
+            b.btnRectify.setOnClickListener {
+                if (item.status == CollectionStatus.PENDING) onEditClick?.invoke(item)
+                else onRectifyClick?.invoke(item)
+            }
             b.cardThumbnail.setOnClickListener { onImageClick?.invoke(item) }
         }
     }
