@@ -109,6 +109,34 @@ interface TravelDeskApi {
         @Body body: SetDriverStatusRequest
     ): TravelDeskSimpleResponse
 
+    @GET("api/travel-desk/settings")
+    suspend fun getAgencySettings(
+        @Header("Authorization") token: String
+    ): TravelDeskSettingsResponse
+
+    @POST("api/travel-desk/settings/update")
+    suspend fun updateAgencySettings(
+        @Header("Authorization") token: String,
+        @Body body: UpdateTravelDeskSettingsRequest
+    ): TravelDeskSettingsResponse
+
+    @GET("api/travel-desk/staff")
+    suspend fun listAgencyStaff(
+        @Header("Authorization") token: String
+    ): TravelDeskAgencyStaffResponse
+
+    @POST("api/travel-desk/staff/create")
+    suspend fun createAgencyStaff(
+        @Header("Authorization") token: String,
+        @Body body: CreateAgencyStaffRequest
+    ): TravelDeskCreateResponse
+
+    @POST("api/travel-desk/staff/update")
+    suspend fun updateAgencyStaff(
+        @Header("Authorization") token: String,
+        @Body body: UpdateAgencyStaffRequest
+    ): TravelDeskSimpleResponse
+
     // ── Agency-owned driver ───────────────────────────────────────────────
     // Same bearer token as the agency routes; the backend resolves the
     // travelDeskSessions row to a *driver* principal and scopes the list to
@@ -208,6 +236,24 @@ interface TravelDeskApi {
         @Body body: TravelDeskDriverTripRequest
     ): TravelDeskAllocateResponse
 
+    @POST("api/mms-fleet/dispatch/complete-offline")
+    suspend fun completeOfflineMms(
+        @Header("Authorization") token: String,
+        @Body body: CompleteOfflineTripRequest
+    ): TravelDeskAllocateResponse
+
+    @POST("api/travel-desk/trips/complete-offline")
+    suspend fun completeOfflineAgency(
+        @Header("Authorization") token: String,
+        @Body body: CompleteOfflineTripRequest
+    ): TravelDeskAllocateResponse
+
+    @POST("api/travel-desk/trips/extra-km")
+    suspend fun submitExtraKmClaim(
+        @Header("Authorization") token: String,
+        @Body body: ExtraKmClaimRequest
+    ): TravelDeskSimpleResponse
+
     @GET("api/mms-fleet/dispatch/drivers")
     suspend fun listMmsDrivers(
         @Header("Authorization") token: String
@@ -251,7 +297,7 @@ interface TravelDeskApi {
                 .addInterceptor(authWatchdog)
                 .addInterceptor(logging)
                 .connectTimeout(30, TimeUnit.SECONDS)
-                .readTimeout(30, TimeUnit.SECONDS)
+                .readTimeout(60, TimeUnit.SECONDS)
                 .build()
             return Retrofit.Builder()
                 .baseUrl(BuildConfig.BASE_URL)

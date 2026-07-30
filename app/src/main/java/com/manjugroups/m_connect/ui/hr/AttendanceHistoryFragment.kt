@@ -487,7 +487,7 @@ class AttendanceHistoryFragment : Fragment() {
                 )
 
                 allApprovalsDeferred.await()?.let { if (it.success) cachedAllApprovals = it.records }
-                updateBadgeFor(3, cachedAllApprovals.count { !isRequestLinked(it) })
+                updateBadgeFor(3, allApprovalAttendanceRows().size)
 
                 hrReviewDeferred.await()?.let { if (it.success) cachedHrReview = it.records }
                 updateBadgeFor(4, cachedHrReview.size)
@@ -555,7 +555,7 @@ class AttendanceHistoryFragment : Fragment() {
                 else teamApprovalAttendanceRows(),
                 ""
             )
-            3 -> renderApprovals(cachedAllApprovals.filterNot(::isRequestLinked), "")
+            3 -> renderApprovals(allApprovalAttendanceRows(), "")
             4 -> {
                 val source = if (activeSubTab == 0) hrReviewAttendanceRows()
                 else hrReviewRequestRows()
@@ -579,6 +579,29 @@ class AttendanceHistoryFragment : Fragment() {
         r.requestType == "remarks" || r.requestType == "correction"
 
     /**
+     * True when this record's `id` is an attendanceRequests doc (a correction /
+     * remark request), so its approve/reject must route through the REQUEST
+     * mutation (`isRequest = true`). Derived from the RECORD — never the active
+     * tab — so a request approved from search / the All tab still routes
+     * correctly instead of hitting the plain-attendance path (which 500s on a
+     * request id). `requestStage` is the reliable id-type signal; requestType
+     * is the same predicate the Requests sub-tabs are built from.
+     */
+    private fun isRequestRecord(r: AttendanceApprovalRecord): Boolean =
+        isRequestLinked(r) || !r.requestStage.isNullOrBlank()
+
+    /** staff|date key, or null when the row has no staffId (never collapsed). */
+    private fun staffDateKey(r: AttendanceApprovalRecord): String? {
+        val staff = r.staffId?.trim().orEmpty()
+        if (staff.isBlank()) return null
+        return "$staff|${r.date.orEmpty()}"
+    }
+
+    /** staff|date keys of every pending correction/remark request in [rows]. */
+    private fun requestStaffDateKeys(rows: List<AttendanceApprovalRecord>): Set<String> =
+        rows.filter(::isRequestLinked).mapNotNull(::staffDateKey).toSet()
+
+    /**
      * Team Approval · Attendance rows. Correction/remarks rows are ALWAYS
      * excluded.
      *
@@ -590,8 +613,19 @@ class AttendanceHistoryFragment : Fragment() {
      * the time-correction dialog. Deriving the Requests feed locally (see
      * [teamApprovalRequestRows]) covers that case properly.
      */
-    private fun teamApprovalAttendanceRows(): List<AttendanceApprovalRecord> =
-        cachedApprovals.filterNot(::isRequestLinked)
+    private fun teamApprovalAttendanceRows(): List<AttendanceApprovalRecord> {
+        // Also hide plain attendance rows whose staff+date already has a pending
+        // correction request — the day must surface once, on the Requests tab,
+        // not as both an approval AND a correction.
+        val requestKeys = requestStaffDateKeys(cachedApprovals) +
+            (if (teamRequestsSourced) cachedTeamRequests.mapNotNull(::staffDateKey).toSet()
+            else emptySet())
+        return cachedApprovals.filter { r ->
+            if (isRequestLinked(r)) return@filter false
+            val key = staffDateKey(r)
+            key == null || key !in requestKeys
+        }
+    }
 
     /**
      * Team Approval · Requests rows: the server feed when the backend supplies
@@ -603,11 +637,34 @@ class AttendanceHistoryFragment : Fragment() {
             else cachedApprovals.filter(::isRequestLinked)
         )
 
-    /** HR Review · Attendance sub-tab rows (non-request punch records). */
-    private fun hrReviewAttendanceRows(): List<AttendanceApprovalRecord> =
-        cachedHrReview.filter {
-            it.requestType != "remarks" && it.requestType != "correction"
+    /**
+     * All Approval tab rows: plain attendance approvals only, with days that
+     * already have a pending correction request removed (the correction is
+     * actioned on the HR Review · Requests tab, so the day never appears as
+     * both an approval and a correction).
+     */
+    private fun allApprovalAttendanceRows(): List<AttendanceApprovalRecord> {
+        val requestKeys = requestStaffDateKeys(cachedAllApprovals)
+        return cachedAllApprovals.filter { r ->
+            if (isRequestLinked(r)) return@filter false
+            val key = staffDateKey(r)
+            key == null || key !in requestKeys
         }
+    }
+
+    /**
+     * HR Review · Attendance sub-tab rows (non-request punch records), with any
+     * row whose staff+date already has a pending correction request removed so
+     * a day never shows as both an attendance approval AND a correction.
+     */
+    private fun hrReviewAttendanceRows(): List<AttendanceApprovalRecord> {
+        val requestKeys = requestStaffDateKeys(cachedHrReview)
+        return cachedHrReview.filter { r ->
+            if (isRequestLinked(r)) return@filter false
+            val key = staffDateKey(r)
+            key == null || key !in requestKeys
+        }
+    }
 
     /** HR Review · Requests sub-tab rows, deduped (see [dedupeRequestRows]). */
     private fun hrReviewRequestRows(): List<AttendanceApprovalRecord> =
@@ -1296,9 +1353,11 @@ class AttendanceHistoryFragment : Fragment() {
             // attendanceRequests docs, so their decision routes through the
             // request mutations (isRequest).
             // Request rows (attendanceRequests ids → isRequest=true on
-            // approve/reject) live on the Requests sub-tab of BOTH the
-            // Team Approval and HR Review tabs.
-            val isRequestRow = (activeTab == 2 || activeTab == 4) && activeSubTab == 1
+            // approve/reject) are detected from the RECORD, not the active tab,
+            // so a correction request approved from search or the All tab still
+            // routes through the request mutation instead of the plain
+            // attendance approve (which 500s on a request id).
+            val isRequestRow = isRequestRecord(record)
             val openReviewModal = View.OnClickListener {
                 val sheet = ReviewAttendanceRequestBottomSheet.newInstance(record, object : ReviewAttendanceRequestBottomSheet.OnActionClickListener {
                     override fun onApprove(recordId: String, status: String) {
@@ -1439,7 +1498,7 @@ class AttendanceHistoryFragment : Fragment() {
             1 -> cachedTeamAttendance
             2 -> if (activeSubTab == 1) teamApprovalRequestRows()
                  else teamApprovalAttendanceRows()
-            3 -> cachedAllApprovals.filterNot(::isRequestLinked)
+            3 -> allApprovalAttendanceRows()
             4 -> {
                 if (activeSubTab == 0) hrReviewAttendanceRows()
                 else hrReviewRequestRows()

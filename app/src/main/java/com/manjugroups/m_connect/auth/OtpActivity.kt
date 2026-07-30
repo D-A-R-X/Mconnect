@@ -269,6 +269,7 @@ class OtpActivity : AppCompatActivity() {
         )
         session.staffId = response.user?.staffId
         session.employeeId = response.user?.employeeId
+        session.role = response.user?.role
         session.mustChangePassword = false
         session.geoTrackingEnabled = response.user?.geoTrackingEnabled == true
         session.geoConsentGiven = false
@@ -298,7 +299,11 @@ class OtpActivity : AppCompatActivity() {
         val jobFleet = launch {
             session.fleetDriverByBackend = runCatching {
                 geoApi.getMmsFleetDriverTrips(session.bearerToken)
-            }.map { it.success }.getOrDefault(false)
+            }.map { response ->
+                response.success &&
+                    response.diagnostics?.notDriver != true &&
+                    response.diagnostics?.reason != "staff_not_driver"
+            }.getOrDefault(false)
         }
 
         val jobIam = launch {

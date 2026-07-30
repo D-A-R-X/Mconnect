@@ -582,7 +582,17 @@ class AppLibraryFragment : Fragment() {
         // ── Front Desk ──────────────────────────────────────────────────────
         bindIamEntry(
             row = binding.itemFrontDeskQR,
-            allowed = hasAny(listOf("frontdesk.view", "frontdesk.checkin", "frontdesk.invite")),
+            allowed = hasAny(
+                listOf(
+                    "frontdesk.view",
+                    "frontdesk.checkin",
+                    "frontdesk.invite",
+                    "marketing.siteVisits.view",
+                    "marketing.siteVisits.viewTeam",
+                    "marketing.siteVisits.viewAll",
+                    "marketing.siteVisits.scanConsulting",
+                ),
+            ),
         ) { checkCameraPermissionAndOpen() }
     }
 

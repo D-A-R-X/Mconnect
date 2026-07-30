@@ -30,6 +30,7 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.manjugroups.m_connect.R
+import com.manjugroups.m_connect.util.EditableTimeFormat
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.BookingExchangeSource
@@ -48,7 +49,9 @@ import com.manjugroups.m_connect.network.ProposedSiteVisit
 import com.manjugroups.m_connect.network.SetOutcomeRequest
 import com.manjugroups.m_connect.network.StorageUploader
 import com.manjugroups.m_connect.network.ManualProfilePatch
+import com.manjugroups.m_connect.network.PostponeSiteVisitRequest
 import com.manjugroups.m_connect.network.SetSiteVisitOutcomeRequest
+import com.manjugroups.m_connect.network.SiteVisitIdRequest
 import com.manjugroups.m_connect.network.SvNotInterestedDetail
 import com.manjugroups.m_connect.network.UpdateTelecallerLeadRequest
 import com.manjugroups.m_connect.network.SiteVisitAttendeeRequest
@@ -806,6 +809,13 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         // already a site visit — fade + disable it.
         tabSiteVisit.cell?.isClickable = false
         tabSiteVisit.cell?.alpha = 0.35f
+        tabPostpone.label?.text = "Follow up"
+        view?.findViewById<TextView>(R.id.tvPostDateLabel)?.text = "Follow-up date"
+        view?.findViewById<TextView>(R.id.tvPostDateHelp)?.text =
+            "When should the client be followed up."
+        view?.findViewById<TextView>(R.id.tvPostReasonHelp)?.text =
+            "Why does this client need a follow up."
+        etPostNotes?.hint = "Reason for follow up"
 
         // When launched from a specific SV outcome button, keep the
         // same shared form UI but remove the outcome switcher so the
@@ -815,13 +825,13 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             view?.findViewById<View>(R.id.outcomeTopTabs)?.visibility = View.GONE
             view?.findViewById<TextView>(R.id.tvOutcomeTitle)?.text = when (lockedOutcome) {
                 Outcome.BOOKING -> "Converted as Booking"
-                Outcome.POSTPONE -> "Its Been Postponed"
+                Outcome.POSTPONE -> "Follow up"
                 Outcome.NOT_INTERESTED -> "Client Not Interested"
                 Outcome.SITE_VISIT -> "Site Visit"
             }
             view?.findViewById<TextView>(R.id.tvOutcomeSubtitle)?.text = when (lockedOutcome) {
                 Outcome.BOOKING -> "Booking form"
-                Outcome.POSTPONE -> "Postponed reason"
+                Outcome.POSTPONE -> "Follow-up details"
                 Outcome.NOT_INTERESTED -> "Not interested reason"
                 Outcome.SITE_VISIT -> "Site visit form"
             }
@@ -1667,7 +1677,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
 
         // ---- Site Visit interactions ----
         view?.findViewById<View>(R.id.rowSvProject)?.setOnClickListener { pickSvProject() }
-        view?.findViewById<View>(R.id.rowSvDate)?.setOnClickListener { openSvDatePicker() }
+        view?.findViewById<View>(R.id.rowSvDate)?.setOnClickListener { pickDate(tvSvDate, minDateMillis = System.currentTimeMillis()) }
         view?.findViewById<View>(R.id.rowSvTime)?.setOnClickListener { pickTime(tvSvTime) }
 
         view?.findViewById<View>(R.id.rowSvIncharge)?.setOnClickListener {
@@ -3515,7 +3525,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         android.app.TimePickerDialog(
             requireContext(),
             { _, hour, minute ->
-                target?.text = String.format(Locale.US, "%02d:%02d", hour, minute)
+                target?.text = EditableTimeFormat.fromPicker(hour, minute).second
             },
             cal.get(Calendar.HOUR_OF_DAY),
             cal.get(Calendar.MINUTE),
@@ -3889,20 +3899,12 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
+    @Suppress("UNUSED_PARAMETER")
     private fun filterBookingStaff(roleKey: String, items: List<StaffData>): List<StaffData> {
-        fun StaffData.haystack(): String = listOfNotNull(name, role, designation, department)
-            .joinToString(" ")
-            .lowercase(Locale.US)
-        val tokens = when (roleKey) {
-            "avp" -> listOf("avp", "assistant vice president")
-            "gm" -> listOf("gm", "general manager")
-            "seniorManager" -> listOf("senior manager", "sm")
-            "bdo" -> listOf("bdo", "business development")
-            "telecaller" -> listOf("telecaller", "tele caller", "telesales")
-            else -> emptyList()
-        }
-        val filtered = items.filter { staff -> tokens.any { staff.haystack().contains(it) } }
-        return filtered.ifEmpty { items }
+        // Show ALL active staff in the booking role pickers (BDO / AVP / GM /
+        // Senior Manager), not only designation-matching staff — same as the SV
+        // role pickers. The assigner picks any staff regardless of designation.
+        return items
     }
 
     private fun showBookingStaffPicker(
@@ -4003,13 +4005,13 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
         viewLifecycleOwner.lifecycleScope.launch {
             try {
+                // Show ALL active staff in the SV role pickers (Site Incharge /
+                // HOD / AVP / GM / Senior Manager), not just sales/telesales — the
+                // assigner should be able to pick any staff regardless of dept.
                 val resp = api.getStaff(session.bearerToken, status = "active")
-                val filtered = resp.staff.filter {
-                    val dept = it.department.orEmpty().lowercase(Locale.US)
-                    dept.contains("telesales") || dept.contains("sales")
-                }
+                val filtered = resp.staff
                 if (filtered.isEmpty()) {
-                    showError("No Sales / Telesales staff found")
+                    showError("No staff found")
                     return@launch
                 }
                 svStaffCache = filtered
@@ -4270,7 +4272,9 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         val project = svProject ?: return showError("Please select a project")
         val date = tvSvDate?.text?.toString()?.trim().orEmpty()
         if (date.isEmpty()) return showError("Please pick a date")
-        val time = tvSvTime?.text?.toString()?.trim().takeIf { !it.isNullOrEmpty() }
+        val time = tvSvTime?.text?.toString()?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?.let(EditableTimeFormat::toStorage)
 
         btnSubmit?.isClickable = false
         btnSubmit?.text = "Saving…"
@@ -4389,7 +4393,20 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
         val reason = etPostNotes?.text?.toString()?.trim().orEmpty()
         if (reason.isBlank()) {
-            showError("Enter a reason for postponement")
+            showError(
+                if (isSiteVisitMode) "Enter a reason for follow up"
+                else "Enter a reason for postponement",
+            )
+            return
+        }
+        if (isSiteVisitMode) {
+            // A follow-up carries a next-visit date, so route it through the
+            // dedicated SV postpone/reschedule endpoint. setSiteVisitOutcome
+            // (outcome=follow_up) only accepts on_counselling/picked_from_site/
+            // dropped and returns HTTP 500 for a visit still in scheduled/on_site;
+            // the postpone endpoint accepts any active status and reschedules to
+            // the chosen date.
+            persistSvFollowUp(nextDate, reason)
             return
         }
         // The next-visit date rides in the human-readable notes blob (the
@@ -4401,6 +4418,53 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             notes = "Next visit: $nextDate — $reason",
         )
     }
+
+    /**
+     * SV follow-up: reschedule the visit to the chosen next date via the
+     * dedicated postpone endpoint (broad status guard) instead of setOutcome.
+     */
+    private fun persistSvFollowUp(displayDate: String, reason: String) {
+        val svId = argSiteVisitId?.takeIf { it.isNotBlank() } ?: run {
+            showError("Missing site visit id")
+            return
+        }
+        val apiDate = displayDateToApiDate(displayDate) ?: run {
+            showError("Pick a valid next visit date")
+            return
+        }
+        btnSubmit?.isClickable = false
+        btnSubmit?.text = "Saving…"
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = geoApi.postponeSiteVisit(
+                    session.bearerToken,
+                    PostponeSiteVisitRequest(
+                        id = svId,
+                        scheduledDate = apiDate,
+                        reason = reason,
+                    ),
+                )
+                if (!resp.success) {
+                    finishCtaSave(resp.error ?: "Failed to save follow up")
+                    return@launch
+                }
+                setFragmentResult(
+                    RESULT_KEY,
+                    bundleOf(KEY_CLIENT_MET to true, KEY_OUTCOME to OUTCOME_FOLLOW_UP),
+                )
+                dismissAllowingStateLoss()
+            } catch (e: Exception) {
+                finishCtaSave(e.message ?: "Network error")
+            }
+        }
+    }
+
+    /** Picker display "dd/MM/yyyy" -> API "yyyy-MM-dd"; null if unparseable. */
+    private fun displayDateToApiDate(display: String): String? = runCatching {
+        val parsed = SimpleDateFormat("dd/MM/yyyy", Locale.US).parse(display)
+            ?: return null
+        SimpleDateFormat("yyyy-MM-dd", Locale.US).format(parsed)
+    }.getOrNull()
 
     // ---- Not Interested -------------------------------------------------
     private fun persistNotInterested() {
@@ -4506,6 +4570,20 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                             finishCtaSave("Missing site visit id")
                             return@launch
                         }
+                    // The backend's setOutcome only accepts a visit already in
+                    // on_counselling / picked_from_site / dropped. The outcome
+                    // buttons, however, unlock at On Site — so a manual close from
+                    // status="on_site" hit setOutcome's assertTransition and 500'd.
+                    // The QR flow advances on_site → on_counselling first; mirror
+                    // that here. Best-effort: it only transitions from on_site, so
+                    // for the already-eligible statuses it no-ops (error ignored)
+                    // and setOutcome below still runs.
+                    runCatching {
+                        geoApi.markSiteVisitOnCounselling(
+                            session.bearerToken,
+                            SiteVisitIdRequest(id = svId),
+                        )
+                    }
                     val resp = geoApi.setSiteVisitOutcome(
                         session.bearerToken,
                         SetSiteVisitOutcomeRequest(
@@ -4570,9 +4648,15 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 )
                 dismissAllowingStateLoss()
             } catch (e: Exception) {
-                finishCtaSave(e.message ?: "Network error")
-                Toast.makeText(requireContext(), e.message ?: "Network error", Toast.LENGTH_SHORT)
-                    .show()
+                // Retrofit throws HttpException on a 5xx before deserialising the
+                // body, so `e.message` is just "HTTP 500" — useless to the
+                // operator. Pull the backend's real {error:"..."} out of the body
+                // (e.g. an invalid-status transition or a validator rejection) so
+                // the sheet shows the actual reason. Mirrors persistSiteVisit's catch.
+                val serverMessage = extractHttpErrorMessage(e)
+                val message = serverMessage ?: e.message ?: "Network error"
+                finishCtaSave(message)
+                Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -5721,7 +5805,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private fun outcomeFromArg(value: String): Outcome? = when (value) {
         OUTCOME_BOOKING -> Outcome.BOOKING
         OUTCOME_SITE_VISIT -> Outcome.SITE_VISIT
-        OUTCOME_POSTPONED -> Outcome.POSTPONE
+        OUTCOME_POSTPONED, OUTCOME_FOLLOW_UP -> Outcome.POSTPONE
         OUTCOME_NOT_INTERESTED -> Outcome.NOT_INTERESTED
         // Map rejected → NOT_INTERESTED for the UI enum since both
         // are terminal-decline tabs; the actual outcome string saved
@@ -5951,7 +6035,9 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         //    fields (attendees, food prefs, pickup address from the
         //    client place if we have it).
         tvSvDate?.text = proposed.scheduledDate ?: visit.scheduledDate ?: ""
-        tvSvTime?.text = proposed.scheduledTime ?: visit.scheduledTime ?: ""
+        tvSvTime?.text = EditableTimeFormat.toDisplay(
+            proposed.scheduledTime ?: visit.scheduledTime
+        )
 
         // Cache lead + attendee context for the visitor-row auto-fill.
         // Order: client.clientName (canonical, manually entered) →
@@ -6278,6 +6364,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         // the Fixed tab.
         private const val OUTCOME_INTERESTED = "interested"
         private const val OUTCOME_POSTPONED = "postponed"
+        private const val OUTCOME_FOLLOW_UP = "follow_up"
         private const val OUTCOME_NOT_INTERESTED = "not_interested"
         // SV-cum-CP rejection (distinct from not_interested). Set by
         // the RejectReasonBottomSheet sub-flow with the captured reason

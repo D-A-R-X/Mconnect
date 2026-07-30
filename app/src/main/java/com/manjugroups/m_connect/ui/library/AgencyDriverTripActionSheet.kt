@@ -2,6 +2,7 @@ package com.manjugroups.m_connect.ui.library
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
 import android.app.Dialog
 import android.content.ActivityNotFoundException
 import android.content.Intent
@@ -54,8 +55,8 @@ import java.io.File
  *
  * START uploads the odometer photo and calls arrive → start (the backend
  * requires arrival before start, so we chain them). END uploads the closing
- * odometer photo and calls end. The client OTP the backend checks is a fixed
- * dummy ("0000") on this deployment, so the driver never has to type it.
+ * odometer photo and calls end. External starts accept the original fleet OTP
+ * or the same 1111 bypass used by the CP verification flow.
  */
 class AgencyDriverTripActionSheet : BottomSheetDialogFragment() {
 
@@ -93,19 +94,28 @@ class AgencyDriverTripActionSheet : BottomSheetDialogFragment() {
         }
         val file = currentPhotoFile
         if (result.resultCode == Activity.RESULT_OK && file != null && file.exists()) {
-            placeholder.visibility = View.GONE
-            ivPhoto.visibility = View.VISIBLE
-            ivPhoto.load(file)
+            showCapturedPhoto(file)
         } else {
-            Toast.makeText(requireContext(), "Camera capture cancelled", Toast.LENGTH_SHORT).show()
+            if (isAdded) Toast.makeText(requireContext(), "Camera capture cancelled", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private val galleryLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (!isAdded || uri == null) return@registerForActivityResult
+        val file = copyUriToTempFile(uri) ?: run {
+            if (isAdded) Toast.makeText(requireContext(), "Could not read image", Toast.LENGTH_SHORT).show()
+            return@registerForActivityResult
+        }
+        showCapturedPhoto(file)
     }
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) launchCamera()
-        else Toast.makeText(requireContext(), "Camera permission is required", Toast.LENGTH_SHORT).show()
+        else if (isAdded) Toast.makeText(requireContext(), "Camera permission is required", Toast.LENGTH_SHORT).show()
     }
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
@@ -158,13 +168,48 @@ class AgencyDriverTripActionSheet : BottomSheetDialogFragment() {
         view.findViewById<TextView>(R.id.tvKmLabel).text =
             if (isStart) "Start Km *" else "End Km *"
         view.findViewById<TextView>(R.id.tvCaptureHint).text =
-            if (isStart) "Document the dashboard odometer at trip start."
-            else "Document the dashboard odometer at trip end."
+            if (isStart) "Optionally add a dashboard photo at trip start."
+            else "Optionally add a dashboard photo at trip end."
         (btnSubmit as? android.widget.Button)?.text =
             if (isStart) "Start Trip" else "End Trip"
 
-        btnUpload.setOnClickListener { checkCameraPermissionAndLaunch() }
+        btnUpload.setOnClickListener { showPhotoSourceChooser() }
         btnSubmit.setOnClickListener { performSubmit() }
+    }
+
+    private fun showPhotoSourceChooser() {
+        AlertDialog.Builder(requireContext())
+            .setTitle("Add odometer photo")
+            .setItems(arrayOf("Take photo", "Choose from gallery")) { _, which ->
+                if (which == 0) {
+                    checkCameraPermissionAndLaunch()
+                } else {
+                    galleryLauncher.launch("image/*")
+                }
+            }
+            .show()
+    }
+
+    private fun showCapturedPhoto(file: File) {
+        currentPhotoFile = file
+        placeholder.visibility = View.GONE
+        ivPhoto.visibility = View.VISIBLE
+        ivPhoto.load(file)
+    }
+
+    private fun copyUriToTempFile(uri: Uri): File? {
+        return try {
+            val dir = File(requireContext().cacheDir, "agency_trip_photos").apply {
+                if (!exists()) mkdirs()
+            }
+            val file = File.createTempFile("trip_gallery_", ".jpg", dir)
+            requireContext().contentResolver.openInputStream(uri)?.use { input ->
+                file.outputStream().use { output -> input.copyTo(output) }
+            }
+            if (file.exists() && file.length() > 0) file else null
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun checkCameraPermissionAndLaunch() {
@@ -183,11 +228,16 @@ class AgencyDriverTripActionSheet : BottomSheetDialogFragment() {
         }
         val file = File.createTempFile("trip_", ".jpg", dir)
         currentPhotoFile = file
-        val uri = FileProvider.getUriForFile(
-            requireContext(),
-            "${requireContext().packageName}.fileprovider",
-            file,
-        )
+        val uri = runCatching {
+            FileProvider.getUriForFile(
+                requireContext(),
+                "${requireContext().packageName}.fileprovider",
+                file,
+            )
+        }.getOrElse {
+            if (isAdded) Toast.makeText(requireContext(), "Unable to open camera", Toast.LENGTH_SHORT).show()
+            return
+        }
         currentPhotoUri = uri
         val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
             putExtra(MediaStore.EXTRA_OUTPUT, uri)
@@ -215,16 +265,13 @@ class AgencyDriverTripActionSheet : BottomSheetDialogFragment() {
             Toast.makeText(requireContext(), "Enter the client OTP", Toast.LENGTH_SHORT).show()
             return
         }
-        val file = currentPhotoFile
-        if (file == null || !file.exists()) {
-            Toast.makeText(requireContext(), "Capture the odometer photo first", Toast.LENGTH_SHORT).show()
-            return
-        }
+        val file = currentPhotoFile?.takeIf { it.exists() }
 
         btnSubmit.isEnabled = false
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val storageId = uploadPhoto(file)
+                val storageId = file?.let { uploadPhoto(it) }
+                val photoIds = listOfNotNull(storageId)
                 val ok: Pair<Boolean, String?> = if (internal) {
                     if (mode == Mode.START) {
                         // Backend requires arrival before start; chain them. The
@@ -237,7 +284,7 @@ class AgencyDriverTripActionSheet : BottomSheetDialogFragment() {
                             session.bearerToken,
                             MmsFleetDriverStartRequest(
                                 siteVisitId = visitId,
-                                photoIds = listOf(storageId),
+                                photoIds = photoIds,
                                 startKm = km,
                             ),
                         )
@@ -247,7 +294,7 @@ class AgencyDriverTripActionSheet : BottomSheetDialogFragment() {
                             session.bearerToken,
                             MmsFleetDriverEndRequest(
                                 siteVisitId = visitId,
-                                photoIds = listOf(storageId),
+                                photoIds = photoIds,
                                 endKm = km,
                             ),
                         )
@@ -263,7 +310,7 @@ class AgencyDriverTripActionSheet : BottomSheetDialogFragment() {
                         TravelDeskStartTripRequest(
                             siteVisitId = visitId,
                             otp = otp,
-                            photoIds = listOf(storageId),
+                            photoIds = photoIds,
                             startKm = km,
                         ),
                     )
@@ -275,7 +322,7 @@ class AgencyDriverTripActionSheet : BottomSheetDialogFragment() {
                         session.bearerToken,
                         TravelDeskEndTripRequest(
                             siteVisitId = visitId,
-                            photoIds = listOf(storageId),
+                            photoIds = photoIds,
                             endKm = km,
                         ),
                     )
@@ -287,6 +334,7 @@ class AgencyDriverTripActionSheet : BottomSheetDialogFragment() {
                 setFragmentResult(RESULT_KEY, bundleOf("success" to true, "visitId" to visitId))
                 dismissAllowingStateLoss()
             } catch (e: Exception) {
+                if (!isAdded) return@launch
                 btnSubmit.isEnabled = true
                 Toast.makeText(requireContext(), readApiError(e), Toast.LENGTH_LONG).show()
             }
@@ -328,8 +376,6 @@ class AgencyDriverTripActionSheet : BottomSheetDialogFragment() {
         private const val ARG_VISIT_ID = "arg_visit_id"
         private const val ARG_MODE = "arg_mode"
         private const val ARG_INTERNAL = "arg_internal"
-        private const val CLIENT_OTP = "0000"
-
         fun newInstance(
             visitId: String,
             mode: Mode,

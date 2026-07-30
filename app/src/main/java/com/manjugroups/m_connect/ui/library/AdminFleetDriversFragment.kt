@@ -51,8 +51,7 @@ class AdminFleetDriversFragment : Fragment() {
      * would 401 on the agency ones, which the watchdog reads as a dead session).
      */
     private val useMmsFleet: Boolean
-        get() = !session.designation.orEmpty()
-            .trim().equals("External Fleet", ignoreCase = true)
+        get() = !session.isExternalFleetAgencyOperator
 
     /**
      * Human-readable load failure.
@@ -98,9 +97,10 @@ class AdminFleetDriversFragment : Fragment() {
                 name = driver.name,
                 phone = driver.phone,
                 address = driver.address,
+                category = driver.category,
                 status = driver.status,
-                onSave = { newName, newPhone, newAddress ->
-                    submitUpdate(driver.id, newName, newPhone, newAddress)
+                onSave = { newName, newPhone, newAddress, newCategory ->
+                    submitUpdate(driver.id, newName, newPhone, newAddress, newCategory)
                 },
                 onDeactivate = {
                     val nextStatus = if (driver.status == "Active") "inactive" else "active"
@@ -131,8 +131,8 @@ class AdminFleetDriversFragment : Fragment() {
         })
 
         binding.btnCreateDriver.setOnClickListener {
-            val bottomSheet = CreateDriverBottomSheet.newInstance { name, phone, address ->
-                submitCreate(name, phone, address)
+            val bottomSheet = CreateDriverBottomSheet.newInstance { name, phone, address, category ->
+                submitCreate(name, phone, address, category)
             }
             bottomSheet.showOnce(parentFragmentManager, "CreateDriverBottomSheet")
         }
@@ -174,7 +174,7 @@ class AdminFleetDriversFragment : Fragment() {
         }
     }
 
-    private fun submitCreate(name: String, phone: String, address: String) {
+    private fun submitCreate(name: String, phone: String, address: String, category: String) {
         val token = session.bearerToken
         if (token.isBlank()) {
             Toast.makeText(requireContext(), "Session expired — sign in again.", Toast.LENGTH_SHORT).show()
@@ -187,6 +187,7 @@ class AdminFleetDriversFragment : Fragment() {
                     name = name.trim(),
                     phone = phone.trim(),
                     address = address.trim().takeIf { it.isNotBlank() },
+                    category = category,
                 )
                 val resp = if (useMmsFleet) api.createMmsDriver(token, request)
                     else api.createDriver(token, request)
@@ -206,7 +207,13 @@ class AdminFleetDriversFragment : Fragment() {
         }
     }
 
-    private fun submitUpdate(id: String, name: String, phone: String, address: String) {
+    private fun submitUpdate(
+        id: String,
+        name: String,
+        phone: String,
+        address: String,
+        category: String,
+    ) {
         val token = session.bearerToken
         if (token.isBlank()) {
             Toast.makeText(requireContext(), "Session expired — sign in again.", Toast.LENGTH_SHORT).show()
@@ -220,6 +227,7 @@ class AdminFleetDriversFragment : Fragment() {
                     name = name.trim().takeIf { it.isNotBlank() },
                     phone = phone.trim().takeIf { it.isNotBlank() },
                     address = address.trim().takeIf { it.isNotBlank() },
+                    category = category,
                 )
                 val resp = if (useMmsFleet) api.updateMmsDriver(token, request)
                     else api.updateDriver(token, request)
@@ -276,6 +284,7 @@ class AdminFleetDriversFragment : Fragment() {
             // Internal fleet drivers may have no phone on record.
             phone = d.phone.orEmpty(),
             address = d.address ?: "",
+            category = d.category?.uppercase()?.takeIf { it == "OLD" || it == "NEW" } ?: "NEW",
             status = statusLabel,
         )
     }
@@ -289,7 +298,8 @@ class AdminFleetDriversFragment : Fragment() {
             displayedDrivers.addAll(allDrivers.filter {
                 it.name.lowercase(Locale.getDefault()).contains(cleanQuery) ||
                 it.phone.contains(cleanQuery) ||
-                it.address.lowercase(Locale.getDefault()).contains(cleanQuery)
+                it.address.lowercase(Locale.getDefault()).contains(cleanQuery) ||
+                it.category.lowercase(Locale.getDefault()).contains(cleanQuery)
             })
         }
         adapter.notifyDataSetChanged()
@@ -307,6 +317,7 @@ class AdminFleetDriversFragment : Fragment() {
         val name: String,
         val phone: String,
         val address: String,
+        val category: String,
         val status: String // "Active" or "Inactive"
     )
 
@@ -336,6 +347,7 @@ class AdminFleetDriversFragment : Fragment() {
 
                 binding.tvDriverName.text = item.name
                 binding.tvDriverPhone.text = item.phone
+                binding.tvDriverCategory.text = item.category
                 binding.tvDriverAddress.text = item.address.ifBlank { "—" }
                 binding.tvDriverStatus.text = item.status
 

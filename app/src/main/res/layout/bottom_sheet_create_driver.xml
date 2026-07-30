@@ -158,6 +158,36 @@
             android:src="@drawable/ic_custom_address" />
     </FrameLayout>
 
+    <TextView
+        android:id="@+id/tvLabelCategory"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:fontFamily="@font/inter_semibold"
+        android:text="Category *"
+        android:textColor="#374151"
+        android:textSize="13sp" />
+
+    <EditText
+        android:id="@+id/etDriverCategory"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_input"
+        android:clickable="true"
+        android:cursorVisible="false"
+        android:drawableStart="@drawable/ic_custom_user"
+        android:drawableEnd="@drawable/ic_chevron_down"
+        android:drawablePadding="10dp"
+        android:focusable="false"
+        android:fontFamily="@font/inter_regular"
+        android:hint="Select OLD or NEW"
+        android:inputType="none"
+        android:paddingHorizontal="14dp"
+        android:textColor="#111827"
+        android:textColorHint="#9CA3AF"
+        android:textSize="14sp" />
+
     <!-- Submit Button (Create Mode) -->
     <androidx.appcompat.widget.AppCompatButton
         android:id="@+id/btnSubmitCreate"

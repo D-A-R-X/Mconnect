@@ -150,7 +150,11 @@ class EmployeePasswordLoginActivity : AppCompatActivity() {
             // phone" path even when designation isn't literally "Driver".
             session.fleetDriverByBackend = runCatching {
                 geoApi.getMmsFleetDriverTrips(session.bearerToken)
-            }.map { it.success }.getOrDefault(false)
+            }.map { response ->
+                response.success &&
+                    response.diagnostics?.notDriver != true &&
+                    response.diagnostics?.reason != "staff_not_driver"
+            }.getOrDefault(false)
 
             runCatching {
                 api.getMyIamPermissions(session.bearerToken)

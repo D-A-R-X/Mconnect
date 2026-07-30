@@ -227,6 +227,14 @@ class SessionManager(context: Context) {
         get() = (designation ?: "").trim()
             .equals("External Fleet", ignoreCase = true)
 
+    val isExternalFleetStaff: Boolean
+        get() = (role ?: "").trim().equals("agency_staff", ignoreCase = true) ||
+            (designation ?: "").trim()
+                .equals("External Fleet Staff", ignoreCase = true)
+
+    val isExternalFleetAgencyOperator: Boolean
+        get() = isExternalFleetAgency || isExternalFleetStaff
+
     /**
      * A driver created BY an external agency. Same synthesised-designation
      * trick as [isExternalFleetAgency]. Deliberately distinct from
@@ -240,7 +248,7 @@ class SessionManager(context: Context) {
 
     /** Either external principal — neither has a staff record to look up. */
     val isExternalFleetPrincipal: Boolean
-        get() = isExternalFleetAgency || isExternalFleetDriver
+        get() = isExternalFleetAgencyOperator || isExternalFleetDriver
 
     val isFleetAdminDriver: Boolean
         get() = isDriverDesignation(designation) &&
@@ -549,6 +557,19 @@ class SessionManager(context: Context) {
         if (isDriverMode) return true
         if ((role ?: "").trim().equals("super-admin", ignoreCase = true)) return true
         return iamPermissions.contains("marketing.fleet.myTrips.view")
+    }
+
+    /**
+     * Whether the current user can mark an expired fleet trip as completed offline.
+     *
+     * Mirrors the server-side gating on markExpiredTripOutcomePending which
+     * requires `marketing.fleet.completeOffline`. Fleet dispatchers get this
+     * by designation grant; super-admins get it automatically.
+     */
+    fun canCompleteOfflineFleet(): Boolean {
+        if (isExternalFleetAgencyOperator) return true
+        if ((role ?: "").trim().equals("super-admin", ignoreCase = true)) return true
+        return iamPermissions.contains("marketing.fleet.completeOffline")
     }
 
     /**

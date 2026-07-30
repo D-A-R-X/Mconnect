@@ -1,0 +1,690 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/completeFormScroll"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@android:color/transparent"
+    android:clipToPadding="false"
+    android:fillViewport="true"
+    android:overScrollMode="never">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_leave_sheet"
+        android:orientation="vertical"
+        android:paddingHorizontal="20dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="24dp">
+
+        <View
+            android:layout_width="40dp"
+            android:layout_height="4dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="16dp"
+            android:background="#E4E7EC" />
+
+        <TextView
+            android:id="@+id/tvCompleteTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Complete Outcome"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textSize="18sp" />
+
+        <TextView
+            android:id="@+id/tvCompleteSubtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:fontFamily="@font/inter_regular"
+            android:text="Save trip details, then the Site Incharge can record the final outcome."
+            android:textColor="#667085"
+            android:textSize="12sp" />
+
+        <!-- Dashboard images already uploaded for this trip (e.g. captured on
+             the travel-desk / driver side). Shown so the reviewer can see the
+             proof that's already on file. Hidden when there are none. -->
+        <LinearLayout
+            android:id="@+id/layoutExistingPhotos"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="6dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/inter_medium"
+                    android:text="Start image on file"
+                    android:textColor="#344054"
+                    android:textSize="12sp" />
+
+                <ImageView
+                    android:id="@+id/ivExistingStartPhoto"
+                    android:layout_width="match_parent"
+                    android:layout_height="96dp"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/bg_input"
+                    android:scaleType="centerCrop"
+                    android:visibility="gone"
+                    android:contentDescription="Start dashboard image on file" />
+
+                <TextView
+                    android:id="@+id/tvExistingStartEmpty"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:fontFamily="@font/inter_regular"
+                    android:text="Not captured"
+                    android:textColor="#98A2B3"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/inter_medium"
+                    android:text="End image on file"
+                    android:textColor="#344054"
+                    android:textSize="12sp" />
+
+                <ImageView
+                    android:id="@+id/ivExistingEndPhoto"
+                    android:layout_width="match_parent"
+                    android:layout_height="96dp"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/bg_input"
+                    android:scaleType="centerCrop"
+                    android:visibility="gone"
+                    android:contentDescription="End dashboard image on file" />
+
+                <TextView
+                    android:id="@+id/tvExistingEndEmpty"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:fontFamily="@font/inter_regular"
+                    android:text="Not captured"
+                    android:textColor="#98A2B3"
+                    android:textSize="11sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Staff can choose a fleet type. Agency sessions are already
+             external, so this entire selector is hidden for them. -->
+        <LinearLayout
+            android:id="@+id/layoutFleetTypeSelector"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_medium"
+                android:text="Fleet type *"
+                android:textColor="#344054"
+                android:textSize="12sp" />
+
+            <Spinner
+                android:id="@+id/spinnerFleetType"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input"
+                android:paddingHorizontal="8dp" />
+        </LinearLayout>
+
+        <!-- Internal fleet: vehicle picker -->
+        <LinearLayout
+            android:id="@+id/layoutInternalFleet"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="Vehicle *"
+                android:textColor="#344054"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/tvVehicleSelector"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input"
+                android:drawableEnd="@android:drawable/arrow_down_float"
+                android:gravity="center_vertical"
+                android:fontFamily="@font/inter_regular"
+                android:hint="Select vehicle"
+                android:paddingHorizontal="12dp"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/tvSelectedDriver"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:fontFamily="@font/inter_regular"
+                android:textColor="#667085"
+                android:textSize="11sp"
+                android:visibility="gone" />
+
+            <!-- Base rate: "Per km rate" for km-priced trips, else "Package price" -->
+            <TextView
+                android:id="@+id/tvInternalBaseLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="Package price"
+                android:textColor="#344054"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/etPackageAmount"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input"
+                android:fontFamily="@font/inter_regular"
+                android:hint="Enter package price"
+                android:inputType="numberDecimal"
+                android:paddingHorizontal="12dp"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textSize="14sp" />
+
+            <!-- Distance (optional) -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="Start km *"
+                android:textColor="#344054"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/etStartKm"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input"
+                android:fontFamily="@font/inter_regular"
+                android:hint="Start odometer"
+                android:inputType="numberDecimal"
+                android:paddingHorizontal="12dp"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textSize="14sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="End km *"
+                android:textColor="#344054"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/etEndKm"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input"
+                android:fontFamily="@font/inter_regular"
+                android:hint="End odometer"
+                android:inputType="numberDecimal"
+                android:paddingHorizontal="12dp"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textSize="14sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="Total km travelled"
+                android:textColor="#344054"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/etTotalKmInternal"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input"
+                android:focusable="false"
+                android:hint="Calculated automatically"
+                android:paddingHorizontal="12dp" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btnStartDashboardImage"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/bg_input"
+                android:text="Select start dashboard image (optional)"
+                android:textAllCaps="false" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btnEndDashboardImage"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_input"
+                android:text="Select end dashboard image (optional)"
+                android:textAllCaps="false" />
+
+            <EditText
+                android:id="@+id/etStandingMinutesInternal"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/bg_input"
+                android:hint="Standing minutes (optional)"
+                android:inputType="number"
+                android:paddingHorizontal="12dp" />
+
+            <CheckBox
+                android:id="@+id/checkStandingWithAcInternal"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:enabled="false"
+                android:minHeight="46dp"
+                android:text="Standing with AC" />
+        </LinearLayout>
+
+        <!-- External fleet: agency name + package + distance -->
+        <LinearLayout
+            android:id="@+id/layoutExternalFleet"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="Vehicle sent"
+                android:textColor="#344054"
+                android:textSize="12sp" />
+
+            <Spinner
+                android:id="@+id/spinnerExternalVehicle"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input"
+                android:paddingHorizontal="12dp" />
+
+            <EditText
+                android:id="@+id/etExternalDriverName"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_input"
+                android:hint="Driver name (optional)"
+                android:imeOptions="actionNext"
+                android:inputType="textPersonName"
+                android:paddingHorizontal="12dp" />
+
+            <EditText
+                android:id="@+id/etExternalDriverPhone"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_input"
+                android:hint="Driver phone (optional)"
+                android:imeOptions="actionNext"
+                android:inputType="phone"
+                android:paddingHorizontal="12dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="Package price"
+                android:textColor="#344054"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/etPackageAmountExternal"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input"
+                android:fontFamily="@font/inter_regular"
+                android:hint="Enter package price"
+                android:imeOptions="actionNext"
+                android:inputType="numberDecimal"
+                android:paddingHorizontal="12dp"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textSize="14sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="Total km travelled"
+                android:textColor="#344054"
+                android:textSize="12sp"
+                android:visibility="visible" />
+
+            <EditText
+                android:id="@+id/etDistanceKmExternal"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input"
+                android:fontFamily="@font/inter_regular"
+                android:focusable="false"
+                android:hint="Calculated automatically"
+                android:imeOptions="actionNext"
+                android:inputType="numberDecimal"
+                android:paddingHorizontal="12dp"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textSize="14sp"
+                android:visibility="visible" />
+
+            <EditText
+                android:id="@+id/etStartKmExternal"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/bg_input"
+                android:hint="Start km *"
+                android:inputType="numberDecimal"
+                android:paddingHorizontal="12dp" />
+
+            <EditText
+                android:id="@+id/etEndKmExternal"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_input"
+                android:hint="End km *"
+                android:inputType="numberDecimal"
+                android:paddingHorizontal="12dp" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btnStartDashboardImageExternal"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/bg_input"
+                android:text="Select start dashboard image (optional)"
+                android:textAllCaps="false" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btnEndDashboardImageExternal"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_input"
+                android:text="Select end dashboard image (optional)"
+                android:textAllCaps="false" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="Standing time"
+                android:textColor="#344054"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/etStandingMinutesExternal"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input"
+                android:fontFamily="@font/inter_regular"
+                android:hint="Minutes (optional)"
+                android:imeOptions="actionDone"
+                android:inputType="number"
+                android:paddingHorizontal="12dp"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textSize="14sp" />
+
+            <CheckBox
+                android:id="@+id/checkStandingWithAcExternal"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:buttonTint="?attr/colorAccentPrimary"
+                android:enabled="false"
+                android:fontFamily="@font/inter_medium"
+                android:minHeight="46dp"
+                android:paddingHorizontal="8dp"
+                android:text="Standing with AC"
+                android:textColor="#344054"
+                android:textSize="13sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="40dp"
+                android:fontFamily="@font/inter_regular"
+                android:text="Leave unchecked for without AC"
+                android:textColor="#667085"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <!-- Own vehicle: package + distance only -->
+        <LinearLayout
+            android:id="@+id/layoutOwnVehicle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="Package price"
+                android:textColor="#344054"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/etPackageAmountOwn"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input"
+                android:fontFamily="@font/inter_regular"
+                android:hint="Enter package price"
+                android:inputType="numberDecimal"
+                android:paddingHorizontal="12dp"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textSize="14sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="Distance travelled"
+                android:textColor="#344054"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/etDistanceKmOwn"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_input"
+                android:fontFamily="@font/inter_regular"
+                android:hint="Km (optional)"
+                android:inputType="numberDecimal"
+                android:paddingHorizontal="12dp"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Additional charges (optional)"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textSize="13sp" />
+
+        <EditText
+            android:id="@+id/etBeta"
+            android:layout_width="match_parent"
+            android:layout_height="46dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_input"
+            android:hint="Beta"
+            android:inputType="numberDecimal"
+            android:paddingHorizontal="12dp" />
+
+        <EditText
+            android:id="@+id/etBeta2"
+            android:layout_width="match_parent"
+            android:layout_height="46dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_input"
+            android:hint="Beta 2"
+            android:inputType="numberDecimal"
+            android:paddingHorizontal="12dp" />
+
+        <EditText
+            android:id="@+id/etTollAmount"
+            android:layout_width="match_parent"
+            android:layout_height="46dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_input"
+            android:hint="Toll charge"
+            android:inputType="numberDecimal"
+            android:paddingHorizontal="12dp" />
+
+        <EditText
+            android:id="@+id/etHillCharge"
+            android:layout_width="match_parent"
+            android:layout_height="46dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_input"
+            android:hint="Hill charge"
+            android:inputType="numberDecimal"
+            android:paddingHorizontal="12dp" />
+
+        <EditText
+            android:id="@+id/etOutstationCharge"
+            android:layout_width="match_parent"
+            android:layout_height="46dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_input"
+            android:hint="Outstation charge"
+            android:inputType="numberDecimal"
+            android:paddingHorizontal="12dp" />
+
+        <EditText
+            android:id="@+id/etPermitCharge"
+            android:layout_width="match_parent"
+            android:layout_height="46dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_input"
+            android:hint="Permit charge"
+            android:inputType="numberDecimal"
+            android:paddingHorizontal="12dp" />
+
+        <EditText
+            android:id="@+id/etPermitTax"
+            android:layout_width="match_parent"
+            android:layout_height="46dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_input"
+            android:hint="Permit tax"
+            android:inputType="numberDecimal"
+            android:paddingHorizontal="12dp" />
+
+        <EditText
+            android:id="@+id/etStandingCharge"
+            android:layout_width="match_parent"
+            android:layout_height="46dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_input"
+            android:hint="Standing charge"
+            android:inputType="numberDecimal"
+            android:paddingHorizontal="12dp" />
+
+        <!-- Live billing total: base (km rate × distance, or package) + charges -->
+        <TextView
+            android:id="@+id/tvBillingTotal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Billing total: —"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textSize="14sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:orientation="horizontal">
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btnCancelComplete"
+                android:layout_width="0dp"
+                android:layout_height="46dp"
+                android:layout_marginEnd="6dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_btn_reject_outline_red"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Cancel"
+                android:textAllCaps="false"
+                android:textColor="#B42318"
+                android:textSize="14sp" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btnSubmitComplete"
+                android:layout_width="0dp"
+                android:layout_height="46dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_button_primary"
+                android:backgroundTint="#0B61CA"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Save"
+                android:textAllCaps="false"
+                android:textColor="@android:color/white"
+                android:textSize="14sp" />
+        </LinearLayout>
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

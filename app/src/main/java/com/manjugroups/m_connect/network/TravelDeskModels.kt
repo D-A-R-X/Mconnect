@@ -33,7 +33,7 @@ data class TravelDeskAuthUser(
     val name: String? = null,
     val phone: String? = null,
     val address: String? = null,
-    /** "driver" or "agency". Agencies use the travel-desk web, not the app. */
+    /** "driver", "agency", or "agency_staff". */
     val role: String? = null,
 )
 
@@ -62,6 +62,7 @@ data class TravelDeskTrip(
     // (e.g. a date-grouped wrapper) produced an id that was null despite the
     // type, and threw at the first non-null use. Callers must skip id-less rows.
     @SerializedName("_id") val id: String? = null,
+    val createdAt: Long? = null,
     val scheduledDate: String? = null,
     val scheduledTime: String? = null,
     val pickupAddress: String? = null,
@@ -95,6 +96,32 @@ data class TravelDeskTrip(
     val travelDeskOnSiteAt: Long? = null,
     val travelDeskPickedFromSiteAt: Long? = null,
     val travelDeskEndedAt: Long? = null,
+    val travelDeskTaskStatus: String? = null,
+    val travelDeskProofPending: Boolean? = null,
+    val fleetProgressState: String? = null,
+    val completedOffline: Boolean? = null,
+    val outcome: String? = null,
+    val travelDeskPricingMode: String? = null,
+    val travelDeskKmRate: Double? = null,
+    val travelDeskPackageAmount: Double? = null,
+    val travelDeskBeta: Double? = null,
+    val travelDeskBeta2: Double? = null,
+    val travelDeskTollAmount: Double? = null,
+    val travelDeskHillCharge: Double? = null,
+    val travelDeskOutstationCharge: Double? = null,
+    val travelDeskPermitCharge: Double? = null,
+    val travelDeskPermitTax: Double? = null,
+    val travelDeskStandingCharge: Double? = null,
+    // Operator-defined extra charge lines applied at completion (agency web /
+    // MMS). `amount` is the computed line total; `unit` retained for display.
+    val travelDeskCustomCharges: List<TravelDeskAppliedCharge> = emptyList(),
+    val travelDeskBillingCompletedAt: Long? = null,
+    val travelDeskTotalAmount: Double? = null,
+    val travelDeskExtraKm: Double? = null,
+    val travelDeskExtraKmRate: Double? = null,
+    val travelDeskExtraKmAmount: Double? = null,
+    val travelDeskExtraKmStatus: String? = null,
+    val travelDeskExtraKmReviewReason: String? = null,
     // Odometer readings + dashboard photos the driver captured at start/end.
     val travelDeskStartKm: Double? = null,
     val travelDeskEndKm: Double? = null,
@@ -105,6 +132,14 @@ data class TravelDeskTrip(
 data class TravelDeskAgencyRef(
     @SerializedName("_id") val id: String? = null,
     val name: String? = null,
+)
+
+/** A custom charge as applied to a completed trip. `unit` is one of
+ *  km / hour / minute / person / toll / trip (retained for display). */
+data class TravelDeskAppliedCharge(
+    val label: String? = null,
+    val amount: Double? = null,
+    val unit: String? = null,
 )
 
 /** The lead a site visit is linked to. enrichVisit returns this inline; the
@@ -123,6 +158,7 @@ data class TravelDeskLead(
 data class TravelDeskDriverTrip(
     // Nullable for the same Gson reason as TravelDeskTrip — skip id-less rows.
     @SerializedName("_id") val id: String? = null,
+    val createdAt: Long? = null,
     val scheduledDate: String? = null,
     val scheduledTime: String? = null,
     val pickupAddress: String? = null,
@@ -165,6 +201,8 @@ data class TravelDeskEndTripRequest(
     val siteVisitId: String,
     val photoIds: List<String>,
     val endKm: Double? = null,
+    val tollAmount: Double? = null,
+    val beta: Double? = null,
 )
 
 data class TravelDeskStorageResponse(
@@ -254,13 +292,39 @@ data class AllocateTripRequest(
 
 // ── Vehicles create ─────────────────────────────────────────────────────
 
+data class CompleteOfflineTripRequest(
+    val siteVisitId: String,
+    val packageAmount: Double? = null,
+    val kmRate: Double? = null,
+    val distanceKm: Double? = null,
+    val driverName: String? = null,
+    val driverPhone: String? = null,
+    val beta: Double? = null,
+    val beta2: Double? = null,
+    val tollAmount: Double? = null,
+    val hillCharge: Double? = null,
+    val outstationCharge: Double? = null,
+    val permitCharge: Double? = null,
+    val permitTax: Double? = null,
+    val standingCharge: Double? = null,
+    val fleetType: String? = null,
+    val vehicleId: String? = null,
+    val agencyName: String? = null,
+    val standingTimeMinutes: Int? = null,
+    val standingWithAc: Boolean? = null,
+    val startKm: Double? = null,
+    val endKm: Double? = null,
+    val startPhotoIds: List<String>? = null,
+    val endPhotoIds: List<String>? = null,
+)
+
 data class CreateVehicleRequest(
-    val vehicleNumber: String,
+    val vehicleNumber: String? = null,
     val make: String? = null,
-    val model: String? = null,
-    val modelYear: Int? = null,
-    val type: String? = null,
-    val capacity: Int? = null,
+    val model: String,
+    val modelYear: Int,
+    val type: String,
+    val capacity: Int,
     val defaultDriverName: String? = null,
     val defaultDriverPhone: String? = null,
     val defaultDriverWhatsapp: String? = null,
@@ -292,6 +356,8 @@ data class TravelDeskDriver(
     // and Gson writes null straight through a non-null declaration.
     val phone: String? = null,
     val address: String? = null,
+    /** Lowercase MMS contract value: "old" or "new". */
+    val category: String? = null,
     val status: String = "active",
 )
 
@@ -309,6 +375,7 @@ data class CreateDriverRequest(
     val name: String,
     val phone: String,
     val address: String? = null,
+    val category: String,
 )
 
 data class UpdateDriverRequest(
@@ -316,6 +383,7 @@ data class UpdateDriverRequest(
     val name: String? = null,
     val phone: String? = null,
     val address: String? = null,
+    val category: String? = null,
 )
 
 data class SetDriverStatusRequest(
@@ -329,10 +397,80 @@ data class TravelDeskCreateResponse(
     val success: Boolean = false,
     val driverId: String? = null,
     val vehicleId: String? = null,
+    val staffId: String? = null,
     val error: String? = null,
 )
 
 data class TravelDeskSimpleResponse(
     val success: Boolean = false,
     val error: String? = null,
+)
+
+data class TravelDeskAgencySettings(
+    val kmRate: Double = 0.0,
+    val packageAmount: Double = 0.0,
+    val bettaAmount: Double = 0.0,
+    val permitCharge: Double = 0.0,
+    val permitTax: Double = 0.0,
+    val standingChargeWithAc: Double = 0.0,
+    val standingChargeDurationMinutes: Double = 0.0,
+    val waitingAllowance: Double = 0.0,
+    val cancellationAllowance: Double = 0.0,
+    val tollCharge: Double = 0.0,
+)
+
+data class TravelDeskSettingsResponse(
+    val success: Boolean = false,
+    val settings: TravelDeskAgencySettings? = null,
+    val error: String? = null,
+)
+
+data class UpdateTravelDeskSettingsRequest(
+    val kmRate: Double,
+    val packageAmount: Double,
+    val bettaAmount: Double? = null,
+    val permitCharge: Double? = null,
+    val permitTax: Double? = null,
+    val standingChargeWithAc: Double? = null,
+    val standingChargeDurationMinutes: Double? = null,
+    val waitingAllowance: Double? = null,
+    val cancellationAllowance: Double? = null,
+    val tollCharge: Double? = null,
+)
+
+data class ExtraKmClaimRequest(
+    val siteVisitId: String,
+    val extraKm: Double,
+)
+
+data class TravelDeskAgencyStaff(
+    @SerializedName("_id") val id: String,
+    val travelAgencyId: String? = null,
+    val name: String,
+    val phone: String,
+    val whatsapp: String? = null,
+    val status: String = "active",
+)
+
+data class TravelDeskAgencyStaffResponse(
+    val success: Boolean = false,
+    val staff: List<TravelDeskAgencyStaff>? = null,
+    val error: String? = null,
+) {
+    val rows: List<TravelDeskAgencyStaff>
+        get() = staff ?: emptyList()
+}
+
+data class CreateAgencyStaffRequest(
+    val name: String,
+    val phone: String,
+    val whatsapp: String? = null,
+)
+
+data class UpdateAgencyStaffRequest(
+    val id: String,
+    val name: String? = null,
+    val phone: String? = null,
+    val whatsapp: String? = null,
+    val status: String? = null,
 )

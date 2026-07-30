@@ -381,14 +381,19 @@ class HomeViewModel : ViewModel() {
                 _driverTripsError.value = null
                 try {
                     val driverResp = driverDeferred!!.await().getOrThrow()
+                    val notDriver =
+                        driverResp.diagnostics?.notDriver == true ||
+                            driverResp.diagnostics?.reason == "staff_not_driver"
                     // Persist the backend's verdict so the rest of the
                     // app (SessionManager.isDriverMode) reflects it on
                     // the very next access, without waiting for a
                     // logout/login cycle.
                     if (session != null) {
-                        session.fleetDriverByBackend = driverResp.success
+                        session.fleetDriverByBackend = driverResp.success && !notDriver
                     }
-                    if (driverResp.success) {
+                    if (notDriver) {
+                        _driverTripsError.value = null
+                    } else if (driverResp.success) {
                         val existingIds = merged.map { it.id }.toHashSet()
                         val driverTrips = driverResp.trips
                             .mapNotNull { it.toTodayVisitOrNull() }

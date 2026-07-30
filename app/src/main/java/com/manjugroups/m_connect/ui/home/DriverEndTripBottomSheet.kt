@@ -2,6 +2,7 @@ package com.manjugroups.m_connect.ui.home
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
 import android.app.Dialog
 import android.content.ActivityNotFoundException
 import android.content.Intent
@@ -34,6 +35,7 @@ import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.MmsFleetDriverEndRequest
 import com.manjugroups.m_connect.network.MmsFleetDriverSiteVisitRequest
+import com.manjugroups.m_connect.util.fleetTripDistanceKm
 import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.asRequestBody
@@ -73,12 +75,21 @@ class DriverEndTripBottomSheet : BottomSheetDialogFragment() {
         }
         val file = currentPhotoFile
         if (result.resultCode == Activity.RESULT_OK && file != null && file.exists()) {
-            layoutUploadPlaceholder.visibility = View.GONE
-            ivUploadedPhoto.visibility = View.VISIBLE
-            ivUploadedPhoto.load(file)
+            showCapturedPhoto(file)
         } else {
-            Toast.makeText(requireContext(), "Camera capture cancelled", Toast.LENGTH_SHORT).show()
+            if (isAdded) Toast.makeText(requireContext(), "Camera capture cancelled", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private val galleryLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (!isAdded || uri == null) return@registerForActivityResult
+        val file = copyUriToTempFile(uri) ?: run {
+            if (isAdded) Toast.makeText(requireContext(), "Could not read image", Toast.LENGTH_SHORT).show()
+            return@registerForActivityResult
+        }
+        showCapturedPhoto(file)
     }
 
     private val permissionLauncher = registerForActivityResult(
@@ -87,7 +98,7 @@ class DriverEndTripBottomSheet : BottomSheetDialogFragment() {
         if (granted) {
             launchCamera()
         } else {
-            Toast.makeText(requireContext(), "Camera permission is required", Toast.LENGTH_SHORT).show()
+            if (isAdded) Toast.makeText(requireContext(), "Camera permission is required", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -131,11 +142,46 @@ class DriverEndTripBottomSheet : BottomSheetDialogFragment() {
         btnSubmit = view.findViewById(R.id.btnSubmit)
 
         btnUploadImage.setOnClickListener {
-            checkCameraPermissionAndLaunch()
+            showPhotoSourceChooser()
         }
 
         btnSubmit.setOnClickListener {
             performSubmit()
+        }
+    }
+
+    private fun showPhotoSourceChooser() {
+        AlertDialog.Builder(requireContext())
+            .setTitle("Add odometer photo")
+            .setItems(arrayOf("Take photo", "Choose from gallery")) { _, which ->
+                if (which == 0) {
+                    checkCameraPermissionAndLaunch()
+                } else {
+                    galleryLauncher.launch("image/*")
+                }
+            }
+            .show()
+    }
+
+    private fun showCapturedPhoto(file: File) {
+        currentPhotoFile = file
+        layoutUploadPlaceholder.visibility = View.GONE
+        ivUploadedPhoto.visibility = View.VISIBLE
+        ivUploadedPhoto.load(file)
+    }
+
+    private fun copyUriToTempFile(uri: Uri): File? {
+        return try {
+            val dir = File(requireContext().cacheDir, "arrival_photos").apply {
+                if (!exists()) mkdirs()
+            }
+            val file = File.createTempFile("end_gallery_", ".jpg", dir)
+            requireContext().contentResolver.openInputStream(uri)?.use { input ->
+                file.outputStream().use { output -> input.copyTo(output) }
+            }
+            if (file.exists() && file.length() > 0) file else null
+        } catch (_: Exception) {
+            null
         }
     }
 
@@ -157,11 +203,16 @@ class DriverEndTripBottomSheet : BottomSheetDialogFragment() {
         }
         val file = File.createTempFile("end_", ".jpg", dir)
         currentPhotoFile = file
-        val uri = FileProvider.getUriForFile(
-            requireContext(),
-            "${requireContext().packageName}.fileprovider",
-            file
-        )
+        val uri = runCatching {
+            FileProvider.getUriForFile(
+                requireContext(),
+                "${requireContext().packageName}.fileprovider",
+                file
+            )
+        }.getOrElse {
+            if (isAdded) Toast.makeText(requireContext(), "Unable to open camera", Toast.LENGTH_SHORT).show()
+            return
+        }
         currentPhotoUri = uri
 
         val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
@@ -187,10 +238,10 @@ class DriverEndTripBottomSheet : BottomSheetDialogFragment() {
             return
         }
         val endKmVal = kmText.toDoubleOrNull() ?: 0.0
-        if (endKmVal < startKm) {
+        if (fleetTripDistanceKm(startKm, endKmVal) == null) {
             Toast.makeText(
                 requireContext(),
-                "Ending Km cannot be less than starting Km (${startKm.toInt()} Km)",
+                "Check the odometer readings. Trip distance cannot exceed 5,000 km.",
                 Toast.LENGTH_LONG
             ).show()
             return

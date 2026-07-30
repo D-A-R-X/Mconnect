@@ -265,7 +265,7 @@ class SiteVisitsFragment : Fragment() {
     // "Picked Up" — client collected from the CP and the trip is in transit
     // through to the site and back. "arrived" is the collapsed-bucket fallback.
     private fun isPickedUp(s: String): Boolean = s in setOf(
-        "picked_up", "on_site", "picked_from_site", "arrived",
+        "picked_up", "on_site", "consulting", "on_counselling", "picked_from_site", "arrived",
     )
 
     private fun isCompleted(s: String): Boolean = s in setOf(
@@ -290,6 +290,7 @@ class SiteVisitsFragment : Fragment() {
         if (!isScheduledState(effStatus(visit))) return false
         return com.manjugroups.m_connect.util.VisitExpiry.isExpired(
             visit.scheduledDate, visit.scheduledStartTime, isDone = false,
+            createdAtMillis = visit.creationTime?.toLong(),
         )
     }
 
@@ -537,6 +538,10 @@ class SiteVisitsFragment : Fragment() {
                 paintPill("Cancelled", R.drawable.bg_sv_status_red, "#B42318", "#B42318")
             isPostponed(s) ->
                 paintPill("Postponed", R.drawable.bg_sv_status_orange, "#B54708", "#F79009")
+            // Fleet "completed offline" — the admin marked this SV as done
+            // without a live trip; the site incharge must record the outcome.
+            visit.completedOffline == true && visit.outcome.isNullOrBlank() ->
+                paintPill("Outcome Pending", R.drawable.bg_home_trip_status_progress, "#B54708", "#B54708")
             isCompleted(s) ->
                 paintPill("Completed", R.drawable.bg_sv_status_green, "#027A48", "#027A48")
             isStarted(s) ->
@@ -544,6 +549,7 @@ class SiteVisitsFragment : Fragment() {
             isPickedUp(s) -> {
                 val label = when (s) {
                     "on_site" -> "On site"
+                    "consulting", "on_counselling" -> "On counselling"
                     "picked_from_site" -> "Picked from site"
                     "arrived" -> "Reaching"
                     else -> "Picked up"

@@ -822,6 +822,7 @@ class CpVisitsFragment : Fragment() {
             }
             com.manjugroups.m_connect.util.VisitExpiry.isExpired(
                 visit.scheduledDate, visit.scheduledStartTime, isDone = false,
+                createdAtMillis = visit.creationTime?.toLong(),
             ) -> {
                 // The fixed day/time has passed and the visit was never run —
                 // show it as Expired instead of a live "Start Trip" that the

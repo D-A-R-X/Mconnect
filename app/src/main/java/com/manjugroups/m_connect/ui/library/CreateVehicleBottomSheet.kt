@@ -35,10 +35,12 @@ class CreateVehicleBottomSheet : BottomSheetDialogFragment() {
             "Honda", "MG", "Renault", "Nissan", "Volkswagen", "Skoda", "Ford",
             "Force", "Isuzu", "Other",
         )
-        private val VEHICLE_TYPES = listOf(
-            "Hatchback", "Sedan", "SUV", "MUV", "Van", "Tempo Traveller",
-            "Bus", "Pickup", "Other",
+        private val VEHICLE_CAPACITY_BY_TYPE = linkedMapOf(
+            "SUV" to 7,
+            "Sedan" to 5,
+            "Hatchback" to 5,
         )
+        private val VEHICLE_TYPES = VEHICLE_CAPACITY_BY_TYPE.keys.toList()
 
         private const val ARG_IS_EDIT_MODE = "arg_is_edit_mode"
         private const val ARG_PLATE = "arg_plate"
@@ -163,10 +165,15 @@ class CreateVehicleBottomSheet : BottomSheetDialogFragment() {
         binding.btnEditVehicle.visibility = View.GONE
         binding.layoutEditButtons.visibility = View.GONE
 
-        // Make + Vehicle Type are dropdowns (same option sets as the web
-        // Travel Desk vehicle form). "Other" turns the field into free text.
+        // Make supports a custom value. Vehicle type is restricted to the
+        // external-fleet options and controls seating capacity.
         setupChoiceField(binding.etMake, "Select make", VEHICLE_MAKES)
-        setupChoiceField(binding.etVehicleType, "Select vehicle type", VEHICLE_TYPES)
+        setupChoiceField(
+            field = binding.etVehicleType,
+            title = "Select vehicle type",
+            options = VEHICLE_TYPES,
+            allowCustomValue = false,
+        ) { updateCapacityForType(it) }
 
         // WhatsApp "same as mobile": disable + mirror the mobile field.
         fun applyWhatsappSame(checked: Boolean) {
@@ -192,9 +199,11 @@ class CreateVehicleBottomSheet : BottomSheetDialogFragment() {
         })
 
         // Add red asterisks to required fields
-        binding.tvLabelVehicleNumber.text = Html.fromHtml("Vehicle Number <font color='#EF4444'>*</font>")
+        binding.tvLabelVehicleNumber.text = "Vehicle Number"
+        binding.tvLabelModel.text = Html.fromHtml("Model <font color='#EF4444'>*</font>")
+        binding.tvLabelModelYear.text = Html.fromHtml("Model Year <font color='#EF4444'>*</font>")
         binding.tvLabelVehicleType.text = Html.fromHtml("Vehicle Type <font color='#EF4444'>*</font>")
-        binding.tvLabelCapacity.text = Html.fromHtml("Capacity <font color='#EF4444'>*</font>")
+        binding.tvLabelCapacity.text = "Seating Capacity"
         binding.tvLabelName.text = Html.fromHtml("Name <font color='#EF4444'>*</font>")
         binding.tvLabelPhone.text = Html.fromHtml("Phone Number <font color='#EF4444'>*</font>")
         binding.tvLabelAgency.text = Html.fromHtml("Agency <font color='#EF4444'>*</font>")
@@ -209,7 +218,7 @@ class CreateVehicleBottomSheet : BottomSheetDialogFragment() {
             binding.etModel.setText(arguments?.getString(ARG_MODEL) ?: "")
             binding.etModelYear.setText(arguments?.getString(ARG_MODEL_YEAR) ?: "")
             binding.etVehicleType.setText(arguments?.getString(ARG_TYPE) ?: "")
-            binding.etCapacity.setText(arguments?.getString(ARG_CAPACITY) ?: "")
+            updateCapacityForType(binding.etVehicleType.text.toString())
             binding.etDriverName.setText(arguments?.getString(ARG_NAME) ?: "")
             binding.etDriverPhone.setText(arguments?.getString(ARG_PHONE) ?: "")
             val initialWhatsapp = arguments?.getString(ARG_WHATSAPP) ?: ""
@@ -302,11 +311,16 @@ class CreateVehicleBottomSheet : BottomSheetDialogFragment() {
     }
 
     /**
-     * Turn an EditText into a tap-to-pick dropdown backed by [options]. Picking
-     * "Other" converts it to a free-text field (drops the chevron) so a make /
-     * type outside the list can still be entered — mirrors the web form.
+     * Turn an EditText into a tap-to-pick dropdown backed by [options].
+     * Choice fields that allow "Other" can switch to free-text entry.
      */
-    private fun setupChoiceField(field: android.widget.EditText, title: String, options: List<String>) {
+    private fun setupChoiceField(
+        field: android.widget.EditText,
+        title: String,
+        options: List<String>,
+        allowCustomValue: Boolean = true,
+        onPicked: (String) -> Unit = {},
+    ) {
         field.setOnClickListener {
             com.manjugroups.m_connect.ui.common.SearchableSelectionDialog.show(
                 context = requireContext(),
@@ -315,7 +329,7 @@ class CreateVehicleBottomSheet : BottomSheetDialogFragment() {
                     com.manjugroups.m_connect.ui.common.SearchableOption(item = it, title = it)
                 },
             ) { picked ->
-                if (picked == "Other") {
+                if (allowCustomValue && picked == "Other") {
                     field.setOnClickListener(null)
                     field.isFocusableInTouchMode = true
                     field.isFocusable = true
@@ -328,9 +342,14 @@ class CreateVehicleBottomSheet : BottomSheetDialogFragment() {
                     field.requestFocus()
                 } else {
                     field.setText(picked)
+                    onPicked(picked)
                 }
             }
         }
+    }
+
+    private fun updateCapacityForType(type: String) {
+        binding.etCapacity.setText(VEHICLE_CAPACITY_BY_TYPE[type]?.toString().orEmpty())
     }
 
     private fun validateAndSubmit() {
@@ -343,19 +362,19 @@ class CreateVehicleBottomSheet : BottomSheetDialogFragment() {
     }
 
     /**
-     * Read every field into a result, validating the required ones. Vehicle
-     * number, type, capacity, driver name and phone are required; make, model,
-     * model year and WhatsApp are optional. The agency is no longer collected —
-     * the backend binds the vehicle to the logged-in agency. Returns null if a
-     * required field is blank.
+     * Read every field into a result, validating the required ones. Model,
+     * model year, type, driver name and phone are required. Vehicle number,
+     * make and WhatsApp are optional, while capacity is derived from type.
      */
     private fun collectForm(): VehicleFormResult? {
         val number = binding.etVehicleNumber.text.toString().trim()
+        val model = binding.etModel.text.toString().trim()
+        val modelYear = binding.etModelYear.text.toString().trim()
         val type = binding.etVehicleType.text.toString().trim()
-        val capacity = binding.etCapacity.text.toString().trim()
+        val capacity = VEHICLE_CAPACITY_BY_TYPE[type]?.toString() ?: return null
         val name = binding.etDriverName.text.toString().trim()
         val phone = binding.etDriverPhone.text.toString().trim()
-        if (number.isEmpty() || type.isEmpty() || capacity.isEmpty() ||
+        if (model.isEmpty() || modelYear.length != 4 || modelYear.toIntOrNull() == null ||
             name.isEmpty() || phone.isEmpty()
         ) return null
         val whatsapp =
@@ -364,8 +383,8 @@ class CreateVehicleBottomSheet : BottomSheetDialogFragment() {
         return VehicleFormResult(
             vehicleNumber = number,
             make = binding.etMake.text.toString().trim(),
-            model = binding.etModel.text.toString().trim(),
-            modelYear = binding.etModelYear.text.toString().trim(),
+            model = model,
+            modelYear = modelYear,
             type = type,
             capacity = capacity,
             driverName = name,
