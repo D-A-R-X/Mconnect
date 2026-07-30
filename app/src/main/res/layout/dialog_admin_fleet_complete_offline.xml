@@ -43,6 +43,90 @@
             android:textColor="#667085"
             android:textSize="12sp" />
 
+        <!-- Dashboard images already uploaded for this trip (e.g. captured on
+             the travel-desk / driver side). Shown so the reviewer can see the
+             proof that's already on file. Hidden when there are none. -->
+        <LinearLayout
+            android:id="@+id/layoutExistingPhotos"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="6dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/inter_medium"
+                    android:text="Start image on file"
+                    android:textColor="#344054"
+                    android:textSize="12sp" />
+
+                <ImageView
+                    android:id="@+id/ivExistingStartPhoto"
+                    android:layout_width="match_parent"
+                    android:layout_height="96dp"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/bg_input"
+                    android:scaleType="centerCrop"
+                    android:visibility="gone"
+                    android:contentDescription="Start dashboard image on file" />
+
+                <TextView
+                    android:id="@+id/tvExistingStartEmpty"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:fontFamily="@font/inter_regular"
+                    android:text="Not captured"
+                    android:textColor="#98A2B3"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/inter_medium"
+                    android:text="End image on file"
+                    android:textColor="#344054"
+                    android:textSize="12sp" />
+
+                <ImageView
+                    android:id="@+id/ivExistingEndPhoto"
+                    android:layout_width="match_parent"
+                    android:layout_height="96dp"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/bg_input"
+                    android:scaleType="centerCrop"
+                    android:visibility="gone"
+                    android:contentDescription="End dashboard image on file" />
+
+                <TextView
+                    android:id="@+id/tvExistingEndEmpty"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:fontFamily="@font/inter_regular"
+                    android:text="Not captured"
+                    android:textColor="#98A2B3"
+                    android:textSize="11sp" />
+            </LinearLayout>
+        </LinearLayout>
+
         <!-- Staff can choose a fleet type. Agency sessions are already
              external, so this entire selector is hidden for them. -->
         <LinearLayout

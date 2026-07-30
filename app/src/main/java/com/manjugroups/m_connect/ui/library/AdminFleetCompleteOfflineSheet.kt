@@ -22,6 +22,8 @@ import androidx.core.content.FileProvider
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import coil.load
+import com.manjugroups.m_connect.BuildConfig
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.TravelDeskVehicle
@@ -166,6 +168,7 @@ class AdminFleetCompleteOfflineSheet : BottomSheetDialogFragment() {
         setupInternalFleet(view, t)
         setupExternalFleet(view, t)
         setupOwnVehicle(view, t)
+        bindExistingPhotos(view, t)
         view.findViewById<EditText>(R.id.etBeta)
             .setText(t.beta?.toDisplayText().orEmpty())
         view.findViewById<EditText>(R.id.etBeta2)
@@ -453,6 +456,45 @@ class AdminFleetCompleteOfflineSheet : BottomSheetDialogFragment() {
             .setText(t.packageAmount?.toDisplayText().orEmpty())
         view.findViewById<EditText>(R.id.etDistanceKmOwn)
             .setText(t.distanceKm?.toDisplayText().orEmpty())
+    }
+
+    /**
+     * Show the dashboard images already on file for this trip (e.g. captured on
+     * the travel-desk / driver side) so the reviewer sees the existing proof.
+     * Hidden entirely when the trip has none.
+     */
+    private fun bindExistingPhotos(view: View, t: AdminFleetTripsFragment.AdminTrip) {
+        val container = view.findViewById<View>(R.id.layoutExistingPhotos)
+        if (t.startPhotoId.isNullOrBlank() && t.endPhotoId.isNullOrBlank()) {
+            container.visibility = View.GONE
+            return
+        }
+        container.visibility = View.VISIBLE
+        bindOnePhoto(
+            view.findViewById(R.id.ivExistingStartPhoto),
+            view.findViewById(R.id.tvExistingStartEmpty),
+            t.startPhotoId,
+        )
+        bindOnePhoto(
+            view.findViewById(R.id.ivExistingEndPhoto),
+            view.findViewById(R.id.tvExistingEndEmpty),
+            t.endPhotoId,
+        )
+    }
+
+    private fun bindOnePhoto(
+        image: android.widget.ImageView,
+        empty: android.widget.TextView,
+        storageId: String?,
+    ) {
+        if (storageId.isNullOrBlank()) {
+            image.visibility = View.GONE
+            empty.visibility = View.VISIBLE
+            return
+        }
+        image.visibility = View.VISIBLE
+        empty.visibility = View.GONE
+        image.load("${BuildConfig.BASE_URL}api/storage/serve?storageId=$storageId")
     }
 
     /** Recompute the live billing total whenever any amount/odometer changes. */
