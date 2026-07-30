@@ -51,6 +51,7 @@ import com.manjugroups.m_connect.network.StorageUploader
 import com.manjugroups.m_connect.network.ManualProfilePatch
 import com.manjugroups.m_connect.network.PostponeSiteVisitRequest
 import com.manjugroups.m_connect.network.SetSiteVisitOutcomeRequest
+import com.manjugroups.m_connect.network.SiteVisitIdRequest
 import com.manjugroups.m_connect.network.SvNotInterestedDetail
 import com.manjugroups.m_connect.network.UpdateTelecallerLeadRequest
 import com.manjugroups.m_connect.network.SiteVisitAttendeeRequest
@@ -4569,6 +4570,20 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                             finishCtaSave("Missing site visit id")
                             return@launch
                         }
+                    // The backend's setOutcome only accepts a visit already in
+                    // on_counselling / picked_from_site / dropped. The outcome
+                    // buttons, however, unlock at On Site — so a manual close from
+                    // status="on_site" hit setOutcome's assertTransition and 500'd.
+                    // The QR flow advances on_site → on_counselling first; mirror
+                    // that here. Best-effort: it only transitions from on_site, so
+                    // for the already-eligible statuses it no-ops (error ignored)
+                    // and setOutcome below still runs.
+                    runCatching {
+                        geoApi.markSiteVisitOnCounselling(
+                            session.bearerToken,
+                            SiteVisitIdRequest(id = svId),
+                        )
+                    }
                     val resp = geoApi.setSiteVisitOutcome(
                         session.bearerToken,
                         SetSiteVisitOutcomeRequest(
@@ -4633,9 +4648,15 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 )
                 dismissAllowingStateLoss()
             } catch (e: Exception) {
-                finishCtaSave(e.message ?: "Network error")
-                Toast.makeText(requireContext(), e.message ?: "Network error", Toast.LENGTH_SHORT)
-                    .show()
+                // Retrofit throws HttpException on a 5xx before deserialising the
+                // body, so `e.message` is just "HTTP 500" — useless to the
+                // operator. Pull the backend's real {error:"..."} out of the body
+                // (e.g. an invalid-status transition or a validator rejection) so
+                // the sheet shows the actual reason. Mirrors persistSiteVisit's catch.
+                val serverMessage = extractHttpErrorMessage(e)
+                val message = serverMessage ?: e.message ?: "Network error"
+                finishCtaSave(message)
+                Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
             }
         }
     }

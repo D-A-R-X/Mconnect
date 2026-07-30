@@ -1299,7 +1299,9 @@ data class ScannedSiteVisit(
     // counselling is already in progress (on_counselling).
     val canRecordOutcome: Boolean = false,
     val expectedAttendeeCount: Int? = null,
-    val attendees: List<ScannedSiteVisitAttendee> = emptyList(),
+    // Nullable: Gson writes null (not the default) when the backend sends
+    // "attendees": null, and iterating that null crashed the QR scan flow.
+    val attendees: List<ScannedSiteVisitAttendee>? = null,
     val foodPreferences: String? = null,
     val project: ScannedSiteVisitProject? = null,
     val lead: ScannedSiteVisitLead? = null,

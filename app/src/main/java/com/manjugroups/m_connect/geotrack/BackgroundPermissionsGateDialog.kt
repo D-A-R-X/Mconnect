@@ -155,11 +155,16 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
                 behavior.state = BottomSheetBehavior.STATE_EXPANDED
                 behavior.skipCollapsed = true
                 behavior.isDraggable = false
-                
-                // Force wrap_content on sheet container to prevent stretching to full height
+
+                // Force wrap_content so the sheet hugs its content on tall
+                // screens, but cap it to ~92% of the screen so on short devices
+                // the content scrolls inside (the layout root is a
+                // NestedScrollView) instead of clipping the last rows.
                 val lp = it.layoutParams
                 lp.height = ViewGroup.LayoutParams.WRAP_CONTENT
                 it.layoutParams = lp
+                behavior.maxHeight =
+                    (resources.displayMetrics.heightPixels * 0.92f).toInt()
             }
         }
         return dialog
@@ -264,10 +269,12 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
             {
                 if (!isAdded || view == null) return@addListener
                 val status = runCatching { future.get() }.getOrNull()
-                // available = the device exposes this setting at all.
+                // available   = the device exposes this setting at all.
                 // restrictionOn = the OS will hibernate/revoke the app if unused.
+                // known       = the standard query actually read the on/off state.
                 val available: Boolean
                 val restrictionOn: Boolean
+                var known = true
                 when (status) {
                     androidx.core.content.UnusedAppRestrictionsConstants.API_30_BACKPORT,
                     androidx.core.content.UnusedAppRestrictionsConstants.API_30,
@@ -277,17 +284,27 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
                     androidx.core.content.UnusedAppRestrictionsConstants.DISABLED -> {
                         available = true; restrictionOn = false
                     }
-                    else -> { // FEATURE_NOT_AVAILABLE / ERROR
-                        available = false; restrictionOn = false
+                    else -> {
+                        // FEATURE_NOT_AVAILABLE / ERROR / null. The standard query
+                        // couldn't read the state — but on Android 11+ (API 30) the
+                        // "pause app if unused" / hibernation setting exists on
+                        // essentially every device, and many OEMs (Xiaomi, Oppo,
+                        // Vivo, etc.) don't report it through this API. So surface
+                        // the row anyway (assume it may be ON) instead of hiding it;
+                        // we just can't confirm the exact state.
+                        known = false
+                        available = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+                        restrictionOn = available
                     }
                 }
                 row.visibility = if (available) View.VISIBLE else View.GONE
-                // ON only when the restriction is disabled in mobile settings.
-                sw.isChecked = available && !restrictionOn
+                // Toggle ON only when the restriction is confirmed disabled.
+                sw.isChecked = available && known && !restrictionOn
                 // Satisfied when the device has no such setting, or the user has
-                // actually disabled it. Once satisfied (and everything else is
-                // granted) close the gate; it's the only async requirement.
-                unusedAppSatisfied = !available || !restrictionOn
+                // CONFIRMED-disabled it. When the state is unreadable (known=false)
+                // we still show the row so the user can reach the setting, but we
+                // don't hard-block the gate on a signal we can't verify.
+                unusedAppSatisfied = !available || !known || !restrictionOn
                 if (unusedAppSatisfied && allGranted(ctx)) {
                     com.manjugroups.m_connect.notifications.PermissionAlertNotification.clear(ctx)
                     dismissAllowingStateLoss()
