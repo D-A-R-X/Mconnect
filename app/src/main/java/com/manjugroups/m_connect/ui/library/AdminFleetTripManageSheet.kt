@@ -300,7 +300,16 @@ class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
         }
 
         val billing = view.findViewById<TextView>(R.id.tvBillingDetails)
-        val billingLines = listOfNotNull(
+        val customLines = t.customCharges.mapNotNull { charge ->
+            val label = charge.label?.trim().orEmpty()
+            val amount = charge.amount
+            if (label.isEmpty() || amount == null) null
+            else "$label: ${fmtMoney(amount)}"
+        }
+        // New completions bill entirely through the dynamic rate-sheet lines,
+        // leaving the legacy fixed columns at zero — so once custom charges are
+        // present, show only those (skip the noisy legacy rows).
+        val fixedLines = if (customLines.isNotEmpty()) emptyList() else listOfNotNull(
             t.packageAmount?.let { "Package: ${fmtMoney(it)}" },
             t.beta?.let { "Beta: ${fmtMoney(it)}" },
             t.tollAmount?.let { "Toll: ${fmtMoney(it)}" },
@@ -309,13 +318,9 @@ class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
             t.permitCharge?.let { "Permit charge: ${fmtMoney(it)}" },
             t.permitTax?.let { "Permit tax: ${fmtMoney(it)}" },
             t.standingCharge?.let { "Standing charge: ${fmtMoney(it)}" },
-        ) +
-            t.customCharges.mapNotNull { charge ->
-                val label = charge.label?.trim().orEmpty()
-                val amount = charge.amount
-                if (label.isEmpty() || amount == null) null
-                else "$label: ${fmtMoney(amount)}"
-            } +
+        )
+        val billingLines = fixedLines +
+            customLines +
             listOfNotNull(
                 t.totalAmount?.let { "Total: ${fmtMoney(it)}" },
             )
