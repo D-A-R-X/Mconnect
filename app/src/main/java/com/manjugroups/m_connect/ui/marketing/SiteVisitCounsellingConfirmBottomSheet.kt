@@ -121,14 +121,31 @@ class SiteVisitCounsellingConfirmBottomSheet : BottomSheetDialogFragment() {
         // authorised → an explicit Start counselling button.
         val showOutcome = canRecordOutcome && isOngoing && !isCompleted
         val showStart = canStartCounselling && !isOngoing && !isCompleted
+        // Whoever opened this can't start counselling or record the outcome —
+        // they may only view. Point them at the Site Incharge by name.
+        val noAccess = !isCompleted && !showOutcome && !showStart
+        val inchargeContact =
+            inchargeName.ifBlank { "the Site Incharge" }
         val accessNote = view.findViewById<TextView>(R.id.tvCounsellingAccessNote)
         accessNote.text = when {
             isCompleted -> "The site visit outcome has been recorded."
             showOutcome -> "You will be redirected to the outcome page in 5s"
-            isOngoing -> "Counselling is currently in progress."
-            canStartCounselling -> "Confirm only when counselling is actually starting."
-            else -> "Visit details only. The assigned BDO, Site Incharge, administrator, or authorised staff can start counselling."
+            showStart -> "Confirm only when counselling is actually starting."
+            isOngoing ->
+                "Counselling is in progress. You don't have access to close " +
+                    "this site visit — please contact the Site Incharge " +
+                    "($inchargeContact)."
+            else ->
+                "You don't have access to close this site visit. Please " +
+                    "contact the Site Incharge ($inchargeContact) to start " +
+                    "counselling and record the outcome."
         }
+        // Make the no-access notice stand out from the neutral helper copy.
+        accessNote.setTextColor(
+            resolveThemeColor(
+                if (noAccess) R.attr.colorWarning else R.attr.colorForegroundSecondary
+            )
+        )
         view.findViewById<View>(R.id.counsellingActions).visibility =
             if (showStart) View.VISIBLE else View.GONE
         view.findViewById<View>(R.id.btnCancelCounselling).setOnClickListener { dismiss() }
