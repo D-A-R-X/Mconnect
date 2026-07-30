@@ -49,6 +49,7 @@ import com.manjugroups.m_connect.network.ProposedSiteVisit
 import com.manjugroups.m_connect.network.SetOutcomeRequest
 import com.manjugroups.m_connect.network.StorageUploader
 import com.manjugroups.m_connect.network.ManualProfilePatch
+import com.manjugroups.m_connect.network.PostponeSiteVisitRequest
 import com.manjugroups.m_connect.network.SetSiteVisitOutcomeRequest
 import com.manjugroups.m_connect.network.SvNotInterestedDetail
 import com.manjugroups.m_connect.network.UpdateTelecallerLeadRequest
@@ -4397,15 +4398,72 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             )
             return
         }
+        if (isSiteVisitMode) {
+            // A follow-up carries a next-visit date, so route it through the
+            // dedicated SV postpone/reschedule endpoint. setSiteVisitOutcome
+            // (outcome=follow_up) only accepts on_counselling/picked_from_site/
+            // dropped and returns HTTP 500 for a visit still in scheduled/on_site;
+            // the postpone endpoint accepts any active status and reschedules to
+            // the chosen date.
+            persistSvFollowUp(nextDate, reason)
+            return
+        }
         // The next-visit date rides in the human-readable notes blob (the
         // outcome request has no dedicated date field); the reason travels
         // separately via postponeReasons.
         finalizeTerminalOutcome(
             cpVisitId = cpVisitId.orEmpty(),
-            outcomeEnum = if (isSiteVisitMode) OUTCOME_FOLLOW_UP else OUTCOME_POSTPONED,
+            outcomeEnum = OUTCOME_POSTPONED,
             notes = "Next visit: $nextDate — $reason",
         )
     }
+
+    /**
+     * SV follow-up: reschedule the visit to the chosen next date via the
+     * dedicated postpone endpoint (broad status guard) instead of setOutcome.
+     */
+    private fun persistSvFollowUp(displayDate: String, reason: String) {
+        val svId = argSiteVisitId?.takeIf { it.isNotBlank() } ?: run {
+            showError("Missing site visit id")
+            return
+        }
+        val apiDate = displayDateToApiDate(displayDate) ?: run {
+            showError("Pick a valid next visit date")
+            return
+        }
+        btnSubmit?.isClickable = false
+        btnSubmit?.text = "Saving…"
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = geoApi.postponeSiteVisit(
+                    session.bearerToken,
+                    PostponeSiteVisitRequest(
+                        id = svId,
+                        scheduledDate = apiDate,
+                        reason = reason,
+                    ),
+                )
+                if (!resp.success) {
+                    finishCtaSave(resp.error ?: "Failed to save follow up")
+                    return@launch
+                }
+                setFragmentResult(
+                    RESULT_KEY,
+                    bundleOf(KEY_CLIENT_MET to true, KEY_OUTCOME to OUTCOME_FOLLOW_UP),
+                )
+                dismissAllowingStateLoss()
+            } catch (e: Exception) {
+                finishCtaSave(e.message ?: "Network error")
+            }
+        }
+    }
+
+    /** Picker display "dd/MM/yyyy" -> API "yyyy-MM-dd"; null if unparseable. */
+    private fun displayDateToApiDate(display: String): String? = runCatching {
+        val parsed = SimpleDateFormat("dd/MM/yyyy", Locale.US).parse(display)
+            ?: return null
+        SimpleDateFormat("yyyy-MM-dd", Locale.US).format(parsed)
+    }.getOrNull()
 
     // ---- Not Interested -------------------------------------------------
     private fun persistNotInterested() {
