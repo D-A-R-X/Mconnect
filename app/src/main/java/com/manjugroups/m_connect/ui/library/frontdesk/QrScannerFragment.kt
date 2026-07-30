@@ -393,7 +393,7 @@ class QrScannerFragment : Fragment() {
                     visit.scheduledDate?.takeIf { it.isNotBlank() },
                     visit.scheduledTime?.takeIf { it.isNotBlank() },
                 ).joinToString(" - ")
-                val additionalVisitors = visit.attendees
+                val additionalVisitors = visit.attendees.orEmpty()
                     .filterNot {
                         it.name?.trim()?.equals(clientName?.trim(), ignoreCase = true) == true
                     }
