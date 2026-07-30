@@ -309,8 +309,16 @@ class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
             t.permitCharge?.let { "Permit charge: ${fmtMoney(it)}" },
             t.permitTax?.let { "Permit tax: ${fmtMoney(it)}" },
             t.standingCharge?.let { "Standing charge: ${fmtMoney(it)}" },
-            t.totalAmount?.let { "Total: ${fmtMoney(it)}" },
-        )
+        ) +
+            t.customCharges.mapNotNull { charge ->
+                val label = charge.label?.trim().orEmpty()
+                val amount = charge.amount
+                if (label.isEmpty() || amount == null) null
+                else "$label: ${fmtMoney(amount)}"
+            } +
+            listOfNotNull(
+                t.totalAmount?.let { "Total: ${fmtMoney(it)}" },
+            )
         billing.visibility = if (billingLines.isEmpty()) View.GONE else View.VISIBLE
         billing.text = billingLines.joinToString("\n")
     }

@@ -112,6 +112,9 @@ data class TravelDeskTrip(
     val travelDeskPermitCharge: Double? = null,
     val travelDeskPermitTax: Double? = null,
     val travelDeskStandingCharge: Double? = null,
+    // Operator-defined extra charge lines applied at completion (agency web /
+    // MMS). `amount` is the computed line total; `unit` retained for display.
+    val travelDeskCustomCharges: List<TravelDeskAppliedCharge> = emptyList(),
     val travelDeskBillingCompletedAt: Long? = null,
     val travelDeskTotalAmount: Double? = null,
     val travelDeskExtraKm: Double? = null,
@@ -129,6 +132,14 @@ data class TravelDeskTrip(
 data class TravelDeskAgencyRef(
     @SerializedName("_id") val id: String? = null,
     val name: String? = null,
+)
+
+/** A custom charge as applied to a completed trip. `unit` is one of
+ *  km / hour / minute / person / toll / trip (retained for display). */
+data class TravelDeskAppliedCharge(
+    val label: String? = null,
+    val amount: Double? = null,
+    val unit: String? = null,
 )
 
 /** The lead a site visit is linked to. enrichVisit returns this inline; the

@@ -19,6 +19,7 @@ import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.CompleteOfflineTripRequest
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.TravelDeskApi
+import com.manjugroups.m_connect.network.TravelDeskAppliedCharge
 import com.manjugroups.m_connect.network.TravelDeskTrip
 import com.manjugroups.m_connect.network.TravelDeskVehicle
 import com.manjugroups.m_connect.network.StorageUploader
@@ -977,6 +978,7 @@ class AdminFleetTripsFragment : Fragment() {
             permitCharge = trip.travelDeskPermitCharge,
             permitTax = trip.travelDeskPermitTax,
             standingCharge = trip.travelDeskStandingCharge,
+            customCharges = trip.travelDeskCustomCharges,
             totalAmount = trip.travelDeskTotalAmount,
             extraKm = trip.travelDeskExtraKm,
             extraKmRate = trip.travelDeskExtraKmRate,
@@ -1030,6 +1032,7 @@ class AdminFleetTripsFragment : Fragment() {
         var permitCharge: Double? = null,
         var permitTax: Double? = null,
         var standingCharge: Double? = null,
+        var customCharges: List<TravelDeskAppliedCharge> = emptyList(),
         var totalAmount: Double? = null,
         var extraKm: Double? = null,
         var extraKmRate: Double? = null,
