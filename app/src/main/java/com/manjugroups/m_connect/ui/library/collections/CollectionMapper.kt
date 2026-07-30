@@ -51,6 +51,7 @@ object CollectionMapper {
             type = mapType(row.customerPaymentCategory),
             remarks = row.verificationNotes,
             proofStorageId = row.proofStorageId,
+            edited = !row.collectorEditedAt.isNullOrBlank(),
         )
     }
 

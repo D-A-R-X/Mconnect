@@ -14,6 +14,9 @@ data class CollectionItem(
     var status: CollectionStatus,
     var type: CollectionType,
     var remarks: String? = null,
+    // True when the collector corrected their own entry (while still pending
+    // Accounts) — drives the "Edited" tag.
+    var edited: Boolean = false,
     // Convex `_storage` id from the server. Resolved to a signed URL
     // at list-render time via /api/storage/get-url and loaded into
     // the thumbnail with Coil. Null when the executive submitted the

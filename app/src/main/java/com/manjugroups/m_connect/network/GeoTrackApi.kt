@@ -265,6 +265,14 @@ interface GeoTrackApi {
         @Body body: SubmitCollectionRequest,
     ): SubmitCollectionResponse
 
+    // Collector self-correction while still pending Accounts. Backend enforces
+    // collector-ownership + pending status and stamps collectorEditedAt.
+    @POST("api/postsales/collections/correct")
+    suspend fun correctCustomerCollection(
+        @Header("Authorization") token: String,
+        @Body body: CorrectCollectionRequest,
+    ): VerifyCollectionResponse
+
     // ── Collections: Library list + Accounts verification queue ─────
     // Wraps customerCollections.listByStaff / listForAccounts so the
     // two new Library screens (Sales-Executive Collections + Accounts
@@ -1107,6 +1115,7 @@ data class CustomerCollectionRow(
     val verificationNotes: String? = null,
     val verifiedByName: String? = null,
     val verifiedAt: String? = null,
+    val collectorEditedAt: String? = null,
     val createdAt: String? = null,
     val updatedAt: String? = null,
     val customerName: String? = null,
@@ -1141,6 +1150,17 @@ data class VerifyCollectionResponse(
     val success: Boolean = false,
     val collection: CustomerCollectionRow? = null,
     val error: String? = null,
+)
+
+/** Collector corrects their own still-pending collection. All fields but
+ *  `collectionId` are optional — only the changed ones are sent. */
+data class CorrectCollectionRequest(
+    val collectionId: String,
+    val amount: Double? = null,
+    val collectionDate: String? = null,
+    val paymentMode: String? = null,
+    val transactionReference: String? = null,
+    val notes: String? = null,
 )
 
 // ── Loan Desk DTOs ──────────────────────────────────────────────────
