@@ -1523,6 +1523,13 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         if (visitId == null) return
 
         val isCpVisit = isCpVisit()
+        // sv_cum_cp rows are CP-backed but don't carry tripType="client_place",
+        // so isCpVisit() misses them. They still need the CP confirm sheet after
+        // OTP — otherwise the trip finalizes and the linked SV is never confirmed
+        // (stays "Fixed"). Handled at the routing check below (not in isCpVisit()
+        // itself, to avoid changing the pre-OTP swipe/client-seen path).
+        val isSvCumCp = !cpVisitId.isNullOrBlank() &&
+            arguments?.getString(ARG_VISIT_CATEGORY) == "sv_cum_cp"
 
         // Gift Distribution: after OTP verify we DO NOT auto-complete.
         // The proof photo for gift_distribution is of the gift
@@ -1559,7 +1566,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             return
         }
 
-        if (isCpVisit && !cpVisitDecisionCaptured) {
+        if ((isCpVisit || isSvCumCp) && !cpVisitDecisionCaptured) {
             renderArrivalPhase(alreadyArrived = true)
             showCpCompletionSheet()
             return
