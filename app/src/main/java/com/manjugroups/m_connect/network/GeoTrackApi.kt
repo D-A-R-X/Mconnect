@@ -935,7 +935,11 @@ data class SetOutcomeRequest(
     val id: String,
     val outcome: String,
     val postponeReasons: List<String>? = null,
-    val notes: String? = null
+    val notes: String? = null,
+    // Gift-distribution handover photo (captured post-OTP). The backend attaches
+    // it to the field visit before the completion-proof check so the outcome
+    // doesn't fail on a photo that completeVisit links a moment later.
+    val arrivalPhotoStorageId: String? = null
 )
 
 data class ConvertCpVisitToSiteVisitRequest(

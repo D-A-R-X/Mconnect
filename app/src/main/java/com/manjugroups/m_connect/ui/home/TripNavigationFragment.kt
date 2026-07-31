@@ -2095,6 +2095,10 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                         id = cpId,
                         outcome = "gift_distributed",
                         notes = "Gift distributed — handover photo attached",
+                        // Hand the just-uploaded handover photo to setOutcome so the
+                        // backend attaches it before its arrival-photo proof check;
+                        // otherwise this completes with a 500 (photo not linked yet).
+                        arrivalPhotoStorageId = pendingArrivalStorageId,
                     ),
                 )
                 if (!outcomeResp.success) {
@@ -2115,13 +2119,23 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             } catch (e: Exception) {
                 isGiftDistributionPostOtpPhotoCapture = false
                 swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
-                Toast.makeText(
-                    requireContext(),
-                    e.message ?: "Network error",
-                    Toast.LENGTH_LONG,
-                ).show()
+                // Show the backend's real {error:"..."} instead of a bare "HTTP 500".
+                val msg = httpErrorMessage(e) ?: e.message ?: "Network error"
+                Toast.makeText(requireContext(), msg, Toast.LENGTH_LONG).show()
             }
         }
+    }
+
+    /** Pull the backend {error:"..."} out of a Retrofit 5xx body (else null). */
+    private fun httpErrorMessage(e: Throwable): String? {
+        val httpEx = e as? retrofit2.HttpException ?: return null
+        val raw = runCatching { httpEx.response()?.errorBody()?.string() }
+            .getOrNull() ?: return null
+        return runCatching {
+            val obj = com.google.gson.JsonParser.parseString(raw).asJsonObject
+            (obj.get("error")?.asString ?: obj.get("message")?.asString)
+                ?.takeIf { it.isNotBlank() }
+        }.getOrNull()
     }
 
     private fun renderArrivalPhase(alreadyArrived: Boolean) {
