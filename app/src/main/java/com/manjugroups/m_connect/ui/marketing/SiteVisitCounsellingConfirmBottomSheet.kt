@@ -1,6 +1,7 @@
 package com.manjugroups.m_connect.ui.marketing
 
 import android.app.Dialog
+import android.content.DialogInterface
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.LayoutInflater
@@ -14,6 +15,12 @@ import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.manjugroups.m_connect.R
 
 class SiteVisitCounsellingConfirmBottomSheet : BottomSheetDialogFragment() {
+
+    // True once the user starts counselling or is redirected to the outcome
+    // page — those paths navigate away, so we must NOT also tell the scanner to
+    // resume. A plain dismiss (Cancel / swipe / back) leaves `false`, which
+    // signals the scanner to re-arm for the next scan.
+    private var actionTaken = false
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog =
         BottomSheetDialog(requireContext(), theme)
@@ -154,6 +161,7 @@ class SiteVisitCounsellingConfirmBottomSheet : BottomSheetDialogFragment() {
             text = "Start counselling"
             setOnClickListener {
                 if (showStart) {
+                    actionTaken = true
                     setFragmentResult(
                         RESULT_KEY,
                         bundleOf(
@@ -189,6 +197,7 @@ class SiteVisitCounsellingConfirmBottomSheet : BottomSheetDialogFragment() {
 
             override fun onFinish() {
                 if (!isAdded) return
+                actionTaken = true
                 setFragmentResult(
                     RESULT_KEY_OPEN_OUTCOME,
                     bundleOf(
@@ -199,6 +208,16 @@ class SiteVisitCounsellingConfirmBottomSheet : BottomSheetDialogFragment() {
                 dismiss()
             }
         }.start()
+    }
+
+    // A plain dismiss (Cancel / swipe / back — no counselling started, no
+    // outcome redirect) must re-arm the scanner, which froze its camera when
+    // the QR was read. Action paths pop the scanner themselves, so skip those.
+    override fun onDismiss(dialog: DialogInterface) {
+        super.onDismiss(dialog)
+        if (!actionTaken && isAdded) {
+            setFragmentResult(RESULT_KEY_CLOSED, bundleOf())
+        }
     }
 
     override fun onDestroyView() {
@@ -227,6 +246,8 @@ class SiteVisitCounsellingConfirmBottomSheet : BottomSheetDialogFragment() {
         // Fired when an authorised viewer opens the outcome page of a visit that
         // is already on counselling (no re-mark of counselling).
         const val RESULT_KEY_OPEN_OUTCOME = "site_visit_open_outcome"
+        // Fired on a plain dismiss (no action) so the scanner re-arms its camera.
+        const val RESULT_KEY_CLOSED = "site_visit_counselling_closed"
         const val KEY_SITE_VISIT_ID = "site_visit_id"
         const val KEY_LEAD_TEMPERATURE = "lead_temperature"
 

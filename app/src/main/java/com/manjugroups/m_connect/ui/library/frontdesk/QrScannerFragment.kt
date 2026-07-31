@@ -135,6 +135,16 @@ class QrScannerFragment : Fragment() {
             )
         }
 
+        // The counselling sheet was dismissed without an action (Cancel / swipe
+        // / back). Scanning was paused and the camera unbound when the QR was
+        // read, so re-arm the scanner for the next SV — without this the second
+        // scan stays frozen (reported for superadmin + site incharge).
+        setFragmentResultListener(
+            SiteVisitCounsellingConfirmBottomSheet.RESULT_KEY_CLOSED,
+        ) { _, _ ->
+            resumeScanning()
+        }
+
         binding.btnBack.setOnClickListener {
             parentFragmentManager.popBackStack()
         }
