@@ -1523,6 +1523,13 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         if (visitId == null) return
 
         val isCpVisit = isCpVisit()
+        // sv_cum_cp rows are CP-backed but don't carry tripType="client_place",
+        // so isCpVisit() misses them. They still need the CP confirm sheet after
+        // OTP — otherwise the trip finalizes and the linked SV is never confirmed
+        // (stays "Fixed"). Handled at the routing check below (not in isCpVisit()
+        // itself, to avoid changing the pre-OTP swipe/client-seen path).
+        val isSvCumCp = !cpVisitId.isNullOrBlank() &&
+            arguments?.getString(ARG_VISIT_CATEGORY) == "sv_cum_cp"
 
         // Gift Distribution: after OTP verify we DO NOT auto-complete.
         // The proof photo for gift_distribution is of the gift
@@ -1559,7 +1566,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             return
         }
 
-        if (isCpVisit && !cpVisitDecisionCaptured) {
+        if ((isCpVisit || isSvCumCp) && !cpVisitDecisionCaptured) {
             renderArrivalPhase(alreadyArrived = true)
             showCpCompletionSheet()
             return
@@ -1712,6 +1719,16 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 }
                 setFragmentResultListener(CollectionPaymentEntryBottomSheet.RESULT_KEY) { _, bundle ->
                     isOpeningOutcomeSheet = false
+                    // "Nothing collected" — close as Not Collected (₹0), no
+                    // customerCollections row, optional remarks.
+                    val notCollected = bundle.getBoolean(
+                        CollectionPaymentEntryBottomSheet.KEY_NOT_COLLECTED,
+                        false,
+                    )
+                    if (notCollected) {
+                        completeNotCollectedVisit(cpId, bundle)
+                        return@setFragmentResultListener
+                    }
                     val submitted = bundle.getBoolean(
                         CollectionPaymentEntryBottomSheet.KEY_SUBMITTED,
                         false,
@@ -1914,6 +1931,72 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         }
     }
 
+    /** Closes a Collection CP visit when the client was met but nothing
+     *  was collected. No customerCollections row is written; the CP visit
+     *  is stamped outcome="not_collected" (₹0) with the optional remarks,
+     *  so the web shows a "Not Collected" badge. */
+    private fun completeNotCollectedVisit(cpId: String, bundle: Bundle) {
+        val notes = bundle.getString(CollectionPaymentEntryBottomSheet.KEY_NOTES).orEmpty()
+        val summary =
+            if (notes.isNotBlank()) "Not collected — $notes" else "Not collected"
+
+        swipeArrived?.lockAsBusy("Closing visit…")
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val metResp = geoApi.markClientMet(
+                    session.bearerToken,
+                    com.manjugroups.m_connect.network.MarkClientMetRequest(
+                        id = cpId,
+                        clientMet = true,
+                        clientNoShowReason = null,
+                    ),
+                )
+                if (!metResp.success) {
+                    swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                    Toast.makeText(
+                        requireContext(),
+                        metResp.error ?: "Failed to mark client met",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    return@launch
+                }
+                val outcomeResp = geoApi.setCpVisitOutcome(
+                    session.bearerToken,
+                    com.manjugroups.m_connect.network.SetOutcomeRequest(
+                        id = cpId,
+                        outcome = "not_collected",
+                        notes = summary,
+                    ),
+                )
+                if (!outcomeResp.success) {
+                    swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                    Toast.makeText(
+                        requireContext(),
+                        outcomeResp.error ?: "Failed to close visit",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    return@launch
+                }
+                cpClientMet = true
+                cpOutcome = "not_collected"
+                cpVisitDecisionCaptured = true
+                Toast.makeText(
+                    requireContext(),
+                    "Visit closed — nothing collected",
+                    Toast.LENGTH_SHORT,
+                ).show()
+                finalizeCompleteVisit()
+            } catch (e: Exception) {
+                swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                Toast.makeText(
+                    requireContext(),
+                    e.message ?: "Network error",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
+    }
+
     private fun buildCollectionSummary(
         bookingRef: String,
         amount: Double,
@@ -2019,6 +2102,10 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                         id = cpId,
                         outcome = "gift_distributed",
                         notes = "Gift distributed — handover photo attached",
+                        // Hand the just-uploaded handover photo to setOutcome so the
+                        // backend attaches it before its arrival-photo proof check;
+                        // otherwise this completes with a 500 (photo not linked yet).
+                        arrivalPhotoStorageId = pendingArrivalStorageId,
                     ),
                 )
                 if (!outcomeResp.success) {
@@ -2039,13 +2126,23 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             } catch (e: Exception) {
                 isGiftDistributionPostOtpPhotoCapture = false
                 swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
-                Toast.makeText(
-                    requireContext(),
-                    e.message ?: "Network error",
-                    Toast.LENGTH_LONG,
-                ).show()
+                // Show the backend's real {error:"..."} instead of a bare "HTTP 500".
+                val msg = httpErrorMessage(e) ?: e.message ?: "Network error"
+                Toast.makeText(requireContext(), msg, Toast.LENGTH_LONG).show()
             }
         }
+    }
+
+    /** Pull the backend {error:"..."} out of a Retrofit 5xx body (else null). */
+    private fun httpErrorMessage(e: Throwable): String? {
+        val httpEx = e as? retrofit2.HttpException ?: return null
+        val raw = runCatching { httpEx.response()?.errorBody()?.string() }
+            .getOrNull() ?: return null
+        return runCatching {
+            val obj = com.google.gson.JsonParser.parseString(raw).asJsonObject
+            (obj.get("error")?.asString ?: obj.get("message")?.asString)
+                ?.takeIf { it.isNotBlank() }
+        }.getOrNull()
     }
 
     private fun renderArrivalPhase(alreadyArrived: Boolean) {

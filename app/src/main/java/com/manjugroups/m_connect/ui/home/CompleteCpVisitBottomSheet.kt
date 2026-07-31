@@ -4454,7 +4454,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 )
                 dismissAllowingStateLoss()
             } catch (e: Exception) {
-                finishCtaSave(e.message ?: "Network error")
+                // Surface the backend's real {error:"..."} (a permission denial or
+                // a downstream reschedule failure) instead of a bare "HTTP 500".
+                val serverMessage = extractHttpErrorMessage(e)
+                finishCtaSave(serverMessage ?: e.message ?: "Network error")
             }
         }
     }
@@ -5905,6 +5908,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                         (visit.attendees?.isNotEmpty() == true) ||
                         !visit.foodPreferences.isNullOrBlank() ||
                         !visit.vehiclePreference.isNullOrBlank()
+                // Strongest signal: the SV already exists and is linked (the
+                // sv_cum_cp case). Confirm/Reject must lock even when the softer
+                // proposed/lead/party signals are missing on this row.
+                val hasConvertedSv = !visit.convertedSiteVisitId.isNullOrBlank()
 
                 // Always seed the SV-form caches from CP context so
                 // the visitor row, project picker and pickup address
@@ -5917,7 +5924,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 //   1. proposedSiteVisit has at least one populated field
                 //   2. The lead's followUpStatus is already "sv_fixed"
                 //   3. Party data is on the CP visit row (SV-fix-only)
-                if (!proposedMeaningful && !leadFlaggedSvFixed && !hasSvFixParty) {
+                if (!proposedMeaningful && !leadFlaggedSvFixed && !hasSvFixParty && !hasConvertedSv) {
                     android.util.Log.d(
                         LOG_TAG,
                         "detect: cpVisitId=$cpVisitId no SV-fix signal -> normal mode (defaults seeded)",
@@ -5927,6 +5934,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 val source = when {
                     proposedMeaningful -> "proposedSiteVisit"
                     leadFlaggedSvFixed -> "lead.followUpStatus=sv_fixed"
+                    hasConvertedSv -> "convertedSiteVisitId"
                     else -> "partyData"
                 }
                 android.util.Log.d(

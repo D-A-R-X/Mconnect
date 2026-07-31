@@ -1201,7 +1201,12 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
     private fun updatePostponeVisibility(status: String?) {
         val lower = status?.trim()?.lowercase(Locale.US).orEmpty()
         val canEdit = session.hasPermission("marketing.siteVisits.edit")
-        val counsellingStarted = lower in setOf(
+        // Reschedule (Postpone) is only offered BEFORE the client reaches the
+        // site. From on_site onwards the visit is happening — it runs to an
+        // outcome, so hide the postpone action.
+        val arrivedOrLater = lower in setOf(
+            "on_site",
+            "on site",
             "consulting",
             "on_counselling",
             "on counselling",
@@ -1217,7 +1222,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
             "no_show",
         )
         btnPostponeSiteVisit?.visibility =
-            if (canEdit && !isOutcomeLocked && !counsellingStarted) View.VISIBLE else View.GONE
+            if (canEdit && !isOutcomeLocked && !arrivedOrLater) View.VISIBLE else View.GONE
     }
 
     private fun formatDateOnly(scheduledDate: String): String {
