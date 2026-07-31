@@ -4454,7 +4454,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 )
                 dismissAllowingStateLoss()
             } catch (e: Exception) {
-                finishCtaSave(e.message ?: "Network error")
+                // Surface the backend's real {error:"..."} (a permission denial or
+                // a downstream reschedule failure) instead of a bare "HTTP 500".
+                val serverMessage = extractHttpErrorMessage(e)
+                finishCtaSave(serverMessage ?: e.message ?: "Network error")
             }
         }
     }
