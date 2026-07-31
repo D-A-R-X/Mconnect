@@ -148,6 +148,7 @@ class CollectionPaymentEntryBottomSheet : BottomSheetDialogFragment() {
         val etNotes = view.findViewById<EditText>(R.id.etCollectionNotes)
         val btnCancel = view.findViewById<Button>(R.id.btnCancelCollection)
         val btnSubmit = view.findViewById<Button>(R.id.btnSubmitCollection)
+        val btnNotCollected = view.findViewById<Button>(R.id.btnNotCollected)
         val dropZone = view.findViewById<View>(R.id.proofDropZone)
         val proofEmpty = view.findViewById<LinearLayout>(R.id.proofEmptyState)
         val proofFilled = view.findViewById<LinearLayout>(R.id.proofFilledState)
@@ -215,6 +216,24 @@ class CollectionPaymentEntryBottomSheet : BottomSheetDialogFragment() {
 
         btnCancel.setOnClickListener {
             setFragmentResult(RESULT_KEY, bundleOf(KEY_SUBMITTED to false))
+            dismissAllowingStateLoss()
+        }
+
+        // Nothing collected — close the CP visit as "Not Collected" (₹0)
+        // with the optional remarks. No amount / mode / reference / proof
+        // required; no customerCollections row is written.
+        btnNotCollected.setOnClickListener {
+            val notes = etNotes.text?.toString()?.trim().orEmpty()
+            setFragmentResult(
+                RESULT_KEY,
+                bundleOf(
+                    KEY_SUBMITTED to false,
+                    KEY_NOT_COLLECTED to true,
+                    KEY_NOTES to notes,
+                    KEY_CASE_ID to (selectedBooking?.caseId.orEmpty()),
+                    KEY_CLIENT_NAME to (selectedBooking?.clientName.orEmpty()),
+                ),
+            )
             dismissAllowingStateLoss()
         }
 
@@ -362,6 +381,7 @@ class CollectionPaymentEntryBottomSheet : BottomSheetDialogFragment() {
     companion object {
         const val RESULT_KEY = "collection_payment_entry_result"
         const val KEY_SUBMITTED = "submitted"
+        const val KEY_NOT_COLLECTED = "not_collected"
         const val KEY_CASE_ID = "case_id"
         const val KEY_BOOKING_REF = "booking_ref"
         const val KEY_CLIENT_NAME = "client_name"

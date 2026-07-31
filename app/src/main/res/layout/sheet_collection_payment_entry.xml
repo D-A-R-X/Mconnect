@@ -335,6 +335,23 @@
         android:layout_height="1dp"
         android:background="#E4E7EC" />
 
+    <!-- Nothing was collected at the client place (client met, no
+         payment). Records the CP visit as "Not Collected" (₹0) with the
+         optional remarks above — no amount/mode/reference required. -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnNotCollected"
+        style="@style/Widget.MaterialComponents.Button.TextButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="20dp"
+        android:layout_marginTop="10dp"
+        android:fontFamily="@font/inter_bold"
+        android:text="Nothing collected — mark Not Collected"
+        android:textAllCaps="false"
+        android:textColor="#B54708"
+        android:textSize="14sp"
+        app:cornerRadius="27dp" />
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

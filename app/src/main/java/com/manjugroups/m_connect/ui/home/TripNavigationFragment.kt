@@ -1712,6 +1712,16 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 }
                 setFragmentResultListener(CollectionPaymentEntryBottomSheet.RESULT_KEY) { _, bundle ->
                     isOpeningOutcomeSheet = false
+                    // "Nothing collected" — close as Not Collected (₹0), no
+                    // customerCollections row, optional remarks.
+                    val notCollected = bundle.getBoolean(
+                        CollectionPaymentEntryBottomSheet.KEY_NOT_COLLECTED,
+                        false,
+                    )
+                    if (notCollected) {
+                        completeNotCollectedVisit(cpId, bundle)
+                        return@setFragmentResultListener
+                    }
                     val submitted = bundle.getBoolean(
                         CollectionPaymentEntryBottomSheet.KEY_SUBMITTED,
                         false,
@@ -1900,6 +1910,72 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 Toast.makeText(
                     requireContext(),
                     "Collection submitted for Accounts review",
+                    Toast.LENGTH_SHORT,
+                ).show()
+                finalizeCompleteVisit()
+            } catch (e: Exception) {
+                swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                Toast.makeText(
+                    requireContext(),
+                    e.message ?: "Network error",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
+    }
+
+    /** Closes a Collection CP visit when the client was met but nothing
+     *  was collected. No customerCollections row is written; the CP visit
+     *  is stamped outcome="not_collected" (₹0) with the optional remarks,
+     *  so the web shows a "Not Collected" badge. */
+    private fun completeNotCollectedVisit(cpId: String, bundle: Bundle) {
+        val notes = bundle.getString(CollectionPaymentEntryBottomSheet.KEY_NOTES).orEmpty()
+        val summary =
+            if (notes.isNotBlank()) "Not collected — $notes" else "Not collected"
+
+        swipeArrived?.lockAsBusy("Closing visit…")
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val metResp = geoApi.markClientMet(
+                    session.bearerToken,
+                    com.manjugroups.m_connect.network.MarkClientMetRequest(
+                        id = cpId,
+                        clientMet = true,
+                        clientNoShowReason = null,
+                    ),
+                )
+                if (!metResp.success) {
+                    swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                    Toast.makeText(
+                        requireContext(),
+                        metResp.error ?: "Failed to mark client met",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    return@launch
+                }
+                val outcomeResp = geoApi.setCpVisitOutcome(
+                    session.bearerToken,
+                    com.manjugroups.m_connect.network.SetOutcomeRequest(
+                        id = cpId,
+                        outcome = "not_collected",
+                        notes = summary,
+                    ),
+                )
+                if (!outcomeResp.success) {
+                    swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                    Toast.makeText(
+                        requireContext(),
+                        outcomeResp.error ?: "Failed to close visit",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    return@launch
+                }
+                cpClientMet = true
+                cpOutcome = "not_collected"
+                cpVisitDecisionCaptured = true
+                Toast.makeText(
+                    requireContext(),
+                    "Visit closed — nothing collected",
                     Toast.LENGTH_SHORT,
                 ).show()
                 finalizeCompleteVisit()
