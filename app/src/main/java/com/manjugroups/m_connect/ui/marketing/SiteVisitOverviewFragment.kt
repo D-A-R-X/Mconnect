@@ -52,8 +52,12 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
     // returns a fresh status — drives stepper colouring AND gates
     // which next-step button is clickable.
     private var currentStepIndex: Int = 0
+    private var hasFleetArrived = false
     private var hasFleetStart = false
     private var hasFleetOnSite = false
+    // Non-null ("POSTPONED"/"CANCELLED") when the SV is in a terminal status —
+    // the cab/own stepper then shows the reached prefix + this terminal node.
+    private var currentTerminalLabel: String? = null
     private var isConsultingStatus = false
     // Lock for the lifecycle-transition button so a double-tap doesn't
     // fire two markPickedUp calls back-to-back.
@@ -89,6 +93,12 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
     private var tvAttendees: TextView? = null
     private var tvIncharge: TextView? = null
 
+    // Call Client / Call Driver buttons above the pickup address + their numbers.
+    private var btnCallClient: View? = null
+    private var btnCallDriver: View? = null
+    private var clientPhone: String? = null
+    private var driverPhone: String? = null
+
     private var tvVisitorName: TextView? = null
     private var tvVisitorDetails: TextView? = null
     private var tvNotes: TextView? = null
@@ -113,9 +123,11 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
     private var stepLine5: View? = null
     private var stepLine6: View? = null
     private var stepLine7: View? = null
+    private var stepLine8: View? = null
 
     private var circleScheduled: FrameLayout? = null
     private var circleAssigned: FrameLayout? = null
+    private var circleReachedCp: FrameLayout? = null
     private var circlePickedUp: FrameLayout? = null
     private var circleOnSite: FrameLayout? = null
     private var circleConsulting: FrameLayout? = null
@@ -125,6 +137,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
 
     private var ivScheduled: ImageView? = null
     private var ivAssigned: ImageView? = null
+    private var ivReachedCp: ImageView? = null
     private var ivPickedUp: ImageView? = null
     private var ivOnSite: ImageView? = null
     private var ivConsulting: ImageView? = null
@@ -134,6 +147,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
 
     private var labelScheduled: TextView? = null
     private var labelAssigned: TextView? = null
+    private var labelReachedCp: TextView? = null
     private var labelPickedUp: TextView? = null
     private var labelOnSite: TextView? = null
     private var labelConsulting: TextView? = null
@@ -218,6 +232,12 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         tvAttendees = view.findViewById(R.id.tvOverviewAttendees)
         tvIncharge = view.findViewById(R.id.tvOverviewIncharge)
 
+        btnCallClient = view.findViewById(R.id.btnOverviewCallClient)
+        btnCallDriver = view.findViewById(R.id.btnOverviewCallDriver)
+        btnCallClient?.setOnClickListener { dialPhone(clientPhone) }
+        btnCallDriver?.setOnClickListener { dialPhone(driverPhone) }
+        refreshCallButtons()
+
         tvVisitorName = view.findViewById(R.id.tvOverviewVisitorName)
         tvVisitorDetails = view.findViewById(R.id.tvOverviewVisitorDetails)
         tvNotes = view.findViewById(R.id.tvOverviewNotes)
@@ -230,10 +250,12 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         stepLine5 = view.findViewById(R.id.stepLine5)
         stepLine6 = view.findViewById(R.id.stepLine6)
         stepLine7 = view.findViewById(R.id.stepLine7)
+        stepLine8 = view.findViewById(R.id.stepLine8)
 
         // Stepper circles
         circleScheduled = view.findViewById(R.id.frameStepScheduled)
         circleAssigned = view.findViewById(R.id.frameStepAssigned)
+        circleReachedCp = view.findViewById(R.id.frameStepReachedCp)
         circlePickedUp = view.findViewById(R.id.frameStepPickedUp)
         circleOnSite = view.findViewById(R.id.frameStepOnSite)
         circleConsulting = view.findViewById(R.id.frameStepConsulting)
@@ -244,6 +266,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         // Stepper icons
         ivScheduled = view.findViewById(R.id.ivStepScheduled)
         ivAssigned = view.findViewById(R.id.ivStepAssigned)
+        ivReachedCp = view.findViewById(R.id.ivStepReachedCp)
         ivPickedUp = view.findViewById(R.id.ivStepPickedUp)
         ivOnSite = view.findViewById(R.id.ivStepOnSite)
         ivConsulting = view.findViewById(R.id.ivStepConsulting)
@@ -254,6 +277,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         // Stepper labels
         labelScheduled = view.findViewById(R.id.tvStepScheduled)
         labelAssigned = view.findViewById(R.id.tvStepAssigned)
+        labelReachedCp = view.findViewById(R.id.tvStepReachedCp)
         labelPickedUp = view.findViewById(R.id.tvStepPickedUp)
         labelOnSite = view.findViewById(R.id.tvStepOnSite)
         labelConsulting = view.findViewById(R.id.tvStepConsulting)
@@ -398,6 +422,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         val rawStatus = args.getString(ARG_STATUS).orEmpty()
         isOutcomeLocked = isTerminalOutcomeStatus(rawStatus)
         outcomeStatusEligible = isOutcomeStatusEligible(rawStatus)
+        currentTerminalLabel = terminalStepLabelFor(rawStatus)
         updatePostponeVisibility(rawStatus)
         bindLeadTemperature(args.getString(ARG_LEAD_TEMPERATURE))
 
@@ -410,6 +435,8 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         tvClientName?.text = initialName?.let { formatPersonName(it) } ?: "—"
         tvVisitorName?.text = initialName?.let { formatPersonName(it) } ?: "—"
         tvPhone?.text = leadPhone?.takeIf { it.isNotBlank() } ?: "—"
+        clientPhone = leadPhone?.takeIf { it.isNotBlank() }
+        refreshCallButtons()
         tvProject?.text = placeName?.takeIf { it.isNotBlank() } ?: "—"
         tvPickupAddress?.text = placeAddress?.takeIf { it.isNotBlank() } ?: "—"
         // Clear the BDO / incharge / attendees / visitor-details slots
@@ -457,12 +484,24 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         }
     }
 
+    /** "POSTPONED" / "CANCELLED" for terminal statuses (drives the stepper's
+     *  terminal node); null for every other status. */
+    private fun terminalStepLabelFor(status: String?): String? {
+        return when (status?.trim()?.lowercase(Locale.US)) {
+            "postponed" -> "POSTPONED"
+            "cancelled", "canceled" -> "CANCELLED"
+            "no_show" -> "NO SHOW"
+            else -> null
+        }
+    }
+
     private fun bindStatusHeader(status: String) {
         val lower = status.lowercase(Locale.US)
         val displayName = when {
             lower in setOf("completed", "complete", "done") -> "COMPLETED"
             lower in setOf("cancelled", "canceled", "no_show") -> "CANCELLED"
             lower == "postponed" -> "POSTPONED"
+            lower in setOf("reached_cp", "reached cp") -> "REACHED CP"
             lower in setOf("picked_up", "client_started") -> "PICKED FROM CP"
             lower in setOf("on_site", "arrived") -> "ON SITE"
             lower in setOf("consulting", "on_counselling", "on counselling") -> "ON COUNSELLING"
@@ -477,7 +516,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
             "COMPLETED" -> Color.parseColor("#027A48")
             "CANCELLED" -> Color.parseColor("#B42318")
             "POSTPONED" -> Color.parseColor("#B54708")
-            "PICKED FROM CP", "ON SITE", "ON COUNSELLING", "PICKED FROM SITE", "DROPPED" ->
+            "REACHED CP", "PICKED FROM CP", "ON SITE", "ON COUNSELLING", "PICKED FROM SITE", "DROPPED" ->
                 Color.parseColor("#B54708")
             else -> Color.parseColor("#004EEB")
         }
@@ -487,13 +526,17 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
 
     private fun mapStatusToStepIndex(status: String): Int {
         val lower = status.lowercase(Locale.US)
+        // 9-node cab stepper: Scheduled(0) Assigned(1) ReachedCP(2) PickedFromCP(3)
+        // OnSite(4) Consulting(5) PickedFromSite(6) Dropped(7) Done(8). ReachedCP
+        // is timestamp-driven (no status maps to it); a picked_up status implies
+        // the driver already reached CP.
         return when (lower) {
-            "completed", "complete", "done", "closed" -> 7
-            "dropped" -> 6
-            "picked_from_site", "picked from site" -> 5
-            "consulting", "on_counselling", "on counselling" -> 4
-            "on_site", "on site", "arrived" -> 3
-            "picked_up", "picked up", "client_started", "client started" -> 2
+            "completed", "complete", "done", "closed" -> 8
+            "dropped" -> 7
+            "picked_from_site", "picked from site" -> 6
+            "consulting", "on_counselling", "on counselling" -> 5
+            "on_site", "on site", "arrived" -> 4
+            "picked_up", "picked up", "client_started", "client started" -> 3
             "assigned" -> 1
             else -> 0
         }
@@ -519,12 +562,8 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
     ): Int {
         val baseFromStatus = mapStatusToOwnStepIndex(status)
 
-        // Closed states don't get driver-boosted (see computeWebParityStepIndex).
-        val lower = status.lowercase(Locale.US)
-        if (lower == "postponed" || lower in setOf("cancelled", "canceled")) {
-            return baseFromStatus
-        }
-
+        // Postponed/cancelled keep their reached progress; the own-vehicle
+        // stepper renders the terminal node from it (see updateStepper).
         val driverBoost = when {
             snapshot?.travelDeskEndedAt != null -> 2
             snapshot?.travelDeskOnSiteAt != null -> 2
@@ -565,22 +604,17 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
     ): Int {
         val baseFromStatus = mapStatusToStepIndex(status)
 
-        // A postponed / cancelled SV is closed — the driver's travelDesk* taps
-        // must not advance the stepper past it (was showing a postponed trip on
-        // ON SITE). Show the plain status position; the header carries the tag.
-        val lower = status.lowercase(Locale.US)
-        if (lower == "postponed" || lower in setOf("cancelled", "canceled")) {
-            return baseFromStatus
-        }
-
-        // Driver-side boosts: explicit timestamps trump status when
-        // they're ahead. Identical precedence to the web's
-        // mergeVisitProgress(base, boost) helper.
+        // Driver-side boosts: explicit timestamps trump status when they're
+        // ahead. travelDeskArrivedAt = Reached CP (2); travelDeskStartedAt =
+        // Picked from CP (3). Same precedence as the web mergeVisitProgress.
+        // (Postponed/cancelled keep their reached progress here — updateStepper
+        // renders the terminal node from it + the header carries the tag.)
         val driverBoost = when {
-            snapshot?.travelDeskEndedAt != null -> 6
-            snapshot?.travelDeskPickedFromSiteAt != null -> 5
-            snapshot?.travelDeskOnSiteAt != null -> 3
-            snapshot?.travelDeskStartedAt != null -> 2
+            snapshot?.travelDeskEndedAt != null -> 7
+            snapshot?.travelDeskPickedFromSiteAt != null -> 6
+            snapshot?.travelDeskOnSiteAt != null -> 4
+            snapshot?.travelDeskStartedAt != null -> 3
+            snapshot?.travelDeskArrivedAt != null -> 2
             else -> -1
         }
 
@@ -594,17 +628,16 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         val vehicleBoost = if (baseFromStatus == 0 && hasVehicleAssigned) 1 else -1
 
         // Cab visits have TWO decoupled tracks. The SV status covers the visit
-        // up to counselling (step 4); the fleet return steps — Picked from Site
-        // (5), Dropped (6), Done (7) — belong to the driver and come only from
-        // the travelDesk* timestamps. Recording the SV outcome (status
-        // completed/dropped) must NOT slide the bar past where the driver
-        // actually is: the trip stays fleet-pending until the driver ends it.
-        // Once the driver HAS ended (travelDeskEndedAt), the SV status may fill
-        // the final step so a completed outcome shows Done. Own-vehicle visits
-        // have no separate fleet leg, so they keep the full status contribution.
+        // up to counselling (step 5); the fleet return steps — Picked from Site
+        // (6), Dropped (7), Done (8) — belong to the driver and come only from
+        // the travelDesk* timestamps, so recording the SV outcome must NOT slide
+        // the bar past where the driver actually is. Once the driver HAS ended
+        // (travelDeskEndedAt) the SV status may fill the final step so a
+        // completed outcome shows Done. Own-vehicle visits keep the full status
+        // contribution.
         val fleetEnded = snapshot?.travelDeskEndedAt != null
         val statusContribution =
-            if (!isOwnVehicleSelected && !fleetEnded) minOf(baseFromStatus, 4)
+            if (!isOwnVehicleSelected && !fleetEnded) minOf(baseFromStatus, 5)
             else baseFromStatus
 
         return maxOf(statusContribution, driverBoost, vehicleBoost)
@@ -626,55 +659,97 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
                 else -> 4
             }
 
-            // Helper to update each step circle and label
-            fun setOwnStep(
-                circle: FrameLayout?,
-                icon: ImageView?,
-                label: TextView?,
-                stepIdx: Int,
-                activeIconRes: Int
-            ) {
-                val state = when {
-                    stepIdx < ownActiveIndex -> "done"
-                    stepIdx == ownActiveIndex -> "active"
-                    else -> "inactive"
-                }
+            // Own-vehicle 5-node stepper + 4 connector lines.
+            val ownCircles = listOf(
+                circleOwnScheduled, circleOwnClientDeparture, circleOwnOnSite,
+                circleOwnConsulting, circleOwnDone,
+            )
+            val ownIcons = listOf(
+                ivOwnScheduled, ivOwnClientDeparture, ivOwnOnSite, ivOwnConsulting, ivOwnDone,
+            )
+            val ownStepLabels = listOf(
+                labelOwnScheduled, labelOwnClientDeparture, labelOwnOnSite,
+                labelOwnConsulting, labelOwnDone,
+            )
+            val ownDefaultLabels = listOf(
+                "SCHEDULED", "CLIENT DEPARTURE", "ON SITE", "CONSULTING", "DONE",
+            )
+            val ownIconResList = listOf(
+                R.drawable.ic_check_white, R.drawable.ic_car_outline,
+                R.drawable.ic_task_building, R.drawable.ic_auth_user, R.drawable.ic_check_circle,
+            )
+            val ownStepLines = listOf(stepLineOwn1, stepLineOwn2, stepLineOwn3, stepLineOwn4)
+            val ownLineGray = Color.parseColor("#EAECF0")
+
+            fun paintOwnNode(i: Int, state: String, labelText: String) {
+                val circle = ownCircles[i]
+                val icon = ownIcons[i]
+                val label = ownStepLabels[i]
                 when (state) {
                     "done" -> {
                         circle?.background = ContextCompat.getDrawable(context, R.drawable.bg_trip_progress_figma_active)
                         icon?.setImageResource(R.drawable.ic_check_white)
+                        icon?.imageTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
                         label?.setTextColor(blueColor)
                         label?.typeface = ResourcesCompat.getFont(context, R.font.inter_semibold)
                     }
                     "active" -> {
                         circle?.background = ContextCompat.getDrawable(context, R.drawable.bg_trip_progress_figma_active_current)
-                        icon?.setImageResource(activeIconRes)
+                        icon?.setImageResource(ownIconResList[i])
                         icon?.imageTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
                         label?.setTextColor(blueColor)
                         label?.typeface = ResourcesCompat.getFont(context, R.font.inter_bold)
                     }
-                    "inactive" -> {
+                    else -> {
                         circle?.background = ContextCompat.getDrawable(context, R.drawable.bg_trip_progress_figma_inactive)
-                        icon?.setImageResource(activeIconRes)
+                        icon?.setImageResource(ownIconResList[i])
                         icon?.imageTintList = android.content.res.ColorStateList.valueOf(grayColor)
                         label?.setTextColor(grayColor)
                         label?.typeface = ResourcesCompat.getFont(context, R.font.inter_medium)
                     }
                 }
+                label?.text = labelText
             }
 
-            // Apply circle states for Own Stepper
-            setOwnStep(circleOwnScheduled, ivOwnScheduled, labelOwnScheduled, 0, R.drawable.ic_check_white)
-            setOwnStep(circleOwnClientDeparture, ivOwnClientDeparture, labelOwnClientDeparture, 1, R.drawable.ic_car_outline)
-            setOwnStep(circleOwnOnSite, ivOwnOnSite, labelOwnOnSite, 2, R.drawable.ic_task_building)
-            setOwnStep(circleOwnConsulting, ivOwnConsulting, labelOwnConsulting, 3, R.drawable.ic_auth_user)
-            setOwnStep(circleOwnDone, ivOwnDone, labelOwnDone, 4, R.drawable.ic_check_circle)
-
-            // Connector lines progress state for Own Stepper
-            stepLineOwn1?.setBackgroundColor(if (ownActiveIndex >= 1) blueColor else Color.parseColor("#EAECF0"))
-            stepLineOwn2?.setBackgroundColor(if (ownActiveIndex >= 2) blueColor else Color.parseColor("#EAECF0"))
-            stepLineOwn3?.setBackgroundColor(if (ownActiveIndex >= 3) blueColor else Color.parseColor("#EAECF0"))
-            stepLineOwn4?.setBackgroundColor(if (ownActiveIndex >= 4) blueColor else Color.parseColor("#EAECF0"))
+            val ownTerminal = currentTerminalLabel
+            if (ownTerminal != null) {
+                val terminalIdx = (ownActiveIndex.coerceIn(0, ownCircles.size - 2)) + 1
+                for (i in ownCircles.indices) {
+                    val wrapper = ownCircles[i]?.parent as? View
+                    when {
+                        i < terminalIdx -> {
+                            wrapper?.visibility = View.VISIBLE
+                            paintOwnNode(i, "done", ownDefaultLabels[i])
+                        }
+                        i == terminalIdx -> {
+                            wrapper?.visibility = View.VISIBLE
+                            paintOwnNode(i, "done", ownTerminal)
+                        }
+                        else -> wrapper?.visibility = View.GONE
+                    }
+                }
+                for (i in ownStepLines.indices) {
+                    val show = i < terminalIdx
+                    ownStepLines[i]?.visibility = if (show) View.VISIBLE else View.GONE
+                    ownStepLines[i]?.setBackgroundColor(if (show) blueColor else ownLineGray)
+                }
+            } else {
+                for (c in ownCircles) (c?.parent as? View)?.visibility = View.VISIBLE
+                for (l in ownStepLines) l?.visibility = View.VISIBLE
+                for (i in ownCircles.indices) {
+                    val state = when {
+                        i < ownActiveIndex -> "done"
+                        i == ownActiveIndex -> "active"
+                        else -> "inactive"
+                    }
+                    paintOwnNode(i, state, ownDefaultLabels[i])
+                }
+                for (i in ownStepLines.indices) {
+                    ownStepLines[i]?.setBackgroundColor(
+                        if (ownActiveIndex >= (i + 1)) blueColor else ownLineGray,
+                    )
+                }
+            }
 
             // Outcome buttons activation gate — only once counselling has
             // started (client QR scan) and through the later statuses, until
@@ -711,81 +786,124 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
                 btnPostponed?.setOnClickListener(lockedToast)
             }
         } else {
-            // Cab Vehicle: 6 steps (original implementation)
-            // Helper to update each step circle and label
-            fun setStep(
-                circle: FrameLayout?,
-                icon: ImageView?,
-                label: TextView?,
-                stepIdx: Int,
-                activeIconRes: Int
-            ) {
-                val isPendingFleetGap =
-                    isConsultingStatus &&
-                        ((stepIdx == 2 && !hasFleetStart) || (stepIdx == 3 && !hasFleetOnSite))
-                val state = when {
-                    isPendingFleetGap -> "inactive"
-                    stepIdx < activeIndex -> "done"
-                    stepIdx == activeIndex -> "active"
-                    else -> "inactive"
-                }
+            // Cab Vehicle: 9-node stepper (Scheduled, Assigned, Reached CP,
+            // Picked from CP, On Site, Consulting, Picked from Site, Dropped,
+            // Done) + 8 connector lines, driven off `activeIndex`.
+            val circles = listOf(
+                circleScheduled, circleAssigned, circleReachedCp, circlePickedUp,
+                circleOnSite, circleConsulting, circlePickedFromSite, circleDropped, circleDone,
+            )
+            val icons = listOf(
+                ivScheduled, ivAssigned, ivReachedCp, ivPickedUp,
+                ivOnSite, ivConsulting, ivPickedFromSite, ivDropped, ivDone,
+            )
+            val stepLabels = listOf(
+                labelScheduled, labelAssigned, labelReachedCp, labelPickedUp,
+                labelOnSite, labelConsulting, labelPickedFromSite, labelDropped, labelDone,
+            )
+            val defaultLabels = listOf(
+                "SCHEDULED", "ASSIGNED", "REACHED CP", "PICKED FROM CP",
+                "ON SITE", "CONSULTING", "PICKED FROM SITE", "DROPPED", "DONE",
+            )
+            val iconResList = listOf(
+                R.drawable.ic_check_white, R.drawable.ic_car_outline, R.drawable.ic_map_pin,
+                R.drawable.ic_nav_home, R.drawable.ic_task_building, R.drawable.ic_auth_user,
+                R.drawable.ic_nav_home, R.drawable.ic_map_pin, R.drawable.ic_check_circle,
+            )
+            val stepLines = listOf(
+                stepLine1, stepLine2, stepLine3, stepLine4,
+                stepLine5, stepLine6, stepLine7, stepLine8,
+            )
+            val lineGray = Color.parseColor("#EAECF0")
+
+            fun paintNode(i: Int, state: String, labelText: String) {
+                val circle = circles[i]
+                val icon = icons[i]
+                val label = stepLabels[i]
                 when (state) {
                     "done" -> {
                         circle?.background = ContextCompat.getDrawable(context, R.drawable.bg_trip_progress_figma_active)
                         icon?.setImageResource(R.drawable.ic_check_white)
+                        icon?.imageTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
                         label?.setTextColor(blueColor)
                         label?.typeface = ResourcesCompat.getFont(context, R.font.inter_semibold)
                     }
                     "active" -> {
                         circle?.background = ContextCompat.getDrawable(context, R.drawable.bg_trip_progress_figma_active_current)
-                        icon?.setImageResource(activeIconRes)
+                        icon?.setImageResource(iconResList[i])
                         icon?.imageTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
                         label?.setTextColor(blueColor)
                         label?.typeface = ResourcesCompat.getFont(context, R.font.inter_bold)
                     }
-                    "inactive" -> {
+                    else -> {
                         circle?.background = ContextCompat.getDrawable(context, R.drawable.bg_trip_progress_figma_inactive)
-                        icon?.setImageResource(activeIconRes)
+                        icon?.setImageResource(iconResList[i])
                         icon?.imageTintList = android.content.res.ColorStateList.valueOf(grayColor)
                         label?.setTextColor(grayColor)
                         label?.typeface = ResourcesCompat.getFont(context, R.font.inter_medium)
                     }
                 }
+                label?.text = labelText
             }
 
-            // Apply circle states
-            setStep(circleScheduled, ivScheduled, labelScheduled, 0, R.drawable.ic_check_white)
-            setStep(circleAssigned, ivAssigned, labelAssigned, 1, R.drawable.ic_car_outline)
-            setStep(circlePickedUp, ivPickedUp, labelPickedUp, 2, R.drawable.ic_nav_home)
-            setStep(circleOnSite, ivOnSite, labelOnSite, 3, R.drawable.ic_task_building)
-            setStep(circleConsulting, ivConsulting, labelConsulting, 4, R.drawable.ic_auth_user)
-            setStep(
-                circlePickedFromSite,
-                ivPickedFromSite,
-                labelPickedFromSite,
-                5,
-                R.drawable.ic_nav_home,
-            )
-            setStep(circleDropped, ivDropped, labelDropped, 6, R.drawable.ic_map_pin)
-            setStep(circleDone, ivDone, labelDone, 7, R.drawable.ic_check_circle)
-
-            // Connector lines progress state
-            stepLine1?.setBackgroundColor(if (activeIndex >= 1) blueColor else Color.parseColor("#EAECF0"))
-            stepLine2?.setBackgroundColor(
-                if (activeIndex >= 2 && (!isConsultingStatus || hasFleetStart)) blueColor
-                else Color.parseColor("#EAECF0"),
-            )
-            stepLine3?.setBackgroundColor(
-                if (activeIndex >= 3 && (!isConsultingStatus || hasFleetOnSite)) blueColor
-                else Color.parseColor("#EAECF0"),
-            )
-            stepLine4?.setBackgroundColor(
-                if (activeIndex >= 4 && (!isConsultingStatus || hasFleetOnSite)) blueColor
-                else Color.parseColor("#EAECF0"),
-            )
-            stepLine5?.setBackgroundColor(if (activeIndex >= 5) blueColor else Color.parseColor("#EAECF0"))
-            stepLine6?.setBackgroundColor(if (activeIndex >= 6) blueColor else Color.parseColor("#EAECF0"))
-            stepLine7?.setBackgroundColor(if (activeIndex >= 7) blueColor else Color.parseColor("#EAECF0"))
+            val terminal = currentTerminalLabel
+            if (terminal != null) {
+                // Postponed / cancelled: show the reached prefix, then a terminal
+                // node in place of the next step, and hide everything after —
+                // parity with the web stepper's terminalProgressSnapshot.
+                val terminalIdx = (activeIndex.coerceIn(0, circles.size - 2)) + 1
+                for (i in circles.indices) {
+                    val wrapper = circles[i]?.parent as? View
+                    when {
+                        i < terminalIdx -> {
+                            wrapper?.visibility = View.VISIBLE
+                            paintNode(i, "done", defaultLabels[i])
+                        }
+                        i == terminalIdx -> {
+                            wrapper?.visibility = View.VISIBLE
+                            paintNode(i, "done", terminal)
+                        }
+                        else -> wrapper?.visibility = View.GONE
+                    }
+                }
+                for (i in stepLines.indices) {
+                    val show = i < terminalIdx
+                    stepLines[i]?.visibility = if (show) View.VISIBLE else View.GONE
+                    stepLines[i]?.setBackgroundColor(if (show) blueColor else lineGray)
+                }
+            } else {
+                // Normal progression — every node/line visible.
+                for (c in circles) (c?.parent as? View)?.visibility = View.VISIBLE
+                for (l in stepLines) l?.visibility = View.VISIBLE
+                for (i in circles.indices) {
+                    // Consulting-gap: the SV can reach counselling while the fleet
+                    // legs trail — hold Reached CP / Picked from CP / On Site
+                    // inactive until the matching travelDesk* stamp exists.
+                    val gap = isConsultingStatus && (
+                        (i == 2 && !hasFleetArrived) ||
+                        (i == 3 && !hasFleetStart) ||
+                        (i == 4 && !hasFleetOnSite)
+                    )
+                    val state = when {
+                        gap -> "inactive"
+                        i < activeIndex -> "done"
+                        i == activeIndex -> "active"
+                        else -> "inactive"
+                    }
+                    paintNode(i, state, defaultLabels[i])
+                }
+                // Line i sits between node i and i+1 → blue once node i+1 is
+                // reached, held back if the destination node is in the fleet gap.
+                for (i in stepLines.indices) {
+                    val destGap = isConsultingStatus && (
+                        (i == 1 && !hasFleetArrived) ||
+                        (i == 2 && !hasFleetStart) ||
+                        (i == 3 && !hasFleetOnSite)
+                    )
+                    val on = activeIndex >= (i + 1) && !destGap
+                    stepLines[i]?.setBackgroundColor(if (on) blueColor else lineGray)
+                }
+            }
 
             // Outcome buttons activation gate — only once counselling has
             // started (client QR scan) and through the later statuses, until
@@ -854,7 +972,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
                 else -> return@setFragmentResultListener
             }
 
-            updateStepper(6)
+            updateStepper(8)
             bindStatusHeader("completed")
             visitId?.takeIf { it.isNotBlank() }?.let(::loadEnrichedDetail)
             Toast.makeText(
@@ -898,6 +1016,37 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         }
     }
 
+    private fun refreshCallButtons() {
+        setCallButtonEnabled(btnCallClient, !clientPhone.isNullOrBlank())
+        setCallButtonEnabled(btnCallDriver, !driverPhone.isNullOrBlank())
+    }
+
+    private fun setCallButtonEnabled(button: View?, enabled: Boolean) {
+        button?.isEnabled = enabled
+        button?.isClickable = enabled
+        button?.alpha = if (enabled) 1f else 0.4f
+    }
+
+    /** Open the phone dialer pre-filled with the number. ACTION_DIAL needs no
+     *  permission (unlike ACTION_CALL) — the user taps the green call button. */
+    private fun dialPhone(phone: String?) {
+        val number = phone?.trim().orEmpty()
+        if (number.isBlank()) {
+            Toast.makeText(requireContext(), "No number available", Toast.LENGTH_SHORT).show()
+            return
+        }
+        runCatching {
+            startActivity(
+                android.content.Intent(
+                    android.content.Intent.ACTION_DIAL,
+                    android.net.Uri.parse("tel:$number"),
+                ),
+            )
+        }.onFailure {
+            Toast.makeText(requireContext(), "Couldn't open the dialer", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun bindEnriched(visit: CpVisitDetail) {
         // --- Customer name + phone -------------------------------------
         // Precedence: CP-level client → lead → clientPlace label. Show
@@ -914,6 +1063,10 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         val phone = visit.client?.mobileNumber?.takeIf { it.isNotBlank() }
             ?: visit.lead?.mobileNumber?.takeIf { it.isNotBlank() }
         tvPhone?.text = phone ?: "—"
+        clientPhone = phone
+        // The assigned cab driver lives on the SV snapshot (proposedSiteVisit = sv).
+        driverPhone = visit.proposedSiteVisit?.driverPhone?.takeIf { it.isNotBlank() }
+        refreshCallButtons()
         bindLeadTemperature(visit.lead?.temperature)
 
         // --- Project / title ------------------------------------------
@@ -1037,8 +1190,10 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
             "on_counselling",
             "on counselling",
         )
+        hasFleetArrived = proposed?.travelDeskArrivedAt != null
         hasFleetStart = proposed?.travelDeskStartedAt != null
         hasFleetOnSite = proposed?.travelDeskOnSiteAt != null
+        currentTerminalLabel = terminalStepLabelFor(effStatus)
         isOutcomeLocked = isTerminalOutcome(visit)
         outcomeStatusEligible = isOutcomeStatusEligible(effStatus)
         isFleetOutcomePending = visit.completedOffline == true && visit.outcome.isNullOrBlank()
@@ -1080,12 +1235,13 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
                 bindStatusHeader(rawStatus)
             else -> bindStatusHeader(
                 when (stepIndex) {
-                    7 -> "completed"
-                    6 -> "dropped"
-                    5 -> "picked_from_site"
-                    4 -> "on_counselling"
-                    3 -> "on_site"
-                    2 -> "picked_up"
+                    8 -> "completed"
+                    7 -> "dropped"
+                    6 -> "picked_from_site"
+                    5 -> "on_counselling"
+                    4 -> "on_site"
+                    3 -> "picked_up"
+                    2 -> "reached_cp"
                     1 -> "assigned"
                     else -> "scheduled"
                 }
@@ -1189,7 +1345,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
 
                 // Stepper visually completes — setOutcome on the
                 // server-side moves status to "completed" (Done step).
-                updateStepper(6)
+                updateStepper(8)
                 bindStatusHeader("completed")
                 Toast.makeText(
                     requireContext(),
