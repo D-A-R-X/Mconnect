@@ -593,7 +593,21 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
             )
         val vehicleBoost = if (baseFromStatus == 0 && hasVehicleAssigned) 1 else -1
 
-        return maxOf(baseFromStatus, driverBoost, vehicleBoost)
+        // Cab visits have TWO decoupled tracks. The SV status covers the visit
+        // up to counselling (step 4); the fleet return steps — Picked from Site
+        // (5), Dropped (6), Done (7) — belong to the driver and come only from
+        // the travelDesk* timestamps. Recording the SV outcome (status
+        // completed/dropped) must NOT slide the bar past where the driver
+        // actually is: the trip stays fleet-pending until the driver ends it.
+        // Once the driver HAS ended (travelDeskEndedAt), the SV status may fill
+        // the final step so a completed outcome shows Done. Own-vehicle visits
+        // have no separate fleet leg, so they keep the full status contribution.
+        val fleetEnded = snapshot?.travelDeskEndedAt != null
+        val statusContribution =
+            if (!isOwnVehicleSelected && !fleetEnded) minOf(baseFromStatus, 4)
+            else baseFromStatus
+
+        return maxOf(statusContribution, driverBoost, vehicleBoost)
     }
 
     private fun updateStepper(activeIndex: Int) {
