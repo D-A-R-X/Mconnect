@@ -99,6 +99,11 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <!-- Delivered to THIS app after its APK is updated. An update
+                     kills the running foreground service; without this the
+                     location tracking stays dead until the app is reopened
+                     (the 31-Jul GPS-loss / underpaid-allowance bug). -->
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
 
