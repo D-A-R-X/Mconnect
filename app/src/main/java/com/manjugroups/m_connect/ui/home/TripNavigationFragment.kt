@@ -310,6 +310,14 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         loadingOverlay = view.findViewById(R.id.tripLoadingOverlay)
         mapView = view.findViewById(R.id.mapViewTrip)
 
+        // Edge-to-edge shell: lift the pinned action row above the gesture nav
+        // bar (and the main tab bar when visible) so the swipe button isn't
+        // jammed against the bottom edge.
+        view.findViewById<View>(R.id.bottomActions)?.let {
+            com.manjugroups.m_connect.ui.common.BottomActionInsets
+                .applyAboveSystemNavAndTabs(it)
+        }
+
         tvTripStateLabel = view.findViewById(R.id.tvTripStateLabel)
         tripStepStart = view.findViewById(R.id.tripStepStart)
         tripStepEnroute = view.findViewById(R.id.tripStepEnroute)
@@ -384,6 +392,11 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             placeAddress?.takeIf { it.isNotBlank() }
                 ?: placeName.takeIf { it.isNotBlank() }
                 ?: "Location not set"
+        // Full client address card above the map — wraps, no truncation.
+        view.findViewById<TextView>(R.id.tvClientAddressFull)?.text =
+            placeAddress?.takeIf { it.isNotBlank() }
+                ?: placeName.takeIf { it.isNotBlank() }
+                ?: "Address not available"
         bindTripClientHeader(view, placeName)
 
         btnBack?.setOnClickListener { navigateUp() }
@@ -651,6 +664,10 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             uiSettings.isCompassEnabled = true
             uiSettings.isZoomControlsEnabled = false
             uiSettings.isMyLocationButtonEnabled = false
+            // The map sits inside a NestedScrollView; let vertical drags scroll
+            // the page instead of panning this small preview (otherwise the map
+            // swallows the gesture and the page feels stuck over it).
+            uiSettings.isScrollGesturesEnabled = false
         }
         if (hasLocationPermission()) {
             try {

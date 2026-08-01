@@ -49,7 +49,6 @@ import com.manjugroups.m_connect.network.ProposedSiteVisit
 import com.manjugroups.m_connect.network.SetOutcomeRequest
 import com.manjugroups.m_connect.network.StorageUploader
 import com.manjugroups.m_connect.network.ManualProfilePatch
-import com.manjugroups.m_connect.network.PostponeSiteVisitRequest
 import com.manjugroups.m_connect.network.SetSiteVisitOutcomeRequest
 import com.manjugroups.m_connect.network.SiteVisitIdRequest
 import com.manjugroups.m_connect.network.SvNotInterestedDetail
@@ -815,6 +814,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             "When should the client be followed up."
         view?.findViewById<TextView>(R.id.tvPostReasonHelp)?.text =
             "Why does this client need a follow up."
+        view?.findViewById<TextView>(R.id.tvPostReasonSubtitle)?.text =
+            "Note the client's decision so the telecaller can follow up."
         etPostNotes?.hint = "Reason for follow up"
 
         // When launched from a specific SV outcome button, keep the
@@ -4400,12 +4401,11 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             return
         }
         if (isSiteVisitMode) {
-            // A follow-up carries a next-visit date, so route it through the
-            // dedicated SV postpone/reschedule endpoint. setSiteVisitOutcome
-            // (outcome=follow_up) only accepts on_counselling/picked_from_site/
-            // dropped and returns HTTP 500 for a visit still in scheduled/on_site;
-            // the postpone endpoint accepts any active status and reschedules to
-            // the chosen date.
+            // SV Follow up is an OUTCOME, not a reschedule: it completes the
+            // visit and schedules a follow-up call for the assigned telecaller
+            // to discuss the client's decision. It must NOT postpone (which
+            // recreates an unassigned SV). The outcome buttons only unlock from
+            // on_counselling, which setOutcome(follow_up) accepts.
             persistSvFollowUp(nextDate, reason)
             return
         }
@@ -4420,8 +4420,9 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     }
 
     /**
-     * SV follow-up: reschedule the visit to the chosen next date via the
-     * dedicated postpone endpoint (broad status guard) instead of setOutcome.
+     * SV follow-up: record outcome=follow_up on the visit. The backend completes
+     * the SV and creates a follow-up call for the assigned telecaller/LMO on the
+     * chosen date (followupDueDate) — it does NOT reschedule/recreate the SV.
      */
     private fun persistSvFollowUp(displayDate: String, reason: String) {
         val svId = argSiteVisitId?.takeIf { it.isNotBlank() } ?: run {
@@ -4436,12 +4437,23 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         btnSubmit?.text = "Saving…"
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val resp = geoApi.postponeSiteVisit(
+                // setOutcome(follow_up) accepts on_counselling/picked_from_site/
+                // dropped. The outcome buttons only unlock from on_counselling,
+                // but mark it best-effort in case the SV row still trails at
+                // on_site (no-ops for already-eligible statuses).
+                runCatching {
+                    geoApi.markSiteVisitOnCounselling(
+                        session.bearerToken,
+                        SiteVisitIdRequest(id = svId),
+                    )
+                }
+                val resp = geoApi.setSiteVisitOutcome(
                     session.bearerToken,
-                    PostponeSiteVisitRequest(
+                    SetSiteVisitOutcomeRequest(
                         id = svId,
-                        scheduledDate = apiDate,
-                        reason = reason,
+                        outcome = OUTCOME_FOLLOW_UP,
+                        followupDueDate = apiDate,
+                        notes = reason,
                     ),
                 )
                 if (!resp.success) {
@@ -4454,8 +4466,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 )
                 dismissAllowingStateLoss()
             } catch (e: Exception) {
-                // Surface the backend's real {error:"..."} (a permission denial or
-                // a downstream reschedule failure) instead of a bare "HTTP 500".
+                // Surface the backend's real {error:"..."} (a permission denial
+                // or a downstream failure) instead of a bare "HTTP 500".
                 val serverMessage = extractHttpErrorMessage(e)
                 finishCtaSave(serverMessage ?: e.message ?: "Network error")
             }

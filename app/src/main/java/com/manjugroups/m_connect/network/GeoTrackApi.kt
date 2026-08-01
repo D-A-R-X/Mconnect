@@ -1281,6 +1281,9 @@ data class SetSiteVisitOutcomeRequest(
     val notInterestedReasons: List<String>? = null,
     val notInterestedDetails: List<SvNotInterestedDetail>? = null,
     val notes: String? = null,
+    /** For outcome=follow_up: when the assigned telecaller should call back. */
+    val followupDueDate: String? = null,
+    val followupDueTime: String? = null,
 )
 
 data class SiteVisitQrScanRequest(val qrData: String)
