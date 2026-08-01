@@ -814,6 +814,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             "When should the client be followed up."
         view?.findViewById<TextView>(R.id.tvPostReasonHelp)?.text =
             "Why does this client need a follow up."
+        view?.findViewById<TextView>(R.id.tvPostReasonSubtitle)?.text =
+            "Note the client's decision so the telecaller can follow up."
         etPostNotes?.hint = "Reason for follow up"
 
         // When launched from a specific SV outcome button, keep the
