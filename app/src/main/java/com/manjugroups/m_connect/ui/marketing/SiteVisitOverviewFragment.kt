@@ -63,6 +63,12 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
     // trip progress; mobile re-reads it on every loadEnrichedDetail.
     private var isOwnVehicleSelected: Boolean = false
     private var isOutcomeLocked: Boolean = false
+    // Outcome form opens only once the SV has actually reached counselling (the
+    // client QR scan → on_counselling) and stays open through the later
+    // statuses (picked_from_site / dropped) until the outcome is recorded —
+    // mirroring the backend setOutcome contract. Driver-boosted stepper
+    // position (e.g. a cab that reached "on site") must NOT open it.
+    private var outcomeStatusEligible: Boolean = false
     // Fleet "completed offline" — the admin marked this SV as done without a
     // live trip. The site incharge must record the outcome. Bypass the normal
     // stepper gate so the buttons are immediately usable.
@@ -391,6 +397,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         val schedTime = args.getString(ARG_SCHEDULED_START_TIME)
         val rawStatus = args.getString(ARG_STATUS).orEmpty()
         isOutcomeLocked = isTerminalOutcomeStatus(rawStatus)
+        outcomeStatusEligible = isOutcomeStatusEligible(rawStatus)
         updatePostponeVisibility(rawStatus)
         bindLeadTemperature(args.getString(ARG_LEAD_TEMPERATURE))
 
@@ -455,6 +462,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         val displayName = when {
             lower in setOf("completed", "complete", "done") -> "COMPLETED"
             lower in setOf("cancelled", "canceled", "no_show") -> "CANCELLED"
+            lower == "postponed" -> "POSTPONED"
             lower in setOf("picked_up", "client_started") -> "PICKED FROM CP"
             lower in setOf("on_site", "arrived") -> "ON SITE"
             lower in setOf("consulting", "on_counselling", "on counselling") -> "ON COUNSELLING"
@@ -468,6 +476,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         val color = when (displayName) {
             "COMPLETED" -> Color.parseColor("#027A48")
             "CANCELLED" -> Color.parseColor("#B42318")
+            "POSTPONED" -> Color.parseColor("#B54708")
             "PICKED FROM CP", "ON SITE", "ON COUNSELLING", "PICKED FROM SITE", "DROPPED" ->
                 Color.parseColor("#B54708")
             else -> Color.parseColor("#004EEB")
@@ -510,6 +519,12 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
     ): Int {
         val baseFromStatus = mapStatusToOwnStepIndex(status)
 
+        // Closed states don't get driver-boosted (see computeWebParityStepIndex).
+        val lower = status.lowercase(Locale.US)
+        if (lower == "postponed" || lower in setOf("cancelled", "canceled")) {
+            return baseFromStatus
+        }
+
         val driverBoost = when {
             snapshot?.travelDeskEndedAt != null -> 2
             snapshot?.travelDeskOnSiteAt != null -> 2
@@ -549,6 +564,14 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         snapshot: com.manjugroups.m_connect.network.ProposedSiteVisit?,
     ): Int {
         val baseFromStatus = mapStatusToStepIndex(status)
+
+        // A postponed / cancelled SV is closed — the driver's travelDesk* taps
+        // must not advance the stepper past it (was showing a postponed trip on
+        // ON SITE). Show the plain status position; the header carries the tag.
+        val lower = status.lowercase(Locale.US)
+        if (lower == "postponed" || lower in setOf("cancelled", "canceled")) {
+            return baseFromStatus
+        }
 
         // Driver-side boosts: explicit timestamps trump status when
         // they're ahead. Identical precedence to the web's
@@ -639,11 +662,12 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
             stepLineOwn3?.setBackgroundColor(if (ownActiveIndex >= 3) blueColor else Color.parseColor("#EAECF0"))
             stepLineOwn4?.setBackgroundColor(if (ownActiveIndex >= 4) blueColor else Color.parseColor("#EAECF0"))
 
-            // Outcome buttons activation gate
-            val onSiteReached = ownActiveIndex >= 2
+            // Outcome buttons activation gate — only once counselling has
+            // started (client QR scan) and through the later statuses, until
+            // the outcome is recorded. Not driven by the driver's stepper.
             if (isOutcomeLocked) {
                 lockOutcomeButtons("This site visit outcome is already completed.")
-            } else if (onSiteReached || isFleetOutcomePending) {
+            } else if (outcomeStatusEligible || isFleetOutcomePending) {
                 btnBooking?.isEnabled = true
                 btnBooking?.alpha = 1.0f
                 btnNotInterested?.isEnabled = true
@@ -666,7 +690,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
                 btnPostponed?.alpha = 0.4f
 
                 val lockedToast: (View) -> Unit = {
-                    Toast.makeText(context, "Outcome buttons will activate once you reach on site.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Outcome opens after the client QR scan (counselling).", Toast.LENGTH_SHORT).show()
                 }
                 btnBooking?.setOnClickListener(lockedToast)
                 btnNotInterested?.setOnClickListener(lockedToast)
@@ -749,11 +773,13 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
             stepLine6?.setBackgroundColor(if (activeIndex >= 6) blueColor else Color.parseColor("#EAECF0"))
             stepLine7?.setBackgroundColor(if (activeIndex >= 7) blueColor else Color.parseColor("#EAECF0"))
 
-            // Outcome buttons activation gate
-            val onSiteReached = activeIndex >= 3
+            // Outcome buttons activation gate — only once counselling has
+            // started (client QR scan) and through the later statuses, until
+            // the outcome is recorded. A cab merely reaching "on site" (driver
+            // stepper) must NOT open it.
             if (isOutcomeLocked) {
                 lockOutcomeButtons("This site visit outcome is already completed.")
-            } else if (onSiteReached || isFleetOutcomePending) {
+            } else if (outcomeStatusEligible || isFleetOutcomePending) {
                 btnBooking?.isEnabled = true
                 btnBooking?.alpha = 1.0f
                 btnNotInterested?.isEnabled = true
@@ -776,7 +802,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
                 btnPostponed?.alpha = 0.4f
 
                 val lockedToast: (View) -> Unit = {
-                    Toast.makeText(context, "Outcome buttons will activate once you reach on site.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Outcome opens after the client QR scan (counselling).", Toast.LENGTH_SHORT).show()
                 }
                 btnBooking?.setOnClickListener(lockedToast)
                 btnNotInterested?.setOnClickListener(lockedToast)
@@ -1000,6 +1026,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         hasFleetStart = proposed?.travelDeskStartedAt != null
         hasFleetOnSite = proposed?.travelDeskOnSiteAt != null
         isOutcomeLocked = isTerminalOutcome(visit)
+        outcomeStatusEligible = isOutcomeStatusEligible(effStatus)
         isFleetOutcomePending = visit.completedOffline == true && visit.outcome.isNullOrBlank()
         updatePostponeVisibility(effStatus)
         
@@ -1032,7 +1059,10 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         when {
             lower in setOf("completed", "complete", "done", "closed") ->
                 bindStatusHeader("completed")
-            lower in setOf("cancelled", "canceled", "no_show") ->
+            // Closed states keep their own tag and must NOT be relabelled from
+            // the driver-boosted step (a postponed cab trip whose driver had
+            // tapped "arrived" was showing "ON SITE" instead of "POSTPONED").
+            lower in setOf("cancelled", "canceled", "no_show", "postponed") ->
                 bindStatusHeader(rawStatus)
             else -> bindStatusHeader(
                 when (stepIndex) {
@@ -1203,6 +1233,26 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
             "not_interested",
             "postponed",
             "other",
+        )
+    }
+
+    /**
+     * Statuses at which the outcome form may be recorded — the SV must have
+     * reached counselling (client QR scan) and may still be at a later stage.
+     * Deliberately excludes on_site and earlier, so a driver reaching the site
+     * does not open the form before counselling has started. Mirrors the
+     * backend `setOutcome` transition set (on_counselling / picked_from_site /
+     * dropped).
+     */
+    private fun isOutcomeStatusEligible(status: String?): Boolean {
+        val lower = status?.trim()?.lowercase(Locale.US).orEmpty()
+        return lower in setOf(
+            "on_counselling",
+            "on counselling",
+            "consulting",
+            "picked_from_site",
+            "picked from site",
+            "dropped",
         )
     }
 
