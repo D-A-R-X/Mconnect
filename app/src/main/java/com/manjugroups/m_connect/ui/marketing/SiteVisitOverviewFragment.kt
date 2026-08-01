@@ -1178,8 +1178,16 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         isTerminalOutcomeStatus(visit.status) ||
             isTerminalOutcomeStatus(visit.outcome) ||
             visit.convertedBookingId != null ||
-            visit.completedAt != null ||
             visit.cancelledAt != null
+    // NOTE: `completedAt` is deliberately NOT a lock signal. For cab visits the
+    // fleet return-leg advances the status (picked_from_site / dropped) while a
+    // stale `completedAt` can linger, and a trip can finish before the field
+    // staff record the outcome — both left the outcome form greyed at
+    // picked_from_site even though the backend `setOutcome` still accepts
+    // on_counselling / picked_from_site / dropped. A genuinely completed visit
+    // is still caught by its terminal status, recorded outcome,
+    // convertedBookingId, or cancelledAt above, so dropping the raw
+    // `completedAt` check only unblocks the outcome-still-pending case.
 
     private fun isTerminalOutcomeStatus(value: String?): Boolean {
         val lower = value?.trim()?.lowercase(Locale.US).orEmpty()
