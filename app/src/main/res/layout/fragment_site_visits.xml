@@ -162,6 +162,22 @@
                 android:textSize="13sp" />
 
             <TextView
+                android:id="@+id/pillFixed"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_cpv_filter_pill_inactive"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:paddingHorizontal="16dp"
+                android:text="Fixed"
+                android:textColor="#475467"
+                android:textSize="13sp" />
+
+            <TextView
                 android:id="@+id/pillScheduled"
                 android:layout_width="wrap_content"
                 android:layout_height="34dp"
@@ -178,7 +194,7 @@
                 android:textSize="13sp" />
 
             <TextView
-                android:id="@+id/pillStarted"
+                android:id="@+id/pillEnroute"
                 android:layout_width="wrap_content"
                 android:layout_height="34dp"
                 android:layout_marginStart="8dp"
@@ -189,12 +205,12 @@
                 android:gravity="center"
                 android:includeFontPadding="false"
                 android:paddingHorizontal="16dp"
-                android:text="Client Started"
+                android:text="Enroute"
                 android:textColor="#475467"
                 android:textSize="13sp" />
 
             <TextView
-                android:id="@+id/pillPickedUp"
+                android:id="@+id/pillOnsite"
                 android:layout_width="wrap_content"
                 android:layout_height="34dp"
                 android:layout_marginStart="8dp"
@@ -205,7 +221,23 @@
                 android:gravity="center"
                 android:includeFontPadding="false"
                 android:paddingHorizontal="16dp"
-                android:text="Picked Up"
+                android:text="Onsite"
+                android:textColor="#475467"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/pillReturningHome"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_cpv_filter_pill_inactive"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:paddingHorizontal="16dp"
+                android:text="Returning home"
                 android:textColor="#475467"
                 android:textSize="13sp" />
 
@@ -222,6 +254,38 @@
                 android:includeFontPadding="false"
                 android:paddingHorizontal="16dp"
                 android:text="Completed"
+                android:textColor="#475467"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/pillCancelled"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_cpv_filter_pill_inactive"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:paddingHorizontal="16dp"
+                android:text="Cancelled"
+                android:textColor="#475467"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/pillPostponed"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_cpv_filter_pill_inactive"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:paddingHorizontal="16dp"
+                android:text="Postponed"
                 android:textColor="#475467"
                 android:textSize="13sp" />
 

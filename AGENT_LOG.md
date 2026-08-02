@@ -5629,3 +5629,47 @@ with DEFAULT (prod) URL, no dev override.
   (listPending statuses[]) not on mfpl prod -> validator errors on mfpl until the
   team deploys. Typecheck clean both repos (only the pre-existing http.ts:11068
   arrivalPhotoStorageId error).
+
+### Session 105 (cont.) - Time Correction Unavailable on WEB too
+
+**Repo:** manjusitedevelopment (web frontend), app/attendance/page.tsx. Uncommitted.
+NOTE: web frontend change (Next.js), not a convex deploy — never-deploy rule not
+affected; appears on prod when the web is deployed. app/attendance/ was clean of
+main-chat edits.
+
+- Request dialog "Time Correction" SelectItem now `disabled` + labelled
+  "Time Correction (Unavailable)" (only Remark selectable). (~line 7114)
+- Neutralized the forced-correction path: field staff missing a punch-out no
+  longer get forced into correction — `forceCorrection = false`, opens as Remark
+  (~line 5288-5293). Removed now-unused isField/isMissingPunchOut.
+- Existing "Time Correction" DISPLAY labels for already-submitted/pending requests
+  left as-is (history/badges). tsc clean for attendance/page.
+- Mirrors the app change (Session 105). Both surfaces: correction creation is off.
+
+### Session 117 - SV list pipeline tabs (app) + CP→SV incharge default & required gate
+
+**Date:** 2026-08-02
+**Session:** fork. app (Mconnect/merge) + web (manjusitedevelopment/max). mfpl prod.
+
+- SV LIST PIPELINE TABS (app): SiteVisitsFragment now mirrors the MMS web
+  /marketing/site-visits tabs — Fixed | Scheduled | Enroute | Onsite |
+  Returning home | Completed | Cancelled | Postponed, plus All + Expired kept as
+  extras (user choice). Regrouped status predicates to match web boundaries
+  (enroute=client_started+picked_up, onsite=on_site+on_counselling, returning=
+  picked_from_site+dropped, completed=completed only). Row badges follow suit.
+  All CLIENT-SIDE over the existing getMySiteVisits fetch → live on mfpl now.
+- FIXED tab needs confirmationStatus: added `confirmationStatus` to TodayVisit
+  (GeoTrackApi) + to the backend mobile mapper listForViewerAsMobileVisits
+  (siteVisits.ts, web/max) — STAGED for the mfpl deploy; until then Fixed shows
+  empty and pending-confirmation SVs sit under Scheduled.
+- CP→SV INCHARGE DEFAULT (CompleteCpVisitBottomSheet): Site Incharge now defaults
+  to the CP-assigned staff (visit.assignedStaff) — captured on CP load
+  (cpAssignedStaff), seeded into the fix form when the SV carries no incharge,
+  and used as the submit value (inchargeStaffId = svIncharge?.id ?? cpAssignedStaff.id).
+  Fixes the QR-scan showing the telecaller as Site Incharge. App-side, live now.
+- CP→SV REQUIRED GATE: persistSiteVisit blocks conversion unless Site Incharge
+  (picker/CP default) AND BDO (session.staffId = the fixer) are present, with
+  clear errors. Backend already asserts required staff (assertRequiredSvStaffAssignments)
+  — belt-and-suspenders. NOTE: no separate BDO picker exists (BDO = the fixer).
+- Build: :app:compileDebugKotlin SUCCESSFUL. Convex tsc clean (only pre-existing
+  http.ts:11068 arrivalPhotoStorageId).

@@ -1794,6 +1794,11 @@ data class TodayVisit(
     // then record the outcome from their mobile app.
     val completedOffline: Boolean? = null,
     val outcome: String? = null,
+    // Confirmation state of a fixed SV — "pending" (awaiting CP verification)
+    // or "confirmed". Drives the SV list "Fixed" tab (parity with the web
+    // pipeline). Staged on the backend mobile mapper; null on rows that
+    // predate that deploy, in which case the row falls under Scheduled.
+    val confirmationStatus: String? = null,
 )
 
 data class CpVisitState(
