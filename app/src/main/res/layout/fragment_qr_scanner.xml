@@ -75,6 +75,37 @@
         app:layout_constraintStart_toStartOf="@id/scanWindow"
         app:layout_constraintTop_toTopOf="@id/scanWindow" />
 
+    <LinearLayout
+        android:id="@+id/siteVisitScanLoading"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_verification_screen"
+        android:elevation="8dp"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:paddingHorizontal="24dp"
+        android:paddingVertical="20dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@id/scanWindow"
+        app:layout_constraintEnd_toEndOf="@id/scanWindow"
+        app:layout_constraintStart_toStartOf="@id/scanWindow"
+        app:layout_constraintTop_toTopOf="@id/scanWindow">
+
+        <ProgressBar
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:indeterminateTint="@android:color/white" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Loading site visit..."
+            android:textColor="@android:color/white"
+            android:textSize="14sp" />
+    </LinearLayout>
+
     <!-- Floating Header Container (Vertical) -->
     <LinearLayout
         android:id="@+id/headerContainer"

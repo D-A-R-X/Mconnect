@@ -187,6 +187,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
     private var btnNotInterested: LinearLayout? = null
     private var btnPostponed: LinearLayout? = null
     private var btnPostponeSiteVisit: LinearLayout? = null
+    private var btnCancelSiteVisit: LinearLayout? = null
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val dialog = BottomSheetDialog(requireContext(), theme)
@@ -340,6 +341,15 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
                 }
             }
         }
+        btnCancelSiteVisit = view.findViewById(R.id.btnCancelSiteVisit)
+        btnCancelSiteVisit?.visibility = View.GONE
+        btnCancelSiteVisit?.setOnClickListener {
+            visitId?.takeIf { it.isNotBlank() }?.let { id ->
+                CancelSiteVisitBottomSheet
+                    .newInstance(id)
+                    .showOnce(parentFragmentManager, "CancelSiteVisitBottomSheet")
+            }
+        }
 
         // Vehicle-type dropdown removed — the badge above is now
         // read-only. The travel mode is set by the WEB (Own Vehicle
@@ -364,6 +374,12 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         wireBookingResult()
         parentFragmentManager.setFragmentResultListener(
             PostponeSiteVisitBottomSheet.RESULT_KEY,
+            viewLifecycleOwner,
+        ) { _, _ ->
+            dismissAllowingStateLoss()
+        }
+        parentFragmentManager.setFragmentResultListener(
+            CancelSiteVisitBottomSheet.RESULT_KEY,
             viewLifecycleOwner,
         ) { _, _ ->
             dismissAllowingStateLoss()
@@ -424,6 +440,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         outcomeStatusEligible = isOutcomeStatusEligible(rawStatus)
         currentTerminalLabel = terminalStepLabelFor(rawStatus)
         updatePostponeVisibility(rawStatus)
+        updateCancelVisibility(rawStatus)
         bindLeadTemperature(args.getString(ARG_LEAD_TEMPERATURE))
 
         // First-frame bind from list-row arguments. Real values land
@@ -1198,6 +1215,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         outcomeStatusEligible = isOutcomeStatusEligible(effStatus)
         isFleetOutcomePending = visit.completedOffline == true && visit.outcome.isNullOrBlank()
         updatePostponeVisibility(effStatus)
+        updateCancelVisibility(effStatus)
         
         // Detect vehicle type and toggle layout visibility
         isOwnVehicleSelected = proposed?.travelMode == "own_vehicle" || visit.vehiclePreference == "own_vehicle"
@@ -1451,6 +1469,25 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         )
         btnPostponeSiteVisit?.visibility =
             if (canEdit && !isOutcomeLocked && !arrivedOrLater) View.VISIBLE else View.GONE
+    }
+
+    private fun updateCancelVisibility(status: String?) {
+        val terminal = status?.trim()?.lowercase(Locale.US).orEmpty() in setOf(
+            "completed",
+            "complete",
+            "done",
+            "closed",
+            "cancelled",
+            "canceled",
+            "no_show",
+            "postponed",
+        )
+        btnCancelSiteVisit?.visibility =
+            if (session.hasPermission("marketing.siteVisits.cancel") && !terminal) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
     }
 
     private fun formatDateOnly(scheduledDate: String): String {

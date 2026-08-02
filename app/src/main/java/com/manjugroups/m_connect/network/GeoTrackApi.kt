@@ -384,6 +384,12 @@ interface GeoTrackApi {
         @Body body: PostponeSiteVisitRequest,
     ): GeoTrackResponse
 
+    @POST("api/marketing/siteVisits/cancel")
+    suspend fun cancelSiteVisit(
+        @Header("Authorization") token: String,
+        @Body body: CancelSiteVisitRequest,
+    ): GeoTrackResponse
+
     @POST("api/marketing/siteVisits/convertToBooking")
     suspend fun convertSiteVisitToBooking(
         @Header("Authorization") token: String,
@@ -1355,6 +1361,11 @@ data class PostponeSiteVisitRequest(
     val id: String,
     val scheduledDate: String,
     val scheduledTime: String? = null,
+    val reason: String? = null,
+)
+
+data class CancelSiteVisitRequest(
+    val id: String,
     val reason: String? = null,
 )
 
