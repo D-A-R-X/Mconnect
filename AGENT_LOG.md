@@ -5,6 +5,47 @@
 > It is a running logbook for AI agents (Antigravity / Claude / Gemini, etc.)
 > working on this repository so each session picks up exactly where the last left off.
 
+## Mandatory Update Rule
+
+Every AI must update this file on **every response/turn** and after every
+meaningful change. This applies even when the response only reports status,
+answers a question, performs an investigation, or makes no file changes.
+
+Each turn's entry must state:
+
+- what was requested or investigated;
+- every file, behavior, API, schema, UI, configuration, Git state, or document
+  changed;
+- validation run and its result;
+- failures, unresolved risks, deployment requirements, or follow-up work;
+- explicitly that no project files changed when the turn was read-only.
+
+Update entries incrementally during long tasks. Before any final response,
+verify that the current turn is logged accurately. A task is not complete
+until its log entry exists. This file must remain local-only and must never be
+committed or pushed.
+
+### Fork / parallel-session rule
+
+This project is sometimes worked on by **multiple concurrent Claude sessions**:
+a **main chat** plus one or more **forked chats** (a fork branches off the main
+chat and shares the same on-disk repos — Mconnect, manjusitedevelopment,
+travel-desk). Both the main chat AND every fork MUST log their changes here,
+tagged with which session they are, e.g. `**Session:** fork (branched from main)`
+or `**Session:** main`.
+
+Because forks and the main chat edit the **same working trees**, uncommitted
+changes can clobber each other (last write wins). Therefore every session must:
+
+- Note in its log entry that it is a fork/main and which files it touched, so the
+  other session can see what changed underneath it.
+- Before overwriting a shared feature file (e.g. `travel-desk` settings/trip
+  pages, `manjusitedevelopment/convex/*`), check `git status` for edits it did
+  not make — those may be the other session's in-flight work; do not silently
+  revert them.
+- Keep one coherent vertical (e.g. a whole backend+web+app feature) inside a
+  single session where possible, rather than splitting it across fork + main.
+
 ---
 
 ## READ FIRST: Reuse the Mconnect UI System
@@ -2371,6 +2412,94 @@ the top-right trip status badge and again in the compact progress row.
 
 ---
 
+### Session 61 - Mandatory Per-Response Agent Logging Rule
+
+**Date:** 2026-07-29
+**Agent:** Codex
+
+**Request:**
+- Require every AI to update `AGENT_LOG.md` on every response and after every
+  change.
+
+**Changes:**
+- Added a repository-level Mandatory Agent Log Protocol to `AGENTS.md`.
+- Added the same rule near the beginning of `AGENT_LOG.md` so it is visible
+  before project and session history.
+- The rule covers implementation turns, status-only responses, investigations,
+  read-only answers, validation, failures, deployment notes, and no-change
+  turns.
+- The rule requires incremental updates during long work and a final log check
+  before an AI sends its response.
+- Reaffirmed that `AGENT_LOG.md` is local-only and must not be committed or
+  pushed.
+
+**Validation:**
+- Confirmed both instruction files contain the mandatory rule.
+- `git diff --check` -> no whitespace errors.
+
+**Project behavior:**
+- No application code, API, schema, or runtime behavior changed in this turn.
+
+### Session 60 - Agency-Owned Completed Trip Billing And Proof Review
+
+**Date:** 2026-07-29
+**Agent:** Codex
+
+**Repositories updated:**
+- MMS / Convex backend: `C:\Users\surya\Projects\manjusitedevelopment`
+  (`max`, pulled through `origin/max` at `3e93214b`)
+- Mconnect Android: `C:\Users\surya\Projects\Mconnect`
+  (`merge`, pulled through `origin/merge` at `b684127`)
+- Travel Desk: `C:\Users\surya\Projects\travel-desk` (`aizen`)
+
+**Completed-trip lifecycle:**
+- A dropped external trip remains in In progress / Pending details until its
+  own agency submits required start and end odometer readings.
+- Dashboard images remain optional and can be selected from camera or gallery.
+- External billing stores package or kilometer pricing, beta, toll, hill,
+  outstation, permit, permit tax, standing duration/AC, and standing charge.
+- Total kilometers is derived as `end odometer - start odometer`; the stored
+  billing total includes every submitted charge.
+- After submission, the same persisted values and proof images appear in the
+  Travel Desk Completed view, MMS Complete view, and Mconnect completed detail.
+
+**Completed-record editing and ownership:**
+- External completed records are editable only by a logged-in staff/admin
+  session belonging to that exact travel agency.
+- External edits can correct the vehicle sent, driver name/phone, odometer
+  readings, optional proof images, and all billing charges.
+- MMS does not expose edit controls for external-agency completed records.
+- Internal completed records can be corrected only from the MMS fleet module
+  by an authorized internal fleet admin.
+- External summaries show the travel agency before driver and odometer data.
+
+**Live trip proof and OTP UI:**
+- Once a trip is Picked from CP, Travel Desk shows the recorded start
+  kilometer and dashboard image preview in the live progress card.
+- The public driver link now displays four single-digit OTP boxes with
+  automatic focus movement and paste support.
+
+**Pull/conflict notes:**
+- The MMS pull restored an autostash conflict in `convex/whatsappTemplates.ts`.
+  It was resolved by retaining both upstream WhatsApp audit logging and the
+  external-driver per-trip delivery status/retry tracking.
+- Generated report files under `outputs/` are excluded from Next.js type
+  checking; they are artifacts, not production application source.
+
+**Validation:**
+- Travel Desk production build -> **SUCCESS**.
+- MMS production build -> **SUCCESS**.
+- MMS focused fleet/WhatsApp tests -> **10 passed**.
+- Mconnect `:app:assembleDebug` -> **SUCCESS**.
+- `git diff --check` -> no whitespace errors in all three repositories.
+
+**Required admin action:**
+- Deploy MMS/Convex and Travel Desk together, then distribute the rebuilt
+  Mconnect app. The Convex deployment is required before the new completion
+  payload and ownership checks are available in production.
+
+---
+
 ### Session 57 - External Driver WhatsApp Delivery Recovery
 
 **Date:** 2026-07-29
@@ -2456,6 +2585,39 @@ the top-right trip status badge and again in the compact progress row.
 - Travel Desk production build with TypeScript -> **SUCCESS**.
 - MMS/Convex production build with TypeScript -> **SUCCESS**.
 - Travel Desk proof and completion-state tests -> **6 passed**.
+
+**Required admin action:**
+- Deploy MMS/Convex and Travel Desk together.
+
+---
+
+### Session 59 - Overdue Trip Lifecycle Availability
+
+**Date:** 2026-07-29
+**Agent:** Codex
+
+**Repositories:**
+- MMS web and Convex backend:
+  `C:\Users\surya\Projects\manjusitedevelopment` (`max`)
+- Travel Desk web:
+  `C:\Users\surya\Projects\travel-desk` (`aizen`)
+
+**What changed:**
+- Replaced the exact-date fleet action gate with an available-from-date rule.
+- Future trips remain locked until their scheduled date.
+- Same-day trips can start at any time, including before the scheduled pickup
+  time.
+- Previous-day and older unfinished trips remain actionable so fleet staff can
+  continue the MMS lifecycle, backfill missing stages, and complete the trip.
+- Applied the same shared backend rule to external Travel Desk drivers and
+  internal MMS fleet drivers.
+- Updated Travel Desk messaging so overdue trips say `Available now` rather
+  than incorrectly waiting for a date that already passed.
+
+**Validation:**
+- Assignment-date and proof-state tests -> **10 passed**.
+- Travel Desk production build with TypeScript -> **SUCCESS**.
+- MMS/Convex production build with TypeScript -> **SUCCESS**.
 
 **Required admin action:**
 - Deploy MMS/Convex and Travel Desk together.
@@ -2742,3 +2904,2728 @@ the top-right trip status badge and again in the compact progress row.
 
 **Required admin action:**
 - Deploy MMS/Convex and Travel Desk together.
+
+---
+
+### Session 62 - Read Log, Awaiting Task
+
+**Date:** 2026-07-29
+**Agent:** Claude (Claude Code)
+
+**Request:**
+- User asked to read `AGENT_LOG.md` and then wait for the next task.
+
+**What was done:**
+- Read the full `AGENT_LOG.md` (all 2886 lines), the mandatory-logging rule,
+  the UI-reuse rule, and the three-repository map.
+- Confirmed prior in-flight items from the immediately preceding user message
+  are already covered by earlier sessions:
+  - 12-hour time entry across MMS, Travel Desk, and Mconnect (Sessions 20/51).
+  - Vehicle Model/Model Year mandatory, vehicle number optional, and
+    SUV/Sedan/Hatchback capacities per the VP override (Session 14).
+  - Camera/FileProvider crash guards on the fleet capture sheets
+    (Sessions 7/32).
+- Noted many Convex/MMS changes across sessions still require administrator
+  deployment before they are live.
+
+**Project behavior:**
+- Read-only turn. No project files, APIs, schema, layouts, or runtime behavior
+  changed. No builds run, no Git operations performed.
+
+**Next:**
+- Awaiting the user's next task.
+
+---
+
+### Session 63 - Beta 2 charge, Unused-App gate, SV-QR outcome button
+
+**Date:** 2026-07-29
+**Agent:** Claude (Claude Code)
+
+**Repositories:**
+- Travel Desk: `C:\Users\surya\Projects\travel-desk` (`aizen`)
+- MMS / Convex: `C:\Users\surya\Projects\manjusitedevelopment` (`max`)
+- Mconnect: `C:\Users\surya\Projects\Mconnect` (`merge`)
+
+**1. "Beta 2 (optional)" billing charge (external agency completion).**
+- Travel Desk `src/app/trips/[id]/page.tsx`: `beta2` state, prefill, billing-total,
+  finalize-billing payload, and a "Beta 2 (optional)" input after Beta.
+- Travel Desk `src/lib/travel-desk-api.ts`: `travelDeskBeta2` on the row types and
+  `beta2` on the complete-offline + finalize-billing request types.
+- MMS `convex/schema.ts`: `travelDeskBeta2` on siteVisits.
+- MMS `convex/travelDeskTrips.ts`: `beta2` arg + validation + total + store in BOTH
+  `completeExpiredOffline` and `finalizeBilling`. Row exposes it via the existing
+  `...visit` spread in `enrichTrip`.
+- MMS `convex/http.ts`: `beta2` forwarded on the two Travel Desk routes only
+  (complete-offline, finalize-billing); internal mms-fleet route left unchanged.
+- Validation: Travel Desk `tsc --noEmit` SUCCESS; MMS `tsc -p convex` SUCCESS.
+- **App parity NOT done:** `AdminFleetCompleteOfflineSheet` + `TravelDeskModels` also
+  carry `beta`; `beta2` still needs mirroring there (data class, layout `etBeta2`,
+  collect, both fragment result→request maps, `CompleteOfflineTripRequest`,
+  `TravelDeskTrip` row). Flagged as follow-up.
+
+**2. "Manage app if unused" is now a blocking gate step.**
+- `BackgroundPermissionsGateDialog.kt`: added `unusedAppSatisfied` (async-resolved).
+  `recheckAndMaybeDismiss` now also requires it; `refreshUnusedAppRow` dismisses once
+  satisfied + all granted; `showIfNeeded` now also surfaces the gate when all runtime
+  perms are granted but the unused-app restriction is still ON. Users can no longer
+  skip past it without disabling it. Row comment updated (was "Non-blocking").
+
+**3. SV-QR: ongoing visits get an outcome-page button for authorised viewers.**
+- Root cause of earlier "nothing navigates": `canStartCounselling` is false for
+  `on_counselling`, so an already-ongoing visit offered no action.
+- MMS `convex/marketing/siteVisits.ts`: extracted `isQrOutcomeAuthorized`
+  (BDO / Site Incharge / admin / `scanConsulting`), and `getByQrPayload` now returns
+  `canRecordOutcome` (= authorised AND status `on_counselling`). scanQr HTTP route
+  passes it through via the existing `visit` spread.
+- Mconnect: `ScannedSiteVisit.canRecordOutcome`; `QrScannerFragment` forwards it and
+  now listens for a new `RESULT_KEY_OPEN_OUTCOME`, navigating straight to
+  `SiteVisitOverviewFragment.forScannedVisit` (no re-mark). `SiteVisitCounsellingConfirmBottomSheet`
+  shows a "Go to outcome page" button on ongoing + `canRecordOutcome`.
+
+**Validation:**
+- Mconnect `:app:assembleDebug` -> **SUCCESS**.
+- MMS `tsc -p convex/tsconfig.json` -> **SUCCESS** (no new errors).
+- Physical device install blocked by signature mismatch (device runs a differently
+  signed build); changes are compile-verified only.
+
+**Deployment note:**
+- `beta2` persistence/total and `canRecordOutcome` require the MMS/Convex deploy
+  before they work against the live backend. Codex/Claude do not deploy Convex.
+
+**Still queued (not started this turn):**
+- Travel Desk trip-detail + public driver-link web UI: move Open-driver-link /
+  Copy-link / Resend-WhatsApp INSIDE the Driver WhatsApp container and hide them when
+  completed; client details on top; add "Open in map" and "Call client" (tel:/maps
+  links to the device default apps).
+- App-side `beta2` parity (item 1 above).
+
+**Read-only note:** also explained the "Driver WhatsApp: Pending" badge
+(`travelDeskDriverWhatsAppStatus` not yet sent/failed/skipped → provider/deploy
+config pending); no code changed for that question.
+
+---
+
+### Session 64 - Driver-link buttons relocation + availability/driver-default triage
+
+**Date:** 2026-07-29
+**Agent:** Claude (Claude Code)
+
+**Repository:** Travel Desk `C:\Users\surya\Projects\travel-desk` (`aizen`).
+
+**Change made:**
+- `src/app/trips/[id]/page.tsx`: moved "Open driver link", "Copy link", and
+  "Resend WhatsApp" INSIDE the Driver WhatsApp box, and hid them when the trip
+  is completed (`travelDeskBillingCompletedAt != null`). The outer action row
+  now only carries the expired/started/Reassign/Remove controls.
+- Travel Desk `tsc --noEmit` -> **SUCCESS**.
+
+**Investigations (no code change — deploy-gated or already-correct):**
+- "Open/Copy link missing on a trip": those buttons still gate on
+  `trip.driverAccessToken`; a trip without a driver-link token shows none. Token
+  comes from the external allocation flow (backend, deploy-gated).
+- Driver-link "This trip will become available on its assigned date" for a
+  PAST date: the shared helper `convex/lib/driverTripAssignment.ts`
+  `canOperateTripToday` already returns `assignedDate <= today(IST)` (past +
+  same-day allowed). The live behavior is prod running the pre-Session-59 rule
+  -> requires MMS/Convex deploy. No code change needed.
+- "Completion form shows the vehicle's default driver": backend `enrichTrip`
+  spreads `...visit`, so the row `driverName`/`driverPhone` is exactly what the
+  SV stored at allocation (no vehicle-default fallback). If it reads as the
+  default, the allocation stored the vehicle's default driver (Session 50 links
+  vehicle->default driver). Needs product clarification on where a distinct
+  "assigned driver" should live before changing allocation.
+
+**Still queued:** client details on top (trip detail + driver-link pages),
+"Open in map" + "Call client" buttons, and app-side `beta2` parity.
+
+---
+
+### Session 65 - Client-on-top / map / call, app beta2 parity, driver-default triage
+
+**Date:** 2026-07-29
+**Agent:** Claude (Claude Code)
+
+**1. Travel Desk client card + Open-in-map + Call client.**
+- `src/app/trips/[id]/page.tsx`: added a Client card at the TOP (client name,
+  pickup address, "Call client" -> `tel:`, "Open in map" -> Google Maps search
+  URL to the device default app).
+- `src/app/driver/trips/[token]/page.tsx`: added "Open in map" to the pickup
+  address (the client phone was already a `tel:` Call link near the top).
+- Travel Desk `tsc --noEmit` -> **SUCCESS**.
+
+**2. App-side `beta2` parity (completes the earlier web+backend beta2).**
+- `AdminFleetTripsFragment.AdminTrip`: added `var beta2`.
+- `AdminFleetCompleteOfflineSheet`: `CompleteOfflineTripResult.beta2`, prefill
+  `etBeta2`, reset list, `parseResult` collect, and both result builds.
+- `dialog_admin_fleet_complete_offline.xml`: `etBeta2` input ("Beta 2").
+- `TravelDeskModels`: `travelDeskBeta2` on the row + `beta2` on
+  `CompleteOfflineTripRequest`.
+- Fragment maps: `AdminFleetTripsFragment` (request `beta2 = result.beta2`,
+  prefill `beta2 = trip.travelDeskBeta2`) and `HomeFragment` (both prefills).
+  End-trip requests (`TravelDeskEndTripRequest`) intentionally left without
+  beta2, matching the web.
+- Mconnect `:app:assembleDebug` -> **SUCCESS**.
+
+**3. "Completion form shows the vehicle default driver" — NOT a bug.**
+- `travelDeskTrips.allocate` stores `args.driverName` (the explicitly selected
+  roster driver) and only falls back to `vehicle.defaultDriverName` when no
+  driver was selected. The completion form prefills `trip.driverName`, which is
+  that stored assigned driver. So when it reads as the default, the trip was
+  allocated without a separate driver pick, so the vehicle default IS the
+  assigned driver. No code change; would only revisit if the allocate FORM is
+  failing to send the selected driver (separate from this completion form).
+
+**Deployment note:** `beta2` persistence/total still require the MMS/Convex
+deploy (backend done in Session 63). Travel Desk UI changes are client-only and
+live on hot-reload.
+
+**Nothing committed/pushed this turn (Codex also active in these repos).**
+
+---
+
+### Session 66 - Driver-link availability computed client-side
+
+**Date:** 2026-07-29
+**Agent:** Claude (Claude Code)
+
+**Symptom:** Public driver-link page (`/driver/trips/[token]`) showed
+"This trip will become available on its assigned date" and a disabled action
+for a PAST-dated trip (26 Jul, today 29 Jul).
+
+**Diagnosis:** The shared backend rule is already correct — `tripAssignmentDate`
+= `scheduledDate`; `canOperateTripToday` and the mutation gate
+`assertTripOperationalOnAssignmentDay` both use `scheduledDate <= today(IST)`
+(past + same-day allowed). The live lock is the OLDER prod deploy still using an
+exact-date rule for the `canOperateToday` flag.
+
+**Change (Travel Desk, no deploy needed for the UI):**
+- `src/app/driver/trips/[token]/page.tsx`: compute `availableByDate` client-side
+  (`trip.scheduledDate <= todayIst`) and set
+  `canOperate = availableByDate || trip.canOperateToday === true`, so a stale
+  backend flag can't wrongly lock a past/same-day trip. Future trips stay locked.
+- Travel Desk `tsc --noEmit` -> **SUCCESS**.
+
+**Caveat:** If the LIVE prod server-side action gate is also still the old
+exact-date rule, the action button will now enable but the mutation could reject
+a brand-new action on a past-dated trip until MMS/Convex is deployed. (This trip
+already progressed to On-site, so prod has been accepting its actions.)
+
+---
+
+### Session 67 - Start-counselling navigates even if the API call fails
+
+**Date:** 2026-07-29
+**Agent:** Claude (Claude Code)
+
+**Symptom:** Tapping "Start counselling" on the SV-QR confirm sheet did not
+navigate to the SV outcome page.
+
+**Cause:** `QrScannerFragment.markSiteVisitOnCounselling` navigated only on a
+successful `markOnCounselling` response; on any failure (most likely the
+markOnCounselling route not yet deployed on the live backend) it toasted the
+error and resumed scanning — so it dead-ended.
+
+**Change (Mconnect):**
+- `markSiteVisitOnCounselling` now wraps the call in `runCatching`, toasts the
+  real reason on failure, and ALWAYS calls `openSiteVisitOutcome(...)` to open
+  `SiteVisitOverviewFragment.forScannedVisit`. The overview loads the real SV
+  status and unlocks the outcome buttons when eligible (on_site / on_counselling).
+  The authorised viewer already passed the server-derived `canStartCounselling`
+  gate at scan time, so optimistic navigation is safe.
+- Mconnect `:app:assembleDebug` -> **SUCCESS**.
+
+**Note:** Recording the outcome still calls the backend; if the live backend
+hasn't advanced the SV to on_counselling (route pending deploy), the outcome
+buttons rely on the real status (they unlock from on_site onward).
+
+---
+
+### Session 68 - All-staff role pickers + superadmin QR outcome button
+
+**Date:** 2026-07-29
+**Agent:** Claude (Claude Code)
+
+**1. Role pickers show ALL active staff (not just sales/telesales).**
+- MMS web `features/marketing/pages/site-visits-list-page.tsx`: `staffSelectItems`
+  (BDO / Site Incharge / HOD / AVP / GM / Senior Manager) and `lmoStaffSelectItems`
+  (LMO) now filter only on `status === "active"` — dropped the
+  `department includes sales/telesales/...` restriction. MMS `tsc` -> SUCCESS.
+- Mconnect `CompleteCpVisitBottomSheet.pickSvStaff`: dropped the same
+  sales/telesales department filter; the SV role pickers now list every active
+  staff member. App `:app:assembleDebug` -> SUCCESS.
+
+**2. Superadmin scan of an ongoing visit now offers the outcome button.**
+- The Session-63 backend `canRecordOutcome` flag isn't deployed, so the app got
+  `false` and hid the "Go to outcome page" button for superadmins on ongoing
+  visits. The scan model `ScannedSiteVisitStaff` only carries `name` (no staff
+  id), so BDO/incharge can't be matched client-side — but superadmin /
+  scanConsulting can.
+- `QrScannerFragment`: `canRecordOutcome = visit.canRecordOutcome ||
+  session.hasPermission("marketing.siteVisits.scanConsulting")` (true for
+  `isAdmin`). Superadmins + scanConsulting-granted staff now get the button
+  immediately; assigned BDO/Site Incharge still resolve via the backend flag
+  once MMS/Convex is deployed.
+- App build -> SUCCESS.
+
+**Follow-up (same session): mobile booking staff pickers too.**
+- `CompleteCpVisitBottomSheet.filterBookingStaff` now returns all active staff
+  (removed the role-token match for BDO / AVP / GM / Senior Manager / telecaller),
+  matching `pickSvStaff`. So every mobile role picker (SV + booking) lists all
+  active staff. App `:app:assembleDebug` -> SUCCESS.
+
+**Follow-up (same session): auto-redirect instead of the outcome button.**
+- `SiteVisitCounsellingConfirmBottomSheet`: for an authorised viewer on an
+  ongoing visit (`showOutcome`), replaced the "Go to outcome page" button with an
+  automatic redirect — the sheet shows the visit details plus a bottom line
+  "You will be redirected to the outcome page in Ns" (5s reverse countdown via
+  `CountDownTimer`), then fires `RESULT_KEY_OPEN_OUTCOME` and dismisses so
+  `QrScannerFragment` opens `SiteVisitOverviewFragment`. Timer cancelled in
+  `onDestroyView` if the sheet is dismissed first. The scheduled Start-counselling
+  button path is unchanged. App `:app:assembleDebug` -> SUCCESS.
+
+### Session 69 - Auto-redirect crash fix + MMS fleet billing parity
+
+**Date:** 2026-07-29
+**Agent:** Claude (Claude Code)
+
+**1. Crash on the 5s auto-redirect (QrScannerFragment).**
+- The countdown's `onFinish` fired `setFragmentResult(RESULT_KEY_OPEN_OUTCOME)`
+  synchronously, which ran the scanner's result listener while the fragment was
+  mid-transition -> `openSiteVisitOutcome` touched `parentFragmentManager` and
+  threw `IllegalStateException: Fragment ... not associated with a fragment
+  manager`. The old `if (_binding == null) return` guard didn't catch it.
+- Fix (`QrScannerFragment.openSiteVisitOutcome`): defer the pop + `showOnce` with
+  `root.post { ... }` and re-check `isAdded && _binding != null` before touching
+  `parentFragmentManager`. Both outcome routes (countdown + Start-counselling)
+  share this function, so both are now crash-safe. App build -> SUCCESS.
+
+**2. MMS fleet completion form now matches the travel-desk portal billing.**
+- Requirement: show all the portal's billing details on the MMS fleet
+  complete-offline form, and keep ONLY start/end km required.
+- `features/fleet/types.ts`: added `travelDeskBeta2?` to `AssignedFleetVisit` and
+  `beta2: string` to `RecompleteTripDraft`.
+- `use-fleet-assigned-controller.ts`: default/prefill/submit for `beta2`; base
+  field is now pricing-mode aware — prefills from `travelDeskKmRate` (km mode) or
+  `travelDeskPackageAmount` (package), and submits `kmRate` vs `packageAmount`
+  accordingly. Only start/end km are required (unchanged).
+- `tabs/assigned-tab.tsx`: base-field label toggles "Per km rate" / "Package
+  price" by pricing mode; added a "Beta 2 (optional)" input; added a live
+  "Billing total" line; Beta 2 shown in both summary panels.
+- `convex/marketing/fleet.ts` `markExpiredTripOutcomePending`: added `beta2` +
+  `kmRate` args (validated >= 0), included `beta2` in the total, computed the km
+  base from the incoming `kmRate`, and persisted `travelDeskBeta2` /
+  `travelDeskKmRate`. Schema already had `travelDeskBeta2`.
+- MMS `tsc --noEmit` -> clean (only a pre-existing unrelated test error).
+- DEPLOY DEPENDENCY: `beta2`/`kmRate` are new Convex args, so the MMS form must
+  not ship to prod ahead of the `max` Convex deploy or old prod would reject the
+  extra args. Consistent with the standing "code ahead of prod deploy" pattern.
+
+### Session 70 - Travel-desk driver/vehicle pickers + Packages/Outstation settings
+
+**Date:** 2026-07-29
+**Agent:** Claude (Claude Code)
+**Repo:** travel-desk (`aizen`) + manjusitedevelopment (`max`, deploy-gated)
+
+**1. Removed the "+ Create driver" button (travel-desk `driver/page.tsx`).**
+- Drivers are now added inline when allotting one to a vehicle on a trip, so the
+  standalone create flow is gone: dropped the header + empty-state create buttons,
+  the create `DriverForm`, and the now-unused `creating`/`createDraft`/`createBusy`
+  state, `handleCreate`, and the `createTravelDeskDriver` import. Edit / deactivate
+  / delete stay. Copy updated to explain the new-driver path.
+
+**2. Driver + vehicle combobox arrow, and vehicle option order.**
+- New shared `components/combo-chevron.tsx` — a chevron that rotates up when the
+  list is open. Added it as a "confirm and close" button (absolute right, toggles
+  `open`) to both `driver-combobox.tsx` and `vehicle-combobox.tsx`, with `pr-10`
+  on the inputs so text clears the button. Lets the user dismiss the dropdown so
+  it stops covering the fields below.
+- `vehicle-combobox.tsx` option rows now show the **driver name first** (bold top
+  line), then `vehicleNumber · model · type` on the muted second line.
+
+**3. Settings: Packages + Outstation tabs (per user answers).**
+- Decision: two independently-saved rate profiles, NO per-trip selector yet;
+  reuse the existing "Cancellation allowance" (only **Hill charge** is new).
+- Backend (deploy-gated, MMS convex): `schema.ts` `travelDeskAgencySettings` gains
+  `hillCharge` + a nested `outstation` object (same fields). `travelDeskSettings.ts`
+  `get`/`update` rewritten with a `resolveProfile` helper — Packages stays on the
+  flat top-level fields (backward compatible), Outstation nested. `http.ts`
+  settings/update route forwards `hillCharge` + the full `outstation` object.
+- Frontend (`travel-desk-api.ts`): new `TravelDeskFleetProfile` (adds `hillCharge`);
+  `TravelDeskSettings = profile & { outstation: profile }`.
+- `settings/page.tsx` rewritten: Packages/Outstation tabs sharing one
+  `PROFILE_FIELDS` list (Hill charge added), two independent drafts, Save writes
+  both. `profileToDraft` is null/partial-safe so an un-deployed prod backend
+  (no `outstation`) doesn't crash the page.
+- travel-desk `tsc` clean; MMS `tsc` clean (only the pre-existing unrelated
+  attendance test error).
+- DEPLOY DEPENDENCY: `hillCharge`/`outstation` are new Convex settings args —
+  Save will fail on prod until `max` convex is deployed; GET degrades safely.
+
+### Session 71 - Internal fleet MOBILE parity + travel-desk mobile polish
+
+**Date:** 2026-07-29
+**Agent:** Claude (Claude Code)
+
+**1. Internal fleet completion parity on mobile (Mconnect app).**
+- Mirrored the Session-69 web recomplete changes onto the app's
+  `AdminFleetCompleteOfflineSheet` (internal fleet = fleet-type index 0):
+  - **Per km rate label**: when `trip.travelDeskPricingMode == "km"`, the internal
+    base field relabels to "Per km rate" (new `tvInternalBaseLabel` id), prefills
+    from `travelDeskKmRate`, and submits as `kmRate` (packageAmount null); package
+    mode unchanged.
+  - **Live billing total**: new `tvBillingTotal` — base (km rate × distance for km
+    trips, else package) + all optional charges; shows "—" until a km base is
+    computable. Recomputes on every amount/odometer change and on fleet-type
+    switch. Mirrors the web preview.
+- Model plumbing: network trip gains `travelDeskKmRate`; `AdminTrip` gains
+  `pricingMode` + `kmRate` (mapped from the trip); `CompleteOfflineTripResult` and
+  `CompleteOfflineTripRequest` gain `kmRate`.
+- **Backend route bug fix** (`http.ts` `/api/mms-fleet/dispatch/complete-offline`):
+  it was silently DROPPING `beta2` and `standingCharge` (app collected them, route
+  never forwarded them) — now forwards `beta2`, `standingCharge`, and the new
+  `kmRate` to `markExpiredTripOutcomePending`. Deploy-gated.
+- App `:app:assembleDebug` -> SUCCESS; MMS `tsc` clean.
+
+**2. Travel-desk mobile polish.**
+- Audit finding: the portal is already substantially responsive — the shell has a
+  hamburger drawer (`travel-desk-shell.tsx`, `lg:hidden` header + Sidebar), every
+  data table has an `lg:hidden` card fallback (driver/staff/vehicle), and most
+  forms already use `sm:grid-cols-2`.
+- Fixed the two genuinely-cramped grids that forced 2 columns at all widths:
+  trip-detail Toll/Beta pair and the trips-list consulting Start date/time pair
+  now `grid gap-3 sm:grid-cols-2` (stack on phones). travel-desk `tsc` clean.
+- NOTE: did not do a blanket restyle — the pages are auth-gated so a mobile
+  viewport pass couldn't be visually verified; asked the user to flag any specific
+  screen that still looks wrong.
+
+### Session 72 - Travel-desk blank-screen fix + external driver double-booking
+
+**Date:** 2026-07-29
+**Agent:** Claude (Claude Code)
+
+**1. Blank screen on the travel-desk trip page = no error boundary.**
+- The App Router had no `error.tsx`/`global-error.tsx`, so any thrown error
+  rendered a blank white page in prod. Added both (travel-desk, `aizen`, pushed
+  in Session 71 commit 13b1505) — now shows a recoverable panel WITH the error
+  message. Also hardened the dashboard image picker (reset input for same-file
+  re-select + thumbnail previews).
+- Confirmed prod deploys from `aizen` (the trip page doesn't exist on `main`;
+  aizen is 12 commits ahead). A teammate promotes aizen → prod, so the fix goes
+  live on their next promotion.
+
+**2. Root cause surfaced by the new error boundary:**
+  `assertDriverAvailableOnDate` (convex/lib/driverTripAssignment.ts) threw
+  "This driver is already assigned to another trip on <date>" during vehicle
+  allocation.
+
+**3. Fix (per user): external-agency drivers may be double-booked.**
+- The one-trip-per-driver-per-day guard now runs ONLY for the in-house
+  (internal) fleet:
+  - `travelDeskTrips.ts` allocate: skip unless the caller agency's `kind` is
+    "internal".
+  - `marketing/fleet.ts` assignVehicle: wrap the guard in
+    `isInternalAssignment(visit, assignmentAgency)` — external agencies skip it.
+- MMS `tsc` clean. Committed to `max`; had to `git pull --rebase origin max`
+  (teammate had pushed df171405) then pushed -> e436b958. Deploy-gated (convex).
+
+### Session 73 - Travel-desk image upload: compression + picker polish
+
+**Date:** 2026-07-29
+**Agent:** Claude (Claude Code)
+**Repo:** travel-desk (`aizen`), commit e8c4da6
+
+- Root cause of flaky uploads: raw multi-MB phone photos posted as-is. Added
+  `src/lib/compress-image.ts` — `createImageBitmap` → canvas downscale (max
+  1600px) → `toBlob` JPEG q0.7, keeps original if smaller/fails.
+- Applied compression on pick to ALL three image pickers:
+  - `trips/[id]/page.tsx` `DashboardFilesPicker` (multi, billing) — now
+    append-and-compress, thumbnail grid with per-image remove (×), busy state.
+  - `driver/trips/[token]/page.tsx` `DashboardImagePicker` (single) — compress,
+    preview + remove, busy state.
+  - `trips/page.tsx` `DashboardProofPicker` (single, allot) — same.
+- UI polish: gallery/camera SVG icons, previews, remove buttons, "Optimising
+  image…" state, inputs disabled while compressing, input reset for re-pick.
+- travel-desk `tsc` clean. On `aizen` — needs teammate promotion to reach prod.
+
+### Session 74 - Travel-desk "blank after upload" = shell scroll bug (root cause)
+
+**Date:** 2026-07-29
+**Agent:** Claude (Claude Code)
+**Repo:** travel-desk (`aizen`), commit b8cd25e
+
+- REPRODUCED live on localhost:3200 (user was logged in on the in-app browser).
+  Verified via JS + screenshots: compression works (99KB→16KB), authenticated
+  upload returns 200 + storageId, selecting an image renders a preview with no
+  crash. So upload was never broken.
+- Real cause of the "blank screen after upload": a LAYOUT bug. `.shell-root`
+  uses Tailwind `h-full` (height:100%) but nothing set a height on `html`/`body`,
+  so the 100vh shell collapsed to content height and the whole DOCUMENT scrolled
+  (~823px). On the short in-app pane the shell scrolled out of view -> blank
+  navy screen (content present in DOM but off-screen; `htmlScrollTop` 823,
+  `main` top -761). Looked like an upload failure but wasn't.
+- Fix (`globals.css`): `html { height:100% }` and `body { height:100%; display:
+  flex; flex-direction:column }` so the shell locks to the viewport and only
+  `.app-main` scrolls. Verified after fix: `htmlScrollTop` 0, shell fills 742px,
+  form fully visible, image attaches with preview + × remove.
+- Also finalised the single-image billing picker (removed `multiple`, replace on
+  pick, single preview + remove) started in Session 73.
+- Added `.claude/launch.json` (travel-desk-dev, port 3000) for preview_start.
+
+### Session 75 - REAL root cause of blank: sr-only file inputs stretched the doc
+
+**Date:** 2026-07-29
+**Agent:** Claude (Claude Code)
+**Repo:** travel-desk (`aizen`), commit 2a81cb4
+
+- Session-74's html/body height fix helped but the blank RECURRED specifically
+  when the native file dialog opened. Diagnosed live in the in-app browser
+  (user was logged in): `html` scrollHeight was 1565 vs 742 viewport (823px
+  overflow == the exact scroll seen). Enumerated offenders → the four `sr-only`
+  file inputs (Tailwind `sr-only` = `position:absolute`) inside the picker
+  labels. `.app-main` was `position:static`, so those absolute inputs anchored to
+  the document's initial containing block at `top:~1564px`, stretching html.
+  Opening the native dialog FOCUSES the hidden input → browser scrolls the whole
+  document ~823px to reveal it → the 100vh shell scrolls out → blank. (overflow
+  hidden alone didn't help — scrollIntoView still sets scrollTop.)
+- Fix (`globals.css`): `.app-main { position: relative }` so the sr-only inputs
+  anchor to / are clipped by the scroller, not the document. html scrollHeight
+  1565 → 750. Also kept html/body height:100% + overflow:hidden as app-shell
+  hygiene.
+- Verified live via JS + screenshots: after selecting an image the document
+  stays at scrollTop 0, shell at top 0, form visible, thumbnail + × remove
+  render, no blank, no error panel. `tsc` clean.
+
+### Session 76 - Unified dashboard image field (billing form)
+
+**Date:** 2026-07-29
+**Agent:** Claude (Claude Code)
+**Repo:** travel-desk (`aizen`), commit 8e91e78
+
+- Per user: image should show in the upper box; existing image removable +
+  replaceable; once an image is present, hide the duplicate upload buttons.
+- New `DashboardImageField` (trips/[id]) replaces the separate EvidencePreview +
+  DashboardFilesPicker pair in the billing block. Shows the current image (new
+  pick OR saved server photo) in one box; when present shows only Replace /
+  Remove (Gallery/Camera hidden); when empty shows the pickers. Compress on pick.
+- Remove of a SAVED image sets a `cleared` flag; `handleFinalizeBilling` now
+  sends `startPhotoIds`/`endPhotoIds` = uploaded ids | `[]` (cleared) | undefined
+  (keep). Backend already clears on explicit empty array (finalizeBilling
+  `args.startPhotoIds ?? existing`; http maps `Array.isArray ? map : undefined`),
+  so NO backend change needed. Cleared flags reset on trip reload.
+- Verified live on localhost:3200 (logged in): new pick renders in the box +
+  Replace/Remove, upload buttons hidden; the previously-saved end image shows in
+  its box with Replace/Remove ("Saved photo"). `tsc` clean.
+- Confirmed the external-agency driver double-booking logic is present on `max`
+  (travelDeskTrips + marketing/fleet, deploy-gated) per the user's reminder.
+
+### Session 77 - Proper image UI + in-app lightbox preview
+
+**Date:** 2026-07-29
+**Agent:** Claude (Claude Code)
+**Repo:** travel-desk (`aizen`), commit a592b25
+
+- "Use proper ui": `DashboardImageField` redesigned — consistent `aspect-video`
+  box for BOTH empty and filled states (previously empty box was a different
+  size), centered placeholder icon, icon'd Gallery/Camera vs Replace/Remove
+  buttons, and a "Preview unavailable" fallback via `<img onError>` for broken
+  storage URLs (dark-but-valid images still render).
+- "Click image for preview, no external site": clicking an image opens an in-app
+  lightbox modal (fixed overlay, backdrop/×/Escape to close) using the same
+  same-origin src — no new tab, no navigation. Applied to both
+  `DashboardImageField` and `EvidencePreview` (the latter previously used
+  `<a target="_blank">` which opened the convex.site URL in a new tab — removed).
+- Verified live on localhost:3200: boxes aligned/consistent, image opens the
+  lightbox, url unchanged, zero `a[target=_blank]` image links, close works.
+  `tsc` clean.
+
+### Session 78 - Attendance approval 500 + day/correction dedupe (app)
+
+**Date:** 2026-07-29
+**Agent:** Claude (Claude Code)
+**Repo:** Mconnect (`merge`), commit 2d83ec5
+
+**1. "Marking Present → HTTP 500" fix.**
+- `AttendanceHistoryFragment`: `isRequest` was derived from the active tab
+  (`(activeTab==2||4) && activeSubTab==1`). A correction request approved from
+  SEARCH or the All tab was sent with `isRequest=false`, so the backend
+  (`/api/hr/attendance/approve`) ran `staffAttendance.approve` on an
+  attendanceRequests id → threw → 500 (route wraps any throw as 500).
+- Fix: new `isRequestRecord(r) = isRequestLinked(r) || requestStage != null`,
+  and `isRequestRow = isRequestRecord(record)`. Correction requests now always
+  route through `attendanceRequests.approve` regardless of view. Backend route
+  already on prod → no deploy needed.
+
+**2. "Shandhiya shows as both attendance approval AND time correction" fix.**
+- `isRequestLinked` only dropped rows whose OWN requestType was a request; a
+  separate plain attendance row for the same staff+date still showed.
+- Added `staffDateKey` + `requestStaffDateKeys`; `hrReviewAttendanceRows`,
+  `teamApprovalAttendanceRows`, and new `allApprovalAttendanceRows` now exclude
+  any attendance row whose `staff|date` has a pending correction request. So a
+  day surfaces once (as the correction, actioned on the Requests tab). Badge
+  counts follow automatically.
+- App `:app:assembleDebug` -> SUCCESS. Pushed to `merge` (both remotes).
+
+### Session 79 - Uploaded dashboard image shows in MMS + internal fleet mobile
+
+**Date:** 2026-07-29
+**Agent:** Claude (Claude Code)
+**Repos:** manjusitedevelopment (`max` 7858f732) + Mconnect (`merge` 7e37bef)
+
+- Verified round-trip already works for storage: travel-desk uploads to Convex
+  (`NEXT_PUBLIC_CONVEX_SITE_URL/api/travel-desk/storage/upload`) → storageId →
+  `travelDeskStart/EndPhotoIds` on the siteVisit; MMS displays via `getStorageUrl`
+  (SummaryPhotoRow) and the app via `AdminFleetTripManageSheet.bindPhoto`
+  (`BASE_URL/api/storage/serve`). Same prod Convex → ids resolve everywhere.
+- Gap: the COMPLETION forms only showed upload buttons, not the existing image.
+  - MMS `DashboardImagePicker` (assigned-tab recomplete form): added
+    `existingPhotoId` prop → renders the saved image (getStorageUrl) until a
+    replacement is picked; buttons relabel to "Replace"; wired
+    `recompleteTarget.travelDeskStart/EndPhotoIds[0]`. `tsc` clean.
+  - App `AdminFleetCompleteOfflineSheet`: new `layoutExistingPhotos` row in the
+    dialog XML + `bindExistingPhotos` loading `startPhotoId`/`endPhotoId` via
+    Coil from the storage serve URL; hidden when none. Build SUCCESS.
+
+### Session 80 - SV follow-up HTTP 500 fix
+
+**Date:** 2026-07-29
+**Agent:** Claude (Claude Code)
+**Repo:** Mconnect (`merge`), commit 961526f
+
+- Root cause: the SV "Follow up" form (CompleteCpVisitBottomSheet SV outcome
+  mode, `applySiteVisitOutcomeMode`) submitted via `setSiteVisitOutcome`
+  (`outcome=follow_up`). The backend `siteVisits.setOutcome` first runs
+  `assertTransition(status, [on_counselling, picked_from_site, dropped])`, and
+  the `/setOutcome` http route wraps any throw as HTTP 500 — so a visit still in
+  `scheduled`/`on_site` 500s.
+- Fix (`persistPostpone`): SV mode now routes the follow-up through the existing
+  `postponeSiteVisit` → `/api/marketing/siteVisits/postpone` (`postponeVisit`),
+  whose guard allows `scheduled/client_started/picked_up/on_site/on_counselling/
+  picked_from_site/dropped` and reschedules to the chosen next date. New
+  `persistSvFollowUp` + `displayDateToApiDate` (dd/MM/yyyy → yyyy-MM-dd). CP mode
+  path unchanged. Route already on prod → no deploy. Build SUCCESS; pushed to
+  `merge` (both remotes).
+
+### Session 81 - Completed trips → Complete tab (ext+int), delete driver, form parity
+
+**Date:** 2026-07-29
+**Agent:** Claude (Claude Code)
+**Repos:** travel-desk (`aizen` f6af243) + manjusitedevelopment (`max` d3502c15)
+
+**1. Completed agency trips now reach the Complete tab (both portals).**
+- Root cause (both sides): "completed" required an SV `outcome`, but an external
+  agency completes by finalising BILLING (`travelDeskBillingCompletedAt`), which
+  doesn't set `outcome`. So agency-completed trips sat in In-progress.
+- travel-desk `isCompletedTrip`: true when `travelDeskBillingCompletedAt != null`.
+- MMS `fleetProgressState` (convex, deploy-gated): "completed" when
+  `travelDeskBillingCompletedAt != null` (only agency finalize sets it, internal
+  unaffected) → agency trip shows in the internal Complete tab too.
+
+**2. Delete external driver "not working" — error was hidden.**
+- Backend refuses delete while the driver holds an unfinished trip (400), but the
+  error rendered in a page banner BEHIND the modal. Added in-modal `deleteError`
+  (`openDelete` clears it) so the reason shows in the dialog.
+
+**3. Complete-expired modal parity + polish.**
+- Added `Beta 2 (optional)` (backend already accepts it; modal didn't send it) +
+  a live Billing total.
+
+**Already correct (verified):** edit-only-by-agency (MMS recomplete throws "only
+for internal fleet trips" for external rows; travel-desk is agency-scoped); MMS
+shows agency trip details via `SummaryPhotoRow`/billing summary.
+
+**STILL BLOCKED ON DEPLOY:** the "driver already assigned" removal (Session 72 on
+`max`) + the fleetProgressState fix are CONVEX changes. The live error persists
+only because prod convex isn't deployed; per "never deploy convex" I did not
+deploy — needs the `max` convex deploy. travel-desk `tsc` clean; MMS `tsc` clean.
+
+### Session 82 - Collector self-edit of pending collection (backend + app)
+
+**Date:** 2026-07-29
+**Agent:** Claude (Claude Code)
+**Repos:** manjusitedevelopment (`max` 0b9ee9de) + Mconnect (`merge` 01c2da2)
+
+- Problem: a staff entered ₹48,000 instead of ₹4,80,000 and there was no way to
+  fix it. Built a self-correction path (allowed until Accounts acts).
+- Backend (deploy-gated): `customerCollections.correctByCollector` (amount/date/
+  mode/ref/notes; guarded to `collectedByStaffId` + `verificationStatus ==
+  pending_accounts`; stamps `collectorEditedAt`; audit event; recalcs case).
+  Schema `collectorEditedAt`. `POST /api/postsales/collections/correct` (auth
+  user = actor) + CORS allow. `tsc` clean.
+- App (`merge`): `CorrectCollectionRequest` + `correctCustomerCollection`;
+  `collectorEditedAt` on the row model + `edited` on `CollectionItem` + mapper;
+  adapter shows "Edit amount" on own PENDING rows (My Collections is already
+  self-scoped) + inline "Edited" tag; fragment amount-edit dialog. Build SUCCESS.
+
+**NOT done this turn (honest status — flagged to user):**
+- WEB collection edit UI: not built yet. The web collector views
+  (my-work-page / post-sales case detail) render collections read-only; the edit
+  affordance + `correctByCollector` call + Edited tag still need wiring there.
+- `travel-desk` mobile UX optimisation: not done this turn (separate large task).
+- The one-off ₹48,000→₹4,80,000 curl: NOT executed. No valid api-mfpl auth token
+  available, and a direct financial mutation on prod is unsafe to guess. Once the
+  `max` convex deploys, the collector (IMRAN.A) can fix it in-app via Edit amount.
+- DEPLOY-GATED: the whole feature needs the `max` convex deploy to work live.
+
+### Session 83 - Permissions gate sheet responsive on all devices
+
+**Date:** 2026-07-29
+**Agent:** Claude (Claude Code)
+**Repo:** Mconnect (`merge` d2f0914)
+
+- The "Before we get started" gate (`dialog_background_permissions_gate.xml`,
+  shown by `BackgroundPermissionsGateDialog`) was a non-scrolling `wrap_content`
+  LinearLayout → on short screens the last rows (Auto Start / Manage app if
+  unused) clipped off-screen with no way to reach them.
+- Fix: wrapped the content in a `NestedScrollView` (fillViewport, overScroll
+  never) and, in `onCreateDialog`, set `behavior.maxHeight = 92% * screenHeight`
+  so the sheet hugs content on tall screens but scrolls inside on short ones.
+  Build SUCCESS; pushed to `merge` (both remotes).
+
+### Session 84 - Unused-app detection resilience + travel-desk mobile verification
+
+**Date:** 2026-07-29
+**Agent:** Claude (Claude Code)
+**Repos:** Mconnect (`merge` a3fa837) + travel-desk (`aizen` 5166f41)
+
+**1. "Manage app if unused" not detecting on-device.**
+- `getUnusedAppRestrictionsStatus` returns ERROR/FEATURE_NOT_AVAILABLE on many
+  OEMs (Xiaomi/Oppo/Vivo), so the gate hid the row and users couldn't disable
+  hibernation. `refreshUnusedAppRow`: on API 30+ (feature exists on all such
+  devices) now surfaces the row even when the query can't read the state
+  (`known=false`), toggle reflects a CONFIRMED-disabled state, and an unreadable
+  state no longer hard-blocks the gate. Build SUCCESS; pushed to `merge`.
+
+**2. travel-desk mobile UX — verified responsive; polished touch targets.**
+- Inspected the LIVE logged-in dev server at 375px: nav hamburger drawer works,
+  Trips/Drivers/Settings/allot-modal all stack with ZERO horizontal overflow.
+  The app is already responsive in `aizen`.
+- FINDING: the agencies' "many UX issues" are on the LIVE site (prod), which runs
+  OLD code — the accumulated fixes (blank-screen-after-upload, image upload,
+  shell scroll-out, completed→Complete tab, delete-driver error, mobile grid
+  stacking, image lightbox) are ALL on `aizen` and only need the teammate's
+  promotion to reach prod.
+- Polish: `pill-tab` + `btn-action` bumped to a 40px min-height (were ~32-34px)
+  for comfortable tapping. Verified 40px + no overflow live. Pushed to `aizen`.
+
+### Session 85 - Trip card: client + area first, de-duplicated address
+
+**Date:** 2026-07-29
+**Agent:** Claude (Claude Code)
+**Repo:** travel-desk (`aizen` 35c3b9b)
+
+- Redesigned the trips-list card (`trips/page.tsx`): **client name** is the
+  highlighted first line; the **locality/area** shows next in accent — extracted
+  by `extractArea()` (token before a known city, e.g. Poonamallee / Paruthippattu,
+  NOT "Chennai"; falls back to a locality-suffix token, then the city). Project
+  name + phone + date follow as muted details.
+- `dedupeAddress()` collapses the free-typed address's repeated comma-tokens
+  (they often repeat the same area/street 3×) and appends the landmark once.
+- Verified LIVE on the logged-in dev server: card shows "Ravindran / Poonamallee"
+  and "9003124840 / Paruthippattu", with the address de-duplicated. `tsc` clean.
+
+### Session 86 - Verify double-booking fix + Salem area parsing + uppercase
+
+**Date:** 2026-07-29
+**Agent:** Claude (Claude Code)
+**Repo:** travel-desk (`aizen` eaba260)
+
+- Re-verified the external-driver double-booking removal: the ONLY two callers of
+  `assertDriverAvailableOnDate` (travelDeskTrips.ts:778, marketing/fleet.ts:950)
+  are both inside the internal-only guard; the error string is unique to that
+  function; `travelAgencies.kind` = internal|external (absent→external). So
+  external agencies never hit it — code is correct; live persists only until the
+  `max` convex deploy.
+- Area parser bug: `extractArea` used `cityIdx > 0`, so a city-first address
+  ("Salem, bus stand") fell through and returned the trailing landmark. Fixed to
+  `cityIdx >= 0` (returns the city when nothing precedes it). Expanded the TN
+  district/city list (Salem, Namakkal, Erode, Hosur, Karur, …). Stripped
+  surrounding punctuation from tokens so "Chennai -" matches. Area line now
+  renders UPPERCASE. Verified live: Premkumar→SALEM, Kannan→PORUR,
+  Poonamallee/Paruthippattu intact. `tsc` clean.
+
+### Session 87 - Trips sub-tab survives Back navigation
+
+**Date:** 2026-07-29
+**Agent:** Claude (Claude Code)
+**Repo:** travel-desk (`aizen` 419646e)
+
+- Repro (live): on Trips, select "Assigned"/"In progress", open a trip, press
+  Back → the tab reset to "Pending" (the sub-tab was local `useState`, lost on
+  remount). That's the "not properly back-navigating to the previous page".
+- Fix (`trips/page.tsx`): tab now initialises from `?tab=` (`readTabFromUrl`) and
+  `changeTab` does `router.replace('/trips?tab=<t>', {scroll:false})`. Back from a
+  trip detail returns to `/trips?tab=in_progress` and the page re-reads it →
+  restores the tab. Verified live: In progress → open trip → Back → In progress.
+  `tsc` clean. Sidebar tabs already used <Link> (browser history) so were fine.
+
+### Session 88 - Agency staff: login + operations + read-only Settings
+
+**Date:** 2026-07-29
+**Agent:** Claude (Claude Code)
+**Repos:** manjusitedevelopment (`max` c9418bfb) + travel-desk (`aizen` fd4f53b)
+
+- Roles: `driver | agency | agency_staff`. Verified `agency_staff` login is
+  supported (`agencyStaffToUser`), and ALL trip/driver/vehicle operation
+  mutations use `requireAgencySession` (agency + staff) — so staff already
+  allot/complete/manage uploads. Only Settings was admin-gated.
+- Backend: `travelDeskSettings.get` → `requireAgencySession` (staff can READ);
+  `update` stays `requireAgencyAdminSession` (admin-only write). Deploy-gated.
+- Frontend: Sidebar shows Settings for `agency_staff`; settings page renders
+  read-only for non-admins (disabled inputs, no Save button, view-only note),
+  admin keeps full edit. Both repos `tsc` clean; pushed.
+- IN PROGRESS (next): user wants dynamic custom charge fields (add/edit/remove,
+  unit = per km/hr/min/person/toll), chosen Package/Outstation at completion,
+  defaults applied, synced to MMS. Large multi-repo epic — design below.
+
+### Session 89 - QR scan crash fix + custom charge fields (config layer)
+
+**Date:** 2026-07-30
+**Agent:** Claude (Claude Code)
+**Repos:** Mconnect (`merge` da17459) + MMS/travel-desk (custom fields, uncommitted)
+
+- **QR crash (URGENT, DONE + pushed `merge` da17459):** staff couldn't close an
+  SV via QR — scanning the "Client consulting" QR crashed with
+  "Iterable.iterator() on a null object reference". Root cause:
+  `ScannedSiteVisit.attendees` was `List<...> = emptyList()` (non-null), but Gson
+  writes null when the backend sends `"attendees": null`, so
+  `visit.attendees.filterNot{}` (QrScannerFragment.kt:396) iterated null. Fix:
+  model → `List<ScannedSiteVisitAttendee>? = null` (GeoTrackApi.kt:1302) + call
+  site → `visit.attendees.orEmpty().filterNot{}`. Build OK. Classic Gson trap.
+
+- **Custom charge fields — CONFIG LAYER (done, uncommitted):**
+  - MMS backend (`max`, uncommitted): `travelDeskAgencySettings.customFields`
+    (both Packages + Outstation profiles) — `{id,label,amount,unit}`, unit ∈
+    km|hour|minute|person|toll|trip. `sanitizeCustomFields` (max 30, valid unit,
+    non-neg). `get` returns them; `update` accepts them; http.ts maps them for
+    both profiles. schema.ts + travelDeskSettings.ts + http.ts.
+  - travel-desk web (`aizen`, uncommitted): api types `TravelDeskCustomUnit` /
+    `TravelDeskCustomField` + `customFields` on `TravelDeskFleetProfile`. Settings
+    page: per-profile "Custom charges" section — Add field button, inline
+    label/amount/unit-picker rows, Remove, read-only for agency_staff. `tsc` clean.
+  - CONSUMPTION LAYER (next): apply custom charges at trip completion (choose
+    per-trip, defaults from unit × qty), persist on trip, show in MMS + app.
+    Exploring the billing/complete flow (MMS mutation + app fleet completion) now.
+
+---
+
+### Session 89 — Custom charge fields: CONSUMPTION layer (apply + persist + show)
+**Date:** 2026-07-30
+**Agent:** Claude (Opus 4.8)
+
+**Requested:** Finish the dynamic custom-charge feature — apply the operator-
+defined fields at trip completion (choose Package/Outstation, use each field's
+default amount by unit), keep them editable/removable, sum into the total, and
+surface across travel-desk web + MMS + the app.
+
+**MMS backend (`max`, committed 4d4e6556, pushed — NOT deployed):**
+- `schema.ts`: `travelDeskCustomCharges` on `siteVisits` (`{label,amount,unit}`,
+  unit ∈ km|hour|minute|person|toll|trip); `customFields` already on the agency
+  settings table (both profiles).
+- `travelDeskTrips.ts`: `customChargeValidator` + `sanitizeCustomCharges`
+  (label required, non-neg, throws on bad amount). `finalizeBilling` and
+  `completeExpiredOffline` now accept `customCharges`, fold their sum into
+  `travelDeskTotalAmount`, and persist `travelDeskCustomCharges`.
+- `travelDeskSettings.ts`: `update` numeric guard now filters to numbers only
+  (custom arrays no longer trip it) + accepts top-level `customFields`.
+- `http.ts`: `mapCustomCharges` unit-safe coercion forwarded on both completion
+  routes; `mapCustomFields` forwarded on settings/update (both profiles).
+- `features/fleet/types.ts` + `assigned-tab.tsx`: itemise applied custom charges
+  in both billing-summary breakdowns.
+- Validation: `tsc -p convex/tsconfig.json` clean; full-project tsc has one
+  PRE-EXISTING unrelated error (attendanceMobilePunchEdit.test.ts) only.
+
+**travel-desk web (`aizen`, committed 7fa790d, pushed):**
+- api: `TravelDeskAppliedCharge`; `customCharges` on both completion calls;
+  `travelDeskCustomCharges` on `TravelDeskTripRow`.
+- `trips/[id]/page.tsx`: billing form gets a "Custom charges" block — a
+  Packages/Outstation sheet toggle that auto-applies that profile's fields
+  (amount = default × qty: km→distance, hour→standingMin/60, minute→standingMin,
+  person→attendees, toll/trip→flat), each line editable/removable, ad-hoc
+  "+ Add charge"; folded into billing total; completed view itemises them.
+- Validation: `tsc --noEmit` clean.
+
+**Mconnect app (`merge`, uncommitted at time of writing):**
+- `TravelDeskModels.kt`: `TravelDeskAppliedCharge` data class + optional
+  `travelDeskCustomCharges` on `TravelDeskTrip` (Gson-safe, nullable/default).
+- `AdminFleetTripsFragment.kt`: `customCharges` on `AdminTrip` + mapping.
+- `AdminFleetTripManageSheet.kt`: billing breakdown lists applied custom charges
+  before Total. (App display parity — the app's offline-complete sheet is
+  internal-fleet only, so external agency trips are completed on the web; the
+  app shows what agencies applied.)
+- Validation: `:app:compileDebugKotlin` BUILD SUCCESSFUL.
+
+**Deploy gating / follow-ups:**
+- Convex NOT deployed (teammate promotes `max`); `aizen` teammate-promoted.
+- Scope note: the app-side custom-field DEFINITION editor (ManageRatesBottomSheet
+  add/edit/remove) and app internal-fleet completion apply were left to web —
+  the app settings model is still behind web (no outstation/hillCharge); a
+  faithful port is a separate slice.
+
+---
+
+### Session 90 — Pickup map preview + custom-charge refinements
+**Date:** 2026-07-30
+**Agent:** Claude (Opus 4.8)
+
+**Requested (from screenshots):** custom-charge unit list must include "per
+trip"; add delete/edit on custom fields; show the Packages/Outstation toggle on
+the completion form; staff see Settings read-only (not removed); inline map with
+the client pickup marked on the trip detail page + the external driver link, CP/
+SV-style and responsive.
+
+**Already delivered in Session 89 (verified live this turn):**
+- Custom-charge units already include "Per trip (flat)" + km/hour/minute/person/
+  toll; each row has editable Name/Amount/Unit + Remove; "+ Add field" works.
+  Completion form already carries the Packages/Outstation toggle.
+- Settings is read-only for agency_staff (canEdit = role==="agency"): inputs
+  disabled, no Add field / Save. (The "remove settings tab" ask was superseded by
+  the user's final "visible but can't edit/add".)
+
+**New this turn:**
+- MMS (`max`, committed 4f21e8a4, pushed): `travelDeskDriverTrips.ts` returns
+  `pickupLat`/`pickupLng`/`pickupGoogleMapsLink` (agency trips already had them
+  via enrichTrip's `...visit`). Deploy-gated.
+- travel-desk (`aizen`, committed 96ffc11, pushed): new `map-preview.tsx` —
+  keyless Google Maps `output=embed` iframe (no API key / lib), pins by coords
+  when present else geocodes the address, responsive aspect-ratio box + "Open in
+  Google Maps". Wired into the trip-detail Client card and the public driver-link
+  page; dropped the redundant "Open in map" buttons. `pickupLat/Lng/
+  pickupGoogleMapsLink` added to `TravelDeskTripRow`.
+- Validation: convex + travel-desk `tsc` clean. Browser-verified on
+  localhost:3200: map geocodes the pickup correctly (Porur / Sri Ramachandra
+  Hospital), desktop + 375px mobile both clean, zero console errors; Settings
+  custom-charge row + full 6-unit dropdown confirmed.
+
+**Deploy gating:** convex NOT deployed (teammate promotes `max`); `aizen`
+teammate-promoted. Driver-link pin needs the `max` deploy for coords, but falls
+back to address-geocoding meanwhile.
+
+### Session 90 - SV manual-close "Not Interested" HTTP 500 fix
+
+**Date:** 2026-07-30
+**Session:** fork (branched from main chat; main is building the travel-desk
+custom-charge feature in MMS + travel-desk concurrently — DO NOT touch those
+files here)
+**Agent:** Claude (Claude Code)
+**Repo:** Mconnect (`merge` f7bf8c8d, pushed both remotes)
+
+- Report: manually closing an SV as "Client Not Interested" → Save → bare
+  "HTTP 500" (screenshot). App points at PROD (`api-mfpl.theairix.com`).
+- Root cause (code-confirmed): `SiteVisitOverviewFragment` unlocks the outcome
+  buttons at **On Site** (`ownActiveIndex>=2` / cab `activeIndex>=3`, both =
+  status `on_site`). But `marketing/siteVisits.setOutcome` `assertTransition`
+  only allows `on_counselling | picked_from_site | dropped` — NOT `on_site`. The
+  QR flow calls `markOnCounselling` (on_site→on_counselling) before the outcome;
+  the manual path went straight to setOutcome → 500. Also the manual-close catch
+  showed raw `e.message` ("HTTP 500") while the sibling `persistSiteVisit` catch
+  already parsed the backend `{error}`.
+- Fix (`CompleteCpVisitBottomSheet.finalizeTerminalOutcome`, SV branch):
+  best-effort `markSiteVisitOnCounselling(svId)` (runCatching, ignore error —
+  only transitions from on_site; no-ops for already-eligible statuses) BEFORE
+  `setSiteVisitOutcome`; catch now uses `extractHttpErrorMessage`. Added
+  `SiteVisitIdRequest` import. `:app:assembleDebug` OK.
+- No backend/prod change needed; works whether or not prod has newer setOutcome.
+
+---
+
+### Session 91 — Rate sheet made fully dynamic (add/edit/remove every field)
+**Date:** 2026-07-30
+**Agent:** Claude (Opus 4.8)
+
+**Requested:** the fixed settings fields (Kilometre rate, Package amount, Betta,
+Permit, Hill, Standing, Waiting, Cancellation, Toll…) should become added
+fields — editable AND removable. User chose "Everything, fully dynamic": drop
+the fixed grid, every field is a removable/editable row, completion becomes
+line-item driven (total = sum of every line by unit).
+
+**Constraint found:** kmRate/packageAmount columns are read by allocation
+(travelDeskTrips:812), extra-km claims (:597) and the MMS fleet table
+(travelAgencies.list). So they must stay populated.
+
+**MMS (`max`, committed b197eaf6, pushed — NOT deployed):**
+- travelDeskSettings.ts: `seedCustomFieldsFromLegacy` (when customFields never
+  set, synthesise the list from the legacy columns — nothing lost); resolveProfile
+  seeds only when customFields is `undefined` (a defined [] is a real emptied
+  sheet). `update` derives + mirrors kmRate (first per-km line) and packageAmount
+  (a "package" per-trip line) back to the legacy columns for the readers above.
+- assigned-tab.tsx: when a completed trip has custom charges, show only those +
+  total; hide the now-zero legacy fixed rows (both km + package blocks).
+
+**travel-desk (`aizen`, committed 7d5d063, pushed):**
+- settings/page.tsx: fixed grid replaced by ONE dynamic list (name/amount/unit +
+  add/remove), read-only for staff. Uses shared `resolveProfileFields` which
+  respects a defined array else seeds from the legacy columns client-side (works
+  pre-deploy).
+- trips/[id]/page.tsx: completion is fully line-item driven — Charges section
+  with Packages/Outstation toggle applies the sheet (unit × distance/attendees/
+  standing), lines editable/removable/addable, base price forced to 0, total =
+  sum of lines. Removed the fixed charge inputs; added Standing-time input.
+- travel-desk-api.ts: exported `resolveProfileFields`.
+- Browser-verified (localhost:3200): Settings shows 10 seeded rows —
+  "Kilometre rate 15 / km", "Package amount 3000 / trip", rest "0 / trip"
+  (Standing "0 / hour") — each editable/removable, full 6-unit dropdown, + Add
+  field, Save. No server/console errors.
+
+**app (`merge`, committed 0b2f56ae — LOCAL per user hold):**
+- AdminFleetTripManageSheet.kt: billing breakdown shows only custom lines + total
+  when present (hides legacy zero rows). `:app:compileDebugKotlin` SUCCESSFUL.
+
+**Validation:** convex `tsc -p convex/tsconfig.json` clean; travel-desk `tsc`
+clean; MMS full `tsc` no fleet errors; app compile OK.
+
+**Deploy gating:** convex NOT deployed — pre-deploy the client seed shows the
+sheet, but SAVING needs `max` deployed (old update mutation rejects customFields).
+`aizen` teammate-promoted. App commit held local.
+
+---
+
+### Session 92 — Completion auto-applies sheet + prominent toggle; SV no-access note
+**Date:** 2026-07-30
+**Agent:** Claude (Opus 4.8)
+
+**Requested (batch):** (1) the Settings charges should appear in the trip
+completion form automatically, usable at default pricing or editable there
+WITHOUT changing Settings; (2) make the Packages/Outstation toggle wider +
+highlighted; (3) when a user without access opens/closes an SV, show the details
++ "you don't have access, contact the Site Incharge <name>".
+
+**travel-desk (`aizen`, committed c6b1c0e, pushed) — #1 + #2:**
+- trips/[id]/page.tsx: charge-line model gains `rate` + `edited`. The default
+  sheet auto-applies when the billing form opens (no tap needed); each line
+  re-prices live from rate × quantity (distance/standing/attendees) until the
+  user edits its amount (which detaches it). Editing here never writes to
+  Settings — it's a working copy sent as customCharges.
+- The sheet toggle is now a full-width, highlighted 2-col segmented control
+  ("Rate sheet"), with copy clarifying edits don't affect Settings.
+- Browser-verified on a billing-pending trip (localhost:3200): form shows the
+  wide Packages/Outstation toggle + 10 auto-populated lines (per km, per trip…,
+  per hour) each removable, Standing-time input, + Add charge, map preview.
+
+**app (`merge`, committed 0da8fc00 — LOCAL per user hold) — #3:**
+- SiteVisitCounsellingConfirmBottomSheet.kt: no-access branch (can't start
+  counselling nor record outcome) now shows a warning-coloured note naming the
+  Site Incharge — "You don't have access to close this site visit. Please
+  contact the Site Incharge (<name>)…"; ongoing-but-unauthorised handled too.
+  Incharge name already flows in via ARG_INCHARGE_NAME (QrScannerFragment passes
+  visit.inchargeStaff?.name). `:app:compileDebugKotlin` SUCCESSFUL.
+
+**Deploy gating:** convex unchanged this session; `aizen` pushed; app commits
+held local (0b2f56ae, 0da8fc00 + earlier 4d682d4-era).
+
+---
+
+### Session 93 — Hide Driver WhatsApp box after Dropped
+**Date:** 2026-07-30
+**Agent:** Claude (Opus 4.8)
+
+**Requested:** on a trip that has reached "Dropped", the Driver WhatsApp box
+(status + Open driver link / Copy link / Resend WhatsApp) should not show.
+
+**travel-desk (`aizen`, committed d4c8dc9, pushed):** trips/[id]/page.tsx — the
+whole Driver WhatsApp box is now gated on `trip.travelDeskEndedAt == null`
+(previously only the buttons hid at billing-complete). Once the client is
+dropped the run is over, so the box disappears; only billing remains.
+Browser-verified on the dropped trip (localhost:3200): "Driver WhatsApp",
+"Resend WhatsApp", "Open driver link" all absent; trip still shows "Dropped".
+`tsc` clean.
+
+**Also this session:** confirmed (no code change) the completion form's "Total
+km travelled" already auto-calculates (Start 100000 / End 100030 → 30 km, live)
+on both travel-desk and the app (bindTotalKm); shows "-" only until BOTH km
+fields are filled.
+
+---
+
+### Session 94 — Completion charges as quantity × rate
+**Date:** 2026-07-30
+**Agent:** Claude (Opus 4.8)
+
+**Requested:** completion charge lines should show the quantity (auto-fetched or
+entered) and the computed amount, e.g. "Travelled km [23] km - 345", "Standing
+charge [5] hrs - 200", for all per-unit fields.
+
+**travel-desk (`aizen`, committed 28d02af, pushed):** trips/[id]/page.tsx —
+charge-line model gains `mode` ("qty" | "amount") + `quantity`. Per-unit units
+(km/hour/minute/person) render as editable quantity + unit label + computed
+"₹amount" (rate × quantity); flat units (trip/toll) keep a directly-editable ₹
+amount. Quantity auto-fills from odometer distance / standing time / attendees
+and re-prices live until edited (edited detaches it). Helpers: isQuantityUnit,
+quantityUnitLabel (km/hrs/min/persons), qtyAmount; setLineLabel/Quantity/Amount
+replace updateChargeLine; saved re-edit + ad-hoc lines are mode "amount".
+Browser-verified (localhost:3200) on a billing-pending trip: km line "30 km →
+₹450" (30 from odometer 100000→100030), standing "2 hrs → ₹0" (120 min), flat
+lines editable ₹. `tsc` clean.
+
+Note: preview session briefly redirected to /login after HMR; recovered via the
+persisted travel_desk_session_token (no re-login performed).
+
+---
+
+### Session 95 — Mobile blank page after image upload
+**Date:** 2026-07-30
+**Agent:** Claude (Opus 4.8)
+
+**Reported:** on mobile, uploading a dashboard image → tapping the image →
+"done" leaves the page blank ("responsive" bug).
+
+**Diagnosis:** not a CSS/layout bug — verified in the in-app browser at 375px:
+no horizontal overflow, no transform-trapped fixed overlay, upload + lightbox
+open/close all work. The real cause: mobile browsers reload the page when
+returning from the native camera/gallery; on reload the travel-desk session
+re-validates over a resuming network and any transient failure (or the 4s
+timeout) set `user=null` → the auth guard bounced to /login (blank). Reproduced
+the /login redirect earlier in-session.
+
+**travel-desk (`aizen`, committed 5c83cba, pushed):**
+- src/lib/auth.tsx: cache the user in localStorage (`travel_desk_session_user`)
+  and hydrate it synchronously in the AuthProvider's useState initializer, so a
+  reload paints immediately (isLoading starts false when cached). Session
+  validation now signs out ONLY on an explicit token rejection; network/timeout
+  failures keep the cached user and re-validate on the next navigation (removed
+  the logout-on-catch and the isLoading timeout).
+- trips/[id]/page.tsx: lock `document.body.style.overflow` while the image
+  lightbox (DashboardImageField + EvidencePreview) is open, restore on close.
+- Verified (localhost:3200): user cache written ("sudhan"), page stays on the
+  trip route (no /login flash); lightbox toggles body overflow hidden↔none.
+  `tsc` clean.
+
+---
+
+### Session 96 — Remove duplicate "Start km" on the drop step
+**Date:** 2026-07-30
+**Agent:** Claude (Opus 4.8)
+
+**Reported:** the trip page showed "Start km" (+ start dashboard image) twice.
+
+**travel-desk (`aizen`, committed 5e242de, pushed):** trips/[id]/page.tsx — the
+`reached === 5` "Passenger dropped" step rendered its own Start km + start image
+block, duplicating the "Trip start proof" block that already shows them for
+reached >= 3. Removed the duplicate; the drop step now only collects End km +
+end evidence. `tsc` clean. (EvidencePreview still used by Trip start proof and
+the completed view.)
+
+---
+
+### Session 97 — Driver WhatsApp box lingers on completed trips
+**Date:** 2026-07-30
+**Agent:** Claude (Opus 4.8)
+
+**Reported:** after completing a trip, the "Driver WhatsApp / Pending" box still
+shows.
+
+**travel-desk (`aizen`, committed 1bbd89e, pushed):** trips/[id]/page.tsx — the
+box was gated only on `travelDeskEndedAt == null` (Session 93). But a trip can
+be finished with endedAt still null (e.g. the SV is completed in the app without
+the travel-desk driver drop flow), so the box lingered. Broadened the gate to
+hide when finished by ANY measure: `travelDeskEndedAt == null &&
+travelDeskBillingCompletedAt == null && !isCompletedTripRow(trip)`. Imported
+isCompletedTripRow. Only adds hide-conditions → no regression for active trips
+(all three false → box shows); verified dropped trips still hide it. `tsc` clean.
+
+---
+
+### Session 98 — SV QR scanner frozen on 2nd scan
+**Date:** 2026-07-30
+**Agent:** Claude (Opus 4.8)
+
+**Reported:** SV QR scanning shows an issue on the second scan (superadmin +
+site incharge roles).
+
+**Root cause:** onQrCodeScanned sets isScanningActive=false and unbinds the
+camera, then shows SiteVisitCounsellingConfirmBottomSheet (a dialog — the
+scanner fragment is NOT destroyed). The action paths (Start counselling /
+auto-redirect to outcome) call openSiteVisitOutcome → popBackStackImmediate,
+which removes the scanner. But a PLAIN dismiss (Cancel/swipe/back) fired no
+result, so the scanner stayed with the camera unbound + scanning off → the next
+scan was frozen. resumeScanning() was only wired to invite-cancel + errors.
+
+**Fix (app `merge`, committed 0497062b, pushed to both remotes):**
+- SiteVisitCounsellingConfirmBottomSheet.kt: `actionTaken` flag set true in the
+  Start-counselling onClick and the outcome-redirect onFinish; `onDismiss` fires
+  a new `RESULT_KEY_CLOSED` result only when !actionTaken (and isAdded).
+- QrScannerFragment.kt: setFragmentResultListener(RESULT_KEY_CLOSED) →
+  resumeScanning() (re-binds camera + isScanningActive=true).
+- `:app:compileDebugKotlin` SUCCESSFUL.
+
+---
+
+### Session 99 — Fleet sync audit (app / MMS web / travel-desk)
+**Date:** 2026-07-30
+**Agent:** Claude (Opus 4.8)
+
+**Requested:** verify the fleet module syncs across mobile, web (MMS), travel-desk.
+
+**In sync (verified):**
+- Shared model: all three read/write the same `travelDesk*` fields on siteVisits;
+  `travelDeskCustomCharges` name identical everywhere (no drift).
+- Display parity: web-applied custom charges show in MMS web (assigned-tab) AND
+  the app (AdminFleetTripManageSheet) — both via enrichVisit/enrichTrip `...visit`
+  spread; the app model carries travelDeskCustomCharges.
+- Both completion paths (internal marketing.fleet, external travelDeskTrips) write
+  the same billing fields; legacy kmRate/packageAmount stay derived-mirrored.
+- App uses mms-fleet routes for Manju staff (useMmsFleet = !isExternalFleetAgencyOperator)
+  and travel-desk routes for agency operators.
+
+**Gaps found (app external-fleet write-side lags web):**
+1. App ManageRatesBottomSheet = flat Packages only (no customFields / Outstation /
+   hillCharge). Web = full dynamic sheet → app can't define/edit custom fields.
+2. DATA-LOSS (FIXED): app settings-save omits customFields; backend `update`
+   reseeded over the agency's web sheet → wipe. **Fixed on `max` (c5569158):**
+   omitted customFields now preserves the stored sheet (seeds only when none set).
+   Web unaffected (always sends its full sheet). tsc clean.
+3. App external completion (completeOfflineAgency → /api/travel-desk/trips/
+   complete-offline) sends no customCharges + has no UI → an external trip
+   completed via the APP gets no custom charges (web applies them).
+
+**Dominant current state = DEPLOY GAP:** `max` + `aizen` not deployed, so the whole
+custom-charges/fields/dynamic-sheet feature is inactive on prod; the three surfaces
+currently sync on the OLD flat model. Once `max` deploys, web + display parity
+activate and app write-side gaps (#1, #3) become live. Follow-ups (not done):
+port the dynamic sheet to the app settings screen; add customCharges to the app
+completion request + UI.
+
+---
+
+### Session 100 — Driver page + agency nav + mobile blank fixes
+**Date:** 2026-07-30
+**Agent:** Claude (Opus 4.8)
+
+**Reported (travel-desk, on prod):** (1) driver link page goes blank on mobile;
+(2) trip-detail back-nav lands on Drivers but nav shows Trips; (3) external
+drivers shouldn't see amount fields (Toll/Beta); (4) start/end km not calculating.
+
+**travel-desk (`aizen`, committed ed609db, pushed):**
+- driver/trips/[token]/page.tsx (#3, #4): removed Toll amount + Beta inputs (and
+  the toll/beta state) from the "Mark dropped" step — pricing is admin-only, the
+  driver only records the odometer; submit sends endKm only. Added a live "Total
+  km travelled" (endKm − travelDeskStartKm) with an "end must be > start" guard.
+- trips/[id]/page.tsx (#4): admin billing form shows "End km must be greater than
+  the start km" when End < Start instead of a bare "0 km" (that was the clamp,
+  read as "not calculating"; valid input like 100000→100030=30 already worked).
+- lib/auth.tsx (#2): agency operators now land on /trips (not /driver) on both
+  login + the guard, matching the root redirect → Trips is the default tab and
+  back-nav from a trip detail returns to /trips, not the Drivers roster. Dropped
+  the now-unused isTravelDeskAgencyOperationsRole import.
+- layout.tsx (#1): body h-full → h-[100dvh]. Root cause of the mobile blank: the
+  app-shell body was overflow-hidden at h-full (= the SMALL viewport), so when
+  the mobile URL bar hid, the body didn't grow and a blank gap showed at the
+  bottom (public-trip-shell scrolls internally). dvh tracks the dynamic viewport.
+- Validation: `tsc` clean; browser-checked at 375px (no overflow, body tracks
+  viewport, no console errors).
+
+---
+
+### Session 101 — Remove-driver 404 + driver reactivate
+**Date:** 2026-07-30
+**Agent:** Claude (Opus 4.8)
+
+**Reported (travel-desk):** removing a driver from a trip shows "server returned
+an invalid response (404)"; deactivating driver/staff works but reactivating not.
+
+**travel-desk (`aizen`, committed 9b85076, pushed):**
+- Remove-driver 404: the Next proxy route src/app/api/travel-desk/trips/
+  unallocate/route.ts was MISSING (allocate/arrive/end/etc. all have one; the
+  convex /api/travel-desk/trips/unallocate route already existed). Created it —
+  browser-verified it now returns 401 (auth) not 404.
+- Driver reactivate: driver/page.tsx filtered the roster to status==="active",
+  so a deactivated driver vanished with no way back. Now lists ALL drivers
+  (active first, activeDrivers→sortedDrivers), shows an "Inactive" badge, and the
+  action toggles Deactivate/Activate (handleDeactivate→handleToggleStatus).
+- Staff: already correct — staff page shows Active/Inactive with an Activate
+  toggle, and the /api/travel-desk/staff/update route honors status. No change.
+- Validation: `tsc` clean; browser-checked at /driver (90 rows render, toggle
+  logic present).
+
+---
+
+### Session 102 — Billing tab + staff billing permission + driver Call-client
+**Date:** 2026-07-30
+**Agent:** Claude (Opus 4.8)
+
+**Requested (travel-desk external fleet):** (1) add a "Billing" tab after In
+progress for dropped trips where the admin does billing; (2) staff without
+permission see "contact admin" on Settings, add an admin toggle that grants a
+staff billing access (view/modify Settings + use Billing tab); (3) move the
+driver-page Call-client button beside Food preference.
+
+**MMS (`max`, committed 0f409498, pushed — NOT deployed):**
+- schema: travelDeskAgencyStaff.canBill. session: agencyStaffToUser carries
+  canBill; agencyToUser → canBill:true (admins always). TravelDeskUser gains
+  canBill. updateAgencyStaff accepts canBill and REQUIRES an admin session to
+  set it (requireAgencyAdminSession); http staff/update forwards it. tsc clean.
+
+**travel-desk (`aizen`, committed 3c01781, pushed):**
+- api: canDoTravelDeskBilling(user) = agency OR (agency_staff && canBill);
+  canBill on TravelDeskUser + TravelDeskAgencyStaffRow; updateTravelDeskAgencyStaff
+  forwards canBill.
+- trips/page.tsx: new Billing tab (Tab union + TAB_VALUES). billingRows =
+  travelDeskEndedAt != null && travelDeskBillingCompletedAt == null; takes
+  precedence — completed/inProgress/assigned recomputed to exclude it. Tab shown
+  only when canBill; ?tab=billing for others → effectiveTab in_progress. Cards:
+  "Ready to bill" badge + "Complete billing" link. Browser-verified as admin:
+  bar shows Billing 1, the dropped trip lands there with the action.
+- settings/page.tsx: gated on canDoTravelDeskBilling — no access → "Permission
+  required — contact your admin" (replaces the old read-only-for-staff).
+- staff/page.tsx: admin-only Grant/Revoke billing toggle + Billing badge
+  (desktop + mobile).
+- driver/trips/[token]/page.tsx: Call client moved into the details grid (right
+  of Food preference); removed the separate block below the map.
+- tsc clean.
+
+**Deploy note:** admin sees Billing + Settings immediately (role check, not
+canBill). Staff canBill needs `max` deployed to be granted/surfaced.
+
+---
+
+### Session 103 — Sidebar order, staff toggle (deploy gap), load perf
+**Date:** 2026-07-30
+**Agent:** Claude (Opus 4.8)
+
+**Requested (travel-desk):** (1) Trips first in nav, Drivers moved down near
+Staff; (2) external travel desk loads too slowly — fix; (3) "you didn't add the
+Admin access toggle to Staff".
+
+**#1 Sidebar (`aizen`, 580d936, pushed):** agencyOperationsNav reordered to
+[Trips, Vehicles, Drivers] → full nav Trips, Vehicles, Drivers, Staff, Settings.
+Browser-verified.
+
+**#3 Staff toggle:** NOT missing — the "Grant/Revoke billing" toggle (Session
+102) is on `aizen` and browser-verified rendering on /staff. The client is on
+prod, where `aizen` isn't promoted yet. Deploy gap, not a bug.
+
+**#2 Perf (`max`, a10ff211, pushed — NOT deployed):** profiled localhost against
+the LIVE backend (api-mfpl): /trips/pending + /trips/assigned each ~11s. Root
+cause: listPending/listAssigned enriched up to 160 trips with ~7 db.get each
+(~1000+ reads). Added batched `enrichTrips()` (+ `batchGet`): collect unique
+project/vehicle/lead/CP/lmo ids, fetch each once into maps, enrich from maps →
+read count drops to the unique-doc total. Same payload; single enrichTrip kept
+for mutations. tsc clean. (The double request per endpoint in the trace is dev
+StrictMode — single load() trigger, so prod fetches once.)
+
+**Deploy note:** all three land only after promotion — perf needs `max` deployed,
+sidebar + staff toggle need `aizen` promoted. Nothing I change can speed up the
+current prod backend until `max` is deployed.
+
+---
+
+### Session 104 — Contact-client action on trip cards
+**Date:** 2026-07-30
+**Agent:** Claude (Opus 4.8)
+
+**Requested (travel-desk):** add a client contact option to the trip cards in
+Assigned + In progress — web shows Copy (number), mobile shows Call (tel: →
+dialer with the number).
+
+**travel-desk (`aizen`, committed 30e8331, pushed):** trips/page.tsx — in the
+allocated-trip card block (trip.vehicle, covers Assigned/In progress/Billing),
+added a client-contact row gated on trip.clientPhone: a `tel:` "Call client"
+link (className lg:hidden) + a "Copy number" button (hidden lg:inline-flex) that
+copies trip.clientPhone via clipboard. New clientCopiedId state + copyClientNumber
+handler (mirrors the driver-link copy). Browser-verified: at 1280px 8 "Copy
+number" visible / tel hidden; at 375px 8 "Call client" visible (tel:9197...) /
+copy hidden. `tsc` clean.
+
+---
+
+### Session 105 — Complete-tab date filter + billing exports
+**Date:** 2026-07-30
+**Agent:** Claude (Opus 4.8)
+
+**Requested (travel-desk Complete tab):** date-range selector + filter + "export
+all" that adapts to the range; each trip an "export billing" with print/download/
+share exporting CSV/Excel with proper formatting.
+
+**travel-desk (`aizen`, committed 5c1c16a, pushed):**
+- lib/trip-export.ts (new): tripsToCsv (all-trips sheet), tripBillingCsv +
+  tripBillingLines (itemised one-trip), tripBillingHtml (printable), downloadFile
+  (UTF-8 BOM → Excel renders ₹/Tamil), printTripBilling, shareTripBilling
+  (Web Share file → text → clipboard fallback), safeName.
+- trips/page.tsx: Complete tab gets From/To date inputs + Clear; completeTabRows
+  now filters `completed` by scheduledDate in range; summary shows "Total SV: N
+  (of M)". "Export all" button downloads the filtered CSV. Each completed card
+  gets an "Export billing ▾" menu (Print / Download (CSV) / Share) with an
+  outside-click backdrop. New state completeFrom/To + exportMenuTripId.
+- Browser-verified: 32 cards / 32 Export-billing buttons / Export all; menu shows
+  Print+Download+Share; From=To=2026-07-31 → "Total SV: 1 (of 32)", 1 card, Clear
+  shown. `tsc` clean. (Excel = CSV with BOM; no xlsx lib added.)
+
+---
+
+### Session 106 — Full mobile-responsive audit (external travel desk)
+**Date:** 2026-07-30
+**Agent:** Claude (Opus 4.8)
+
+**Requested:** make the whole external website mobile-responsive.
+
+**Audit (localhost @375px):** ran a horizontal-overflow + oversized-element check
+on every surface — /trips (list, tabs, cards), /driver, /vehicle, /staff,
+/settings, /trips/[id] (billing form), /driver/trips/[token], the View-summary
+modal, and the Reassign/allocate modal (the biggest form). Result: **0 px
+horizontal overflow everywhere**; tables collapse to card layouts, the dynamic
+rate sheet stacks (Name/Amount/Unit/Remove), modals fit + scroll. The site is
+already built responsive (mobile card patterns + the Session 100 h-[100dvh] fix).
+
+**Change (`aizen`, pushed):** globals.css btn-ghost → min-h-[38px] + bigger
+padding on mobile (was ~28px, below the comfortable tap minimum), compact at sm+.
+
+**Conclusion / deploy note:** nothing structurally broken on mobile. The reason
+prod may still look off is the deploy gap — the responsive fixes (dvh blank-page,
+driver page, etc.) live on `aizen`, not yet promoted. Once `aizen` is on prod the
+mobile experience matches the verified-clean audit.
+
+---
+
+### Session 107 — Driver page blank (hydration) + full-width pills
+**Date:** 2026-07-30
+**Agent:** Claude (Opus 4.8)
+
+**Reported (travel-desk):** external driver trip link still goes blank after
+uploading an image; the "Edited"/"Assigned" status pills render as full-width bars.
+
+**Blank driver page — real root cause = HYDRATION MISMATCH (not memory/OOM):**
+Extracted the Next dev error — "Hydration failed… server HTML didn't match client".
+The optimistic-cache change (Session 100) initialised auth `user`/`isLoading` by
+reading localStorage in the useState initializers, so SSR (no storage → isLoading
+true → shell spinner) rendered a different tree than a client with a cached user
+(isLoading false → content). React regenerated on dev (worked) but blanked on
+prod. Fixes (`aizen`, committed 4151198, pushed):
+- auth.tsx: deterministic initial state (user=null, isLoading=true); hydrate the
+  cached user + clear isLoading in a mount useEffect (client-only).
+- travel-desk-shell.tsx: public routes (login + /driver/trips/) now render BEFORE
+  the isLoading spinner check (they never depend on the session).
+- driver/trips/[token]/page.tsx: also gate on a `mounted` flag (defence in depth).
+- Browser-verified: full reload of the driver link → hydrationError=false, page
+  renders; /trips also clean.
+
+**Pills (`aizen`, same commit):** trips/page.tsx — the badge column was
+`flex flex-col … sm:items-end`, so on mobile (no base items-*) the pills stretched
+full-width. Added `self-start sm:self-auto` to the Edited/Expired/status spans.
+Verified @375px: badges 57–76px (were ~351px), not stretched.
+
+---
+
+### Session 108 — Trip dates as dd-mm-yyyy
+**Date:** 2026-07-30
+**Agent:** Claude (Opus 4.8)
+
+**Requested:** show dates in dd-mm-yyyy (were showing raw YYYY-MM-DD).
+
+**travel-desk (`aizen`, committed 659bdad, pushed):**
+- lib/time-format.ts: new formatDateDmy(YYYY-MM-DD → dd-mm-yyyy).
+- trips/page.tsx: applied to the card date + allocate + extra-km dialog dates.
+- trips/[id]/page.tsx: applied to the header + reassign dialog dates.
+- driver/trips/[token]/page.tsx: formatTripDate now emits dd-mm-yyyy (regex, no
+  Date/locale → also drops a hydration-risk).
+- Browser-verified: card shows "31-07-2026 · 2:00 PM"; no ISO dates remain.
+
+---
+
+### Session 109 — Always-visible Clear filter (Complete tab)
+**Date:** 2026-07-30
+**Agent:** Claude (Opus 4.8)
+
+**Requested:** add a clear option for the Complete-tab date filters (the existing
+one only appeared once a date was set → not discoverable).
+
+**travel-desk (`aizen`, committed 2c7ad57, pushed):** trips/page.tsx — the "Clear
+filter" button now always renders, disabled (opacity-50) until a From/To is
+chosen. Browser-verified: present + disabled with empty filters.
+
+### Session 91 - SV Follow-up save HTTP 500 (diagnosis + error surfacing)
+
+**Date:** 2026-07-31
+**Session:** fork (branched from main; main still owns travel-desk custom-charge
+feature — did NOT touch MMS convex from this fork)
+**Agent:** Claude (Claude Code)
+**Repo:** Mconnect (`merge` 93f1c087, pushed both remotes)
+
+- Report: SV "Follow up" (postpone, next date 31/07/2026) on a DROPPED cab trip
+  → Save → bare "HTTP 500". App points at PROD (`api-mfpl`).
+- Path: `persistSvFollowUp` → `postponeSiteVisit` → POST
+  `/api/marketing/siteVisits/postpone` → `siteVisits.postponeVisit`.
+  postponeVisit's assertTransition ALLOWS dropped (+scheduled/on_site/…), so NOT
+  a transition error. Root cause is a server-side throw in the mutation. The
+  standout user-dependent cause: `postponeVisit` line 3186-3188 requires
+  `marketing.siteVisits.edit` (route always passes requesterStaffId=auth.user._id),
+  whereas the Not-Interested/`setOutcome` path requires NO such permission — so a
+  field BDO/Site-Incharge who can mark Not Interested 500s on Follow up. (Gate
+  last touched 2026-07-27, commit 61b9f389.) Downstream helpers
+  (patchSiteVisitStatsForChange / recordSiteVisitInsight /
+  scheduleSiteVisitConfirmationWhatsAppForVisit) are secondary suspects.
+- App fix (shipped): `persistSvFollowUp` catch now uses `extractHttpErrorMessage`
+  so the real backend `{error}` shows instead of "HTTP 500". Build OK.
+- IMMEDIATE PROD remedy (no deploy) if it's the permission: grant
+  `marketing.siteVisits.edit` to the field-staff role in web IAM/roles. Proper
+  backend fix = relax postponeVisit to allow the assigned staff to reschedule
+  their own visit (mirror setOutcome) — DEPLOY-GATED, not done here, and MMS
+  convex is the main chat's lane.
+
+### Session 110 — MMS fleet dashboard: internal/external badge + tab counts
+
+**Date:** 2026-07-31
+**Session:** continuation
+**Agent:** Claude (Claude Code)
+**Repo:** manjusitedevelopment (`max` 38a9f944, pushed origin/max — NOT deployed)
+
+- Request: "show these in an organized way properly and highlight was it
+  external or internal fleet and show total count in the tabs" (MMS fleet
+  dispatcher, Assigned view).
+- Badge (frontend-only, ships immediately): each assigned trip row now shows an
+  "Internal fleet" (info/blue) vs "External fleet" (primary) badge at the top of
+  the Project cell, driven by `isMfplFleetVisit(visit)`. features/fleet/tabs/
+  assigned-tab.tsx.
+- Tab counts (backend + frontend, DEPLOY-GATED): `marketing.fleet.listAssigned`
+  now returns `{ groups, counts }` instead of a bare group array. Counts
+  {assigned, in_progress, complete} are computed over the window-filtered rows
+  BEFORE the subtab narrows them, so all three tabs reflect the same population
+  in one query (no extra round-trips). Reordered the window filter above the
+  subtab filter to make this exact.
+- Wiring: use-fleet-assigned-controller.ts destructures `{ groups, counts }`;
+  AssignedFleetCounts added to features/fleet/types.ts; tab bar refactored to a
+  data-driven map rendering a count pill per tab (guarded on
+  `typeof count === "number"`, so it degrades gracefully to no-pill until the
+  backend is deployed).
+- Shape-change fallout fixed: convex/http.ts mobile dispatch endpoint
+  (/api/mms-fleet/dispatch/assigned) and siteVisitCabLifecycleOverride.test.ts
+  updated to read `.groups`.
+- Verified: `tsc -p convex/tsconfig.json` clean; frontend `tsc` clean for
+  fleet (only pre-existing unrelated attendance-test error remains). Browser:
+  fleet dashboard loads without app errors, but the Assigned subtab is gated by
+  `marketing.fleet.view` which the preview account lacks, and counts need a
+  convex deploy — so the badge/counts couldn't be visually confirmed in preview.
+  Teammate deploy required for counts to populate.
+
+### Session 111 — Travel-desk "Update status" form (cancel/postpone) + voice note
+
+**Date:** 2026-07-31
+**Session:** continuation
+**Agents/Repos:**
+- manjusitedevelopment (`max` 557b643d, pushed — NOT deployed)
+- travel-desk (`aizen` dad504a, pushed origin/aizen)
+
+- Request: clicking near Call client should open a "Status update Form" that BOTH
+  admin and driver can use — set Cancelled / Postponed / Not available-not picked
+  up, with a voice note; result reaches SV Cancelled in the MMS SV tab.
+- Decisions (AskUserQuestion): separate "Update status" button (Call client stays
+  a dialer); Cancelled & Not-available → SV `cancelled`, Postponed → reschedule
+  (new SV); voice note OPTIONAL.
+- Backend (MMS, deploy-gated):
+  - Extracted `cancelSiteVisitCore` / `postponeSiteVisitCore` from the staff
+    `cancel` / `postponeVisit` mutations (marketing/siteVisits.ts) so the external
+    flow reuses the identical WhatsApp/audit/stats/new-SV side effects. The staff
+    mutations already tolerate no-actor calls, so the external path is safe.
+  - `travelDeskDriverTrips.submitStatusUpdate(token, siteVisitId, reasonCode,
+    reasonText?, voiceStorageId?, voiceDurationMs?, scheduledDate?, scheduledTime?)`.
+    Auth via existing `getOperatorVisit` — agency session, driver session, OR raw
+    32-hex driver-link access token — so ONE mutation serves admin + driver;
+    ownership-checked. Postponed requires scheduledDate. Attributes agency vs
+    driver in notes/audit (extraMeta.source="travel-desk").
+  - schema: `travelDeskStatusReasonCode|ReasonText|VoiceId|VoiceDurationMs|
+    UpdatedVia|UpdatedAt` on siteVisits.
+  - http: `/api/travel-desk/trips/status-update` (OPTIONS+POST),
+    `travelDeskOperatorTokenResponse` (bearer only; resolution deferred to the
+    mutation) → forwards to submitStatusUpdate.
+- Frontend (travel-desk): new reusable `components/status-update-dialog.tsx`
+  (3 radios + note + MediaRecorder voice note record/playback/re-record;
+  Postponed reveals required date + optional time; uploads voice via the existing
+  `/api/travel-desk/storage/upload` then calls the new endpoint). Wired a separate
+  "Update status" button on the agency trips card (assigned & in-progress, shows
+  even once started) and on the driver link page (phase !== completed). Added
+  `submitTravelDeskStatusUpdate` to travel-desk-api.ts.
+- Verified: convex tsc clean (only pre-existing attendance-test error); travel-desk
+  tsc clean. Browser (portal In-progress, logged in): "Update status" button
+  renders on the Ongoing card; dialog opens ("Status update", 3 options, note,
+  voice recorder); Postponed reveals date+time and enables Submit. NOTE: the
+  mobile preview pane's 800px screenshot vs 375px viewport made pixel clicks miss
+  (kept opening Reassign) — drove the final checks via ref/JS. Live submit not
+  tested (backend deploy-gated).
+- Reminders honored: no convex deploy; branch pushes only; AGENT_LOG local-only.
+
+### Session 111b — Status update: add "No issues" (no-op) option
+
+**Date:** 2026-07-31 · continuation
+**Repos:** manjusitedevelopment (`max` 80a4f13e), travel-desk (`aizen` 4c845e2) — pushed, NOT deployed.
+
+- Request: add a "No issues" button that marks nothing and lets the flow continue;
+  no Note needed, voice note is enough.
+- Frontend: 4th radio "No issues" placed FIRST (safe/common case); when selected
+  the Note textarea is hidden, voice note kept, no date required.
+- Backend: reasonCode "no_issue" added to schema union + submitStatusUpdate — an
+  early no-op that only patches the status/voice metadata and returns
+  {outcome:"no_issue"} without touching the SV lifecycle.
+- Verified: convex tsc + travel-desk tsc clean; browser JS check confirmed the 4
+  options render and selecting "No issues" hides Note while keeping the voice
+  recorder.
+
+### Session 111c — Driver link "blank below the fold" on photo pick (real fix)
+
+**Date:** 2026-07-31 · continuation
+**Repo:** travel-desk (`aizen` 30895c5, pushed)
+
+- Report: external driver link goes blank/cut-off when uploading the dashboard
+  image ("Start trip" visible, everything below blank) — same class as the admin
+  blank issue.
+- Root cause (this time NOT hydration): app `body` is `h-[100dvh] overflow-hidden`,
+  but `.public-trip-shell` was `min-h-full` → it grew to content height (1563px)
+  while body stayed 742px and clipped the overflow with NO scroll. Picking a photo
+  adds the preview and pushes Start trip + the actions below into the clipped
+  region → looks blank. Diagnosed via JS: main.scrollH 1563 vs clientH 742, body
+  overflow-hidden.
+- Fix: `.public-trip-shell` → `height: 100dvh` (was `min-h-full`), keeping
+  `overflow-y-auto` so the shell itself is the scroll container. globals.css only.
+- Verified: reload → main clientH 742 / scrollH 1563 / scrolls to bottom (821px);
+  Start trip + Update status reachable; screenshot shows full form + bottom button.
+
+### Session 111d — Driver link: Vehicle cell detail + Update status placement
+
+**Date:** 2026-07-31 · continuation · travel-desk (`aizen` 033734a, pushed)
+
+- Vehicle cell now shows vehicle number / driver name / vehicle model (model ·
+  type) / driver number (was just number + driver name). Fields from
+  trip.vehicle.{vehicleNumber,model,type} + trip.driver{Name,Phone}.
+- Update status moved out of the shared Call-client cell into its OWN grid cell
+  (the empty cell to the right), restyled btn-secondary self-start to match Call
+  client's size (both 42px). Verified in browser.
+
+### Session 111e — Driver link: show vehicle model (not body type)
+
+**Date:** 2026-07-31 · continuation
+**Repos:** manjusitedevelopment (`max` d5c7390b, rebased onto teammate 0c8cec2f, pushed — NOT deployed), travel-desk (`aizen` 1df1e64, pushed)
+
+- Request: show vehicle MODEL (Swift / Innova), not the body type (Sedan).
+- Frontend: Vehicle cell now renders `trip.vehicle.model` only (dropped the
+  model·type join), hidden when absent.
+- Backend (deploy-gated): `enrichDriverTrip` returned only {vehicleNumber, type}
+  for vehicle — added `model: vehicle.model` (vehicles table has make/model/
+  modelYear/type). Until deployed the model won't reach the page.
+- NOTE on test data: vehicle "RAMAR" has no model saved (only type "Sedan"), so
+  the model line is empty for it even post-deploy — real vehicles with a model
+  will show it. Also earlier: deduped driver-name line when it == vehicleNumber.
+- Verified: convex tsc + travel-desk tsc clean.
+
+### Session 111f — Vehicles list card: driver name header, vehicle number by phone
+
+**Date:** 2026-07-31 · continuation · travel-desk (`aizen` 09209ee, pushed)
+
+- Request (clarified via AskUserQuestion): on the vehicles mobile card the bold
+  header should be the DRIVER NAME and the value in front of the mobile number
+  should be the VEHICLE NUMBER (they were mapped the opposite way; the RAMAR
+  record has vehicleNumber==driverName which made it confusing).
+- Change (src/app/vehicle/page.tsx, mobile card only): header =
+  defaultDriverName || vehicleNumber; phone line = vehicleNumber · phone when a
+  driver name exists, else just phone (avoids repeating the number when it's
+  already the header). Desktop table left as-is (labeled columns).
+- Verified: travel-desk tsc clean. Could NOT screenshot — preview account's
+  vehicles list stayed on "Loading…" (unrelated data/permission state).
+
+### Session 111g — Vehicle capacity excludes driver seat
+
+**Date:** 2026-07-31 · continuation · travel-desk (`aizen` 5122832, pushed)
+
+- Request: capacity should exclude the driver seat — Sedan 4 (not 5), SUV 6.
+- Change: TRAVEL_DESK_VEHICLE_CAPACITY in src/lib/travel-desk-vehicle-rules.ts →
+  SUV 7→6, Sedan 5→4, Hatchback 5→4. Single source; drives the form auto-fill
+  (model/type onChange) + saved capacity for over-cap checks.
+- Verified in browser: type Sedan → capacity 4; SUV → 6. Existing vehicles keep
+  old stored capacity until re-saved.
+- Also confirmed live in same view: vehicles-card swap (driver name header,
+  "RAMAR · phone" below) from 111f is rendering correctly.
+
+### Session 111h — CP visit booking-gate: inline message (keep rule)
+
+**Date:** 2026-07-31 · continuation · manjusitedevelopment (`max` 54d20f0e, pushed — frontend only)
+
+- Request: "handle that error" on Create CP Visit — "Collection CP blocked — no
+  confirmed booking". Chosen (AskUserQuestion): KEEP the rule, improve UX with a
+  persistent inline message (not a fleeting toast + silent dropdown reset).
+- The gate (features/marketing/pages/cp-visits-list-page.tsx handleCpTypeChange)
+  requires collection_cp/booking_cp mobiles to have a postSaleCase (byMobile).
+  Change: removed the count===0 toast; render an inline destructive <p> with
+  AlertTriangle under the CP Type Select when collectionGateCases.count===0 for
+  the current phone; plus a green CheckCircle2 "N confirmed booking(s) found"
+  when the gate passes. Business rule untouched.
+- Verified in browser (localhost:3100, logged in): entered a no-booking mobile,
+  picked Collection CP → inline red warning renders exactly as designed; tsc clean.
+
+### Session 111i — SV postpone gated to pre-arrival (before on_site)
+
+**Date:** 2026-07-31 · continuation
+**Repos:** manjusitedevelopment (`max` 4991ae66, pushed) · Mconnect app (`merge` b80d138, committed LOCAL — awaiting push confirmation)
+
+- Request: postpone option must NOT be available in/after on_site; before that,
+  postponable. (CP/SV module.)
+- Key nuance: the SV postpone endpoint (api.marketing.siteVisits.postponeVisit)
+  is SHARED — the mobile "Follow up" outcome reuses it to reschedule a still-
+  active visit to a next date (persistSvFollowUp → postponeSiteVisit), and the
+  backend list already accepts scheduled/client_started/picked_up/on_site.
+  Hard-blocking on_site in the backend would break real follow-ups (client not
+  available at site → follow up). So gated the RESCHEDULE UI, left the shared
+  endpoint accepting on_site (comment added). This also avoids the Session-91
+  follow-up-500 area.
+- Web (features/marketing/pages): renamed canPostponeBeforeCounselling →
+  canPostponeBeforeArrival, dropped on_site (now scheduled/client_started/
+  picked_up only), on SV detail (canPostponeVisit) + SV list (canPostponeRow);
+  guard toast → "…before the client reaches the site". CP web postpone is dead
+  code (read-only mirror), untouched.
+- App (SiteVisitOverviewFragment.updatePostponeVisibility): added on_site/"on
+  site" to the hide-set (renamed counsellingStarted → arrivedOrLater) so
+  btnPostponeSiteVisit hides from on_site. btnPostponed ("Follow up" outcome)
+  unchanged.
+- Verified: convex test (3/3, incl. on_counselling reject) green; web tsc clean;
+  app :app:compileDebugKotlin BUILD SUCCESSFUL. Browser: SV list renders (postpone
+  lives in per-row menus; deterministic conditional, not driven per-status).
+
+### Session 111j — Collection CP "Not Collected" outcome
+
+**Date:** 2026-07-31 · continuation
+**Repos:** manjusitedevelopment (`max` eff3a386, pushed) · Mconnect app (`merge` b6e45c1, LOCAL — awaiting push with 111i's b80d138)
+
+- Request: Collection CP needs a "Not collected" option (staff forced to enter
+  paid amount even when nothing collected). If used → web shows 0 + not-collected
+  status. Decisions (AskUserQuestion): CP-visit-outcome only (NO post-sales ₹0
+  ledger row); remarks OPTIONAL.
+- Backend (deploy-gated): new clientPlaceVisits outcome `not_collected` in
+  schema.ts + clientPlaceVisits.ts outcomeValidator + legacyImport type. setOutcome
+  handles generically (→ completed). http route already forwards outcome string.
+  No customerCollections write.
+- App: CollectionPaymentEntryBottomSheet — added "Nothing collected — mark Not
+  Collected" footer button (sheet_collection_payment_entry.xml) returning
+  KEY_NOT_COLLECTED + optional notes. TripNavigationFragment: result listener
+  branch → completeNotCollectedVisit(cpId) = markClientMet(true) +
+  setCpVisitOutcome("not_collected", "Not collected — <remarks>"). Skips the
+  amount>0 / reference guards.
+- Web: cp-visit-detail-page badge "Not Collected · ₹0" (amber) + type; cp-visits-
+  list-page OUTCOME label "Not Collected" + type.
+- Verified: convex tsc clean (after extending legacyImport ClientPlaceVisitOutcome);
+  web tsc clean; app :app:compileDebugKotlin BUILD SUCCESSFUL. Note: existing
+  client-ABSENT collection path (completeCpVisitWithoutClient → collection_done)
+  left unchanged — this feature is client-PRESENT/nothing-collected.
+
+### Session 92 - Gift Distribution "Confirm" HTTP 500 + local OTP bypass
+
+**Date:** 2026-07-31
+**Session:** fork (branched from main). MMS edits confined to fieldVisitOtp.ts,
+clientPlaceVisits.ts, http.ts — all clean of main-chat work (only _generated
+was theirs). Nothing committed/deployed by me.
+
+- **Local OTP bypass (prior ask):** `DEV_OTP_BYPASS==="true"` in
+  `hr/fieldVisitOtp.ts` now also skips the contact-phone gate + geofence gate
+  (was only pinning OTP=1111 + skipping SMS). maskPhone/SMS guarded for the
+  no-phone case. Inert unless the flag is set (LOCAL/DEV ONLY — never prod).
+- **Gift Distribution 500 (this ask):** "Confirm Gift Distribution" 500'd.
+  Root cause = ordering: `setCpVisitOutcome("gift_distributed")` runs BEFORE the
+  handover photo is linked (that happens in `finalizeCompleteVisit → completeVisit`),
+  so `clientPlaceVisits.setOutcome`'s `assertRequiredCpCompletionProof`
+  (requires fieldVisit.arrivalPhotoStorageId) threw. The gift OTP sheet opens
+  with arrivalPhotoStorageId=null, so no photo is attached at verify.
+  - Fix (backend): `clientPlaceVisits.setOutcome` takes optional
+    `arrivalPhotoStorageId` and attaches it to the fieldVisit (if not already set)
+    BEFORE the proof check. `http.ts` CP setOutcome route forwards it.
+  - Fix (app): `SetOutcomeRequest.arrivalPhotoStorageId`; gift flow passes
+    `pendingArrivalStorageId`; gift catch now surfaces backend {error} via a new
+    `httpErrorMessage()` helper instead of raw "HTTP 500".
+  - Validation: app `:app:assembleDebug` OK; convex `tsc` clean. Uncommitted.
+  - To test locally: `npx convex dev` (pushes backend) + rebuild/install app at
+    local dev. Deploy-gated for prod.
+
+### Session 92 (cont.) - Deployed gift fix to DEV backend + dev-pointed APK
+
+- Confirmed `.env.local` active target = `next-spaniel-814` (DEV; prod
+  api-mfpl/convex-mfpl commented out) — safe to push (not the live site).
+- Ran `npx convex dev --once` in manjusitedevelopment → deployed working-tree
+  convex (fieldVisitOtp DEV_OTP_BYPASS widening + clientPlaceVisits.setOutcome
+  arrivalPhotoStorageId attach + http.ts route) to next-spaniel-814. OK.
+- Rebuilt app with `MCONNECT_BASE_URL=https://next-spaniel-814.convex.site/` so
+  the debug APK points at the dev backend (default build points at prod api-mfpl).
+  APK: app/build/outputs/apk/debug/app-debug.apk. Install this to test the gift
+  flow end-to-end (backend fix needs the app to SEND arrivalPhotoStorageId).
+- DEV_OTP_BYPASS already set on next-spaniel-814 (1111 worked earlier for user).
+- Did NOT deploy to prod; did NOT commit (MMS = main chat's repo; user iterating).
+
+### Session 111k — Test DB switch (next-spaniel-814) + CP Type column
+
+**Date:** 2026-07-31 · continuation · manjusitedevelopment (`max` a730dc96, pushed)
+
+- USER EXPLICITLY authorized deploying convex to a TEST deployment next-spaniel-814
+  (temporarily overrides never-deploy-convex). Switched .env + .env.local (mfpl
+  block commented, next-spaniel active + CONVEX_DEPLOY_KEY); backups in scratchpad.
+  First deploy failed (node_modules missing @convex-dev/workpool) → pnpm install →
+  `npx convex deploy -y` SUCCEEDED (schema validation passed; all our backend
+  changes live). Restarted web-dev preview; verified client bundle built with
+  next-spaniel-814 (not mfpl); next-spaniel .convex.site route → 401 (deployed).
+  New memory: convex-test-db-next-spaniel. Switch back to mfpl on user's word.
+- CP Type column: added "CP Type" col (after Project) to CP Visits list table
+  (cp-visits-list-page.tsx) rendering CP_TYPE_LABEL[v.cpType] as a Badge; loading
+  colSpan 8→9. Query already returns cpType. Verified live (Collection CP / Gift
+  Distribution / Old Client / SV cum CP / Follow-up render). tsc clean.
+- FLAGGED: pre-existing UNCOMMITTED web-repo changes NOT mine, left unstaged (NOT
+  on max): convex/hr/fieldVisitOtp.ts DEV_OTP_BYPASS flag ("MUST stay unset in
+  prod"); convex/http.ts + clientPlaceVisits.ts arrivalPhotoStorageId (gift
+  handover photo before proof). They got deployed to next-spaniel via working-tree
+  deploy (harmless; DEV_OTP_BYPASS env-gated off). Deploy key secret safe (.env*
+  untracked). Still-unpushed APP (merge): b80d138 postpone + b6e45c1 not-collected.
+
+### Session 111l — Maps billing diagnosis + clear updateLocationAndNotes server error
+
+**Date:** 2026-07-31 · continuation · manjusitedevelopment (deployed to next-spaniel-814 test DB)
+
+- Google Maps "Oops" = BillingNotEnabledMapError. Active key AIzaSyB7mD91… (also
+  GOOGLE_MAPS_SERVER_KEY) has NO billing on its GCP project. Other key AIzaSyD2l7…
+  HAS billing + localhost referrer OK but Geocoding API NOT enabled (REQUEST_DENIED)
+  and is referrer-restricted (unusable server-side). Swapped NEXT_PUBLIC_GOOGLE_MAPS_WEB_KEY
+  → D2l7 in .env.local (LOCAL only, untracked) → map TILES render; address RESOLVE
+  still needs a billing-enabled+Geocoding key. DEFINITIVE FIX (user's GCP action):
+  enable Billing on the B7mD project, then revert the swap. Not a code bug.
+- CP visit "Save changes" red toast = CONVEX updateLocationAndNotes "Server Error".
+  Real error (via `npx convex run` against next-spaniel): "This CP visit has no
+  linked clientPlace to edit." The test visit had no clientPlaceId; a plain throw
+  surfaces as generic Server Error.
+- FIX (convex/marketing/clientPlaceVisits.ts updateLocationAndNotes): when
+  !visit.clientPlaceId AND location fields present, CREATE a clientPlaces row
+  (name from lead/contact/address; type client/status active; all address+lat/lng
+  fields) and patch visit.clientPlaceId, instead of throwing. Deployed to
+  next-spaniel; re-ran the mutation → SUCCESS (returns enriched visit). convex tsc
+  clean.
+- GIT/COMMIT HELD: clientPlaceVisits.ts also carries the teammate's UNCOMMITTED
+  arrivalPhotoStorageId hunk (+ http.ts +1, fieldVisitOtp.ts DEV_OTP_BYPASS). Did
+  NOT commit to max to avoid bundling their WIP into a prod-bound branch. Awaiting
+  user decision.
+
+### Session 111m — Push all
+
+**Date:** 2026-07-31 · continuation
+- MMS `max`: 1b7ed712 (DEV_OTP_BYPASS, isolated commit so it can be dropped before
+  a prod deploy) + 7691f3f2 (updateLocationAndNotes creates clientPlace when
+  missing; arrivalPhotoStorageId gift-photo; regen api types). Pushed.
+- App `merge` → BOTH remotes (manjugroupsdev + D-A-R-X): b80d138 (postpone hidden
+  at on_site) + b6e45c1 (Collection CP Not Collected). Pushed.
+- travel-desk `aizen`: already fully pushed (0 ahead/behind) — nothing new.
+- NOT committed (correct): .env/.env.local (secrets/next-spaniel switch, gitignored),
+  AGENT_LOG.md (local). Reminder: DEV_OTP_BYPASS is now on max as its own commit;
+  drop/revert it before any prod deploy (it disables real arrival OTP when env on).
+
+### Session 93 - SV Follow-up "invalid transition from on_counselling" fix
+
+**Date:** 2026-07-31
+**Session:** fork. MMS edit confined to siteVisits.ts (postponeSiteVisitCore).
+Deployed to DEV (next-spaniel-814) only; prod untouched; uncommitted.
+
+- The session-91 error-surfacing fix paid off: the app now showed the REAL error
+  ("cannot postpone visit from status on_counselling. Allowed: scheduled,
+  client_started, picked_up, on_site") — so the SV Follow-up failure was a
+  TRANSITION guard, NOT the permission issue I'd speculated in session 91.
+- Root cause: `postponeSiteVisitCore` (shared by the mobile Follow-up via
+  `siteVisits.postponeVisit`) allowed only scheduled/client_started/picked_up/
+  on_site. But the app's Follow-up button stays available through the whole
+  post-arrival window (on_counselling/picked_from_site/dropped — same as
+  setOutcome). So a Follow-up once counselling started was rejected.
+- Fix (backend-only): added on_counselling, picked_from_site, dropped to the
+  allowed list. No app change — the app already sends the right request; retry
+  in the SAME build. `tsc` clean; `convex dev --once` → next-spaniel-814 OK.
+- NOTE: this is a genuine PROD bug too (same restrictive list on prod). Ship to
+  prod when folding the fixes into MMS.
+
+### Session 111n — Driver link blank/scroll (real root cause: double scroll container)
+
+**Date:** 2026-07-31 · continuation · travel-desk (`aizen` a4d085d, pushed)
+
+- Report: driver link still scrolls up + blanks after picking dashboard image;
+  worse on mobile. Asked to reuse admin upload component.
+- Root cause (via live DOM inspection): TWO competing scroll containers — the
+  driver-link WRAPPER in travel-desk-shell.tsx (flex-1 min-h-0 overflow-y-auto)
+  AND my earlier 111c fix on .public-trip-shell (height:100dvh + overflow-y-auto).
+  With body h-[100dvh] overflow-hidden, the html/window scrolled independently of
+  the wrapper → content decoupled, page jumped/blanked. (Not the image component —
+  driver's DashboardImagePicker is already the same pattern as the admin trips
+  page's.)
+- Fix: .public-trip-shell → position:fixed; inset:0; z-index:0; overflow-y:auto
+  (globals.css). Out of document flow ⇒ the ONE scroll container; body/html/wrapper
+  can't scroll. Verified desktop+mobile: window.scrollY & html stay 0, content
+  scrolls to bottom, no blank; modals (fixed z-50) still layer above.
+- GOTCHA: Turbopack cached the old compiled CSS across dev-server restarts — had to
+  `rm -rf .next` + restart travel-desk-dev before globals.css @apply changes took
+  effect (plain position:fixed CSS then HMR'd fine).
+
+### Session 111o — Push all (round 2), guarding the app BASE_URL test switch
+
+**Date:** 2026-07-31 · continuation
+- MMS `max` a1705a2a: postponeSiteVisitCore accepts on_counselling/picked_from_site/
+  dropped too (mobile Follow-up outcome reschedules across the post-arrival window;
+  was 500'ing). convex tsc clean.
+- App `merge` → both remotes 131c6314: SetOutcomeRequest.arrivalPhotoStorageId +
+  gift-distribution passes handover photo to setOutcome; httpErrorMessage() surfaces
+  real backend {error} instead of "HTTP 500". app compileDebugKotlin BUILD SUCCESSFUL.
+- HELD BACK (kept LOCAL, NOT committed): app/build.gradle.kts — its default BASE_URL
+  was flipped from api-mfpl.theairix.com (PROD) to next-spaniel-814.convex.site (TEST
+  DB) to build the app against next-spaniel. Committing to merge would point prod app
+  builds at the test DB → excluded, like .env. Revert this local edit (and .env/.env.local
+  + the D2l7 maps key) when switching back to mfpl. AGENT_LOG.md local-only as always.
+
+### Session 111p — Super Admin authorized for every field visit
+
+**Date:** 2026-07-31 · continuation · manjusitedevelopment (`max` cfa06044, pushed + deployed to next-spaniel)
+
+- Report: Super Admin got "Not authorized for this visit" on Swipe to Complete
+  Trip (SV confirmation). Cause: convex/hr/fieldVisitOtp.ts gates
+  requestArrivalOtp / verifyArrivalOtp / cancelArrivalOtp with
+  visit.staffId !== args.staffId (assigned-staff-only).
+- Fix: added isSuperAdminStaff(staff) = isAdmin===true || normalized role
+  "super-admin" (matches isSuperAdmin elsewhere). _readVisitForOtp now takes
+  optional actingStaffId and returns actingIsSuperAdmin; the two actions pass it
+  and bypass; cancelArrivalOtp loads the actor and bypasses. Super admin → all
+  visits.
+- Verified vs next-spaniel via `convex run staff:list`: the Super Admin account
+  (ADMIN-638208, g98a…) has role "super-admin" AND isAdmin true → bypass applies.
+  convex tsc clean; deployed. User can retry on the app (BASE_URL → next-spaniel).
+
+### Session 111p-fix — Deployment-target gotcha (dev vs prod on next-spaniel)
+
+**Date:** 2026-07-31 · continuation
+- CRITICAL: .env.local has BOTH `CONVEX_DEPLOYMENT=dev:next-spaniel-814` AND
+  `CONVEX_DEPLOY_KEY=prod:next-spaniel-814` — TWO different deployments.
+  • `npx convex deploy` → PROD (next-spaniel-814.convex.cloud) = what the app/web hit.
+  • `npx convex run` WITHOUT --prod → the DEV deployment (stale; never deployed to).
+  So my convex-run verifications were sometimes hitting the wrong (dev) deployment
+  → false "not deployed" alarms (e.g. _readVisitForOtp "extra field actingStaffId").
+  FIX: always verify with `npx convex run --prod ...` (matches deploy + app target).
+- Re-deployed super-admin bypass; re-tested with --prod → _readVisitForOtp returns
+  actingIsSuperAdmin:true for the super admin vs a visit assigned to another staff.
+  Confirmed LIVE on next-spaniel prod (the app's target).
+- If the mobile app STILL shows "not authorized": the APK isn't pointed at
+  next-spaniel (BASE_URL baked at build time) — rebuild :app:assembleDebug with the
+  next-spaniel build.gradle BASE_URL and reinstall.
+
+### Session 111p-fix2 — Super-admin bypass: root cause was deployment targeting
+
+**Date:** 2026-07-31 · continuation
+- "Still not authorized" root cause: CONVEX_DEPLOYMENT=dev:next-spaniel-814 +
+  CONVEX_DEPLOY_KEY=prod:next-spaniel-814 = different deployments. Deploys/verifies
+  were inconsistently hitting the DEV deployment while the app/web hit prod
+  (next-spaniel-814.convex.cloud/.site). So the super-admin fix wasn't reliably on
+  the app's deployment.
+- FIX: commented out CONVEX_DEPLOYMENT in .env.local → deploy/run now use the deploy
+  key (= app target) unambiguously. Clean deploy done; verified via
+  `convex run hr/fieldVisitOtp:verifyArrivalOtp` (super admin vs other-staff visit)
+  → now returns "No active OTP. Request one first." (i.e. PASSED the auth gate).
+  Super-admin bypass is LIVE on the app's deployment. Memory updated.
+- User should retry Swipe to Complete on the app now.
+
+### Session 94 - SV-cum-CP skipped the confirm sheet (SV left "Fixed")
+
+**Date:** 2026-07-31
+**Session:** fork. App-only (Mconnect); no backend change/deploy. Uncommitted.
+
+- Bug: completing an sv_cum_cp trip finished the CP but showed NO form, and the
+  linked SV stayed "Fixed" (never confirmed).
+- Root cause: after OTP verify, TripNavigationFragment routes to the CP confirm
+  sheet only when `isCpVisit()` — which is `tripType == "client_place" && cpVisitId`.
+  But sv_cum_cp rows are identified by `visitCategory == "sv_cum_cp"` and do NOT
+  carry tripType="client_place" (see HomeFragment:1026 OR-check). So isCpVisit()
+  was false → the post-OTP branch fell through to `finalizeCompleteVisit()`
+  (silent complete), skipping `showCpCompletionSheet()`.
+- Fix 1 (TripNavigationFragment.onArrivalOtpVerified): compute `isSvCumCp`
+  (cpVisitId + visitCategory==sv_cum_cp) and route `(isCpVisit || isSvCumCp)` to
+  showCpCompletionSheet. Left isCpVisit() itself unchanged so the pre-OTP
+  swipe/client-seen path is not altered.
+- Fix 2 (CompleteCpVisitBottomSheet.detectAndApplyLockedSvMode): treat a linked
+  SV (`convertedSiteVisitId`) as a lock signal so the Confirm/Reject footer shows
+  even when proposed/lead/party signals are absent. Confirm → setCpVisitOutcome
+  ("interested") → flips linked SV Fixed→Confirmed.
+- Build OK (dev-pointed APK). Install + retest: after OTP the Confirm/Reject SV
+  sheet must appear; Confirm should move the SV out of Fixed.
+- Genuine PROD bug too (same isCpVisit gap) — ship with the others.
+
+### Session 111q — Push all (round 3)
+
+**Date:** 2026-07-31 · continuation
+- App `merge` → both remotes bce67214: sv_cum_cp trips now reach the CP confirm
+  sheet after arrival OTP (isSvCumCp routing in TripNavigationFragment) +
+  hasConvertedSv SV-fix signal in CompleteCpVisitBottomSheet. Not my code
+  (teammate WIP) but legit; app compileDebugKotlin BUILD SUCCESSFUL.
+- MMS `max` (cfa06044) + travel-desk `aizen` (a4d085d): already clean/pushed.
+- HELD LOCAL (not committed): app/build.gradle.kts (BASE_URL → next-spaniel test DB;
+  committing would point prod app builds at test DB) and AGENT_LOG.md.
+- Reminder: the MOBILE APP is still on PRODUCTION (mfpl) — proven this session by
+  the CP visits list showing real prod clients (Vignesh/Gomathi) absent from
+  next-spaniel. My next-spaniel deploys don't reach the phone until the APK is
+  rebuilt with the next-spaniel BASE_URL and reinstalled.
+
+### Session 95 - Trip Details: client address card above the map
+
+**Date:** 2026-07-31
+**Session:** fork. App-only (Mconnect); uncommitted; dev-pointed APK.
+
+- Added a "Client Address" card between tripInfoCard and mapCard in
+  fragment_trip_navigation.xml — icon chip (ic_cp_address) + "Client Address"
+  label + full address (tvClientAddressFull, wraps, NO ellipsize/maxLines so the
+  whole address shows). Styled to match the info card (bg_home_trip_card,
+  bg_home_trip_stat_icon_v2, same hex #667085/#111827 the file already uses).
+  Re-anchored mapCard's constraintTop to @id/clientAddressCard.
+- Fragment: bind tvClientAddressFull = placeAddress ?: placeName ?:
+  "Address not available" (next to the existing tvTripOriginName bind).
+- Root is a plain ConstraintLayout (no scroll); card is compact (~64dp) and the
+  map is only 180dp, so it fits with room below. If overflow appears on very
+  small screens, wrap the content in a NestedScrollView (follow-up).
+- Address source = placeAddress arg (the trip's client place address). Sparse
+  test bookings may show "Address not available"; real visits populate it.
+- Build OK (dev-pointed APK). No backend change.
+
+### Session 111r — Status update: No-issues clean pass + rename option
+
+**Date:** 2026-08-01 · continuation · travel-desk (`aizen` be5e089, pushed)
+- status-update-dialog.tsx: for "No issues", hide the Note field AND the Voice
+  note block (already hid Note; now hides voice too), and skip any stray recorded
+  blob on submit for no_issue. Renamed "Not available / not picked up" →
+  "Call not connected" (hint "Couldn't reach the client on the phone"); reasonCode
+  stays not_available so backend unchanged.
+- Verified live (admin trips in-progress → Update status on MANI · BLUE SPOT 3.0):
+  labels = No issues / Cancelled / Call not connected / Postponed; No issues shows
+  neither note nor voice; Cancelled shows both. tsc clean.
+
+### Session 96 - COORDINATION NOTE for the main chat (SV/CP/fleet regression push)
+
+**Date:** 2026-08-01
+**Session:** fork (branched from main). READ THIS before touching SV/CP/fleet.
+
+**Context / standing rule (user-set):** The SV/CP visit + external-fleet flows
+were tested working-perfect ~early–mid July 2026. While other modules were
+worked on, some of that code drifted and REGRESSED. All the recent SV/CP/fleet
+bugs are these regressions surfacing. Goal = RESTORE known-good behavior, not
+redesign. Method: (1) git-blame the working-era code before changing a function,
+(2) impact-check across modules (SV/CP/fleet share setOutcome, postponeSiteVisit
+Core, fieldVisitOtp arrival OTP, completeVisit, clientPlaceVisits↔siteVisits,
+isCpVisit routing), (3) surgical fixes that leave working paths untouched.
+
+**A large batch of SV/CP/fleet issues + edge cases is incoming to THIS fork.**
+The fork is owning the SV/CP/fleet regression cleanup. Main chat: please avoid
+editing the files listed below out from under it; coordinate here.
+
+**This fork's UNCOMMITTED work (dev only — NOT prod, NOT committed):**
+- App (Mconnect `merge`) — uncommitted, dev-pointed APK built against
+  next-spaniel-814: TripNavigationFragment.kt (gift-distribution setOutcome
+  arrivalPhotoStorageId, sv_cum_cp routing fix, client-address card),
+  CompleteCpVisitBottomSheet.kt (gift + sv_cum_cp lock-detect), GeoTrackApi.kt
+  (SetOutcomeRequest.arrivalPhotoStorageId), fragment_trip_navigation.xml.
+  (Already PUSHED earlier to merge: QR crash da17459, SV manual-close f7bf8c8d,
+  SV follow-up surfacing 93f1c087.)
+- MMS (`max`) — uncommitted, DEPLOYED to DEV next-spaniel-814 only via
+  `convex dev --once` (prod api-mfpl/convex-mfpl untouched): fieldVisitOtp.ts
+  (DEV_OTP_BYPASS widening — dev-only, never set the flag on prod),
+  clientPlaceVisits.ts (setOutcome arrivalPhotoStorageId attach), http.ts (CP
+  setOutcome route forward), siteVisits.ts (postponeSiteVisitCore transition list
+  broadened — likely RESTORING a regression; verify vs July working era).
+- These backend + gift/sv_cum_cp bits are GENUINE PROD bugs too — to be folded
+  into MMS + pushed to prod once the user verifies on dev.
+
+See memory: svcp-fleet-regression-guard.
+
+### Session 111s — Status update: drop Note field + play voice note in MMS
+
+**Date:** 2026-08-01 · continuation
+**Repos:** travel-desk (`aizen` 098e785, pushed) · manjusitedevelopment (`max` 70023b59, pushed + deployed to next-spaniel)
+
+- Client complaint: voice note "not working and sending". Root cause = NO
+  VISIBILITY (upload route /api/travel-desk/storage/upload just ctx.storage.store
+  any blob — audio fine; submitStatusUpdate stores travelDeskStatusVoiceId). Fix =
+  surface it in MMS.
+- travel-desk: removed the "Note (optional)" textarea + reasonText from
+  status-update-dialog.tsx — voice note is the only reason capture now.
+- MMS backend: siteVisits enrich() now resolves travelDeskStatusVoiceUrl =
+  ctx.storage.getUrl(travelDeskStatusVoiceId) (only when present). Verified:
+  siteVisits.get returns the key. Deployed to next-spaniel.
+- MMS web: site-visit-detail-page.tsx renders a "Travel desk update" card (reason
+  Cancelled/Call not connected/Postponed + agency/driver + time + <audio> player).
+- BACKEND CAVEAT (flagged to user): travel-desk portal .env →
+  NEXT_PUBLIC_CONVEX_SITE_URL=https://api-mfpl.theairix.com (PRODUCTION), NOT
+  next-spaniel. So status updates + voice notes submitted via the portal hit
+  PROD (and Cancel/Postpone affect REAL SVs); they won't appear in the MMS web
+  (next-spaniel). For the client, both TD + MMS are on mfpl, so the flow works once
+  this code is deployed to prod (teammate). Couldn't end-to-end test voice on
+  next-spaniel (portal on mfpl + mic blocked in preview browser).
+- All tsc clean (convex/web/travel-desk).
+
+### Session 97 - SV Bundle 1: edge-case audit + regression fixes (in progress)
+
+**Date:** 2026-08-01
+**Session:** fork. Task = fix SV edge cases in convex/marketing/siteVisits.ts,
+all SV tests must pass. Baseline `npx vitest run convex/siteVisit` = 2 FAILING.
+
+**Regression A (FIXED):** `siteVisitFollowupOutcome.test.ts:66` — my earlier
+commit `a1705a2a` widened postponeSiteVisitCore to allow on_counselling/
+picked_from_site/dropped, breaking the locked "postpone is pre-counselling only"
+design (`4991ae66`). REVERTED to [scheduled,client_started,picked_up,on_site] in
+the working tree. Test now green. IMPLICATION: the mobile "Follow up" must route
+post-counselling through setOutcome(follow_up), NOT postpone — the earlier app
+"fix" (route follow-up→postpone) was itself wrong. App follow-up needs the
+linked fix (Mconnect: persistSvFollowUp → setSiteVisitOutcome(follow_up,
+followupDueDate); + /setOutcome route must forward followupDueDate).
+
+**Regression B (NEEDS MAIN-CHAT DECISION):** `siteVisitCabLifecycleOverride.test
+.ts:601` — commit **`52dd3614` "fleet billing parity"** (MAIN CHAT's feature)
+added a `billingComplete` gate to `isTravelDeskTaskComplete`
+(convex/lib/travelDeskProof.ts:83-96), so an external-driver trip stays
+travelDeskTaskStatus="pending" even AFTER end-proof — the test expects
+"completed" on driver proof (both driver + agency views). This is the main
+chat's committed billing work; recommended fix = drop the billing factor from
+the DRIVER-task completion (track billing separately), but NOT reverting it
+unilaterally — awaiting user/main-chat call.
+
+**Edge-case audit (task's "fix or documented decision" per case):**
+2 reassign, 3 setOutcome-without-drop (do NOT add guard — breaks tests), 4 stale
+alert (never existed), 5 correctOutcome, 6 auto_confirmed (state doesn't exist),
+7 WhatsApp (runAfter post-commit), 8 reassign-notify, 9 markPickedUp, 10 cab
+permission (test-locked), 11 IRIS convert — ALL correct/known-good, NO fix.
+12 rollup: patchSiteVisitStatsForChange called only on create/update/reassign/
+postpone/delete; 13 status-changing mutations omit it (pre-existing, affects
+byStatus only). Task asks to add — will add the one-liner per mutation.
+
+### Session 97 (cont.) - SV Bundle 1: both regressions fixed, suite GREEN
+
+- Regression A (postpone a1705a2a): REVERTED to pre-counselling statuses. Green.
+- Regression B (cab billing gate): resolved by UPDATING the stale test, NOT
+  un-gating. Discovery: un-gating breaks `travelDeskProof.test.ts:60`, which
+  intentionally locks "external trip pending until agency billing finalized"
+  (added by 52dd3614). So the billing gate stays; instead
+  `siteVisitCabLifecycleOverride.test.ts` (test @506) now finalizes billing
+  up-front (t.run patch travelDeskBillingCompletedAt) so it isolates the
+  end-proof gate (its subject). User approved "update the stale cab test".
+- `npx vitest run convex/siteVisit convex/travelDeskProof` = 6 files / 26 tests
+  ALL PASS.
+- Edge cases 2-11: documented no-fix (already correct/known-good). 3
+  (setOutcome-without-drop) MUST NOT get a guard (breaks followup+cab tests).
+- Item 12 (rollups): delegated subagent adding patchSiteVisitStatsForChange to
+  the 13 status-changing mutations (markPickedUp/ClientStarted/ArrivedSite/
+  OnCounselling/OnCounsellingFromQr/PickedFromSite/Dropped/advanceCabLifecycle/
+  NoShow/setOutcome/correctOutcome/convertToBooking/cancelSiteVisitCore) +
+  re-running suite. Pre-existing gap (byStatus only), not a regression.
+- LINKED APP FIX still owed (Mconnect): since postpone no longer accepts
+  on_counselling, the mobile "Follow up" must call setSiteVisitOutcome(
+  outcome=follow_up, followupDueDate) instead of postponeSiteVisit; the
+  /marketing/siteVisits/setOutcome HTTP route must forward followupDueDate.
+- All uncommitted; NOT deployed to prod. siteVisits.ts also carries the main
+  chat's uncommitted enrich(travelDeskStatusVoiceUrl) — untouched by us.
+
+### Session 98 - Trip Details scroll fix (button was stuck / cut off)
+
+**Date:** 2026-08-01
+**Session:** fork. App-only (Mconnect). Uncommitted; dev-pointed APK.
+
+- After adding the Client Address card (session 95), the fixed non-scrolling
+  ConstraintLayout overflowed and the Start Trip button was cut off with no way
+  to reach it (as flagged then).
+- Fix (fragment_trip_navigation.xml): wrapped tripInfoCard + clientAddressCard +
+  mapCard + tripProgressCard in a NestedScrollView (id tripContentScroll,
+  fillViewport, top→topBar bottom, bottom→bottomActions top; inner
+  ConstraintLayout wrap_content, tripInfoCard top retargeted topBar→parent).
+  bottomActions now PINNED (constraintBottom_toBottomOf parent) so Start Trip /
+  swipe is always visible.
+- Fix (TripNavigationFragment.onMapReady): uiSettings.isScrollGesturesEnabled =
+  false so the in-scroll map doesn't swallow vertical drags.
+- Build OK. No backend change.
+
+### Session 99 - Trip Details swipe button "too low" (edge-to-edge inset)
+
+**Date:** 2026-08-01
+**Session:** fork. App-only (Mconnect). Uncommitted; dev-pointed APK.
+
+- After pinning bottomActions to parent bottom (session 98), the swipe/Start-Trip
+  button sat under the gesture nav bar — app is edge-to-edge
+  (MainActivity setDecorFitsSystemWindows(false)).
+- Fix: TripNavigationFragment applies the app's existing
+  `BottomActionInsets.applyAboveSystemNavAndTabs(R.id.bottomActions)` helper
+  (reserves navigationBars inset + tab bar height + breathing room). Robust
+  across devices; matches how chat/other screens handle it. Build OK.
+
+### Session 100 - Travel-desk driver page: Call client + Call driver above address
+
+**Date:** 2026-08-01
+**Session:** fork. travel-desk (`aizen`), driver/trips/[token]/page.tsx only.
+Uncommitted. NOTE: trips/[id]/page.tsx is the MAIN CHAT's file — untouched.
+
+- Added a "Contact" row (grid grid-cols-2) with Call client (tel:clientPhone) +
+  Call driver (tel:driverPhone) side by side, placed ABOVE the Pickup address
+  cell. Each button conditional on its phone (empty <span/> keeps left/right).
+- Removed the old standalone "Call client" grid cell (moved above); Update status
+  kept. tsc clean.
+- Deploy: aizen → traveldesk.aivida.in is teammate-promoted; change is local/
+  uncommitted so it won't show on the live site until pushed + promoted.
+
+### Session 101 - Travel-desk: horizontal start/end proof + unstick driver upload
+
+**Date:** 2026-08-01
+**Session:** fork. travel-desk (`aizen`). COMMITTED + PUSHED (cc6d845).
+
+- trips/[id]/page.tsx (admin trip detail, "Mark progress"): at the dropped
+  stage (reached===5) the "Trip start proof" and end evidence were stacked
+  vertically. Now they sit side by side in a `grid gap-4 md:grid-cols-2` —
+  Trip start proof (start km + start dashboard image) LEFT, Trip end proof
+  (End km + Toll/Beta + end dashboard image) RIGHT. Standalone start-proof box
+  condition changed to `reached >= 3 && reached !== 5` so it isn't duplicated
+  at stage 5. Isolated to this admin view — zero cross-module impact.
+- compress-image.ts (SHARED by driver picker + admin trips/page.tsx picker):
+  `createImageBitmap` and `canvas.toBlob` can HANG (never settle) on odd HEIC
+  blobs on some mobile browsers. That left DashboardImagePicker's `busy` flag
+  stuck true → every file input `disabled` → "driver came back and couldn't
+  upload." Wrapped both in an 8s `withTimeout` that rejects → catch falls back
+  to the original file, so `busy` always clears. Happy path unchanged for all
+  callers (worst case: a slightly larger original file uploads).
+- driver page: Call client/Call driver row (from session 100) kept.
+- Verified: `npx tsc --noEmit` clean; cleared stale `.next` (Turbopack cache
+  showed a phantom status-update-dialog parse error at an old line number —
+  gone after rm -rf .next + restart); /trips route compiles + renders logged in.
+- Stage-5 horizontal layout not exercisable without a live dropped trip; it's a
+  pure Tailwind restructure that typechecks and the route compiles.
+
+### Session 102 - Travel-desk Status Update "invalid response (404)" fix
+
+**Date:** 2026-08-01
+**Session:** fork. travel-desk (`aizen`). COMMITTED + PUSHED (7a5487e).
+
+- Report: choosing any option in the Status Update form + Submit → "The server
+  returned an invalid response (404)."
+- FALSE START: first hypothesised "Convex route not deployed to prod." Probed
+  prod directly — `POST api-mfpl.../trips/status-update` → **401** (live), not
+  404. So the Convex route + `submitStatusUpdate` mutation ARE deployed. Wrong
+  theory; corrected course.
+- REAL root cause: `tripsRequest()` (travel-desk-api.ts:498) fetches RELATIVE
+  paths → they hit the PORTAL's own Next.js API route handlers under
+  `src/app/api/travel-desk/trips/*`, which proxy to Convex. Every trips endpoint
+  has a handler EXCEPT `status-update` (the newest feature) → Next.js 404 →
+  parseJson renders "invalid response (404)."
+- Fix: added `src/app/api/travel-desk/trips/status-update/route.ts`, a straight
+  POST proxy to `${convexSiteUrl()}/api/travel-desk/trips/status-update`,
+  mirroring the sibling handlers (e.g. end/route.ts). Cross-checked: all 18
+  tripsRequest endpoints now have matching route handlers (status-update was the
+  only gap). Purely additive; no existing path touched.
+- Verified: tsc clean; dev route now returns 400 (reaches Convex) not 404.
+- DEPLOY NOTE: travel-desk frontend change only — NO Convex deploy needed (route
+  already live on prod). Takes effect once the travel-desk portal is
+  redeployed/re-promoted (traveldesk.aivida.in is teammate-promoted). The same
+  redeploy also ships the earlier stale-UI fixes the screenshot showed missing
+  ("Call not connected" rename, removed "Note (optional)", no-issue voice hide).
+
+### Session 103 - Travel-desk: agency staff billing/Settings access glitch
+
+**Date:** 2026-08-01
+**Session:** fork. travel-desk (`aizen`). COMMITTED + PUSHED (913b956).
+
+- Report: staff granted "Billing" still don't see billing features (Settings +
+  Trips Billing tab); a no-access staff opening Settings "glitches" straight to
+  Trips instead of seeing a "you have no access" notice.
+- Root cause (single bug): auth.tsx guard bounced EVERY `agency_staff` off
+  `/settings` (and `/staff`) UNCONDITIONALLY, before the page rendered — it
+  never checked `canBill`. So granted staff couldn't reach the rate sheet, and
+  no-access staff got redirected to Trips instead of the settings page's own
+  "Permission required" notice.
+- Verified the rest of the chain is already correct: settings page self-gates on
+  `canDoTravelDeskBilling(user)` (rate sheet vs notice); Trips "Billing" tab
+  gates on `canBill` (trips/page.tsx:571-572, tab list ~1170); backend sends
+  fresh `canBill` on every validate (resolveTravelDeskSession re-reads the staff
+  doc → canBill: staff.canBill === true). So a granted staff picks it up on
+  reload; no stale-session code bug.
+- Fix (travel-desk only, no backend):
+  * auth.tsx: drop `/settings` from the agency_staff redirect block; keep
+    `/staff` admin-only. Page now decides what staff see.
+  * Sidebar.tsx: split nav — `agencyStaffNav` (Trips/Vehicles/Drivers/Settings,
+    NO Staff) for agency_staff; `agencyAdminNav` (adds Staff) for agency admin.
+    Prevents the Staff link glitching for staff the same way.
+- Blast radius: role-scoped. Admin + driver nav unchanged (verified in browser:
+  admin still sees Trips/Vehicles/Drivers/Staff/Settings and opens the rate
+  sheet). tsc clean.
+- DEPLOY NOTE: frontend-only; takes effect on the next travel-desk portal
+  redeploy/re-promote. Granted staff may need one page refresh so the session
+  re-validates and canBill flips true.
+
+### Session 104 - SV postpone leaves closed visit stuck "pending confirmation"
+
+**Date:** 2026-08-01
+**Session:** fork. MMS/Convex (`max`). COMMITTED + PUSHED (fd4d5e46). NOT deployed.
+
+- Verify-one-by-one pass, item 1 (Postponed → postponed again). Traced
+  postponeSiteVisitCore end-to-end.
+- FINDINGS: new SV created correctly (all fields copied, scheduled + confirmed,
+  stats/insight/WhatsApp fired); original closed (status: postponed). BUT the
+  close patch never touched confirmationStatus. CP-originated SVs start
+  "pending" (siteVisits.ts:2365), so postponing one left it postponed + pending
+  = dangling.
+- LEAK (the "fuse"): the dangling pending inflated pending-confirmation COUNTS
+  only — fixedCountForDate (its terminal set omitted "postponed"!),
+  approximateSiteVisitStats + siteVisitRollupDelta (bucket by confirmationStatus
+  w/ no status guard). The pending-confirmation LIST (:1420) already excluded
+  postponed, so only the metrics drifted. Tell: the list at :1425 excluded
+  postponed but the count at :1097 forgot to.
+- postpone-again chain: works; only the FIRST original (if CP-pending) dangled;
+  subsequent postpones act on auto-confirmed rows.
+- FIX (source): close patch now also sets confirmationStatus:"confirmed" +
+  confirmedAt. Drops it from every pending counter at once; covers BOTH callers
+  (MMS postpone + travel-desk "Postponed"). Also added "postponed" to
+  fixedCountForDate's terminal set (defense-in-depth).
+- TEST: new regression test runs the real postponeVisit on a pending visit,
+  asserts closed→postponed+confirmed, fresh→scheduled+confirmed, and the
+  postpone-again chain. `npx vitest run siteVisitFollowupOutcome.test.ts` → 4/4
+  pass. `tsc -p convex` clean for my files.
+- PRE-EXISTING (NOT mine, flagged): convex/http.ts:11068 passes
+  arrivalPhotoStorageId to marketing.clientPlaceVisits.setOutcomeAndSendSiteVisitWhatsApp
+  which doesn't declare it → TS2353. Committed code, blocks a convex deploy.
+  Separate torn wire (arrival photo never reaches that action). Left untouched.
+
+### Session 105 - SV reassign didn't notify the OUTGOING staff (item 2)
+
+**Date:** 2026-08-01
+**Session:** fork. MMS/Convex (`max`). COMMITTED + PUSHED (3c010458). NOT deployed.
+
+- Verify-one-by-one item 2: reassign during active visit (picked_up/on_site).
+- FINDINGS: reassign runs during active visits (only TERMINAL statuses blocked).
+  NEW staff notified properly — notifyStaffWithPush = in-app notifications row +
+  FCM push (pushNotifications.sendToStaff). But OLD staff got NOTHING: the
+  targets array only carried the new staffId for changed roles; before-id never
+  passed to the notifier. Old staff only saw it passively (visit drops off their
+  scoped list on refresh). Torn wire: mid-visit the field person is un-assigned
+  with zero heads-up.
+- FIX: notifySiteVisitReassignment now takes {staffId, previousStaffId, role}
+  per role + visit status. Fires only on change; pings incoming AND outgoing;
+  skips a "removed" ping for anyone still assigned to another role (role swap).
+  Active statuses (client_started/picked_up/on_site) use handover wording. New
+  notification type "site-visit-unassigned". reassign passes before/after ids +
+  status. Additive; single caller; no data-write/guard change.
+- TEST: convex/siteVisitReassign.test.ts — on_site reassign → new incharge gets
+  site-visit-assigned "Site Visit Handover"; old incharge gets
+  site-visit-unassigned "Site Visit Handed Over"; unchanged BDO gets nothing.
+  33/33 SV-suite tests pass. tsc clean (pre-existing http.ts:11068 untouched).
+- NOTE: backend change; won't reach users until MMS/Convex prod deploy (blocked
+  by the pre-existing arrivalPhotoStorageId type error — still flagged, item TBD).
+
+### Session 106 - SV outcome guards: completed-reopen + stale-counselling watcher
+
+**Date:** 2026-08-01
+**Session:** fork. MMS/Convex (`max`). COMMITTED + PUSHED (f2434d51). NOT deployed.
+
+Two items from the verify-one-by-one pass, both fixed + tested.
+
+- ITEM 3 (setOutcome-without-cab-drop): NO guard on setOutcome is CORRECT — the
+  cab return leg is decoupled (travelDesk* timestamps), and both driver endTrips
+  support post-completion. BUT `mmsFleetDriverTrips.markPickedFromSite` &
+  `markOnSite` wrote SV status UNCONDITIONALLY → an internal-fleet return-pickup
+  after setOutcome REOPENED the completed SV (completed→picked_from_site). Fix:
+  only advance status from the expected active predecessor, else preserve
+  visit.status (mirrors endTrip's existing guard). travelDesk* stamps unchanged.
+  External travelDeskDriverTrips already safe (writes only travelDesk* fields).
+- ITEM 4 (listOutcomePending): confirmed listOutcomePending is a passive pull
+  query with NO time dimension, and NO cron/daily-task watched on_counselling
+  staleness. Added `marketing/siteVisits:remindStaleCounsellingOutcomes`
+  (internalMutation) + 6h cron: on_counselling + consultingAt >24h + no outcome →
+  ensure ONE daily task (`<id>:outcome`) for BDO/incharge (notifies via
+  notifyTaskAssigned). Extended markSiteVisitDailyTasksCompleted to clear
+  `:outcome` too → auto-closes on outcome/cancel/postpone. Deduped (pre-check),
+  skips fresh visits.
+- TESTS: convex/siteVisitOutcomeGuards.test.ts — (a) markPickedFromSite on a
+  completed cab SV keeps status "completed" + stamps travelDeskPickedFromSiteAt;
+  (b) watcher creates a task only for the >24h visit, idempotent, clears on
+  setOutcome. 35 SV/fleet/daily-task tests pass; tsc clean.
+- Setup notes for future fleet tests: mms-fleet driver = staff designation
+  "Driver" + visit.driverPhone===staff.phone + vehicleId set + no external
+  travelAgencyId + scheduledDate<=today. vehicles insert needs {vehicleNumber,
+  status}.
+- STILL pending prod: the pre-existing http.ts:11068 arrivalPhotoStorageId type
+  error blocks `convex deploy` — none of sessions 104/105/106 can reach users
+  until that's fixed + a prod deploy runs.
+
+### Session 107 - App: outcome form greyed at picked_from_site (stale completedAt lock)
+
+**Date:** 2026-08-01
+**Session:** fork. Mconnect app (`merge`). COMMITTED + PUSHED both remotes (2ff9282e).
+
+- Report (screenshot): cab SV at PICKED FROM SITE, no outcome recorded, but the
+  Outcome buttons (Converted/Not Interested/Follow up) were greyed. User wants
+  them active at on_counselling and every status after (backend setOutcome allows
+  on_counselling/picked_from_site/dropped).
+- Traced SiteVisitOverviewFragment.updateStepper: the enable-GATE already allows
+  on_site→dropped (cab: activeIndex>=3; own: ownActiveIndex>=2). picked_from_site
+  maps to index 5, so the gate enables it. The disable came from
+  isOutcomeLocked = isTerminalOutcome(visit), which locked on
+  `visit.completedAt != null`. For cab visits the fleet return-leg advances the
+  status while a stale completedAt lingers (see the decoupling + session 106
+  reopen bug), so a still-pending outcome got locked.
+- FIX: dropped `completedAt` from isTerminalOutcome. Genuine terminals are still
+  caught by terminal status / recorded outcome / convertedBookingId / cancelledAt,
+  so this only unblocks the outcome-still-pending case. (initial-args path at
+  L393 already uses isTerminalOutcomeStatus(rawStatus) only — unaffected.)
+- Build: :app:compileDebugKotlin BUILD SUCCESSFUL. App-only, no backend.
+- Caveat: if a visit has a genuinely recorded `outcome`, it stays locked
+  (correct). This fix targets the completedAt-set-but-no-outcome state.
+
+### Session 101 - Call client/driver buttons: always-visible + pushed to aizen
+
+**Date:** 2026-08-01
+**Session:** fork. travel-desk (aizen fd52d39, pushed origin).
+
+- Prior turn's conditional Call client|Call driver row was committed+pushed but
+  gated on trip.clientPhone/driverPhone — user "still not showing". Two causes:
+  (a) live traveldesk.aivida.in deploy lag from aizen, (b) trip data may lack
+  phones (external agency trip → visit.driverPhone / lead.mobileNumber null).
+- Fix: made BOTH buttons always render (grid-cols-2 above pickup address),
+  greyed + pointer-events-none + aria-disabled when the number is missing, so a
+  data gap can't hide the affordance. tel: link when present. tsc clean.
+- Committed + pushed aizen (fd52d39). Appears on traveldesk.aivida.in once that
+  branch deploys/promotes; hard-refresh if cached. driver/trips/[token] only;
+  did NOT touch trips/[id] (main chat's file).
+
+### Session 108 - Assign-vehicle dialog: driver name/phone read-only from vehicle
+
+**Date:** 2026-08-01
+**Session:** fork. MMS/Convex (`max`). COMMITTED + PUSHED (5b6bafe1, 5a882d71). NOT deployed.
+
+- Request: the fleet assign-vehicle dialog showed editable Driver name / Driver
+  phone inputs (with fleet-driver autocomplete + manual override). Driver should
+  come from the selected vehicle and be NON-editable; show it only after a
+  vehicle is picked.
+- File: features/fleet/components/assign-vehicle-dialog.tsx.
+  * Driver name/phone are now read-only+disabled Inputs bound to
+    selectedVehicle.defaultDriverName / defaultDriverPhone. Placeholders:
+    "Select a vehicle first" (none picked) / "No driver set on this vehicle".
+  * Submit sends selectedVehicle defaults directly (no manual override).
+  * Removed dead machinery: driverName/Phone state + manual flags,
+    driverSuggestionsOpen, the autofill useEffect, the driverSuggestions memo,
+    the fleetDrivers + listBusyDriverPhones queries (autocomplete-only),
+    normalizePhoneDigits, FleetDriverRow type, resolveDriverField import. Fewer
+    queries on open.
+- Test: replaced the obsolete "manual override preserved" test with
+  "driver fields are read-only and follow the selected vehicle" (asserts
+  disabled + swaps driver on vehicle change). 7/7 dialog tests pass.
+- Verify: component tsc-clean, eslint-clean, convex tsc clean. NOTE: root
+  `tsc --noEmit` flags convex *test* files (by_staffId index / a merged
+  attendance test) — pre-existing root-tsconfig-vs-convex scoping quirk, not
+  from this change; convex/tsconfig.json is authoritative and clean.
+- Deploy: MMS frontend; reaches users on the next web deploy.
+
+### Session 109 - App: postponed SV tag + outcome form gated on counselling (QR)
+
+**Date:** 2026-08-01
+**Session:** fork. Mconnect app (`merge`). COMMITTED + PUSHED both remotes (89d20b6c).
+
+- Report (screenshot): postponed a cab SV before on_site; the postponed SV detail
+  showed the stepper/header on ON SITE (no POSTPONED tag), and the outcome form
+  was available too early. Also asked: outcome form should open only on/after
+  reaching on_counselling by QR scan, and stay open through later statuses until
+  outcome recorded.
+- Root cause: SiteVisitOverviewFragment drives header + stepper off the
+  DRIVER-BOOSTED step index (computeWebParityStepIndex max(base, travelDesk*
+  boost)). "postponed" wasn't a closed state → relabelled from the boosted step
+  (ON SITE). And the outcome gate used the boosted activeIndex>=3 (on_site).
+- FIX 1 (postponed display): bindStatusHeader adds POSTPONED label+colour;
+  bindStatusHeaderForStep treats postponed as closed (keeps its tag);
+  computeWebParityStepIndex + computeOwnStepIndex skip the driver boost for
+  postponed/cancelled (closed SV can't advance).
+- FIX 2 (outcome gate): new member outcomeStatusEligible = isOutcomeStatusEligible(
+  status) = status in {on_counselling/consulting, picked_from_site, dropped} —
+  mirrors backend setOutcome transition set, excludes on_site & earlier. Both cab
+  and own gates now use it (+ isFleetOutcomePending bypass) instead of the
+  boosted index. Toast reworded to "Outcome opens after the client QR scan".
+- Build: :app:compileDebugKotlin SUCCESSFUL. App-only; reaches device on next APK.
+- NOT DONE / caveats: the "close it out of the active list" part is LIST-level
+  (site-visits list tabs), not touched — the postponed original still needs to
+  land in a closed/history tab rather than an active one; flag for follow-up.
+  Verified postponeSiteVisitCore does NOT copy travelDesk* timestamps, so the NEW
+  scheduled SV is fresh (won't show on_site). Visual QA needs the app on device.
+
+### Session 102 - GeoTrack GPS-loss on app update (31-Jul underpaid-allowance bug)
+
+**Date:** 2026-08-01
+**Session:** fork. App (Mconnect) + MMS backend (tamper). Deployed dev; uncommitted.
+
+- Diagnosis (from the web/convex chat): APK update killed GeoTrackService and it
+  never restarted → GPS trail collapsed → 27km paid as 5.23km. Root fix is in the
+  ANDROID app (this fork's domain), which that chat couldn't reach.
+- Fix (app): BootReceiver now also handles `ACTION_MY_PACKAGE_REPLACED` (manifest
+  intent-filter added) — same resume path as BOOT_COMPLETED via
+  GeoTrackBootstrapSync.sync, which re-checks fine/background/activity-recognition
+  permissions and only (re)starts the service inside a clock-in tracking window.
+  Also enqueues an `APP_UPDATED` event so future diagnoses have the explicit
+  update signal the web chat had to infer.
+- Fix (backend, MMS): added `APP_UPDATED` to tamper eventType union
+  (geotrack/tamper.ts), TAMPER_SEVERITY (MEDIUM), action label, AND the
+  schema `tamperEvents.eventType` union (schema.ts) so the insert validates.
+  Deployed to dev next-spaniel-814. app :app:assembleDebug OK; tamper tsc clean.
+- Permission re-check on launch already exists (GeoTrackBootstrapSync.sync +
+  BackgroundPermissionsGateDialog); the new update-trigger runs it too.
+- PRE-EXISTING typecheck break flagged (NOT this task): convex/http.ts:11068
+  passes arrivalPhotoStorageId to clientPlaceVisits.setOutcome — source is
+  consistent (both committed) + deploy works, but committed _generated/api.d.ts
+  is stale (session-92 gift fix committed without regen). `convex dev --once`
+  codegen did not refresh it. Needs a proper _generated regen + commit.
+
+### Session 110 - App: SV "Follow up" is an outcome, not a postpone
+
+**Date:** 2026-08-01
+**Session:** fork. Mconnect app (`merge`). COMMITTED + PUSHED both remotes (55a35db9).
+
+- Report: SV "Follow up" (with a follow-up date) errored "cannot postpone visit
+  from status on_counselling". User clarified: Follow up ≠ Postpone. Postpone
+  recreates an unassigned SV on a new date (needs re-assigning vehicle). Follow
+  up should complete the SV and create a follow-up CALL for the assigned
+  telecaller/LMO to discuss the client's decision.
+- Root cause: CompleteCpVisitBottomSheet.persistSvFollowUp DELIBERATELY routed
+  SV follow-up through geoApi.postponeSiteVisit (comment claimed setOutcome
+  follow_up 500s at scheduled/on_site). But postpone rejects on_counselling, and
+  it reschedules instead of creating the telecaller followup.
+- FIX (app-only): persistSvFollowUp now calls setSiteVisitOutcome(
+  outcome=follow_up, followupDueDate=<date>, notes=<reason>) after a best-effort
+  markSiteVisitOnCounselling. Backend setOutcome(follow_up) completes the SV +
+  inserts telecallerFollowups due on that date; the /siteVisits/setOutcome HTTP
+  route already forwards followupDueDate/Time (http.ts:12176-77). Added
+  followupDueDate/followupDueTime to SetSiteVisitOutcomeRequest. Removed unused
+  PostponeSiteVisitRequest import.
+- Works now because session-109 gated the outcome buttons to on_counselling+, so
+  setOutcome(follow_up) always accepts the status.
+- Form labels were already SV-aware (applySiteVisitOutcomeMode: "Follow up" /
+  "Follow-up date" / "Why does this client need a follow up").
+- Build: :app:compileDebugKotlin SUCCESSFUL. Reaches device on next APK.
+- The pre-counselling reschedule (Postpone) still lives in
+  PostponeSiteVisitBottomSheet — unchanged.
+
+### Session 111 - App: cab SV stays fleet-pending after outcome (stepper)
+
+**Date:** 2026-08-01
+**Session:** fork. Mconnect app (`merge`). COMMITTED + PUSHED both remotes (7de2d15c).
+
+- Report: recording SV outcome (follow_up) marked the trip "done" even though the
+  fleet side (picked_from_site/dropped) wasn't updated. Should stay pending on
+  fleet until the driver completes — "completed as sv but not as fleet".
+- VERIFIED BACKEND IS CORRECT: fleetProgressState returns "pending" for outcome-
+  only (isTravelDeskTaskComplete needs travelDeskEndedAt) -> In-progress tab, not
+  Complete. Driver lists (mmsFleetDriverTrips.listForStaff / travelDeskDriverTrips)
+  keep the trip (drop only cancelled/ended), so the driver can still complete.
+  So only the APP's SV stepper mislabelled it done.
+- Root cause: computeWebParityStepIndex = max(mapStatusToStepIndex(status),
+  driverBoost, ...). status=completed -> 7 (Done), jumping past the pending fleet
+  steps.
+- FIX (user picked "keep fleet steps pending"): for cab visits (!isOwnVehicle) and
+  fleet NOT ended (travelDeskEndedAt==null), cap the SV-status contribution at
+  step 4 (counselling): statusContribution = min(baseFromStatus, 4). Fleet steps
+  5/6/7 then come only from the driver's travelDesk* timestamps. Once ended, full
+  status contributes (Done shows on completed+ended). Own-vehicle unchanged.
+  (Sits after the session-109 postponed/cancelled early-return guard.)
+- wireBookingResult's optimistic updateStepper(6) left as-is: it dismisses the
+  sheet immediately; persistent view recomputes on reload.
+- Build: :app:compileDebugKotlin SUCCESSFUL. Reaches device on next APK.
+- Header still shows COMPLETED (SV outcome) while stepper shows fleet-pending —
+  intended "SV done / fleet pending". If a fleet-pending header label is wanted,
+  follow-up.
+
+### Session 112 - App: follow-up "postponed" subtitle + stale-APK diagnosis
+
+**Date:** 2026-08-01
+**Session:** fork. Mconnect app (`merge`). COMMITTED + PUSHED both remotes (8fa1fdfc). Fresh APK sent to user.
+
+- Report: SV Follow up form STILL showed "cannot postpone visit from status
+  on_counselling" + subtitle "Why is the visit being postponed."
+- DIAGNOSIS: the postpone TRANSITION error was already fixed session 110
+  (persistSvFollowUp → setSiteVisitOutcome(follow_up), verified still intact at
+  L4448). No postpone call remains in the follow-up flow. So the DEVICE is
+  running an OLD APK (pre-session-110). Built assembleDebug and sent
+  app-debug.apk to the user to install.
+- REAL LEFTOVER FIXED: the reason subtitle in outcome_body_postpone.xml (L58-66)
+  had NO id, so applySiteVisitOutcomeMode couldn't override it → SV follow-up
+  mode kept showing "Why is the visit being postponed." Added
+  id=tvPostReasonSubtitle; applySiteVisitOutcomeMode now sets "Note the client's
+  decision so the telecaller can follow up."
+- The separate PostponeSiteVisitBottomSheet (pre-counselling reschedule, "Postpone
+  SV" button) is unrelated and correct.
+- Build: :app:assembleDebug SUCCESSFUL (full APK). 
+- NOTE for future: app fixes are compile-checked but the user tests on-device —
+  when a fix "still" fails, suspect stale APK; assembleDebug + send it.
+
+### Session 113 - SV handoff GM approver went to cross-dept IT/HR (PAVITHRA.P)
+
+**Date:** 2026-08-01
+**Session:** fork. MMS/Convex (`max`). COMMITTED + PUSHED (db23e20d). NOT deployed.
+
+- Report: an immediate SV confirmation ("Awaiting Confirmation : PAVITHRA.P")
+  went to PAVITHRA.P, IT-team HR, unrelated to the marketing SV.
+- Root cause: resolveHandoffManagerStaffId (outOfStationHandoffs.ts) resolves the
+  GM approver as explicit gmStaffId → reportingTo chain walk → org-wide first
+  staff whose DESIGNATION matches /gm|general manager/. The handoff was created
+  with no GM selected, so it hit the org-wide fallback — which is department-
+  BLIND — and PAVITHRA.P (IT "General Manager", first by employeeId) was picked.
+  Self-heal never fixed it because she counts as a GM by designation.
+- FIX (user chose "same department as telecaller"): scope the chain walk AND the
+  org-wide fallback to the telecaller's department via deptOk(); a cross-dept GM
+  is ineligible. Explicit gmStaffId stays authoritative; if telecaller has no
+  department, behaves as before (no failure). Self-heal branch re-resolves when
+  the current manager's department != telecaller's (repairs existing PAVITHRA.P
+  handoffs on next "Send to GM").
+- TESTS (outOfStationHandoffs.test.ts, +2): IT GM ordered first by employeeId →
+  new handoff resolves to the marketing GM; existing IT-GM handoff re-resolves to
+  the marketing GM on retry. 5/5 pass. convex tsc clean.
+- NOTE: the "Awaiting Confirmation" message is built client-side
+  (site-visits-list-page.tsx buildHandoffWhatsAppText, manager?.name) and shared
+  via wa.me; fixing manager resolution fixes the name shown + the GM daily task.
+
+### Session 103 - SV "Follow up" ≠ Postpone (design clarification + pending fix)
+
+**Date:** 2026-08-01
+**Session:** fork. LOG-ONLY this turn (design capture). No code changed yet.
+
+**User clarified the intended design (IMPORTANT — do not conflate these):**
+- **Postpone** = a PRE-COUNSELLING reschedule. Recreates a NEW siteVisits row for
+  the new date WITHOUT an assigned vehicle (so it needs re-assigning a vehicle).
+  Backend: `postponeSiteVisitCore` (allowed statuses scheduled/client_started/
+  picked_up/on_site only — restored in Session 97, locked by
+  siteVisitFollowupOutcome.test.ts).
+- **Follow up** = a DIFFERENT, post-SV OUTCOME. It must NOT recreate an SV / need a
+  vehicle. It records the SV outcome as follow_up AND creates a FOLLOW-UP CALL
+  task for the LMO/telecaller assigned to that client (to discuss the client's
+  decision after the SV). Backend already does this: `siteVisits.setOutcome`
+  with outcome="follow_up" completes the current SV and inserts a
+  `telecallerFollowups` row (dueDate = followupDueDate) for the assigned
+  telecaller. Allowed from on_counselling/picked_from_site/dropped.
+
+**Current bug:** the mobile "Follow up" sheet routes to `postponeSiteVisit`
+(persistSvFollowUp) → now throws "cannot postpone visit from status
+on_counselling" (screenshot). That routing is the mistake.
+
+**Pending fix (app + route; this is the Session-97 "linked app fix"):**
+- Mconnect `CompleteCpVisitBottomSheet.persistSvFollowUp` → call
+  `setSiteVisitOutcome(outcome="follow_up", followupDueDate=<nextDate>)` instead
+  of `postponeSiteVisit`. (Reason/notes → the follow-up notes.)
+- `SetSiteVisitOutcomeRequest` needs `followupDueDate`/`followupDueTime`; the
+  `/api/marketing/siteVisits/setOutcome` HTTP route (convex/http.ts ~12166) must
+  forward them (it currently drops followupDueDate — setOutcome mutation already
+  accepts them).
+- Keep Postpone as-is (pre-counselling reschedule). DO NOT re-widen
+  postponeSiteVisitCore to "fix" follow-up — that re-breaks the locked test.
+
+**MAIN CHAT NOTE:** if you touch SV follow-up/postpone on web, follow the same
+split: Follow up = setOutcome(follow_up)+telecaller task; Postpone = reschedule.
+
+### Session 114 - QR counselling: real incharge locked out under duplicate staff id
+
+**Date:** 2026-08-01
+**Session:** fork. MMS/Convex (`max`). COMMITTED + PUSHED (217b8516). NOT deployed.
+
+- Report: CHITRA.P (Site Incharge) scanned the client QR; app showed "You don't
+  have access ... contact the Site Incharge (CHITRA.P)" — told to contact
+  herself. canStartCounselling from backend = false.
+- Traced: app SiteVisitCounsellingConfirmBottomSheet trusts backend
+  visit.canStartCounselling (no client fallback for START). Backend getByQrPayload
+  → canStartCounselling = isQrOutcomeAuthorized() && status in
+  [scheduled/client_started/picked_up/on_site]. HTTP scanQr route passes
+  viewerStaffId = auth.user._id = presentAuthUser(staff)._id (a real staff id).
+  So the check IS correct; isQrOutcomeAuthorized only does
+  inchargeStaffId===staffId || bdo===staffId → fails when the SV's stored
+  incharge id and the same person's logged-in id are DIFFERENT staff records
+  (duplicate/legacy rows). Not a regression (git-blame: logic stable; recent
+  commit only moved the status check out).
+- FIX (additive, identity-scoped): after the direct-id checks, authorize when the
+  actor's normalized phone matches the assigned incharge's or BDO's phone. Only
+  ever matches the SAME person; admin/scanConsulting/direct-id/outsider paths
+  unchanged. Shared by getByQrPayload + markOnCounsellingFromQr.
+- TEST (siteVisitQrCounselling.test.ts +1): duplicate incharge (same phone, diff
+  id) → canStartCounselling=true + can markOnCounsellingFromQr; different-phone
+  outsider stays false. Existing QR test still passes. convex tsc clean.
+- CAVEAT: hypothesis is duplicate staff records. If the real cause is different
+  (e.g. she's genuinely not the assigned incharge), need the SV id + her employee
+  ids to confirm. Underlying data issue = duplicate CHITRA.P staff rows; worth a
+  dedupe.
+
+### Session 104 - Move Call client/driver to MOBILE SV overview (revert web)
+
+**Date:** 2026-08-01
+**Session:** fork. Wrong-surface correction (user uploaded wrong screenshot last time).
+
+- REVERTED the travel-desk driver-page (driver/trips/[token]/page.tsx) Call
+  client/Call driver row — restored the original single Call client below the
+  address. Committed + pushed aizen (fd52d39..2a47bc8). (trips/[id].tsx tsc error
+  seen there is the MAIN CHAT's file, not mine.)
+- ADDED Call Client | Call Driver row ABOVE the pickup address on the MOBILE SV
+  overview: fragment_site_visit_overview.xml (btnOverviewCallClient/Driver, 46dp,
+  weight-1 side-by-side, ic_phone_outline) + SiteVisitOverviewFragment.kt
+  (dialPhone via ACTION_DIAL, refreshCallButtons enable/grey-out by availability).
+  - Client phone = visit.client/lead.mobileNumber (initial: leadPhone arg).
+  - Driver phone = visit.proposedSiteVisit?.driverPhone. NOTE: getForMobileId
+    maps proposedSiteVisit = full SV doc (clientPlaceVisits.ts:1466/1527), which
+    has driverName/driverPhone → added those 2 fields to the app ProposedSiteVisit
+    model (GeoTrackApi.kt) so Gson parses them. NO backend change needed.
+  - Gotcha noted: CpVisitDetail ends at GeoTrackApi.kt:1489; the SV progress/
+    vehicle/driver fields live on ProposedSiteVisit (1501+), not CpVisitDetail.
+  - Build OK (dev-pointed APK). App-only.
+
+### Session 115 - SV stepper: Reached CP node + postponed/cancelled terminal (3 surfaces)
+
+**Date:** 2026-08-01
+**Session:** fork. All 3 repos. COMMITTED + PUSHED. Billing deferred (needs user rules).
+
+- Request: mobile stepper should match web; postponed/cancelled show reached
+  prefix + terminal node (all 3: web/travel-desk/app); add a "Reached CP" step
+  between Assigned and Picked-from-CP for internal+external fleet (cancellation +
+  waiting charges).
+- KEY FINDING (Explore agent): "Reached CP" already exists as travelDeskArrivedAt,
+  written by markArrived (both mmsFleetDriverTrips + travelDeskDriverTrips), and
+  travel-desk already shows "Reached client". Only web+app lacked the node. No
+  schema/mutation change needed. Web already had postponed/cancelled terminal
+  (terminalProgressSnapshot).
+- MMS WEB (max, 8a7031b5): added "Reached CP" to CAB_STAGES + cabDriverProgressBoost
+  (travelDeskArrivedAt branch) + re-indexed cabProgressState + consulting-gap.
+- TRAVEL-DESK (aizen, 76b710d): admin + driver steppers now collapse
+  postponed/cancelled to reached-prefix + terminal node (tripProgressView /
+  tripStageView); "Reached client" -> "Reached CP". (HEAD already had the driver
+  helper from another session; I wired the render.)
+- APP (merge, 3439971c): 9-node cab stepper (inserted Reached CP + stepLine8),
+  re-indexed mapStatusToStepIndex/computeWebParityStepIndex(+arrivedAt boost)/
+  bindStatusHeader(ForStep); added travelDeskArrivedAt to ProposedSiteVisit.
+  Refactored cab + own branches to node/line ARRAYS. Postponed/cancelled ->
+  reached prefix + relabel-next-node-as-terminal + hide-rest (supersedes
+  session-109 header-only). Removed session-109/111 early-returns; kept the
+  fleet-pending cap (now min(status,5)). compileDebugKotlin OK.
+- DEFERRED (workstream 3): billing — waiting charge (reachedCp->pickedUp) +
+  cancellation-after-reached. NO cancellation charge exists today; standing/waiting
+  is captured at markPickedFromSite by the driver + entered by agency admin.
+  Waiting for the user's rate/rule numbers.
+- TODO: on-device visual QA of the app stepper (terminal relabel/hide + Reached CP
+  spacing); MMS web visual QA (dev server wasn't started).
+
+### Session 105 - Time Correction marked Unavailable in app
+
+**Date:** 2026-08-02
+**Session:** fork. App-only (Mconnect). Env note: memory says next-spaniel-814
+REVERTED — app/web/travel-desk back on mfpl PROD, never-deploy in force. Built
+with DEFAULT (prod) URL, no dev override.
+
+- EditAttendanceBottomSheet (HR → Edit Attendance): the request-type dropdown
+  "Time Correction" option is now "Time Correction (Unavailable)"; selecting it
+  shows a toast "Time correction is currently unavailable." and stays on Remark,
+  so the correction flow (time fields + type="correction" submit) is unreachable.
+  Remark still works. Correction submit code left intact (dead) for easy
+  re-enable — comment in code documents how to restore.
+- Build :app:assembleDebug OK. No backend change.
+
+### Session 116 - Travel Desk: back-nav, Edit billing, client wait, cancellation billing + mfpl revert + pull max
+
+**Date:** 2026-08-02
+**Session:** fork. travel-desk (aizen) + web (max) + app (merge). Env back on mfpl PROD.
+
+- BACK-NAV (travel-desk): trip detail "← Back to trips" preserved the wrong tab
+  (hardcoded /trips → default). Now carries ?from=<tab> from the card +
+  Complete-billing links; back link returns to it.
+- EDIT BILLING (travel-desk): Complete-tab cards get an "Edit billing" action
+  (billing-permitted, billed trips) → ?edit=billing reopens the billing editor.
+- CLIENT WAIT (travel-desk): trip detail shows the wait duration
+  (travelDeskStartedAt - travelDeskArrivedAt), admin-only; driver link has no
+  timer, so the driver never sees it's measured.
+- CANCELLATION BILLING: additive, external-only (portal rejects internal fleet at
+  login). Backend (web/max): finalizeCancellationBilling mutation (charges-only,
+  no odometer, cancelled/no_show only) + /api/travel-desk/trips/cancellation-billing
+  http route + listAssigned visibleStatuses widened (cancelled/no_show). Core
+  finalizeBilling + cancelSiteVisitCore UNTOUCHED. Frontend: cancelled trips land
+  in Billing ("Cancelled · to bill"); detail shows a Cancellation billing card
+  (reason + "+ Add charge" + total). STAGED for the api-mfpl deploy (never-deploy).
+- ENV: reverted app + web to mfpl PROD (was next-spaniel-814 test DB). App
+  build.gradle.kts defaultBaseUrl -> api-mfpl.theairix.com; web .env/.env.local
+  MFPL block active. travel-desk already on api-mfpl.
+- PULL MAX: merged 10 commits into local max; 1 conflict in site-visit-detail-page
+  (cab stepper) resolved as 3-way: kept the 9-stage Reached-CP scheme + adopted
+  the team's terminal current:null. NOTE: pulled frontend now expects newer convex
+  (listPending statuses[]) not on mfpl prod -> validator errors on mfpl until the
+  team deploys. Typecheck clean both repos (only the pre-existing http.ts:11068
+  arrivalPhotoStorageId error).
