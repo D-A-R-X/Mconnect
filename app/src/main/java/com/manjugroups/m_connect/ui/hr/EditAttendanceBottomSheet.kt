@@ -90,15 +90,27 @@ class EditAttendanceBottomSheet : BottomSheetDialogFragment() {
         // Request Type exposed dropdown — Remark (default) | Time
         // Correction, matching the web attendance dialog. The time fields
         // only show for Time Correction.
+        // Time Correction is temporarily DISABLED — the correction/approval flow
+        // is unavailable, so the option is labelled "(Unavailable)" and selecting
+        // it just tells the user and keeps the request on Remark. (Re-enable by
+        // restoring the "Time Correction" label + `if (position == 1) "correction"`
+        // routing below.)
         binding.etRequestType.setAdapter(
             ArrayAdapter(
                 requireContext(),
                 R.layout.item_dropdown_request_type,
-                listOf("Remark", "Time Correction"),
+                listOf("Remark", "Time Correction (Unavailable)"),
             )
         )
         binding.etRequestType.setOnItemClickListener { _, _, position, _ ->
-            setRequestType(if (position == 1) "correction" else "remark")
+            if (position == 1) {
+                android.widget.Toast.makeText(
+                    requireContext(),
+                    "Time correction is currently unavailable.",
+                    android.widget.Toast.LENGTH_SHORT,
+                ).show()
+            }
+            setRequestType("remark")
         }
         setRequestType("remark")
 

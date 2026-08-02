@@ -215,6 +215,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     // linked SV's confirmationStatus stayed "pending" and the row never
     // left the Fixed tab on the web's /marketing/site-visits page.
     private var lockedCpVisit: CpVisitDetail? = null
+    // CP-assigned staff (the on-site person) from the loaded CP visit. An SV
+    // fixed from this CP defaults its Site Incharge to this staffer — so the
+    // QR scan shows the on-site incharge, NOT the telecaller who fixed it.
+    private var cpAssignedStaff: com.manjugroups.m_connect.network.CpVisitStaff? = null
 
     /**
      * "Pure SV" outcome mode. When [ARG_SITE_VISIT_ID] is set the sheet
@@ -4277,6 +4281,20 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             ?.takeIf { it.isNotEmpty() }
             ?.let(EditableTimeFormat::toStorage)
 
+        // BDO and Site Incharge are mandatory before an SV can be fixed from a
+        // CP — the QR-scan counselling flow and the SV outcome authorisation
+        // both key off them, so a missing/wrong assignment is exactly what
+        // caused the earlier "wrong incharge" confusion. Site Incharge comes
+        // from the picker (defaulting to the CP-assigned staff); BDO is the
+        // staffer fixing the SV (session.staffId → server derives BDO from it).
+        val inchargeId = svIncharge?.id ?: cpAssignedStaff?.id
+        if (inchargeId.isNullOrBlank()) {
+            return showError("Assign a Site Incharge before fixing this Site Visit")
+        }
+        if (session.staffId.isNullOrBlank()) {
+            return showError("Assign a BDO before fixing this Site Visit")
+        }
+
         btnSubmit?.isClickable = false
         btnSubmit?.text = "Saving…"
 
@@ -4311,7 +4329,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                         // inchargeStaffId.
                         telecallerId = session.staffId,
                         convertedByStaffId = session.staffId,
-                        inchargeStaffId = svIncharge?.id,
+                        // Gated above to be non-null (picker value, else the
+                        // CP-assigned staff) so the SV always has a real Site
+                        // Incharge — never the server's telecaller fallback.
+                        inchargeStaffId = inchargeId,
                         hodStaffId = svHod?.id,
                         avpStaffId = svAvp?.id,
                         gmStaffId = svGm?.id,
@@ -5878,6 +5899,9 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     )
                     return@launch
                 }
+                // Remember the CP-assigned staff so an SV fixed from this CP
+                // defaults its Site Incharge to the on-site person.
+                cpAssignedStaff = visit.assignedStaff
                 // Diagnostic dump of every signal we use to detect
                 // "this CP came from a telecaller-fixed SV". If the
                 // locked UI still doesn't activate on a known SV-fixed
@@ -6135,7 +6159,12 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             proposed.gmStaffId,
             proposed.seniorManagerStaffId,
         )
-        if (anyStaff.isEmpty()) return
+        // Also load the staff cache when we need to default the Site Incharge
+        // to the CP-assigned staff (this SV carries no incharge of its own).
+        val needCpInchargeDefault =
+            proposed.inchargeStaffId.isNullOrBlank() &&
+                !cpAssignedStaff?.id.isNullOrBlank()
+        if (anyStaff.isEmpty() && !needCpInchargeDefault) return
         if (svStaffCache.isEmpty()) {
             runCatching {
                 val resp = api.getStaff(session.bearerToken, status = "active")
@@ -6147,6 +6176,13 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
 
         byId(proposed.inchargeStaffId)?.let { svIncharge = it; tvSvIncharge?.text = it.name ?: "Selected" }
             ?: run { if (!proposed.inchargeStaffId.isNullOrBlank()) tvSvIncharge?.text = "Selected" }
+        // No Site Incharge on the SV → default it to the CP-assigned staff
+        // (the on-site person). The fixer can still change it in the picker.
+        if (svIncharge == null && needCpInchargeDefault) {
+            byId(cpAssignedStaff?.id)?.let { svIncharge = it }
+            tvSvIncharge?.text =
+                svIncharge?.name ?: cpAssignedStaff?.name ?: "Selected"
+        }
         byId(proposed.hodStaffId)?.let { svHod = it; tvSvHod?.text = it.name ?: "Selected" }
             ?: run { if (!proposed.hodStaffId.isNullOrBlank()) tvSvHod?.text = "Selected" }
         byId(proposed.avpStaffId)?.let { svAvp = it; tvSvAvp?.text = it.name ?: "Selected" }

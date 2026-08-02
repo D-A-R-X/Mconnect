@@ -49,7 +49,12 @@ class SiteVisitsFragment : Fragment() {
     private lateinit var session: SessionManager
     private var rootView: View? = null
 
-    private enum class Filter { ALL, SCHEDULED, STARTED, PICKED_UP, COMPLETED, EXPIRED }
+    // Mirrors the MMS web /marketing/site-visits pipeline tabs. All + Expired
+    // are app-only extras kept alongside the web's 8 (Fixed → Postponed).
+    private enum class Filter {
+        ALL, FIXED, SCHEDULED, ENROUTE, ONSITE, RETURNING_HOME,
+        COMPLETED, CANCELLED, POSTPONED, EXPIRED,
+    }
 
     private var allVisits: List<TodayVisit> = emptyList()
     // Gates the skeleton to the first load so refreshes / re-opens don't
@@ -212,10 +217,14 @@ class SiteVisitsFragment : Fragment() {
 
     private fun pillsAndFilters(root: View): List<Pair<TextView, Filter>> = listOf(
         root.findViewById<TextView>(R.id.pillAll) to Filter.ALL,
+        root.findViewById<TextView>(R.id.pillFixed) to Filter.FIXED,
         root.findViewById<TextView>(R.id.pillScheduled) to Filter.SCHEDULED,
-        root.findViewById<TextView>(R.id.pillStarted) to Filter.STARTED,
-        root.findViewById<TextView>(R.id.pillPickedUp) to Filter.PICKED_UP,
+        root.findViewById<TextView>(R.id.pillEnroute) to Filter.ENROUTE,
+        root.findViewById<TextView>(R.id.pillOnsite) to Filter.ONSITE,
+        root.findViewById<TextView>(R.id.pillReturningHome) to Filter.RETURNING_HOME,
         root.findViewById<TextView>(R.id.pillCompleted) to Filter.COMPLETED,
+        root.findViewById<TextView>(R.id.pillCancelled) to Filter.CANCELLED,
+        root.findViewById<TextView>(R.id.pillPostponed) to Filter.POSTPONED,
         root.findViewById<TextView>(R.id.pillExpired) to Filter.EXPIRED,
     )
 
@@ -255,21 +264,27 @@ class SiteVisitsFragment : Fragment() {
     private fun effStatus(visit: TodayVisit): String =
         (visit.rawStatus?.takeIf { it.isNotBlank() } ?: visit.status).lowercase(Locale.US)
 
-    // "Client Started" — the trip has begun but the client hasn't been
-    // picked up from the CP yet. "in-progress" is the collapsed-bucket
-    // fallback (covers client_started + picked_up when rawStatus is absent).
-    private fun isStarted(s: String): Boolean = s in setOf(
-        "client_started", "started", "in-progress", "in_progress",
+    // Enroute (web: client_started + picked_up) — the client is on the way /
+    // has been picked up from the CP but the vehicle hasn't reached the site.
+    // "in-progress" is the collapsed-bucket fallback when rawStatus is absent.
+    private fun isEnroute(s: String): Boolean = s in setOf(
+        "client_started", "started", "in-progress", "in_progress", "picked_up",
     )
 
-    // "Picked Up" — client collected from the CP and the trip is in transit
-    // through to the site and back. "arrived" is the collapsed-bucket fallback.
-    private fun isPickedUp(s: String): Boolean = s in setOf(
-        "picked_up", "on_site", "consulting", "on_counselling", "picked_from_site", "arrived",
+    // Onsite (web: on_site + on_counselling) — reached the plot / counselling.
+    // "arrived"/"consulting" are collapsed-bucket fallbacks.
+    private fun isOnsite(s: String): Boolean = s in setOf(
+        "on_site", "on_counselling", "consulting", "arrived",
     )
 
+    // Returning home (web: picked_from_site + dropped) — the return leg.
+    private fun isReturningHome(s: String): Boolean = s in setOf(
+        "picked_from_site", "dropped",
+    )
+
+    // Completed (web: completed only — "dropped" now lives in Returning home).
     private fun isCompleted(s: String): Boolean = s in setOf(
-        "dropped", "completed", "complete", "done", "closed",
+        "completed", "complete", "done", "closed",
     )
 
     private fun isCancelled(s: String): Boolean = s in setOf(
@@ -278,10 +293,20 @@ class SiteVisitsFragment : Fragment() {
 
     private fun isPostponed(s: String): Boolean = s == "postponed"
 
-    // Still awaiting its trip — not started, finished, cancelled or postponed.
+    // Still awaiting its trip — not enroute, onsite, returning, finished,
+    // cancelled or postponed.
     private fun isScheduledState(s: String): Boolean =
-        !isStarted(s) && !isPickedUp(s) && !isCompleted(s) &&
+        !isEnroute(s) && !isOnsite(s) && !isReturningHome(s) && !isCompleted(s) &&
             !isCancelled(s) && !isPostponed(s)
+
+    // Fixed (web): the SV is fixed but still awaiting CP confirmation
+    // (confirmationStatus == "pending"). Backend field is staged — until the
+    // mfpl deploy it's null everywhere, so these rows sit under Scheduled.
+    private fun isFixed(visit: TodayVisit): Boolean {
+        val s = effStatus(visit)
+        return isScheduledState(s) && !isExpiredVisit(visit) &&
+            visit.confirmationStatus?.lowercase(Locale.US) == "pending"
+    }
 
     // Expired = a still-scheduled visit whose slot has already passed. A
     // trip that has actually progressed (started/picked up/completed) is
@@ -298,11 +323,16 @@ class SiteVisitsFragment : Fragment() {
         val s = effStatus(visit)
         return when (filter) {
             Filter.ALL -> true
-            // Scheduled = genuinely upcoming (not the expired ones).
-            Filter.SCHEDULED -> isScheduledState(s) && !isExpiredVisit(visit)
-            Filter.STARTED -> isStarted(s)
-            Filter.PICKED_UP -> isPickedUp(s)
+            Filter.FIXED -> isFixed(visit)
+            // Scheduled = genuinely upcoming — not expired, not a fixed-pending one.
+            Filter.SCHEDULED ->
+                isScheduledState(s) && !isExpiredVisit(visit) && !isFixed(visit)
+            Filter.ENROUTE -> isEnroute(s)
+            Filter.ONSITE -> isOnsite(s)
+            Filter.RETURNING_HOME -> isReturningHome(s)
             Filter.COMPLETED -> isCompleted(s)
+            Filter.CANCELLED -> isCancelled(s)
+            Filter.POSTPONED -> isPostponed(s)
             Filter.EXPIRED -> isExpiredVisit(visit)
         }
     }
@@ -403,10 +433,14 @@ class SiteVisitsFragment : Fragment() {
             list.visibility = View.GONE
             empty.visibility = View.VISIBLE
             emptyTitle.text = when (currentFilter) {
+                Filter.FIXED -> "No Fixed Visits"
                 Filter.SCHEDULED -> "No Scheduled Visits"
-                Filter.STARTED -> "No Started Visits"
-                Filter.PICKED_UP -> "No Picked-Up Visits"
+                Filter.ENROUTE -> "No Enroute Visits"
+                Filter.ONSITE -> "No Onsite Visits"
+                Filter.RETURNING_HOME -> "No Returning-Home Visits"
                 Filter.COMPLETED -> "No Completed Visits"
+                Filter.CANCELLED -> "No Cancelled Visits"
+                Filter.POSTPONED -> "No Postponed Visits"
                 Filter.EXPIRED -> "No Expired Visits"
                 Filter.ALL -> if (searchQuery.isBlank()) "No Site Visits Yet" else "No Matches Found"
             }
@@ -544,16 +578,25 @@ class SiteVisitsFragment : Fragment() {
                 paintPill("Outcome Pending", R.drawable.bg_home_trip_status_progress, "#B54708", "#B54708")
             isCompleted(s) ->
                 paintPill("Completed", R.drawable.bg_sv_status_green, "#027A48", "#027A48")
-            isStarted(s) ->
-                paintPill("Client Started", R.drawable.bg_sv_status_orange, "#B54708", "#B54708")
-            isPickedUp(s) -> {
+            isReturningHome(s) -> {
+                val label = when (s) {
+                    "picked_from_site" -> "Picked from site"
+                    "dropped" -> "Dropped"
+                    else -> "Returning home"
+                }
+                paintPill(label, R.drawable.bg_sv_status_orange, "#B54708", "#B54708")
+            }
+            isOnsite(s) -> {
                 val label = when (s) {
                     "on_site" -> "On site"
                     "consulting", "on_counselling" -> "On counselling"
-                    "picked_from_site" -> "Picked from site"
                     "arrived" -> "Reaching"
-                    else -> "Picked up"
+                    else -> "Onsite"
                 }
+                paintPill(label, R.drawable.bg_sv_status_orange, "#B54708", "#B54708")
+            }
+            isEnroute(s) -> {
+                val label = if (s == "picked_up") "Picked up" else "Client started"
                 paintPill(label, R.drawable.bg_sv_status_orange, "#B54708", "#B54708")
             }
             // A still-scheduled visit whose slot has already passed is expired,

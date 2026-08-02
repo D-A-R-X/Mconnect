@@ -1517,6 +1517,9 @@ data class ProposedSiteVisit(
     val travelMode: String? = null,
     val vehicleId: String? = null,
     val travelAgencyId: String? = null,
+    // Cab driver contact (for the "Call driver" button on the SV overview).
+    val driverName: String? = null,
+    val driverPhone: String? = null,
     val pickedUpAt: Long? = null,
     val arrivedSiteAt: Long? = null,
     val consultingAt: Long? = null,
@@ -1524,6 +1527,7 @@ data class ProposedSiteVisit(
     val pickedFromSiteAt: Long? = null,
     val droppedAt: Long? = null,
     val completedAt: Long? = null,
+    val travelDeskArrivedAt: Long? = null,
     val travelDeskStartedAt: Long? = null,
     val travelDeskOnSiteAt: Long? = null,
     val travelDeskPickedFromSiteAt: Long? = null,
@@ -1790,6 +1794,11 @@ data class TodayVisit(
     // then record the outcome from their mobile app.
     val completedOffline: Boolean? = null,
     val outcome: String? = null,
+    // Confirmation state of a fixed SV — "pending" (awaiting CP verification)
+    // or "confirmed". Drives the SV list "Fixed" tab (parity with the web
+    // pipeline). Staged on the backend mobile mapper; null on rows that
+    // predate that deploy, in which case the row falls under Scheduled.
+    val confirmationStatus: String? = null,
 )
 
 data class CpVisitState(
