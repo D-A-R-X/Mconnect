@@ -5673,3 +5673,71 @@ main-chat edits.
   — belt-and-suspenders. NOTE: no separate BDO picker exists (BDO = the fixer).
 - Build: :app:compileDebugKotlin SUCCESSFUL. Convex tsc clean (only pre-existing
   http.ts:11068 arrivalPhotoStorageId).
+
+### Session 118 - Travel Desk summary-modal "Edit billing" + reassign wording + standing log rule
+
+**Date:** 2026-08-02
+**Session:** fork. travel-desk (aizen) + web (max, uncommitted). mfpl prod.
+
+- TRAVEL-DESK (aizen, uncommitted): added an "Edit billing" button inside the
+  Complete-tab "View summary" modal (trips/page.tsx). Gated on canBill +
+  travelDeskBillingCompletedAt != null; closes the modal and router.push →
+  /trips/{id}?from=complete&edit=billing (reuses the detail billing editor —
+  no duplicate inline form). tsc clean.
+- WEB (max, uncommitted): ACTIVE_SV_STATUSES widened with on_counselling +
+  picked_from_site + dropped so a mid-flight reassign reads as a live "Handover"
+  (was "Reassigned"). Wording-only; the set is referenced ONLY by
+  notifySiteVisitReassignment (verified). convex tsc: no new errors (pre-existing
+  http.ts:11068 + a pull-introduced whatsappInbound.ts:201 remain).
+- VERIFICATIONS done this session (no code change): correctOutcome guard (perm +
+  triple-blocked after convertToBooking); listPending shows only
+  confirmationStatus=="pending" (index-level, no auto_confirmed leak);
+  createAndSendWhatsApp (SV survives WA failure — send is swallowed, 3x idempotent
+  retry, no durable re-send); reassign notification (resolveSvStaffAssignments +
+  incoming/outgoing dedup + mutation-safe push scheduling).
+- NEW STANDING RULE (user): update AGENT_LOG.md every chat response.
+
+### Session 106 - Remove "Expired" feature from SV + CP lists
+
+**Date:** 2026-08-02
+**Session:** fork. App-only (Mconnect). Built with DEFAULT prod URL (env reverted
+to mfpl per memory). Uncommitted.
+
+- SV (SiteVisitsFragment): removed the Expired filter tab (dropped pillExpired
+  from pillsAndFilters map + hide pillExpired visibility=GONE in setupFilterPills)
+  AND stubbed isExpiredVisit() -> false. Result: no Expired tab, no "Expired"
+  badge; a past-slot scheduled SV now shows under Scheduled. Filter enum EXPIRED +
+  "No Expired Visits" empty-state + the paintPill("Expired") branch left as dead
+  code (unreachable) for easy re-enable.
+- CP (CpVisitsFragment): removed the VisitExpiry.isExpired `when` branch (statusText/
+  actionLabel "Expired", tapMode NONE) — a past-slot CP now falls through to its
+  normal live status (Need to Clock In / Start Trip) instead of "Expired".
+- Build :app:assembleDebug OK. No backend change. VisitExpiry util untouched
+  (still used elsewhere if any).
+
+### Session 118 - SV edge-case audit (12 items) + docs/sv-flow.md
+
+**Date:** 2026-08-02
+**Session:** fork. Web (manjusitedevelopment/max) verification + docs. mfpl prod.
+
+- Audited the 12 SV edge cases from the D-A-R-X GitHub issue (assigned @D-A-R-X,
+  verifier @SafeerMohamed). Each is a fix or a documented no-fix decision.
+- CODE FIXES (2, siteVisits.ts, committed max 22aa56bc):
+  - markPickedUp rejects travelMode==="own_vehicle" (use markClientStarted). Cab /
+    external / unallocated (IRIS) untouched — narrow guard, no IRIS/allocation break.
+  - ACTIVE_SV_STATUSES widened (adds on_counselling, picked_from_site, dropped) so a
+    mid-flight reassign reads "Handover" not "Reassigned". Wording only; used solely
+    by notifySiteVisitReassignment.
+- VERIFIED-CORRECT (no change): correctOutcome guard (perm + post-booking triple
+  block), listPending (by_confirmationStatus eq "pending", no auto_confirmed literal),
+  createAndSendWhatsApp (SV survives, swallowed, 3x idempotent retry), reassign
+  notify (incoming+outgoing, resolveSvStaffAssignments, push is fire-and-forget so
+  no rollback), advanceCabLifecycle IAM gate (marketing.siteVisits.updateCabLifecycle;
+  11/11 tests), IRIS convertToSiteVisit (atomic status:"converted"+convertedSiteVisitId,
+  idempotent), rollup integrity (all 5 status mutations call patchSiteVisitStatsForChange;
+  postpone twice). Prior-session fixes confirmed: postpone close sets confirmationStatus
+  confirmed; remindStaleCounsellingOutcomes 6h cron for >24h on_counselling.
+- TESTS: npx vitest run convex/siteVisit -> 7 files / 25 tests all pass.
+- DOC: created docs/sv-flow.md (Day-1 doc never existed) — lifecycle, tracks,
+  confirmationStatus, rollups, notifications, IRIS, + the 12 edge-case decisions.
+- Drafted the GitHub reply for the issue (all comms in GH per the issue).
