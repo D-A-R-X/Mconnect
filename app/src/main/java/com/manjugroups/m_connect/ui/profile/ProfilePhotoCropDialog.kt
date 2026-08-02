@@ -2,14 +2,17 @@ package com.manjugroups.m_connect.ui.profile
 
 import android.app.Dialog
 import android.graphics.Bitmap
+import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.Window
+import android.view.WindowManager
 import androidx.fragment.app.DialogFragment
 import androidx.lifecycle.lifecycleScope
+import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.databinding.DialogProfilePhotoCropBinding
 import com.manjugroups.m_connect.ui.chat.MediaEditView
 import kotlinx.coroutines.Dispatchers
@@ -43,6 +46,13 @@ class ProfilePhotoCropDialog : DialogFragment() {
         listener = l
     }
 
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // Dialog styling must be applied before Android creates the window.
+        // Applying this in onCreateView leaves the cropper at floating-dialog width.
+        setStyle(STYLE_NORMAL, R.style.ProfilePhotoCropDialogTheme)
+    }
+
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val dialog = super.onCreateDialog(savedInstanceState)
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
@@ -54,9 +64,19 @@ class ProfilePhotoCropDialog : DialogFragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-        setStyle(STYLE_NORMAL, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
         _binding = DialogProfilePhotoCropBinding.inflate(inflater, container, false)
         return binding.root
+    }
+
+    override fun onStart() {
+        super.onStart()
+        dialog?.window?.apply {
+            setBackgroundDrawable(ColorDrawable(android.graphics.Color.TRANSPARENT))
+            setLayout(
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.MATCH_PARENT
+            )
+        }
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {

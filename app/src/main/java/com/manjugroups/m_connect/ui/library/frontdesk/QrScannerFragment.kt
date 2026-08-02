@@ -23,6 +23,7 @@ import androidx.fragment.app.setFragmentResultListener
 import androidx.activity.result.contract.ActivityResultContracts
 import com.google.mlkit.vision.barcode.BarcodeScanner
 import com.google.mlkit.vision.barcode.BarcodeScanning
+import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import com.manjugroups.m_connect.R
@@ -37,7 +38,11 @@ import com.manjugroups.m_connect.network.SiteVisitIdRequest
 import com.manjugroups.m_connect.network.SiteVisitQrScanRequest
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withContext
 import com.manjugroups.m_connect.BuildConfig
 import okhttp3.MediaType.Companion.toMediaType
@@ -69,8 +74,15 @@ class QrScannerFragment : Fragment() {
     private var cameraProvider: ProcessCameraProvider? = null
     private var isScanningActive = true
     private var laserAnimator: ObjectAnimator? = null
-    private val barcodeScanner: BarcodeScanner by lazy { BarcodeScanning.getClient() }
+    private val barcodeScanner: BarcodeScanner by lazy {
+        BarcodeScanning.getClient(
+            BarcodeScannerOptions.Builder()
+                .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+                .build()
+        )
+    }
     private var statusBarHeight = 0
+    private var siteVisitScanJob: Job? = null
 
     private val api by lazy { ApiService.create() }
     private val geoTrackApi by lazy { GeoTrackApi.create() }
@@ -382,12 +394,11 @@ class QrScannerFragment : Fragment() {
     }
 
     private fun confirmSiteVisitConsulting(siteVisitId: String) {
-        viewLifecycleOwner.lifecycleScope.launch {
+        siteVisitScanJob?.cancel()
+        showSiteVisitLoading(true)
+        siteVisitScanJob = viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val response = geoTrackApi.scanSiteVisitQr(
-                    session.bearerToken,
-                    SiteVisitQrScanRequest("SV:$siteVisitId"),
-                )
+                val response = loadSiteVisitQrWithRetry(siteVisitId)
                 val visit = response.visit
                 if (!response.success || visit == null) {
                     throw IllegalStateException(response.error ?: "Unable to validate this SV QR")
@@ -451,14 +462,47 @@ class QrScannerFragment : Fragment() {
                 ).showOnce(parentFragmentManager, "SiteVisitCounsellingConfirmBottomSheet")
             } catch (error: Exception) {
                 if (_binding == null) return@launch
+                val message = if (error is TimeoutCancellationException) {
+                    "The SV details are taking too long to load. Check the connection and scan again."
+                } else {
+                    error.message ?: "This SV QR could not be confirmed"
+                }
                 Toast.makeText(
                     requireContext(),
-                    error.message ?: "This SV QR could not be confirmed",
+                    message,
                     Toast.LENGTH_LONG,
                 ).show()
                 resumeScanning()
+            } finally {
+                showSiteVisitLoading(false)
+                siteVisitScanJob = null
             }
         }
+    }
+
+    private suspend fun loadSiteVisitQrWithRetry(siteVisitId: String): com.manjugroups.m_connect.network.SiteVisitQrScanResponse {
+        var lastError: Exception? = null
+        repeat(2) { attempt ->
+            try {
+                return withTimeout(SV_SCAN_TIMEOUT_MS) {
+                    geoTrackApi.scanSiteVisitQr(
+                        session.bearerToken,
+                        SiteVisitQrScanRequest("SV:$siteVisitId"),
+                    )
+                }
+            } catch (error: Exception) {
+                lastError = error
+                val retryable = error is java.io.IOException || error is TimeoutCancellationException
+                if (!retryable || attempt == 1) throw error
+                delay(SV_SCAN_RETRY_DELAY_MS)
+            }
+        }
+        throw lastError ?: IllegalStateException("Unable to load this SV")
+    }
+
+    private fun showSiteVisitLoading(show: Boolean) {
+        val currentBinding = _binding ?: return
+        currentBinding.siteVisitScanLoading.visibility = if (show) View.VISIBLE else View.GONE
     }
 
     /** Open the SV outcome page for a visit already on counselling — no status
@@ -536,6 +580,7 @@ class QrScannerFragment : Fragment() {
     /** Hide the verification sheet and resume live scanning. */
     private fun resumeScanning() {
         if (_binding == null) return
+        showSiteVisitLoading(false)
         currentInvitationId = null
         binding.visitorVerificationContainer.visibility = View.GONE
         binding.laserLine.visibility = View.VISIBLE
@@ -1089,8 +1134,16 @@ class QrScannerFragment : Fragment() {
 
     override fun onDestroyView() {
         super.onDestroyView()
+        siteVisitScanJob?.cancel()
+        siteVisitScanJob = null
         laserAnimator?.cancel()
+        barcodeScanner.close()
         cameraExecutor.shutdown()
         _binding = null
+    }
+
+    private companion object {
+        const val SV_SCAN_TIMEOUT_MS = 10_000L
+        const val SV_SCAN_RETRY_DELAY_MS = 400L
     }
 }

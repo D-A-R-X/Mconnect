@@ -225,10 +225,11 @@ class SiteVisitsFragment : Fragment() {
         root.findViewById<TextView>(R.id.pillCompleted) to Filter.COMPLETED,
         root.findViewById<TextView>(R.id.pillCancelled) to Filter.CANCELLED,
         root.findViewById<TextView>(R.id.pillPostponed) to Filter.POSTPONED,
-        root.findViewById<TextView>(R.id.pillExpired) to Filter.EXPIRED,
     )
 
     private fun setupFilterPills(root: View) {
+        // Expired feature removed — hide its filter tab.
+        root.findViewById<View>(R.id.pillExpired)?.visibility = View.GONE
         pillsAndFilters(root).forEach { (pill, filter) ->
             pill?.setOnClickListener {
                 if (currentFilter != filter) {
@@ -311,13 +312,10 @@ class SiteVisitsFragment : Fragment() {
     // Expired = a still-scheduled visit whose slot has already passed. A
     // trip that has actually progressed (started/picked up/completed) is
     // never "expired", even if its scheduled time is in the past.
-    private fun isExpiredVisit(visit: TodayVisit): Boolean {
-        if (!isScheduledState(effStatus(visit))) return false
-        return com.manjugroups.m_connect.util.VisitExpiry.isExpired(
-            visit.scheduledDate, visit.scheduledStartTime, isDone = false,
-            createdAtMillis = visit.creationTime?.toLong(),
-        )
-    }
+    // Expired feature removed: a past-slot scheduled visit is no longer flagged
+    // "Expired" (it just shows under Scheduled). Kept as a no-op so the filter /
+    // pill callers stay intact and this is trivial to re-enable.
+    private fun isExpiredVisit(@Suppress("UNUSED_PARAMETER") visit: TodayVisit): Boolean = false
 
     private fun matchesFilter(visit: TodayVisit, filter: Filter): Boolean {
         val s = effStatus(visit)
