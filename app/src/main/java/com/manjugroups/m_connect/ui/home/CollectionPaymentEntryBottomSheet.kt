@@ -1,5 +1,6 @@
 package com.manjugroups.m_connect.ui.home
 
+import android.app.DatePickerDialog
 import android.app.Dialog
 import android.content.ContentResolver
 import android.graphics.Color
@@ -31,6 +32,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.util.Calendar
+import java.util.Locale
 
 /**
  * Payment Entry sheet — Collection CP Yes path.
@@ -144,7 +147,12 @@ class CollectionPaymentEntryBottomSheet : BottomSheetDialogFragment() {
         val etBooking = view.findViewById<EditText>(R.id.etCustomerBooking)
         val etAmount = view.findViewById<EditText>(R.id.etCollectionAmount)
         val etMode = view.findViewById<EditText>(R.id.etCollectionMode)
+        val tvReferenceLabel = view.findViewById<TextView>(R.id.tvCollectionReferenceLabel)
         val etReference = view.findViewById<EditText>(R.id.etCollectionReference)
+        val instrumentFields = view.findViewById<LinearLayout>(R.id.collectionInstrumentFields)
+        val etBankName = view.findViewById<EditText>(R.id.etCollectionBankName)
+        val etBranchName = view.findViewById<EditText>(R.id.etCollectionBranchName)
+        val etInstrumentDate = view.findViewById<EditText>(R.id.etCollectionInstrumentDate)
         val etNotes = view.findViewById<EditText>(R.id.etCollectionNotes)
         val btnCancel = view.findViewById<Button>(R.id.btnCancelCollection)
         val btnSubmit = view.findViewById<Button>(R.id.btnSubmitCollection)
@@ -155,6 +163,25 @@ class CollectionPaymentEntryBottomSheet : BottomSheetDialogFragment() {
         val tvProofName = view.findViewById<TextView>(R.id.tvProofFileName)
         val tvProofSize = view.findViewById<TextView>(R.id.tvProofFileSize)
         val btnRemoveProof = view.findViewById<Button>(R.id.btnRemoveProof)
+
+        fun renderModeFields() {
+            val isCash = selectedMode.id == "cash"
+            val isInstrument = selectedMode.id == "cheque" || selectedMode.id == "dd"
+            tvReferenceLabel.text = when {
+                isCash -> "Reference (optional)"
+                isInstrument -> "${selectedMode.label} number *"
+                else -> "Transaction ID *"
+            }
+            etReference.hint = when {
+                isCash -> "Optional receipt / reference"
+                isInstrument -> "Enter ${selectedMode.label} number"
+                else -> "UTR / transaction reference"
+            }
+            instrumentFields.visibility = if (isInstrument) View.VISIBLE else View.GONE
+        }
+
+        etMode.setText(selectedMode.label)
+        renderModeFields()
 
         // Auto-pick the first booking when there's only one — mirrors
         // the web flow where the Customer dropdown still shows the row
@@ -200,7 +227,23 @@ class CollectionPaymentEntryBottomSheet : BottomSheetDialogFragment() {
             ) { picked ->
                 selectedMode = picked
                 etMode.setText(picked.label)
+                renderModeFields()
             }
+        }
+
+        etInstrumentDate.setOnClickListener {
+            val today = Calendar.getInstance()
+            DatePickerDialog(
+                requireContext(),
+                { _, year, month, day ->
+                    etInstrumentDate.setText(
+                        String.format(Locale.US, "%04d-%02d-%02d", year, month + 1, day),
+                    )
+                },
+                today.get(Calendar.YEAR),
+                today.get(Calendar.MONTH),
+                today.get(Calendar.DAY_OF_MONTH),
+            ).show()
         }
 
         dropZone.setOnClickListener { pickProofLauncher.launch("*/*") }
@@ -249,8 +292,17 @@ class CollectionPaymentEntryBottomSheet : BottomSheetDialogFragment() {
                 return@setOnClickListener
             }
             val reference = etReference.text?.toString()?.trim().orEmpty()
-            if (reference.isBlank()) {
+            val isCash = selectedMode.id == "cash"
+            val isInstrument = selectedMode.id == "cheque" || selectedMode.id == "dd"
+            if (!isCash && reference.isBlank()) {
                 toast("Transaction ID is required (UTR / Cheque / Ref no)")
+                return@setOnClickListener
+            }
+            val bankName = etBankName.text?.toString()?.trim().orEmpty()
+            val branchName = etBranchName.text?.toString()?.trim().orEmpty()
+            val instrumentDate = etInstrumentDate.text?.toString()?.trim().orEmpty()
+            if (isInstrument && (bankName.isBlank() || branchName.isBlank() || instrumentDate.isBlank())) {
+                toast("Enter bank, branch and cheque/DD date")
                 return@setOnClickListener
             }
             val notes = etNotes.text?.toString()?.trim().orEmpty()
@@ -276,6 +328,9 @@ class CollectionPaymentEntryBottomSheet : BottomSheetDialogFragment() {
                             KEY_PAYMENT_MODE to selectedMode.id,
                             KEY_PAYMENT_MODE_LABEL to selectedMode.label,
                             KEY_TRANSACTION_REF to reference,
+                            KEY_BANK_NAME to bankName,
+                            KEY_BRANCH_NAME to branchName,
+                            KEY_INSTRUMENT_DATE to instrumentDate,
                             KEY_NOTES to notes,
                             KEY_PROOF_STORAGE_ID to (storageId.orEmpty()),
                             KEY_PROOF_FILE_NAME to (proofFileName.orEmpty()),
@@ -389,6 +444,9 @@ class CollectionPaymentEntryBottomSheet : BottomSheetDialogFragment() {
         const val KEY_PAYMENT_MODE = "payment_mode"
         const val KEY_PAYMENT_MODE_LABEL = "payment_mode_label"
         const val KEY_TRANSACTION_REF = "transaction_ref"
+        const val KEY_BANK_NAME = "bank_name"
+        const val KEY_BRANCH_NAME = "branch_name"
+        const val KEY_INSTRUMENT_DATE = "instrument_date"
         const val KEY_NOTES = "notes"
         const val KEY_PROOF_STORAGE_ID = "proof_storage_id"
         const val KEY_PROOF_FILE_NAME = "proof_file_name"

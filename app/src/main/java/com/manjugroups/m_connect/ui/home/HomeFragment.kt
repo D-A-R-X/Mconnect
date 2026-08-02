@@ -1739,6 +1739,8 @@ class HomeFragment : Fragment() {
                     title = visit.placeName ?: "Site visit",
                     whenText = whenText,
                     address = visit.placeAddress.orEmpty(),
+                    pickupLat = visit.placeLat,
+                    pickupLng = visit.placeLng,
                     vehicle = "",
                     phase = visit.status,
                     canOperateToday = visit.scheduledDate == today,

@@ -495,6 +495,11 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var btnSvTravelOwn: TextView? = null
     private var btnSvTravelCab: TextView? = null
     private var etSvPickupAddress: EditText? = null
+    private var btnSvPickupMap: TextView? = null
+    private var tvSvPickupPin: TextView? = null
+    private var svPickupLat: Double? = null
+    private var svPickupLng: Double? = null
+    private var svPickupMapsLink: String? = null
     private var tvSvIncharge: TextView? = null
     private var tvSvHod: TextView? = null
     private var tvSvAvp: TextView? = null
@@ -1267,6 +1272,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         btnSvTravelOwn = view.findViewById(R.id.btnSvTravelOwn)
         btnSvTravelCab = view.findViewById(R.id.btnSvTravelCab)
         etSvPickupAddress = view.findViewById(R.id.etSvPickupAddress)
+        btnSvPickupMap = view.findViewById(R.id.btnSvPickupMap)
+        tvSvPickupPin = view.findViewById(R.id.tvSvPickupPin)
         tvSvIncharge = view.findViewById(R.id.tvSvIncharge)
         tvSvHod = view.findViewById(R.id.tvSvHod)
         tvSvAvp = view.findViewById(R.id.tvSvAvp)
@@ -1274,6 +1281,19 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         tvSvSm = view.findViewById(R.id.tvSvSm)
         etSvVisitorCount = view.findViewById(R.id.etSvVisitorCount)
         siteVisitorRows = view.findViewById(R.id.siteVisitorRows)
+    }
+
+    private fun renderSvPickupPin() {
+        val lat = svPickupLat
+        val lng = svPickupLng
+        tvSvPickupPin?.apply {
+            if (lat == null || lng == null) {
+                visibility = View.GONE
+            } else {
+                text = "Pinned: ${String.format(java.util.Locale.US, "%.5f, %.5f", lat, lng)}"
+                visibility = View.VISIBLE
+            }
+        }
     }
 
     // ---- Wire all interactions -----------------------------------------
@@ -1723,6 +1743,21 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
 
         btnSvTravelOwn?.setOnClickListener { setTravelMode("own_vehicle") }
         btnSvTravelCab?.setOnClickListener { setTravelMode("cab") }
+        btnSvPickupMap?.setOnClickListener {
+            val sheet = com.manjugroups.m_connect.ui.common.MapPinDropBottomSheet
+                .newInstance(svPickupLat, svPickupLng)
+            sheet.setListener { result ->
+                svPickupLat = result.lat
+                svPickupLng = result.lng
+                svPickupMapsLink = result.googleMapsLink
+                etSvPickupAddress?.setText(result.address)
+                tvSvPickupPin?.apply {
+                    text = "Pinned: ${result.address.ifBlank { result.googleMapsLink }}"
+                    visibility = View.VISIBLE
+                }
+            }
+            sheet.showOnce(parentFragmentManager, "sv_pickup_map_pin")
+        }
 
         // Each keystroke in the visitor count rebuilds the visitor card list.
         etSvVisitorCount?.addTextChangedListener(object : android.text.TextWatcher {
@@ -4342,6 +4377,9 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                         attendees = collectVisitors().takeIf { it.isNotEmpty() },
                         pickupAddress = etSvPickupAddress?.text?.toString()?.trim()
                             ?.takeIf { it.isNotEmpty() },
+                        pickupLat = svPickupLat,
+                        pickupLng = svPickupLng,
+                        pickupGoogleMapsLink = svPickupMapsLink,
                         travelMode = svTravelMode,
                         notes = "Created from mobile CP visit",
                     ),
@@ -6049,6 +6087,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     ?: "",
             )
         }
+        svPickupLat = visit.clientPlace?.lat
+        svPickupLng = visit.clientPlace?.lng
+        svPickupMapsLink = visit.clientPlace?.googleMapsLink
+        renderSvPickupPin()
 
         // Project picker: prefer the CP's own projectId (set by the
         // mobile/web Create CP form's Project picker), then fall back
@@ -6107,6 +6149,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 ?: visit.lead?.preferredArea
                 ?: "",
         )
+        svPickupLat = visit.clientPlace?.lat
+        svPickupLng = visit.clientPlace?.lng
+        svPickupMapsLink = visit.clientPlace?.googleMapsLink
+        renderSvPickupPin()
 
         // Resolve project + staff names from the caches (load them if
         // they're cold so the labels render as something meaningful

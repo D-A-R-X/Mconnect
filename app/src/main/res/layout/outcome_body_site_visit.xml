@@ -144,6 +144,30 @@
         android:textColorHint="#94A3B8"
         android:textSize="13sp" />
 
+    <TextView
+        android:id="@+id/btnSvPickupMap"
+        android:layout_width="match_parent"
+        android:layout_height="46dp"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/bg_outcome_secondary_button"
+        android:clickable="true"
+        android:focusable="true"
+        android:fontFamily="@font/inter_semibold"
+        android:gravity="center"
+        android:text="Search address and drop pin"
+        android:textColor="#0B61CA"
+        android:textSize="13sp" />
+
+    <TextView
+        android:id="@+id/tvSvPickupPin"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:fontFamily="@font/inter_medium"
+        android:textColor="#667085"
+        android:textSize="11sp"
+        android:visibility="gone" />
+
     <!-- Business Development Organisation (read-only "Keep Original") -->
     <TextView
         style="@style/OutcomeFieldLabel"

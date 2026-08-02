@@ -33,8 +33,8 @@ import kotlinx.coroutines.withContext
 
 /**
  * A CP-style detail screen for one external-agency trip: a map pinned on the
- * client location (geocoded from the pickup address, since the trip payload
- * carries no coordinates), the trip details, and the single lifecycle action.
+ * client location (using the canonical saved coordinates, with address
+ * geocoding only for legacy trips), the trip details, and the lifecycle action.
  *
  * Not started → "Start Trip" opens the capture sheet (dashboard photo + start
  * km). Started → "End Trip" opens the closing capture. Completed → read-only.
@@ -65,6 +65,11 @@ class AgencyDriverTripDetailFragment : Fragment(), OnMapReadyCallback {
     private val title get() = requireArguments().getString(ARG_TITLE).orEmpty()
     private val whenText get() = requireArguments().getString(ARG_WHEN).orEmpty()
     private val address get() = requireArguments().getString(ARG_ADDRESS).orEmpty()
+    private val pickupLat get() = requireArguments().takeIf { it.containsKey(ARG_PICKUP_LAT) }
+        ?.getDouble(ARG_PICKUP_LAT)
+    private val pickupLng get() = requireArguments().takeIf { it.containsKey(ARG_PICKUP_LNG) }
+        ?.getDouble(ARG_PICKUP_LNG)
+    private val pickupMapsLink get() = requireArguments().getString(ARG_PICKUP_MAPS_LINK).orEmpty()
     private val vehicle get() = requireArguments().getString(ARG_VEHICLE).orEmpty()
     private val canOperateToday get() = requireArguments().getBoolean(ARG_CAN_OPERATE, true)
 
@@ -103,6 +108,11 @@ class AgencyDriverTripDetailFragment : Fragment(), OnMapReadyCallback {
         session = SessionManager(requireContext())
         currentPhase = requireArguments().getString(ARG_PHASE).orEmpty()
         onSiteAtMs = requireArguments().getLong(ARG_ONSITE_AT, 0L)
+        val savedLat = pickupLat
+        val savedLng = pickupLng
+        if (savedLat != null && savedLng != null && savedLat.isFinite() && savedLng.isFinite()) {
+            marker = LatLng(savedLat, savedLng)
+        }
 
         binding.tvDetailProgress.text = phaseLabel(currentPhase)
         renderStages()
@@ -115,7 +125,7 @@ class AgencyDriverTripDetailFragment : Fragment(), OnMapReadyCallback {
         mapView = binding.mapViewAgencyTrip
         mapView?.onCreate(savedInstanceState)
         mapView?.getMapAsync(this)
-        geocodeAddress()
+        if (marker == null) geocodeAddress()
 
         renderAction()
         // Internal trips are opened from Home with only the visit status as the
@@ -379,8 +389,11 @@ class AgencyDriverTripDetailFragment : Fragment(), OnMapReadyCallback {
     }
 
     private fun openMaps() {
-        val q = Uri.encode(address.ifBlank { title })
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=$q"))
+        val target = pickupMapsLink.ifBlank {
+            marker?.let { "https://www.google.com/maps/search/?api=1&query=${it.latitude},${it.longitude}" }
+                ?: "geo:0,0?q=${Uri.encode(address.ifBlank { title })}"
+        }
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(target))
         runCatching { startActivity(intent) }
     }
 
@@ -423,6 +436,9 @@ class AgencyDriverTripDetailFragment : Fragment(), OnMapReadyCallback {
         private const val ARG_TITLE = "arg_title"
         private const val ARG_WHEN = "arg_when"
         private const val ARG_ADDRESS = "arg_address"
+        private const val ARG_PICKUP_LAT = "arg_pickup_lat"
+        private const val ARG_PICKUP_LNG = "arg_pickup_lng"
+        private const val ARG_PICKUP_MAPS_LINK = "arg_pickup_maps_link"
         private const val ARG_VEHICLE = "arg_vehicle"
         private const val ARG_PHASE = "arg_phase"
         private const val ARG_CAN_OPERATE = "arg_can_operate"
@@ -434,6 +450,9 @@ class AgencyDriverTripDetailFragment : Fragment(), OnMapReadyCallback {
             title: String,
             whenText: String,
             address: String,
+            pickupLat: Double? = null,
+            pickupLng: Double? = null,
+            pickupMapsLink: String? = null,
             vehicle: String,
             phase: String,
             canOperateToday: Boolean,
@@ -446,6 +465,11 @@ class AgencyDriverTripDetailFragment : Fragment(), OnMapReadyCallback {
                 putString(ARG_TITLE, title)
                 putString(ARG_WHEN, whenText)
                 putString(ARG_ADDRESS, address)
+                if (pickupLat != null && pickupLng != null) {
+                    putDouble(ARG_PICKUP_LAT, pickupLat)
+                    putDouble(ARG_PICKUP_LNG, pickupLng)
+                }
+                putString(ARG_PICKUP_MAPS_LINK, pickupMapsLink)
                 putString(ARG_VEHICLE, vehicle)
                 putString(ARG_PHASE, phase)
                 putBoolean(ARG_CAN_OPERATE, canOperateToday)

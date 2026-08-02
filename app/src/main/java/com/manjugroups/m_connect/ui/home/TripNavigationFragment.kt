@@ -1852,6 +1852,9 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         val mode = bundle.getString(CollectionPaymentEntryBottomSheet.KEY_PAYMENT_MODE).orEmpty()
         val modeLabel = bundle.getString(CollectionPaymentEntryBottomSheet.KEY_PAYMENT_MODE_LABEL).orEmpty()
         val reference = bundle.getString(CollectionPaymentEntryBottomSheet.KEY_TRANSACTION_REF).orEmpty()
+        val bankName = bundle.getString(CollectionPaymentEntryBottomSheet.KEY_BANK_NAME).orEmpty()
+        val branchName = bundle.getString(CollectionPaymentEntryBottomSheet.KEY_BRANCH_NAME).orEmpty()
+        val instrumentDate = bundle.getString(CollectionPaymentEntryBottomSheet.KEY_INSTRUMENT_DATE).orEmpty()
         val notes = bundle.getString(CollectionPaymentEntryBottomSheet.KEY_NOTES).orEmpty()
         val proofStorageId = bundle.getString(CollectionPaymentEntryBottomSheet.KEY_PROOF_STORAGE_ID).orEmpty()
         val proofFileName = bundle.getString(CollectionPaymentEntryBottomSheet.KEY_PROOF_FILE_NAME).orEmpty()
@@ -1868,10 +1871,14 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 val submitResp = geoApi.submitCustomerCollection(
                     session.bearerToken,
                     com.manjugroups.m_connect.network.SubmitCollectionRequest(
+                        cpVisitId = cpId,
                         caseId = caseId,
                         amount = amount,
                         paymentMode = mode,
                         transactionReference = reference.takeIf { it.isNotBlank() },
+                        bankName = bankName.takeIf { it.isNotBlank() },
+                        branchName = branchName.takeIf { it.isNotBlank() },
+                        paymentInstrumentDate = instrumentDate.takeIf { it.isNotBlank() },
                         proofStorageId = proofStorageId.takeIf { it.isNotBlank() },
                         proofFileName = proofFileName.takeIf { it.isNotBlank() },
                         notes = notes.takeIf { it.isNotBlank() },
@@ -2429,7 +2436,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 val terminalOutcome = when {
                     isGiftDistribution -> "gift_distributed"
                     isOldClient -> "old_client_visited"
-                    isCollectionCp -> "collection_done"
+                    isCollectionCp -> "not_collected"
                     else -> "other"
                 }
 

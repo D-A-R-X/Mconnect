@@ -964,6 +964,9 @@ data class ConvertCpVisitToSiteVisitRequest(
     val expectedAttendeeCount: Int? = null,
     val attendees: List<SiteVisitAttendeeRequest>? = null,
     val pickupAddress: String? = null,
+    val pickupLat: Double? = null,
+    val pickupLng: Double? = null,
+    val pickupGoogleMapsLink: String? = null,
     val pickupTime: String? = null,
     val travelMode: String? = null,
     val vehiclePreference: String? = null,
@@ -1077,11 +1080,14 @@ data class PostSaleCasesByMobileResponse(
  *  proof file. `paymentMode` mirrors the web union (cash/upi/neft/
  *  rtgs/cheque/dd/bank). */
 data class SubmitCollectionRequest(
+    val cpVisitId: String? = null,
     val caseId: String,
     val amount: Double,
     val paymentMode: String,
     val transactionReference: String? = null,
     val bankName: String? = null,
+    val branchName: String? = null,
+    val paymentInstrumentDate: String? = null,
     val proofStorageId: String? = null,
     val proofFileName: String? = null,
     val notes: String? = null,
@@ -1091,6 +1097,7 @@ data class SubmitCollectionResponse(
     val success: Boolean = false,
     val collectionId: String? = null,
     val collectionRefNo: String? = null,
+    val alreadySubmitted: Boolean = false,
     val error: String? = null,
 )
 
@@ -1611,6 +1618,9 @@ data class MmsFleetDriverTrip(
     val scheduledDate: String? = null,
     val scheduledTime: String? = null,
     val pickupAddress: String? = null,
+    val pickupLat: Double? = null,
+    val pickupLng: Double? = null,
+    val pickupGoogleMapsLink: String? = null,
     val pickupTime: String? = null,
     val driverName: String? = null,
     val driverPhone: String? = null,
@@ -1695,6 +1705,7 @@ data class CpVisitPlace(
     val pincode: String? = null,
     val lat: Double? = null,
     val lng: Double? = null,
+    val googleMapsLink: String? = null,
     val contactPerson: String? = null,
     val contactPhone: String? = null,
 )
