@@ -351,6 +351,9 @@ class CpVisitsFragment : Fragment() {
                     session.bearerToken,
                     fromDate = from,
                     toDate = to,
+                    // Browsable list: pull a wide window so the on-screen
+                    // search can reach any client, not just the newest 20.
+                    limit = 200,
                 )
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 hasLoadedOnce = true

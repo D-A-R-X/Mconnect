@@ -393,9 +393,11 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 ?: placeName.takeIf { it.isNotBlank() }
                 ?: "Location not set"
         // Full client address card above the map — wraps, no truncation.
+        // Never fall back to the client name here: showing the name in the
+        // address slot reads as a real address and hides that coordinates /
+        // address are actually missing. Show an explicit placeholder instead.
         view.findViewById<TextView>(R.id.tvClientAddressFull)?.text =
             placeAddress?.takeIf { it.isNotBlank() }
-                ?: placeName.takeIf { it.isNotBlank() }
                 ?: "Address not available"
         bindTripClientHeader(view, placeName)
 
@@ -466,6 +468,22 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             }
         }
 
+        // Deploy-independent bridge: if the backend list still reports a
+        // pre-start status but this device already started the trip, show the
+        // enroute/arrival phase so re-opening the card doesn't reset to
+        // "Start Trip". A backend arrived/completed status above already took
+        // over and skipped this.
+        val isPreStartStatus =
+            incomingStatus.isBlank() ||
+                incomingStatus in setOf("scheduled", "assigned", "pending", "in_progress_cp")
+        if (isPreStartStatus && !visitStarted && isVisitLocallyStarted()) {
+            visitStarted = true
+            showTripStartTime()
+            applyStatusPill("Enroute")
+            btnOpenMaps?.visibility = View.GONE
+            renderArrivalPhase(alreadyArrived = false)
+        }
+
         // Self-healing: ARG_STATUS comes from whatever the home list said,
         // which can lag the server (e.g. the legacy /today-visits row
         // says "scheduled" but the spawned fieldVisits row is already
@@ -516,6 +534,10 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     session.bearerToken,
                     fromDate = null,
                     toDate = null,
+                    // Wide window so this specific CP is reliably in the result
+                    // set — the default (~10 newest) could omit it and silently
+                    // skip the status reconcile.
+                    limit = 200,
                 )
                 if (!resp.success) return@launch
                 val cp = resp.visits.firstOrNull { it.id == cpId } ?: return@launch
@@ -590,15 +612,69 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                         btnOpenMaps?.visibility = View.GONE
                         swipeArrived?.visibility = View.GONE
                         btnCompleteCpDetails?.visibility = View.GONE
+                        // Terminal on the server — drop the local started bridge
+                        // so it never masks a genuinely finished trip.
+                        clearVisitLocallyStarted()
                     }
-                    // "scheduled" or empty: leave the locally-rendered
-                    // pre-start phase as-is so the user can Start Trip.
-                    else -> { /* no-op */ }
+                    // "scheduled" or empty: the server hasn't advanced the row
+                    // yet. If THIS device started it, surface the enroute phase
+                    // instead of leaving the user on "Start Trip".
+                    else -> {
+                        if (!arrivalConfirmedForProgress && !visitStarted && isVisitLocallyStarted()) {
+                            visitStarted = true
+                            showTripStartTime()
+                            applyStatusPill("Enroute")
+                            btnOpenMaps?.visibility = View.GONE
+                            renderArrivalPhase(alreadyArrived = false)
+                        }
+                    }
                 }
             } catch (_: Exception) {
                 // Network blip: don't disturb the locally-rendered UI.
             }
         }
+    }
+
+    // ── Local "trip started on this device" bridge ───────────────────────────
+    // The backend CP list reports the clientPlaceVisit's own lifecycle status
+    // ("scheduled" until the outcome is recorded) — the authoritative
+    // in-progress state lives on the spawned fieldVisit, which older backends
+    // don't surface in the list. Without a bridge, exiting and re-opening Trip
+    // Details after Start Trip drops the staff back on "Start Trip". We record
+    // the started ids on-device and treat them as enroute on re-open, until the
+    // backend advances the row itself (arrived/completed still win below).
+    private fun localStartedIds(): MutableSet<String> =
+        requireContext()
+            .getSharedPreferences("trip_local_started", android.content.Context.MODE_PRIVATE)
+            .getStringSet("ids", emptySet())
+            ?.toMutableSet() ?: mutableSetOf()
+
+    private fun startedKeys(): List<String> =
+        listOfNotNull(visitId, cpVisitId, arguments?.getString(ARG_PLACE_ID))
+            .filter { it.isNotBlank() }
+
+    private fun markVisitLocallyStarted() {
+        if (!isAdded) return
+        val set = localStartedIds()
+        set.addAll(startedKeys())
+        requireContext()
+            .getSharedPreferences("trip_local_started", android.content.Context.MODE_PRIVATE)
+            .edit().putStringSet("ids", set).apply()
+    }
+
+    private fun clearVisitLocallyStarted() {
+        if (!isAdded) return
+        val set = localStartedIds()
+        if (set.removeAll(startedKeys().toSet())) {
+            requireContext()
+                .getSharedPreferences("trip_local_started", android.content.Context.MODE_PRIVATE)
+                .edit().putStringSet("ids", set).apply()
+        }
+    }
+
+    private fun isVisitLocallyStarted(): Boolean {
+        val set = localStartedIds()
+        return startedKeys().any { it in set }
     }
 
     override fun onResume() {
@@ -950,6 +1026,10 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 applyTrackingBootstrap(bootstrap, attendanceActive = true)
 
                 visitStarted = true
+                // Remember locally that this device started the trip so a
+                // later exit + re-open doesn't reset to "Start Trip" while the
+                // backend list still reports the CP as "scheduled".
+                markVisitLocallyStarted()
                 if (alreadyArrived) arrivalConfirmedForProgress = true
                 showTripStartTime()
                 if (location != null) currentLocation = LatLng(location.latitude, location.longitude)
@@ -2510,6 +2590,9 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
 
     private fun finalizeCompleteVisit() {
         val id = visitId ?: return
+        // The trip is being finished — drop the local "started" bridge so a
+        // future re-open reflects the real (completed) state, not enroute.
+        clearVisitLocallyStarted()
         val storageId = pendingArrivalStorageId
         swipeArrived?.lockAsBusy("Completing visit…")
         viewLifecycleOwner.lifecycleScope.launch {
