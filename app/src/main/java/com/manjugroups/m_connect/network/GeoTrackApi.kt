@@ -1353,6 +1353,10 @@ data class ScannedSiteVisitClient(
 )
 
 data class ScannedSiteVisitStaff(
+    // Backend staffSummary sends the staff `_id`; the app uses it to authorise
+    // the assigned Site Incharge / BDO for start-counselling + outcome even
+    // before the broadened backend flags are deployed.
+    @com.google.gson.annotations.SerializedName("_id") val id: String? = null,
     val name: String? = null,
 )
 

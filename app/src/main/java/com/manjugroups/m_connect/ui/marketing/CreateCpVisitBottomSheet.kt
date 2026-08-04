@@ -367,9 +367,10 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             )
             val compiledAddress = addressParts.joinToString(", ")
 
-            // Coordinates + maps link come from the pin-drop UX (still
-            // to be wired). Until then they're left null on submit;
-            // the server already permits both as optional.
+            // Coordinates + maps link from the pin-drop UX. When no pin was
+            // dropped these stay null here and are resolved by geocoding the
+            // typed address at submit (below) so the CP always ships with
+            // coordinates for the trip map pin.
             val latVal: Double? = pinLat
             val lngVal: Double? = pinLng
             val maps: String = pinMapsLink
@@ -398,6 +399,33 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             btnSubmit.isEnabled = false
             viewLifecycleOwner.lifecycleScope.launch {
                 try {
+                    // A CP MUST carry coordinates so the trip map can pin the
+                    // client location (without them the trip screen tries to
+                    // geocode the free-text address, and a vague/junk address
+                    // lands the pin on null-island / the ocean). When the user
+                    // didn't drop a pin, geocode the typed address here; if it
+                    // can't be located, require a pin rather than saving a
+                    // coordinate-less CP.
+                    var resolvedLat = latVal
+                    var resolvedLng = lngVal
+                    if (resolvedLat == null || resolvedLng == null) {
+                        val plainAddress = listOf(
+                            doorNo, street, addressLine1, addressLine2,
+                            city, state, pincode,
+                        ).filter { it.isNotBlank() }.joinToString(", ")
+                        val geo = com.manjugroups.m_connect.network.DirectionsClient
+                            .geocodeAddress(session.bearerToken, plainAddress)
+                        if (!isAdded) return@launch
+                        if (geo != null) {
+                            resolvedLat = geo.latLng.latitude
+                            resolvedLng = geo.latLng.longitude
+                        } else {
+                            btnSubmit.isEnabled = true
+                            toast("Couldn't locate this address on the map. Drop a pin to set the exact client location.")
+                            btnDropPin.performClick()
+                            return@launch
+                        }
+                    }
                     val resp = geoApi.createCpVisit(
                         session.bearerToken,
                         CreateCpVisitRequest(
@@ -407,8 +435,8 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                             scheduledDate = selectedDate,
                             scheduledTime = selectedTime,
                             visitAddress = compiledAddress,
-                            visitLat = latVal,
-                            visitLng = lngVal,
+                            visitLat = resolvedLat,
+                            visitLng = resolvedLng,
                             googleMapsLink = maps.takeIf { it.isNotBlank() },
                             notes = notesVal.takeIf { it.isNotBlank() },
                             projectId = project.id,

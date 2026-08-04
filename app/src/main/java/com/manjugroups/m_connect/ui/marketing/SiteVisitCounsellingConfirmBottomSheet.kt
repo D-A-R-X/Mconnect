@@ -126,7 +126,13 @@ class SiteVisitCounsellingConfirmBottomSheet : BottomSheetDialogFragment() {
         // Ongoing + authorised (BDO / Site Incharge / admin) → auto-redirect to
         // the outcome page after a short countdown (no button). Scheduled +
         // authorised → an explicit Start counselling button.
-        val showOutcome = canRecordOutcome && isOngoing && !isCompleted
+        // The outcome can be recorded from the moment counselling starts through
+        // the cab return leg — on_counselling, picked_from_site, dropped
+        // (mirrors setOutcome). So an authorised Site Incharge / BDO is NOT
+        // locked out once the fleet advances the SV to "dropped".
+        val outcomeRecordableStatus = visitStatus == "on_counselling" ||
+            visitStatus == "picked_from_site" || visitStatus == "dropped"
+        val showOutcome = canRecordOutcome && outcomeRecordableStatus && !isCompleted
         val showStart = canStartCounselling && !isOngoing && !isCompleted
         // Whoever opened this can't start counselling or record the outcome —
         // they may only view. Point them at the Site Incharge by name.
