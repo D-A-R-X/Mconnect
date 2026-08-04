@@ -461,6 +461,9 @@ interface GeoTrackApi {
         // managers get the full pool, field staff get their own
         // assignments via the fallback path.
         @Query("scope") scope: String = "all",
+        // Browsable list screens pass a high limit so client-side search can
+        // reach a specific client; Home/today merges leave it null (default).
+        @Query("limit") limit: Int? = null,
     ): MyMarketingCpVisitsResponse
 
     // ── Timeline (self-view) ──
