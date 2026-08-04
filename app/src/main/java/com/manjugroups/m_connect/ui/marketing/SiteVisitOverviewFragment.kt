@@ -436,7 +436,11 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         val schedDate = args.getString(ARG_SCHEDULED_DATE)
         val schedTime = args.getString(ARG_SCHEDULED_START_TIME)
         val rawStatus = args.getString(ARG_STATUS).orEmpty()
-        isOutcomeLocked = isTerminalOutcomeStatus(rawStatus)
+        // First-frame gate from the list-row status only. A lifecycle
+        // "completed"/"done" must NOT pre-lock the form (outcome may still be
+        // pending) — only an actually recorded/terminal outcome status does.
+        // bindEnriched() re-derives this from the full visit once it loads.
+        isOutcomeLocked = isOutcomeRecordedStatus(rawStatus)
         outcomeStatusEligible = isOutcomeStatusEligible(rawStatus)
         currentTerminalLabel = terminalStepLabelFor(rawStatus)
         updatePostponeVisibility(rawStatus)
@@ -1211,7 +1215,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         hasFleetStart = proposed?.travelDeskStartedAt != null
         hasFleetOnSite = proposed?.travelDeskOnSiteAt != null
         currentTerminalLabel = terminalStepLabelFor(effStatus)
-        isOutcomeLocked = isTerminalOutcome(visit)
+        isOutcomeLocked = isOutcomeAlreadyRecorded(visit)
         outcomeStatusEligible = isOutcomeStatusEligible(effStatus)
         isFleetOutcomePending = visit.completedOffline == true && visit.outcome.isNullOrBlank()
         updatePostponeVisibility(effStatus)
@@ -1397,6 +1401,38 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
             isTerminalOutcomeStatus(visit.outcome) ||
             visit.convertedBookingId != null ||
             visit.cancelledAt != null
+
+    /**
+     * True only when a SALES OUTCOME has actually been recorded (or the SV was
+     * cancelled / converted) — the point at which the outcome form must lock.
+     *
+     * A bare lifecycle "completed" / "done" WITHOUT a recorded outcome is NOT a
+     * lock signal: the fleet can finish the cab trip (advanceCabLifecycle /
+     * completed-offline) before field staff capture the result, and that visit
+     * must still be able to record its outcome. Mirrors the backend setOutcome
+     * contract, which accepts "completed" while `outcome` is still empty.
+     */
+    private fun isOutcomeAlreadyRecorded(visit: CpVisitDetail): Boolean =
+        !visit.outcome.isNullOrBlank() ||
+            isOutcomeRecordedStatus(visit.status) ||
+            visit.convertedBookingId != null ||
+            visit.cancelledAt != null
+
+    /** Statuses that mean the outcome/terminal decision is already taken —
+     *  deliberately EXCLUDES lifecycle "completed"/"done"/"closed" so a trip
+     *  finished without an outcome keeps the form open. */
+    private fun isOutcomeRecordedStatus(value: String?): Boolean {
+        val lower = value?.trim()?.lowercase(Locale.US).orEmpty()
+        return lower in setOf(
+            "cancelled",
+            "canceled",
+            "no_show",
+            "converted_to_booking",
+            "not_interested",
+            "postponed",
+            "other",
+        )
+    }
     // NOTE: `completedAt` is deliberately NOT a lock signal. For cab visits the
     // fleet return-leg advances the status (picked_from_site / dropped) while a
     // stale `completedAt` can linger, and a trip can finish before the field
@@ -1441,6 +1477,14 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
             "picked_from_site",
             "picked from site",
             "dropped",
+            // Lifecycle-finished but outcome-pending: the fleet may mark the
+            // cab trip completed/done before field staff record the result, so
+            // the outcome form must stay recordable here too (the lock above is
+            // what closes it once an outcome actually exists).
+            "completed",
+            "complete",
+            "done",
+            "closed",
         )
     }
 
