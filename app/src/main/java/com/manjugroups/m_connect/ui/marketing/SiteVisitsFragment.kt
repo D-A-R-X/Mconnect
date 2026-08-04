@@ -292,6 +292,32 @@ class SiteVisitsFragment : Fragment() {
         "cancelled", "canceled", "no_show",
     )
 
+    // A cancelled SV whose CP verification was REJECTED carries a
+    // "[CP rejected by <name>] <reason>" marker in notes (set server-side).
+    // These helpers let the list show a distinct "Rejected" badge + who/why
+    // instead of a plain "Cancelled".
+    private fun isRejectedSv(visit: TodayVisit): Boolean =
+        visit.notes?.contains("[CP rejected") == true
+
+    private fun rejectedBy(visit: TodayVisit): String? {
+        val notes = visit.notes ?: return null
+        val start = notes.lastIndexOf("[CP rejected by ")
+        if (start < 0) return null
+        val from = start + "[CP rejected by ".length
+        val close = notes.indexOf(']', from)
+        if (close < 0) return null
+        return notes.substring(from, close).trim().takeIf { it.isNotBlank() }
+    }
+
+    private fun rejectionReason(visit: TodayVisit): String? {
+        val notes = visit.notes ?: return null
+        val idx = notes.lastIndexOf("[CP rejected")
+        if (idx < 0) return null
+        val close = notes.indexOf(']', idx)
+        if (close < 0) return null
+        return notes.substring(close + 1).trim().takeIf { it.isNotBlank() }
+    }
+
     private fun isPostponed(s: String): Boolean = s == "postponed"
 
     // Still awaiting its trip — not enroute, onsite, returning, finished,
@@ -566,6 +592,14 @@ class SiteVisitsFragment : Fragment() {
                 android.content.res.ColorStateList.valueOf(Color.parseColor(dot))
         }
         when {
+            // A CP-rejected SV is cancelled under the hood — surface it as a
+            // distinct "Rejected" (with who rejected it, if known) so the team
+            // can see it wasn't a plain cancellation.
+            isRejectedSv(visit) ->
+                paintPill(
+                    rejectedBy(visit)?.let { "Rejected · $it" } ?: "Rejected",
+                    R.drawable.bg_sv_status_red, "#B42318", "#B42318",
+                )
             isCancelled(s) ->
                 paintPill("Cancelled", R.drawable.bg_sv_status_red, "#B42318", "#B42318")
             isPostponed(s) ->

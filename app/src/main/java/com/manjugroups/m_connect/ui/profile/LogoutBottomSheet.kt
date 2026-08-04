@@ -78,9 +78,11 @@ class LogoutBottomSheet : BottomSheetDialogFragment() {
             // enqueue() (flush just tries to send it now; it survives a
             // timeout and flushes on the next session), and the server session
             // expires on its own if api.logout doesn't land.
+            // Best-effort pre-logout work while the session is still valid:
+            // the mid-shift logout tamper signal (Room-buffered by enqueue, so
+            // it survives even if the flush times out) and the push-token
+            // unregister. Capped so a dead connection can't hang the UI.
             kotlinx.coroutines.withTimeoutOrNull(2000) {
-                // Logging out mid-shift (inside a clock-in/tracking window) is
-                // a tamper signal — record + push it BEFORE the session clears.
                 if (session.shouldTrackNow) {
                     runCatching {
                         com.manjugroups.m_connect.geotrack.GeoTrackEventQueue.enqueue(
@@ -94,6 +96,12 @@ class LogoutBottomSheet : BottomSheetDialogFragment() {
                     }
                 }
                 runCatching { PushTokenManager.unregisterCurrentToken(ctx, session) }
+            }
+            // Free the SERVER session on its OWN budget — this is what releases
+            // the single-device login block so the staff can sign in on another
+            // phone. It must never be starved by the best-effort work above, or
+            // the server session stays active and re-login is refused.
+            kotlinx.coroutines.withTimeoutOrNull(4000) {
                 runCatching { api.logout(session.bearerToken) }
             }
             session.clearSession()

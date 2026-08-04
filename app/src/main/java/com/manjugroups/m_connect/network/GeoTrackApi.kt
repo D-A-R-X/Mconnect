@@ -1820,6 +1820,10 @@ data class TodayVisit(
     // then record the outcome from their mobile app.
     val completedOffline: Boolean? = null,
     val outcome: String? = null,
+    // Free-text notes; carries the "[CP rejected by <name>] <reason>" marker so
+    // the SV list can show a distinct "Rejected" badge + reason for an SV whose
+    // CP verification was rejected.
+    val notes: String? = null,
     // Confirmation state of a fixed SV — "pending" (awaiting CP verification)
     // or "confirmed". Drives the SV list "Fixed" tab (parity with the web
     // pipeline). Staged on the backend mobile mapper; null on rows that

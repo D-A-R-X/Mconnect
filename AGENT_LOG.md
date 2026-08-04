@@ -5741,3 +5741,875 @@ to mfpl per memory). Uncommitted.
 - DOC: created docs/sv-flow.md (Day-1 doc never existed) — lifecycle, tracks,
   confirmationStatus, rollups, notifications, IRIS, + the 12 edge-case decisions.
 - Drafted the GitHub reply for the issue (all comms in GH per the issue).
+
+### Session 119 - SV/CP management sign-off gate and same-day multiple-SV blocker
+
+**Date:** 2026-08-02
+**Session:** main task. Documentation-only changes in manjusitedevelopment/max;
+no commit or push.
+
+- Read the management sign-off task and audited its prerequisites against the
+  repository. `docs/sv-flow.md` and `docs/sv-flow.docx` exist, but
+  `docs/cp-flow.md` is missing; reviewer completion and management sign-off
+  evidence are also not present. The sign-off task therefore remains blocked.
+- Added edge case 13 to `docs/sv-flow.md`: same client with multiple SVs on the
+  same day is explicitly `INCOMPLETE / BLOCKED` because the current Fleet model
+  can cross-wire assignment, progress, proof, billing, and tab classification.
+  Documented the five management decisions required before implementation and
+  required the approved behavior to be filed as a separate GitHub issue.
+- Synchronized the same edge-case row, decision checklist, and release gate into
+  the management-facing `docs/sv-flow.docx`.
+- Created `docs/sv-cp-management-signoff.md` as an evidence-based task tracker.
+  All prerequisite, review, signature, upload, follow-up-issue, and confirmation
+  boxes remain unchecked until their GitHub evidence exists.
+- Validation: `git diff --check` passed; DOCX structural inspection confirmed 13
+  edge rows and the new blocked heading. Microsoft Word exported the DOCX to PDF,
+  Poppler rendered four PNG pages, and all pages were visually checked with no
+  clipping or broken layout. The bundled renderer itself could not start because
+  LibreOffice is not installed, so Word was used as the rendering fallback.
+- Remaining actions: create and obtain reviewer completion for `docs/cp-flow.md`,
+  present both flows to management, collect written/signature evidence, upload
+  `docs/sv-cp-signoff.pdf` (or a GitHub attachment), file each newly approved
+  requirement as its own GitHub issue, and comment on the source issue with the
+  dated sign-off. No management review or signature was claimed in this turn.
+
+### Session 120 - Publish pending app, web documentation, and Travel Desk changes
+
+**Date:** 2026-08-02
+**Session:** main task. Publish audit across all three project repositories.
+
+- Audited pending changes in Mconnect (`merge`), manjusitedevelopment (`max`),
+  and travel-desk (`aizen`). All three local branches matched their remote tips
+  before publishing (`0 ahead / 0 behind`).
+- Confirmed publish scope: app removal of CP/SV expiry presentation; SV flow and
+  management sign-off documentation including the same-day multiple-SV blocker;
+  and Travel Desk Complete-summary `Edit billing` navigation.
+- Kept `AGENT_LOG.md` local-only and excluded it from staging as required.
+- Validation before commit: Mconnect `:app:assembleDebug` passed using Android
+  Studio's bundled JDK; Travel Desk `npx tsc --noEmit` passed; web documentation
+  `git diff --check` and sign-off tracker existence check passed. The SV DOCX had
+  already been structurally and visually verified in Session 119.
+- Published successfully and verified `0 ahead / 0 behind` after fetching:
+  - Mconnect `merge`: `b4094f27` (`fix(marketing): remove visit expiry presentation`)
+    pushed directly to `manjugroupsdev/Mconnect` so the additional configured
+    D-A-R-X push URL was not touched.
+  - manjusitedevelopment `max`: `2707bb1a` (`docs(sv): record multiple-visit
+    sign-off blocker`).
+  - travel-desk `aizen`: `b10d756` (`feat(trips): edit billing from completion
+    summary`).
+- Final repository state: web and Travel Desk worktrees are clean; Mconnect has
+  only this required local-only `AGENT_LOG.md` modification.
+
+### Session 121 - Management-ready SV flowchart document
+
+**Date:** 2026-08-02
+**Session:** main task. Documentation-only work in manjusitedevelopment/max; not
+committed or pushed.
+
+- Created `docs/sv-flowchart-guide.docx` as a separate, cleaner management-facing
+  companion to the detailed `docs/sv-flow.md` technical audit.
+- Reorganised the SV material into eight readable pages with five high-resolution
+  flowcharts: end-to-end entry, cab/Fleet lifecycle, own-vehicle lifecycle, QR to
+  counselling/outcome, and exceptions/controls.
+- Documented entry origins, confirmation states, required staff, internal/external
+  Fleet ownership, pending-details classification, QR access rules, counselling,
+  outcomes, postpone/cancel/reassign behavior, odometer/evidence ownership, and
+  cross-system MMS/Travel Desk/Mconnect consistency.
+- Kept same-client same-day multiple SVs prominently marked `INCOMPLETE / BLOCKED`
+  with the five management decisions and release gate required before a separate
+  implementation issue can proceed.
+- Added a management review checklist that remains explicitly unsigned and does
+  not claim review completion.
+- Validation: canonical `render_docx.py` could not start because LibreOffice is
+  unavailable; Microsoft Word exported the DOCX and Poppler rendered all eight
+  pages. Reviewed every page twice after correcting an awkward section break; no
+  clipping, overlap, broken diagrams, or crowded tables remain. Final accessibility
+  audit reports 0 high, 0 medium, and 0 low findings after marking both table header
+  rows correctly. Structural checks confirmed five inline diagrams, two tables,
+  Letter page geometry, 1-inch side margins, and the blocked requirement text.
+- Repository state: `docs/sv-flowchart-guide.docx` is a new untracked deliverable;
+  no source code, existing SV documentation, commit, or remote branch was changed.
+
+### Session 122 - SV cancellation parity for mobile and Travel Desk
+
+**Date:** 2026-08-02
+**Session:** main task. Cross-repository implementation in Mconnect, MMS backend,
+and Travel Desk; not committed or pushed.
+
+- Inspected the existing MMS Site Visit cancellation contract and confirmed that
+  `cancelSiteVisitCore` owns terminal-state validation, lead reopening, lifecycle
+  WhatsApp, daily-task completion, audit, and rollup updates. Confirmed the web
+  mutation enforces `marketing.siteVisits.cancel` for staff callers.
+- Added the authenticated mobile `POST /api/marketing/siteVisits/cancel` endpoint
+  to the MMS backend and its CORS preflight registration. It accepts `id` and an
+  optional `reason`, attributes the action to the bearer-token staff member, and
+  delegates IAM and lifecycle behavior to the existing mutation.
+- Added the mobile API model/call, IAM-gated `Cancel visit` action, and a reusable
+  confirmation bottom sheet with an optional reason. Terminal SVs hide the action;
+  successful cancellation closes the stale detail sheet.
+- Added an explicit Travel Desk agency `Cancel visit` action that preselects the
+  existing ownership-checked `cancelled` status flow. Added optional typed reason
+  capture and prevented completed/already-cancelled cards from offering the action.
+- Validation: Travel Desk `npx tsc --noEmit` passed after the final edits;
+  Mconnect `:app:processDebugResources :app:compileDebugKotlin --no-daemon`
+  passed, covering the new XML resources, Retrofit model, and Kotlin UI flow;
+  and `git diff --check` passed in all three repositories.
+- A full Mconnect assemble was attempted twice. The first attempt reached dex
+  merge but failed on a corrupted generated ZLIB stream after an earlier forced
+  timeout; after stopping Gradle daemons, a clean assemble exceeded the five-minute
+  runner limit. The focused resource/Kotlin build then passed in 51 seconds.
+- MMS `npx tsc --noEmit --pretty false` completed but remains red on pre-existing,
+  unrelated errors in the older arrival-photo HTTP call, attendance and SV lifecycle
+  tests, reassign test indexes, and WhatsApp inbound nullability. The new cancel
+  route produced no TypeScript diagnostic.
+- Repository state at completion: Mconnect contains the five cancellation source/
+  resource changes plus this required local-only log; manjusitedevelopment contains
+  `convex/http.ts` plus the pre-existing untracked `docs/sv-flowchart-guide.docx`;
+  Travel Desk contains the trip-page and status-dialog changes. No commit, push,
+  Convex deployment, or live cancellation was performed.
+
+### Session 123 - Chart-only SV flow document
+
+**Date:** 2026-08-02
+**Session:** main task. Documentation-only work in manjusitedevelopment/max; not
+committed or pushed.
+
+- Created `docs/sv-flowcharts-only.docx` as an 11-page, chart-only SV flow
+  document with no narrative sections, tables, or cover material.
+- Covered direct/CP/IRIS entry, confirmation and required staff, own/internal/
+  external transport routing, Fleet lifecycle and ownership, QR/IAM counselling,
+  all counselling outcomes, separate SV postponement, cancellation/no-show/
+  reassignment, Fleet evidence and billing, cross-system status synchronization,
+  supported edge cases, and the blocked same-client same-day multiple-SV case.
+- Kept same-client multiple same-day SVs explicitly marked incomplete/blocked and
+  charted the management decisions required before implementation.
+- Validation: the standard LibreOffice renderer was unavailable, so Microsoft
+  Word exported a QA PDF and Poppler rendered it. Visually reviewed all 11 pages
+  after correcting image ratio, font sizing, wrapping, and connector routes.
+  Final PDF verification reports 11 landscape Letter pages; the DOCX is present
+  at 1,428,267 bytes.
+- No application source, API, schema, configuration, commit, push, or deployment
+  was changed for this request. Existing uncommitted work from Session 122 was
+  left untouched.
+
+### Session 124 - Travel Desk working-version recovery snapshot
+
+**Date:** 2026-08-02
+**Session:** main task. Travel Desk commit/push and recovery reference only.
+
+- Reviewed the pending Travel Desk cancellation-parity diff in
+  `src/app/trips/page.tsx` and `src/components/status-update-dialog.tsx`.
+- Validation passed: `git diff --check` and `npx tsc --noEmit`.
+- Confirmed local `aizen` and `origin/aizen` were synchronized before commit,
+  committed the two files as `feat(trips): add agency cancellation action`, and
+  pushed successfully to `origin/aizen`.
+- **Stored Travel Desk recovery commit:**
+  `b340926dc331f06e948876278f2dcf7af6600ef4`.
+  When the user says **"store recovery"**, restore/recover the Travel Desk
+  working version from this exact commit unless the user explicitly replaces the
+  recovery point later.
+- Added the local Git tag `recovery-travel-desk-working-2026-08-02` and local Git
+  config `codex.recoveryCommit` pointing to the same SHA. The tag was intentionally
+  kept local; the branch commit itself is present on the remote.
+- Post-push verification: `HEAD`, `origin/aizen`, and the local recovery tag all
+  resolve to the stored SHA, and the Travel Desk worktree is clean.
+- MMS web and Mconnect source changes were not staged, committed, or pushed in
+  this step. `AGENT_LOG.md` remains local-only as required.
+
+### Session 125 - Horizontal Travel Desk trip progress
+
+**Date:** 2026-08-02
+**Session:** main task. Travel Desk UI-only change; not committed or pushed.
+
+- Replaced the vertical Trip progress list in
+  `src/app/trips/[id]/page.tsx` with a connected left-to-right seven-stage
+  stepper.
+- Preserved completed/current/pending state styling and stage timestamps. The
+  active stage now has a separate `Current` label and `aria-current="step"`.
+- Added a stable minimum rail width and horizontal overflow so narrow screens
+  retain stage order and readable labels instead of compressing the tracker.
+- Validation passed: `npx tsc --noEmit`, `git diff --check`, and the full
+  `npm run build` production build.
+- Focused ESLint remains red on eight pre-existing `react-hooks` errors and one
+  pre-existing dependency warning elsewhere in the same large page; no diagnostic
+  points to the new progress-stepper block.
+- Browser verification reached the local Travel Desk login screen, but the
+  isolated test browser did not have an authenticated agency session, so live
+  trip-data visual verification could not be completed without credentials.
+- No commit or push was performed. The stored recovery commit remains
+  `b340926dc331f06e948876278f2dcf7af6600ef4` and was not moved.
+
+### Session 126 - Drop-gated Start/End proof updater
+
+**Date:** 2026-08-02
+**Session:** main task. Travel Desk UI/flow change; not committed or pushed.
+
+- Updated `src/app/trips/[id]/page.tsx` so live trips show Start km/proof on
+  the left and a visibly disabled End km/proof panel on the right.
+- The End panel remains locked through Picked from Site. The pre-drop form no
+  longer accepts end odometer, end image, toll, or beta details; `Mark Dropped`
+  is now the explicit event that unlocks end-proof entry.
+- After Dropped, the agency billing updater presents Start and End odometer/image
+  panels side by side. The End panel is marked `Unlocked`, and total distance
+  validation/calculation remains immediately below the paired panels.
+- Mobile/narrow layouts stack the two panels while desktop keeps the requested
+  left/right arrangement.
+- Validation passed: `npx tsc --noEmit`, `git diff --check`, and the full
+  `npm run build` production build.
+- This change remains in the same uncommitted trip-detail file as Session 125.
+  No commit or push was performed, and the stored recovery commit remains
+  `b340926dc331f06e948876278f2dcf7af6600ef4`.
+
+### Session 127 - Optimized Travel Desk trip details card
+
+**Date:** 2026-08-02
+**Session:** main task. Travel Desk UI-only change; not committed or pushed.
+
+- Reworked the `Details` section in `src/app/trips/[id]/page.tsx` into a compact
+  `Trip details` layout with clearer label/value hierarchy.
+- Kept the pickup address as a full-width lead row, then arranged pickup time,
+  attendees, vehicle, driver, and rate in a responsive five-column desktop grid
+  that becomes two columns on narrow screens.
+- Split vehicle type and driver phone into quieter secondary lines and added
+  explicit package/per-kilometer context beneath the rate, without changing any
+  source values or actions.
+- Added wrapping and minimum-width protections so long vehicle, driver, address,
+  or pricing text cannot overlap adjacent fields.
+- Validation passed: `npx tsc --noEmit`, `git diff --check`, and the full
+  `npm run build` production build.
+- No commit or push was performed. Sessions 125-127 remain together in the
+  modified trip-detail page; the stored recovery commit is still
+  `b340926dc331f06e948876278f2dcf7af6600ef4`.
+
+### Session 128 - Actionable pending trip evidence
+
+**Date:** 2026-08-02
+**Session:** main task. Travel Desk UI plus MMS backend lifecycle contract; not
+committed, pushed, or deployed.
+
+- Updated the live Start km/proof panel in Travel Desk to detect missing start
+  odometer and image independently, show an amber `Pending details` tag, and
+  expose only the missing input/uploader.
+- Added `Save start details`, allowing the agency to upload either missing Start
+  item immediately; the other item remains visibly pending until supplied.
+- Added Complete/Pending tags to both Start and End proof panels in the post-drop
+  billing updater. Existing proof previews remain visible and missing fields stay
+  editable through the existing completion workflow.
+- Extended `convex/travelDeskDriverTrips.ts::submitEvidence` so Start evidence can
+  be backfilled after trip start but before drop. End evidence is still rejected
+  until `travelDeskEndedAt` exists, preserving the requested drop gate.
+- Expanded `convex/siteVisitCabLifecycleOverride.test.ts` to verify successful
+  pre-drop Start km/image backfill, rejection of pre-drop End km, and normal End
+  evidence completion after drop.
+- Validation passed: Travel Desk `npx tsc --noEmit`, `git diff --check`, and full
+  `npm run build`; MMS focused Vitest suite passed all 11 tests; targeted MMS
+  `git diff --check` passed.
+- No commit, push, Convex deployment, or live upload was performed. Existing
+  unrelated MMS `convex/http.ts` and documentation work was left untouched. The
+  stored Travel Desk recovery commit remains
+  `b340926dc331f06e948876278f2dcf7af6600ef4`.
+
+### Session 129 - Standing AC checkbox interaction fix
+
+**Date:** 2026-08-02
+**Session:** main task. Travel Desk UI behavior fix; not committed or pushed.
+
+- Diagnosed the non-responsive `Standing with AC` checkbox in
+  `src/app/trips/[id]/page.tsx`: it was disabled whenever Standing time was
+  blank, even though that field is explicitly optional.
+- Removed the standing-time-dependent `disabled` gate so the checkbox can always
+  be toggled during Picked from Site.
+- Removed the input handler that forcibly unchecked AC whenever standing minutes
+  were cleared. The user selection now remains stable while editing the optional
+  duration.
+- Validation passed: `npx tsc --noEmit`, `git diff --check`, and full
+  `npm run build`.
+- No commit or push was performed. Existing Travel Desk and MMS changes remain
+  uncommitted; the stored recovery commit remains
+  `b340926dc331f06e948876278f2dcf7af6600ef4`.
+
+### Session 130 - SV not-interested outcome reason fix
+
+**Date:** 2026-08-02
+**Session:** main task. MMS web outcome form fix; not committed, pushed, or
+deployed.
+
+- Diagnosed the reported Convex `setOutcome` failure. The backend intentionally
+  requires a non-empty `notInterestedReasons` array for a `not_interested`
+  outcome, but the MMS Site Visit detail dialog submitted only the outcome and
+  optional notes.
+- Updated
+  `features/marketing/pages/site-visit-detail-page.tsx` in the MMS/web repo to
+  present the same eight canonical not-interested reasons used by the Mconnect
+  SV form as app-native checkboxes.
+- Added client-side validation requiring at least one reason, included the
+  selected reasons in the `setOutcome` mutation payload, and reset the selection
+  on cancel, close, and successful submission. The Convex data-integrity guard
+  remains unchanged.
+- Validation: targeted `git diff --check` passed. Focused ESLint reached only
+  pre-existing `no-explicit-any` errors and one unused-disable warning at
+  unrelated lines in the same page; the new code produced no lint finding. Full
+  `npx tsc --noEmit --pretty false` exceeded the 120-second command limit without
+  emitting diagnostics.
+- Existing unrelated MMS changes and documentation files were left untouched.
+  No commit, push, Convex deployment, or live verification was performed.
+
+### Session 131 - Faster and recoverable SV QR scanning
+
+**Date:** 2026-08-02
+**Session:** main task. Mconnect scanner plus MMS QR-query latency fix; not
+committed, pushed, or deployed.
+
+- Traced the SV QR flow from CameraX/ML Kit through
+  `POST /api/marketing/siteVisits/scanQr` and found that the camera froze with no
+  loading feedback while a request could wait for the shared 30-second network
+  timeout.
+- Restricted ML Kit recognition to QR codes, added a visible `Loading site
+  visit...` state, bounded each SV lookup to 10 seconds, and added one short
+  retry for transient I/O/time-out failures. A final failure now resumes the
+  camera and gives a clear retry message instead of leaving the scanner frozen.
+- Added scanner job cancellation and barcode-scanner cleanup with the fragment
+  lifecycle to prevent stale requests/results after navigation.
+- Parallelized MMS `getByQrPayload` authorization and visit enrichment, removing
+  an unnecessary serial wait before returning the scan details.
+- Validation passed: Mconnect `:app:assembleDebug` completed successfully using
+  Android Studio's bundled JDK; MMS `siteVisitQrCounselling.test.ts` passed both
+  focused authorization/scan tests; targeted `git diff --check` passed in both
+  repos. The first cold Android build retried internally after a stale generated
+  Kotlin class lookup and later completed; a second clean incremental build
+  confirmed `BUILD SUCCESSFUL` in four seconds, and its generated diagnostic log
+  was removed.
+- Existing cancellation, fleet, outcome-dialog, and documentation changes in
+  both repositories were preserved. No commit, push, Convex deployment, APK
+  installation, or physical-device camera/network test was performed.
+
+### Session 132 - Publish accumulated changes
+
+**Date:** 2026-08-02
+**Session:** main task. Git publication across Mconnect, MMS, and Travel Desk
+completed.
+
+- Audited all three repositories and confirmed the target branches are Mconnect
+  `merge`, MMS/web `max`, and Travel Desk `aizen`.
+- Fetched each corresponding origin branch; all three local branches were
+  exactly synchronized with their remotes before staging (`0` behind, `0`
+  ahead).
+- Publication scope includes the accumulated app cancellation/QR work, MMS
+  cancellation/fleet/SV outcome/QR work and SV flow documents, and the Travel
+  Desk trip-detail workflow/UI changes. `AGENT_LOG.md` remains intentionally
+  unstaged and local-only.
+- Created and pushed Mconnect commit
+  `b236fff112cdc679400bed4a5e9228c3be466799` to branch `merge`. Because the
+  configured `origin` has two push URLs, the same commit was published to both
+  `manjugroupsdev/Mconnect` and `D-A-R-X/Mconnect`.
+- Created and pushed MMS/web commit
+  `e1342d46e35dff2e321ef64ba37160fa98e7e2c7` to branch `max` on
+  `manjugroupsdev/manjusitedevelopment`.
+- Created and pushed Travel Desk commit
+  `33a9d7d4abf8d7657d4ae92a2a2aba510165e9df` to branch `aizen` on
+  `manjugroupsdev/travel-desk`.
+- Verified each branch using `git ls-remote`; every remote SHA exactly matched
+  its local HEAD after push. MMS and Travel Desk are clean. Mconnect contains
+  only this intentionally uncommitted `AGENT_LOG.md` update.
+- No Convex deployment, web deployment, or APK release was performed; this turn
+  published source commits only.
+
+### Session 133 - Stored multi-repo recovery baseline
+
+**Date:** 2026-08-02
+**Session:** main task. Local recovery metadata only; no source commit or push.
+
+- Stored the current published Mconnect baseline at commit
+  `b236fff112cdc679400bed4a5e9228c3be466799` using local tag
+  `recovery-mconnect-working-2026-08-02` and the repository-local
+  `codex.recoveryCommit` / `codex.recoveryLabel` settings.
+- Stored the current published MMS/web baseline at commit
+  `e1342d46e35dff2e321ef64ba37160fa98e7e2c7` using local tag
+  `recovery-mms-working-2026-08-02` and matching local recovery settings.
+- Replaced the active Travel Desk recovery pointer with commit
+  `33a9d7d4abf8d7657d4ae92a2a2aba510165e9df` using local tag
+  `recovery-travel-desk-working-2026-08-02-v2`. The earlier historical tag at
+  `b340926dc331f06e948876278f2dcf7af6600ef4` was preserved rather than moved.
+- Verified every new tag resolves to its recorded full commit SHA. Future
+  requests to `recover` or `use stored recovery` should restore these three
+  active `codex.recoveryCommit` values unless the user stores a newer baseline.
+- Recovery tags/config are intentionally local metadata and were not pushed.
+  The underlying commits are already available on their respective remote
+  branches from Session 132. `AGENT_LOG.md` remains local-only.
+
+### Session 134 - SV map-first reusable address component
+
+**Date:** 2026-08-02
+**Session:** main task. MMS/web reusable component and SV-only integration;
+validation in progress, not committed, pushed, or deployed.
+
+- Audited the existing `UnifiedAddressFields` widget and confirmed it already
+  owns address parsing, India Post pincode lookup, forward geocoding, reverse
+  geocoding, and coordinate/Google Maps link state, but exposed the searchable
+  map only through a secondary Drop Pin dialog.
+- Added an opt-in `layout="map-first"` component mode. It presents an address
+  search/paste input first, live suggestions, an immediately visible interactive
+  map, automatic map focus, tappable/draggable pin placement, reverse-geocoded
+  field updates, and the existing seven structured fields below the map.
+- Enabled the map-first mode only in Site Visit creation and Site Visit editing.
+  CP and every other current consumer retain the established fields-first UI
+  until the user explicitly requests the broader rollout.
+- Preserved the existing SV persistence contract: the seven fields are joined
+  into `pickupAddress`, with exact `pickupLat`, `pickupLng`, and
+  `pickupGoogleMapsLink` saved separately.
+- Confirmed the final map shell keeps the suggestion popup unclipped while the
+  map canvas itself retains rounded clipping. `git diff --check` passed for all
+  three modified MMS files.
+- Audited Mconnect for the matching Android rollout. Google Maps is already in
+  use, but the current mobile SV screens consume assigned visits and do not
+  expose the MMS create/edit pickup-address form shown in this request. No
+  Android source was changed in this SV design pass; broader app adoption stays
+  deferred until the requested all-address rollout.
+- Verified the live MMS address-search route at port 3100 with `Manju Groups
+  Chennai`; it returned HTTP 200, the expected Ashok Nagar address, and precise
+  latitude/longitude. The MMS development server remains available on port
+  3100 for user testing.
+- `next build` compiled the application successfully in 27.7 seconds, then the
+  repository-wide TypeScript phase stopped at the pre-existing unrelated
+  `convex/http.ts:11068` mismatch where `arrivalPhotoStorageId` is not declared
+  by the `siteVisits.setOutcome` argument type. Focused ESLint found only two
+  pre-existing `react-hooks/set-state-in-effect` findings in the legacy
+  `PinDropDialog` at lines 1246 and 1275; no new map-first lint finding was
+  reported.
+- Final `git diff --check` passed. MMS has exactly three intended modified
+  files (`components/unified-address-fields.tsx`, SV create, and SV edit). No
+  commit, push, Convex deployment, or web deployment was performed. Mconnect's
+  unrelated `.idea/deploymentTargetSelector.xml` change was observed and left
+  untouched; this log remains local-only.
+
+### Session 135 - Canonical address rollout across MMS, Travel Desk, and Mconnect
+
+**Date:** 2026-08-02
+**Session:** main task. Cross-repository audit and implementation in progress;
+not committed, pushed, or deployed.
+
+- Started the requested rollout of the reusable map-first address workflow to
+  every applicable address/location surface across MMS, Travel Desk, and the
+  Android app, covering SV, CP, projects, and fleet.
+- Established the rollout invariant: structured address fields, canonical
+  display address, latitude, longitude, and Google Maps link must be persisted
+  and propagated together; downstream screens must prefer the saved coordinates
+  and geocode address text only for legacy rows that lack coordinates.
+- Initial inventory found four current MMS consumers of
+  `UnifiedAddressFields` (SV create/edit and two CP surfaces). Android already
+  contains a reusable `MapPinDropBottomSheet`, while fleet/trip screens commonly
+  display `pickupAddress`; schema and route tracing is in progress before edits.
+- No source files were changed during this audit step. The unrelated local
+  `.idea/deploymentTargetSelector.xml` modification remains untouched.
+- Activated MMS `layout="map-first"` for all persisted SV and CP create/edit
+  surfaces and replaced project create/edit free-text location inputs with the
+  same canonical editor. Project saves now include the joined canonical address,
+  exact `lat`, exact `lng`, and Google Maps link; the land-to-project mutation
+  was extended to accept the coordinates already supported by the project table.
+- Confirmed Travel Desk already receives `pickupAddress`, `pickupLat`,
+  `pickupLng`, and `pickupGoogleMapsLink`, and its trip/driver map preview
+  prioritizes coordinates over text geocoding. No Travel Desk source change was
+  needed for canonical fleet pickup locations.
+- Extended the MMS internal-fleet driver projection and Mconnect external and
+  internal trip models with canonical pickup coordinates/maps link. The Android
+  trip detail now pins and opens the saved location directly, using geocoding
+  only for legacy trips without coordinates.
+- Added the existing reusable Android searchable map/pin picker to the mobile
+  CP-to-SV outcome form. The selected address, latitude, longitude, and Maps
+  link are submitted together through the already-compatible conversion API;
+  existing client-place coordinates prefill the picker when available.
+- Completed the canonical operational-location rollout for the requested
+  modules. MMS SV create/edit, CP create/edit, and project create/edit now use
+  the map-first shared editor. Fleet records inherit the exact saved SV pickup
+  address and coordinates instead of independently geocoding the display text.
+- Extended the MMS internal-driver-trip projection plus the Mconnect external
+  and internal fleet models so `pickupAddress`, `pickupLat`, `pickupLng`, and
+  `pickupGoogleMapsLink` stay together end to end. Android trip details center
+  the map and open navigation from saved coordinates/link, with text geocoding
+  retained only for legacy records that have no coordinates.
+- Confirmed Travel Desk already implements this contract in its API models and
+  trip map surfaces; no Travel Desk source file needed modification. Its direct
+  TypeScript check (`npx tsc --noEmit --pretty false`) passed.
+- Validation: focused ESLint passed for all edited MMS UI/projection files;
+  `convex/driverTrip.test.ts` passed all 8 tests; `git diff --check` passed in
+  MMS, Travel Desk, and Mconnect; and a clean Android
+  `:app:assembleDebug --no-daemon` build succeeded.
+- MMS full TypeScript checking still reports only repository-existing failures
+  outside this change (`convex/http.ts` arrival proof typing, several test
+  nullability/index typings, and `convex/whatsappInbound.ts`). The production
+  build also could not be captured while the active localhost Next dev server
+  held the shared `.next` workspace, so validation used focused ESLint, direct
+  TypeScript diagnostics, and the relevant trip contract test instead.
+- Browser verification on the live local SV scheduling dialog confirmed the
+  map-first search/pin surface and structured fields render. The configured
+  Google Maps key currently returns `BillingNotEnabledMapError`; billing must
+  be enabled for `NEXT_PUBLIC_GOOGLE_MAPS_WEB_KEY` before exact pin interaction
+  can work in deployed environments. This is configuration follow-up, not a
+  component code failure.
+- Removed the temporary Kotlin compiler crash log created by the initial stale
+  incremental-cache failure. The unrelated local
+  `.idea/deploymentTargetSelector.xml` modification remains untouched.
+- No commit, push, Convex deployment, or production deployment was performed.
+
+### Session 136 - Full-width profile/group photo crop screen
+
+**Date:** 2026-08-02
+
+- Investigated the narrow, floating crop screen shown on mobile. The shared
+  `ProfilePhotoCropDialog` was applying its full-screen style from
+  `onCreateView`, after Android had already created a floating-width dialog
+  window.
+- Moved crop-dialog styling into `onCreate`, added a non-floating Day/Night
+  crop theme, and explicitly sizes the window to the full available width and
+  height in `onStart`. This fixes the clipped/narrow editor for both profile
+  photos and chat group photos, which share the same crop dialog.
+- Updated the crop surface and text to use semantic inverse theme colors and
+  replaced the unrelated bright-green loan background on `Use Photo` with the
+  standard app primary-button background.
+- Validation completed: `git diff --check` passed and
+  `./gradlew :app:assembleDebug --no-daemon` completed successfully. No source
+  warning or resource error was introduced by the full-screen dialog theme.
+- The unrelated `.idea/deploymentTargetSelector.xml` change remains untouched.
+- No commit, push, or deployment was performed in this session.
+
+### Session 137 - Collection CP collected/not-collected audit
+
+**Date:** 2026-08-02
+
+- Traced the Collection CP mobile flow through the payment sheet, Android API
+  models, MMS HTTP route, Convex collection mutation, and CP outcome rendering.
+- Confirmed the explicit `Collected` and `Nothing collected` actions exist and
+  map to `collection_done` and `not_collected`, respectively.
+- Found two integrity gaps under repair: the client-not-present branch wrongly
+  records `collection_done`, and retrying after a partial network failure can
+  create duplicate customer collection rows because mobile collection submits
+  are not tied idempotently to the CP visit.
+- No source files have been changed yet in this session. The unrelated local
+  `.idea/deploymentTargetSelector.xml` modification remains untouched.
+- Corrected Collection CP client-not-present completion to persist
+  `not_collected` instead of the false `collection_done` outcome.
+- Made the collected-payment form mode-aware: Cash permits an optional
+  reference, electronic modes require a transaction reference, and Cheque/DD
+  reveal and require number, bank, branch, and instrument date fields. These
+  values now travel through the Android request and MMS HTTP mutation.
+- Added per-CP-visit collection idempotency in the MMS schema/mutation. A
+  network retry returns the existing collection row, while conflicting retry
+  details are rejected, preventing duplicate Accounts collection entries.
+- Added a focused Convex regression test covering repeated mobile submission
+  for the same Collection CP. Validation is pending.
+- Validation completed: Android `:app:assembleDebug --no-daemon` succeeded;
+  the focused `convex/postSales.test.ts` suite passed all 16 tests; focused
+  ESLint passed for `customerCollections.ts`, `schema.ts`, and the regression
+  test; and `git diff --check` passed in both Mconnect and MMS.
+- The first regression run failed only because the synthetic CP fixture omitted
+  required `createdAt`; the fixture was corrected and the rerun passed.
+- Repository-wide TypeScript checking exceeded the 120-second command limit.
+  Full-file ESLint on legacy `convex/http.ts` also reports its existing broad
+  `no-explicit-any` backlog, including hundreds of unrelated lines; the single
+  added route field was exercised through the passing mutation test and Android
+  contract compile.
+- The Convex schema/mutation change still requires normal admin deployment
+  before the live app receives retry idempotency. No commit, push, Convex
+  deployment, or production deployment was performed.
+
+### Session 138 - Publish current repository changes
+
+**Date:** 2026-08-02
+
+- Audited all three project repositories before publishing. MMS has source
+  changes on `max`, Mconnect has source changes on `merge`, and Travel Desk is
+  clean on `aizen` with nothing new to commit.
+- Preparing to commit and push all current source changes in MMS and Mconnect.
+  `AGENT_LOG.md` remains local-only, and the unrelated Android Studio
+  `.idea/deploymentTargetSelector.xml` change is explicitly excluded.
+- Created Mconnect commit `e64ad50` on `merge` and MMS commit `65e716d3` on
+  `max`. Travel Desk remains clean with no commit required. Push verification
+  is pending.
+- Successfully pushed Mconnect `merge` at
+  `e64ad5007a962b690eb660699d26f958280f9ed6` to both configured push targets
+  (`manjugroupsdev/Mconnect` and `D-A-R-X/Mconnect`) and MMS `max` at
+  `65e716d3fbb1be6988a4106ab32f129db745f236` to
+  `manjugroupsdev/manjusitedevelopment`.
+- Verified local HEAD and each origin tracking branch are identical after the
+  push. Travel Desk `aizen` remains synchronized at `33a9d7d4`.
+- Only local-only `AGENT_LOG.md` and the unrelated
+  `.idea/deploymentTargetSelector.xml` modification remain in Mconnect; neither
+  was committed or pushed. No deployment was performed.
+
+### Session 139 - Web-saved CP/SV coordinate propagation failure
+
+**Date:** 2026-08-04
+
+- Began tracing the reported missing destination pin from the MMS web address
+  editor through client-place persistence, CP/SV creation and projection
+  endpoints, and the Mconnect trip payload/map consumer.
+- The screenshot confirms a contract failure rather than a marker-style issue:
+  the app receives no usable destination coordinates, falls back to a world
+  map/current-location label, and cannot perform the near-client check.
+- MMS is clean on `max`. Mconnect contains a separate local change in
+  `CreateCpVisitBottomSheet.kt`, plus local IDE/Kotlin state; these are treated
+  as user-owned and will not be overwritten or included in this fix.
+- No source files have been changed yet in this session.
+- Confirmed the Android pin consumes only the nested `clientPlace.lat/lng` for CP rows, while SV rows consume `pickupLat/pickupLng`. The CP persistence helper is capable of patching explicit coordinates, so investigation moved to the web form payload and mobile projection/fallback contract.
+- Verified `/api/marketing/clientPlaceVisits/my` delegates to the enriched CP list and currently returns the linked client-place row verbatim, with no fallback when that row lacks coordinates.
+- Implemented the first fix pass in MMS: the shared address component now rejects the legacy `0,0` placeholder, CP and SV create flows require a usable map coordinate, CP visits persist an exact address/coordinate snapshot, edit saves update that snapshot, and enriched mobile responses resolve coordinates from visit snapshot -> linked place -> client master while filtering unusable values.
+- No Android source was changed; the fix is intentionally on the web/backend contract that feeds the existing Android `clientPlace.lat/lng` fields.
+- Hardened both create and edit surfaces for CP and SV so an address cannot be saved with missing, partial, invalid, or legacy `0,0` coordinates. The shared component now renders `0,0` as unpinned and geocodes/asks the user to set the real destination.
+- Hardened the HTTP CP create endpoint to accept camelCase/snake_case coordinates, reject partial/non-numeric/`0,0` pairs with HTTP 400, and avoid converting blank coordinate strings to zero.
+- Added coordinate regression tests covering missing, non-finite, out-of-range, zero-placeholder, and valid Chennai coordinate pairs.
+- Completed the web/backend coordinate fix across CP and SV create/edit flows.
+  The shared address control now treats legacy `(0, 0)` as unpinned, requires a
+  real map selection, and forwards the selected latitude/longitude unchanged.
+- Added visit-scoped CP address/coordinate snapshots to the MMS schema. Mobile
+  CP projections now resolve the destination in this order: visit snapshot,
+  linked client place, then client master, while rejecting unusable coordinate
+  pairs. This preserves the existing Android `clientPlace.lat/lng` contract, so
+  no Mconnect source change was required.
+- Updated the CP create and CP-to-SV HTTP endpoints to normalize camelCase and
+  snake_case coordinates and reject partial, non-numeric, out-of-range, and
+  `(0, 0)` values. CP/SV edit saves now update the same persisted destination
+  used by downstream app, Travel Desk, and MMS views.
+- Added and passed an end-to-end Convex regression test proving that a
+  web-created CP returns its exact address and coordinates through the mobile
+  list payload, and that editing the pin updates both the stored snapshot and
+  nested `clientPlace` projection. Focused result: 4 tests passed.
+- Verified `git diff --check`, the local MMS page at
+  `http://localhost:3100/marketing/site-visits?tab=scheduled&from=2026-08-02&to=2026-08-02`
+  (HTTP 200), and the local map search endpoint, which resolved Anna Nagar to
+  latitude `13.0849557` and longitude `80.2101342`.
+- Repository-wide TypeScript/ESLint remain blocked by existing unrelated
+  errors in legacy files, including the established `no-explicit-any` backlog;
+  no reported failure points to the new coordinate logic. Convex codegen also
+  remains blocked by the configured malformed/unauthorized deployment token.
+- Live behavior requires the normal admin Convex deployment. Legacy visits
+  recover automatically when a linked place or client master has valid
+  coordinates; a record with no valid coordinate in any source must be opened
+  once in CP/SV Edit and pinned. No commit, push, Convex deployment, Android
+  source change, or production deployment was performed in this turn.
+
+### Session 140 - Compact address UI and legacy pin self-repair
+
+**Date:** 2026-08-04
+
+- Reworked the shared MMS address component used by CP, SV, and project forms.
+  The embedded search/map surface is removed from the form; a compact Drop pin
+  or Adjust pin action now appears above the original postal address fields,
+  and opens the existing search-and-map dialog only when requested.
+- Removed the obsolete `map-first` option from all shared-component call sites
+  so CP create/edit, SV create/edit, and project create/edit now render the same
+  canonical address UI.
+- Address field edits now clear the previous coordinate and Maps link before
+  the debounced geocoder resolves the changed address, preventing a stale pin
+  from being stored against different address text.
+- Added non-blocking legacy CP repair. The mobile CP list queues missing
+  coordinates in bounded batches, suppresses duplicate work for ten minutes,
+  and writes recovered coordinates to both the linked client place and visit
+  snapshot. Existing valid place coordinates are copied without an external
+  request; address-only rows are geocoded asynchronously.
+- Added a regression test for legacy snapshot repair. Focused coordinate/proof
+  tests now pass 5/5, and focused ESLint passes for the shared component,
+  geocoding backend, and test.
+- Final validation passed: the focused suite remains 5/5, focused ESLint is
+  clean across the shared address component and touched CP/project forms,
+  `git diff --check` passes, `/marketing/cp-visits` responds HTTP 200 on the
+  existing MMS dev server at `http://localhost:3000`, and the map proxy resolves
+  Velachery to `12.9754605,80.2207047`.
+- Browser visual automation could not navigate away from its stale localhost
+  connection-error tab because of the in-app browser URL policy; runtime HTTP
+  compilation and DOM-facing lint/tests were used instead. The existing MMS
+  server is available on port 3000 (a second port-3100 server is intentionally
+  rejected by Next.js while the first dev instance owns the project lock).
+- A separate concurrent change appeared in `convex/marketing/siteVisits.ts`
+  while this task was running. It concerns SV outcome authorization after
+  counselling and was not edited, reverted, or included in this address work.
+- No commit, push, Convex deployment, Android source edit, or production
+  deployment was performed. The schema/action repair requires the normal admin
+  Convex deployment before legacy live records begin self-healing.
+
+### Session 141 - Static coordinate confirmation in address forms
+
+**Date:** 2026-08-04
+
+- Added a permanent Saved coordinates section below the shared address fields.
+  Valid pins display latitude and longitude separately at seven-decimal
+  precision; unpinned addresses display an explicit Coordinates not set state
+  with a prompt to use Drop pin.
+- Simplified the top Exact location strip to show only pin-capture status so
+  the numeric values have one consistent, easy-to-check location at the bottom
+  of every CP, SV, and project form using the shared component.
+- Validation is pending. No commit, push, deployment, or Android edit has been
+  performed in this turn.
+- Validation completed: focused ESLint for
+  `components/unified-address-fields.tsx` passed, `git diff --check` passed,
+  and the running MMS CP page responded HTTP 200 from
+  `http://localhost:3000/marketing/cp-visits`. No commit, push, Convex
+  deployment, Android edit, or production deployment was performed.
+
+### Session 142 - Historical CP and SV coordinate recovery
+
+**Date:** 2026-08-04
+
+- Reviewed the existing shared address/pin work and legacy CP repair path.
+- Started extending bounded background recovery to past CP and SV records so
+  linked saved coordinates are reused first and address-only records are
+  geocoded without delaying list responses.
+- Records without either trustworthy coordinates or a usable address will be
+  left unresolved to avoid assigning an incorrect map pin.
+- Implementation and validation are in progress. No commit, push, deployment,
+  or Android source edit has been performed in this turn.
+- Added legacy SV coordinate recovery in the MMS backend. An SV now reuses the
+  exact linked CP visit/client-place pin immediately in enriched web/mobile
+  responses and persists that pickup coordinate snapshot in the background.
+- Added address-based fallback geocoding for direct historical SVs that have a
+  usable pickup address but no saved coordinates. Invalid and legacy `0,0`
+  values are treated as missing.
+- Added a bounded 15-minute CP/SV historical repair cron. Each pass advances
+  through unresolved rows, copies linked coordinates without an external
+  request, and staggers at most eight CP plus eight SV geocodes to avoid API
+  bursts. Addressless rows are marked examined and intentionally remain
+  unpinned rather than receiving an inaccurate location.
+- Mobile CP/SV list endpoints continue to trigger immediate bounded repair for
+  currently fetched rows; historical records outside the visible date range
+  are handled by the cron.
+- Added an SV schema throttle field and a regression case proving that a legacy
+  SV inherits the exact linked CP pin while a newer addressless row does not
+  block the historical sweep.
+- Validation passed: focused coordinate/proof tests are 6/6, focused ESLint is
+  clean for the repair module/test/cron, `git diff --check` passes, and the
+  running MMS `/marketing/site-visits` page responds HTTP 200. The test harness
+  still prints its pre-existing asynchronous push-notification transaction
+  warning after reporting success. A repository-wide TypeScript check exceeded
+  the 120-second limit without producing a focused error; the broad HTTP lint
+  remains noisy from its existing explicit-`any` backlog.
+- Preserved the separate concurrent SV outcome-authorization change in
+  `convex/marketing/siteVisits.ts`; it was not reverted or rewritten.
+- No commit, push, Convex deployment, Android source edit, or production
+  deployment was performed. The schema, cron, and repair functions require the
+  normal admin Convex deployment before live historical rows begin repairing.
+
+### Session 143 - Pin reverse-geocode field population
+
+**Date:** 2026-08-04
+
+- Investigating why a confirmed map pin persists latitude/longitude but leaves
+  the shared address fields empty.
+- The issue is isolated to the MMS shared address component's pin-dialog
+  reverse-geocode/result mapping; implementation and validation are in
+  progress. No commit, push, deployment, or Android source edit has been made.
+- Fixed the pin dialog's early return when the Google geocoder library is not
+  ready. Pin clicks and marker drags now always attempt the same-origin reverse
+  geocoder fallback, populate structured door/street/address/city/state/pincode
+  components, and ignore stale responses after the marker moves again.
+- Added `GET /api/map/reverse-geocode` as a server-side Nominatim proxy with
+  coordinate validation, required provider headers, timeout, and caching. This
+  avoids browser CORS/key restrictions silently leaving the fields empty.
+- Confirm location remains disabled while reverse geocoding is active, so the
+  coordinates cannot be accepted before the resolved address is ready.
+- Validation passed: focused ESLint is clean for the shared component and new
+  route, `git diff --check` passes, and the screenshot coordinates
+  `13.0436392,80.2121029` resolve through the local route to Jawaharlal Nehru
+  Road, Chennai, Tamil Nadu `600083` with structured road/city/state/pincode
+  values.
+- No commit, push, Convex deployment, Android source edit, or production
+  deployment was performed in this turn. This UI/API route change requires the
+  normal MMS web deployment; it does not require a Convex schema deployment.
+
+### Session 144 - Historical coordinate deployment clarification
+
+**Date:** 2026-08-04
+
+- Confirmed that historical CP/SV coordinate repair is automatic only after
+  the pending Convex schema/functions/cron are deployed; publishing only the
+  MMS web reverse-geocode route fixes new/manual pin interactions but does not
+  start the database backfill.
+- Existing rows with a usable saved address will be geocoded progressively,
+  and rows linked to an existing CP/client-place pin will reuse that exact pin.
+  Rows with neither coordinates nor a usable address cannot be resolved safely
+  and remain explicitly unpinned until their address is corrected manually.
+- No files other than this mandatory local agent log were changed. No commit,
+  push, build, test, or deployment was performed.
+
+### Session 145 - Commit and push current repository changes
+
+**Date:** 2026-08-04
+
+- Began auditing MMS, Mconnect, and Travel Desk worktrees, branches, remotes,
+  and outstanding changes before committing and pushing the current work.
+- `AGENT_LOG.md` remains local-only and will not be staged or pushed.
+- Git audit, commit, and push are in progress.
+- Audit found MMS changes on `max` and Android source changes on `merge`;
+  Travel Desk `aizen` is clean. MMS remote `origin/max` advanced by one commit
+  during the work, so the local MMS commit will be rebased onto it before push.
+- Mconnect `origin` has two configured push URLs (company and D-A-R-X). The
+  current tracked `origin/merge` branch is up to date. The IDE deployment target
+  file and this log will be excluded from staging.
+- Pre-commit validation passed: MMS coordinate/proof tests are 6/6, focused
+  ESLint and `git diff --check` pass, and Mconnect `:app:assembleDebug` completed
+  successfully using Android Studio's bundled JBR.
+- Created MMS commit `705fcdb6` and Mconnect commit `8c1de1c`. The MMS commit
+  was then rebased cleanly onto the newly fetched `origin/max`; its final hash
+  will be recorded after push. No conflict resolution was required.
+- Pushed MMS `max` at final commit `89e120b8d9baa783e53a54a7253cebd04333075b`
+  to `manjugroupsdev/manjusitedevelopment`; remote-tip verification matches.
+- Pushed Mconnect `merge` commit
+  `8c1de1c5342a10e219e57f5c4259a84e91ad9dbc` to both configured remotes:
+  `manjugroupsdev/Mconnect` and `D-A-R-X/Mconnect`; both remote tips match.
+- Travel Desk `aizen` had no changes and was already up to date; an explicit
+  push confirmed there was nothing pending.
+- Final worktree state: MMS and Travel Desk are clean and synchronized.
+  Mconnect source is synchronized; only the intentionally uncommitted local
+  `.idea/deploymentTargetSelector.xml` and mandatory `AGENT_LOG.md` remain.
+- Push task completed. No deployment or Convex deployment was performed.
+
+### Session 146 - Live historical pin diagnosis
+
+**Date:** 2026-08-04
+
+- Confirmed that missing coordinates on existing production CP cards are
+  expected while the new Convex repair backend remains undeployed. A Git push
+  alone does not activate the schema field, repair mutations, or 15-minute
+  historical backfill cron.
+- Repository deployment wiring contains only the explicit
+  `convex:deploy:prod` package script; no checked workflow automatically runs a
+  Convex deployment from the `max` push.
+- Once the admin deploys Convex, linked existing pins can appear immediately
+  on fetch and address-only rows will be repaired progressively in bounded cron
+  batches. Rows lacking both a pin and usable address still require correction.
+- Noted new post-push MMS worktree edits in auth/SV/CP files from another
+  source and left them untouched. No code, commit, push, test, or deployment was
+  performed in this turn; only this mandatory local log was updated.
+
+### Session 120 (main-chat) - QR outcome@dropped, CP pin, single-device logout, rejected-SV visibility
+
+**Date:** 2026-08-02
+**Session:** main. app (Mconnect/merge) + web (manjusitedevelopment/max). mfpl.
+
+- SV EDGE-CASE FIXES (web/max, staged): reassign "Handover" wording widened
+  (ACTIVE_SV_STATUSES += on_counselling/picked_from_site/dropped); markPickedUp
+  rejects own_vehicle (use markClientStarted). Verified correctOutcome guard,
+  listPending pending-only, createAndSendWhatsApp resilience, reassign notify,
+  advanceCabLifecycle IAM, IRIS convertedSiteVisitId, rollup integrity — no fix
+  needed. 25/25 SV tests pass.
+- QR OUTCOME @ DROPPED: getByQrPayload canRecordOutcome now covers
+  on_counselling|picked_from_site|dropped (was on_counselling only) — matches
+  setOutcome. App: ScannedSiteVisitStaff gains _id; QrScannerFragment authorises
+  the assigned incharge/BDO client-side (works pre-deploy) across those statuses;
+  ConfirmSheet showOutcome broadened. (Fork committed the QR/CP app edits as
+  8c1de1c5/b236fff1.)
+- CP COORDINATE PIN: CreateCpVisitBottomSheet geocodes the typed address at
+  submit when no pin dropped; requires a pin if unlocatable — so a CP always
+  ships coords and the trip map pins the client (was 0,0/ocean). Also flagged the
+  Google Cloud fix: enable Geocoding API on the Maps keys (REQUEST_DENIED).
+- SINGLE-DEVICE LOGOUT: backend logout now deactivates ALL the staff's sessions
+  (not just the token) so the dialer single-device block always releases →
+  re-login on another mobile works. App LogoutBottomSheet gives api.logout its
+  own 4s budget so it's never starved.
+- REJECTED SV VISIBILITY (both app + web): CP-reject SV-cancel cascade no longer
+  gated on leadId (was invisible for lead-less immediate SVs); stamps
+  "[CP rejected by <name>] <reason>" marker; mobile mapper sends notes; app +
+  web render a distinct "Rejected" badge/pill with by-name + reason (date =
+  cancelledAt). Appears in the Cancelled tab.
+- Builds: :app:compileDebugKotlin OK; convex tsc clean for my files. Pre-existing
+  pull errors on max (site-visits-list-page 1304/1331/1402, clientPlaceVisits
+  808-809, whatsappInbound 201, http.ts 11068) would block a convex/web deploy —
+  not mine, flagged for a cleanup pass.
