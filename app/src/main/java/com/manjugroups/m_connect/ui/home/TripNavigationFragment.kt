@@ -1354,7 +1354,6 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     ArrivalOtpRequestBody(visitId = id, lat = effLat, lng = effLng)
                 )
                 if (!resp.success) {
-                    arrivalInProgress = false
                     // If the server tells us this visit is already in the
                     // "arrived" state (e.g. the user swiped successfully on
                     // a prior session, the OTP was verified, but the
@@ -1367,17 +1366,41 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                         errMsg.contains("already verified") ||
                             errMsg.contains("finish the outcome")
                     if (alreadyVerified) {
+                        arrivalInProgress = false
                         arrivalConfirmedForProgress = true
                         renderArrivalPhase(alreadyArrived = true)
                         return@launch
                     }
-                    swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                    // Fallback for the OTP request rate-limit ("Maximum OTP
+                    // requests reached"): an admin — or a staff member with
+                    // access to the client's OTP — can relay the code
+                    // out-of-band. Don't dead-end the trip on a toast; no NEW
+                    // OTP is sent, but we continue into the normal proof + OTP
+                    // entry flow so the staff has a field to type the relayed
+                    // code. Verification still checks the code the server
+                    // already issued AND re-validates arrival location, so
+                    // integrity holds even though the send was rate-limited.
+                    val otpLimitReached =
+                        errMsg.contains("maximum otp") ||
+                            errMsg.contains("otp requests reached") ||
+                            errMsg.contains("max otp") ||
+                            errMsg.contains("too many otp")
+                    if (!otpLimitReached) {
+                        arrivalInProgress = false
+                        swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                        Toast.makeText(
+                            requireContext(),
+                            arrivalBlockedMessage(resp),
+                            Toast.LENGTH_LONG
+                        ).show()
+                        return@launch
+                    }
                     Toast.makeText(
                         requireContext(),
-                        arrivalBlockedMessage(resp),
+                        "OTP limit reached — enter the code shared by your admin to complete.",
                         Toast.LENGTH_LONG
                     ).show()
-                    return@launch
+                    // fall through to the normal proof + OTP entry flow below.
                 }
 
                 pendingArrivalOtpPhoneMasked = resp.contactPhoneMasked
