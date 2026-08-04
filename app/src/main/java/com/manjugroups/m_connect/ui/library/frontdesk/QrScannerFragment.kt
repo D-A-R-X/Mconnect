@@ -433,6 +433,28 @@ class QrScannerFragment : Fragment() {
                         else emptyList()
                     }
                     .joinToString("\n")
+                // Whoever is the assigned Site Incharge / BDO (or a
+                // scanConsulting-granted staff / admin) may start counselling
+                // AND record the outcome. The scan payload carries each staff
+                // `_id`, so authorise client-side too — this works even before
+                // the broadened backend flags deploy, and fixes "reached dropped
+                // → can't record outcome" (setOutcome accepts on_counselling →
+                // picked_from_site → dropped).
+                val myStaffId = session.staffId
+                val assignedToMe = !myStaffId.isNullOrBlank() && (
+                    myStaffId == visit.inchargeStaff?.id ||
+                        myStaffId == visit.bdoStaff?.id ||
+                        myStaffId == visit.telecallerStaff?.id
+                )
+                val scanAuthorized = assignedToMe ||
+                    session.hasPermission("marketing.siteVisits.scanConsulting")
+                val statusLc = visit.status?.trim()?.lowercase().orEmpty()
+                val canStartNow = statusLc in setOf(
+                    "scheduled", "client_started", "picked_up", "on_site",
+                )
+                val canRecordNow = statusLc in setOf(
+                    "on_counselling", "picked_from_site", "dropped",
+                )
                 SiteVisitCounsellingConfirmBottomSheet.newInstance(
                     siteVisitId = visit._id,
                     projectName = projectName,
@@ -452,13 +474,10 @@ class QrScannerFragment : Fragment() {
                     visitStatus = visit.status,
                     outcome = visit.outcome,
                     outcomeNotes = visit.notes,
-                    canStartCounselling = visit.canStartCounselling,
-                    // Fall back to a client-side authorisation check so superadmins
-                    // (and scanConsulting-granted staff) get the outcome button on
-                    // an ongoing visit even before the backend's canRecordOutcome
-                    // flag is deployed. hasPermission() is true for isAdmin.
+                    canStartCounselling = visit.canStartCounselling ||
+                        (scanAuthorized && canStartNow),
                     canRecordOutcome = visit.canRecordOutcome ||
-                        session.hasPermission("marketing.siteVisits.scanConsulting"),
+                        (scanAuthorized && canRecordNow),
                 ).showOnce(parentFragmentManager, "SiteVisitCounsellingConfirmBottomSheet")
             } catch (error: Exception) {
                 if (_binding == null) return@launch
