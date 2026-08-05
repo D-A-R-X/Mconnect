@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Booking · Office Details — Frame 1 in the current reference set. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/OutcomeBodyCard"
     android:id="@+id/bodyBookingOffice"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -31,7 +32,7 @@
         <EditText android:id="@+id/etOfficePhone" style="@style/OutcomeFieldEdit" android:hint="Enter Number" android:inputType="phone" />
     </LinearLayout>
 
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="20dp" android:text="Office Address" />
+    <TextView style="@style/OutcomeSectionTitle" android:text="Office Address" />
     <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="10dp" android:text="Door No *" />
     <LinearLayout style="@style/OutcomeFieldPill">
         <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_pin" />

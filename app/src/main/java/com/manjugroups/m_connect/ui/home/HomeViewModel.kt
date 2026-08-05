@@ -544,7 +544,14 @@ class HomeViewModel : ViewModel() {
             (this.attendees?.isNotEmpty() == true) ||
             !this.foodPreferences.isNullOrBlank() ||
             !this.vehiclePreference.isNullOrBlank()
-        val category = if (proposedHasFields || leadFlaggedSvFixed || hasSvFixParty) {
+        // The explicit cpType is the authoritative signal: a CP created via the
+        // web "Create CP Visit" modal with CP Type = SV cum CP carries
+        // cpType="sv_cum_cp" but NO proposedSiteVisit / lead-flag / party data,
+        // so the softer heuristics below miss it — and it was wrongly treated as
+        // a direct CP, recording a plain "Interested" outcome that never
+        // materialised the Site Visit (#805). Classify off cpType first.
+        val isSvCumCpType = this.cpType?.trim()?.lowercase(Locale.US) == "sv_cum_cp"
+        val category = if (isSvCumCpType || proposedHasFields || leadFlaggedSvFixed || hasSvFixParty) {
             "sv_cum_cp"
         } else {
             "direct_cp"

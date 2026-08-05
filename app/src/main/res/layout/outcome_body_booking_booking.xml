@@ -2,6 +2,7 @@
 <!-- Booking · Booking Details — Frame 2 in the current reference set.
      Captures the booking metadata before charges / payment / staff. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/OutcomeBodyCard"
     android:id="@+id/bodyBookingBooking"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"

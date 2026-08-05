@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Booking · Charges Details — Frame 3 in the current reference set. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/OutcomeBodyCard"
     android:id="@+id/bodyBookingCharges"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:visibility="gone">
 
-    <TextView style="@style/OutcomeFieldLabel" android:text="Financial Details" />
+    <TextView style="@style/OutcomeSectionTitle" android:layout_marginTop="2dp" android:text="Financial Details" />
     <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="10dp" android:text="Booking Cost *" />
     <LinearLayout style="@style/OutcomeFieldPill">
         <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_briefcase" />

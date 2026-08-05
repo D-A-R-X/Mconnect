@@ -3,6 +3,7 @@
      Top half: registration / GST / document / other charges + advance + mode.
      Bottom half: flexi-payment schedule (allotment + 2nd/3rd/4th installments). -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/OutcomeBodyCard"
     android:id="@+id/bodyBookingPayment"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -15,7 +16,7 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
-    <TextView style="@style/OutcomeFieldLabel" android:text="Charges &amp; Advance" />
+    <TextView style="@style/OutcomeSectionTitle" android:layout_marginTop="2dp" android:text="Charges &amp; Advance" />
 
     <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="10dp" android:text="Promotional Offer *" />
     <LinearLayout style="@style/OutcomeFieldPill">
@@ -122,7 +123,7 @@
             android:textSize="12sp" />
     </LinearLayout>
 
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="20dp" android:text="Customer Funding" />
+    <TextView style="@style/OutcomeSectionTitle" android:text="Customer Funding" />
     <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="10dp" android:text="Customer Payment Category *" />
     <LinearLayout android:id="@+id/rowPayPaymentMode" style="@style/OutcomeFieldPillClickable">
         <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_info_shield" />
@@ -519,7 +520,7 @@
          Regular (max 30 days) / Flexi (max 60 days) always, plus
          Special (max 180 days) only when the selected project has
          specialPaymentEnabled. Flexi keeps mapping to freePayment. -->
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="20dp" android:text="Payment Schedule" />
+    <TextView style="@style/OutcomeSectionTitle" android:text="Payment Schedule" />
     <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="10dp" android:text="Payment Plan *" />
     <LinearLayout android:id="@+id/rowPayPlan" style="@style/OutcomeFieldPillClickable">
         <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_calendar" />

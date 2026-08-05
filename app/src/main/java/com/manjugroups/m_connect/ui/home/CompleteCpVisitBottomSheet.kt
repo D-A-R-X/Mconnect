@@ -109,6 +109,12 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private enum class SaveAs { DRAFT, CONFIRMED }
 
     private var activeOutcome: Outcome = Outcome.BOOKING
+    // #80: for the normal CP flow the user must FIRST pick an outcome type
+    // (Booking / Site visit / Postpone / Not Interested) before any form opens —
+    // the Booking form no longer opens by default. Forced modes (SV-cum-CP lock,
+    // standalone booking, site-visit outcome, or a caller-provided outcome arg)
+    // set this true so they skip the chooser.
+    private var outcomeChosen: Boolean = false
     private var bookingSub: BookingSub = BookingSub.CLIENT
     private var bookingStep: BookingStep = BookingStep.FIND_MOBILE
     /**
@@ -164,14 +170,22 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
             if (uri != null) uploadClientImage(uri)
         }
-    private enum class BookingDocumentKind { ADVANCE_PROOF, AADHAAR, PAN }
+    private enum class BookingDocumentKind {
+        ADVANCE_PROOF, AADHAAR, AADHAAR_BACK, PAN, CEF_FRONT, CEF_BACK
+    }
     private var pendingBookingDocumentKind: BookingDocumentKind? = null
     private var advanceProofStorageId: String? = null
     private var advanceProofFileName: String? = null
     private var aadhaarDocumentStorageId: String? = null
     private var aadhaarDocumentFileName: String? = null
+    private var aadhaarBackDocumentStorageId: String? = null
+    private var aadhaarBackDocumentFileName: String? = null
     private var panDocumentStorageId: String? = null
     private var panDocumentFileName: String? = null
+    private var cefFormFrontDocumentStorageId: String? = null
+    private var cefFormFrontDocumentFileName: String? = null
+    private var cefFormBackDocumentStorageId: String? = null
+    private var cefFormBackDocumentFileName: String? = null
     private val pickBookingDocument =
         registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             val kind = pendingBookingDocumentKind
@@ -476,7 +490,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var etStaffAadhar: EditText? = null
     private var etStaffPancard: EditText? = null
     private var btnStaffAadhaarUpload: TextView? = null
+    private var btnStaffAadhaarBackUpload: TextView? = null
     private var btnStaffPanUpload: TextView? = null
+    private var btnStaffCefFrontUpload: TextView? = null
+    private var btnStaffCefBackUpload: TextView? = null
     private var etStaffRefName1: EditText? = null
     private var etStaffRefMobile1: EditText? = null
     private var etStaffRefProf1: EditText? = null
@@ -744,9 +761,9 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         btnCpLockedReject = view.findViewById(R.id.btnCpLockedReject)
         btnCpLockedConfirm = view.findViewById(R.id.btnCpLockedConfirm)
 
-        // Pre-seed from args if caller passed an outcome.
+        // Pre-seed from args if caller passed an outcome (skips the chooser).
         arguments?.getString(ARG_CP_OUTCOME)?.takeIf { it.isNotBlank() }
-            ?.let { ext -> outcomeFromArg(ext)?.let { activeOutcome = it } }
+            ?.let { ext -> outcomeFromArg(ext)?.let { activeOutcome = it; outcomeChosen = true } }
 
         // If TripNavigationFragment already detected this is an SV-fix
         // CP, switch to Site Visit + fade the other tabs BEFORE the
@@ -760,6 +777,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         val isSvFixedHint = arguments?.getBoolean(ARG_IS_SV_FIXED_HINT, false) == true
         if (isSvFixedHint) {
             activeOutcome = Outcome.SITE_VISIT
+            outcomeChosen = true
         }
 
         wireInteractions()
@@ -809,6 +827,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
         applyEditModeToFields(true)
         activeOutcome = Outcome.BOOKING
+        outcomeChosen = true
         renderState()
     }
 
@@ -848,6 +867,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
 
         activeOutcome = lockedOutcome ?: Outcome.BOOKING
+        outcomeChosen = true
         renderState()
     }
 
@@ -1168,7 +1188,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         etStaffAadhar = view.findViewById(R.id.etStaffAadhar)
         etStaffPancard = view.findViewById(R.id.etStaffPancard)
         btnStaffAadhaarUpload = view.findViewById(R.id.btnStaffAadhaarUpload)
+        btnStaffAadhaarBackUpload = view.findViewById(R.id.btnStaffAadhaarBackUpload)
         btnStaffPanUpload = view.findViewById(R.id.btnStaffPanUpload)
+        btnStaffCefFrontUpload = view.findViewById(R.id.btnStaffCefFrontUpload)
+        btnStaffCefBackUpload = view.findViewById(R.id.btnStaffCefBackUpload)
         etStaffRefName1 = view.findViewById(R.id.etStaffRefName1)
         etStaffRefMobile1 = view.findViewById(R.id.etStaffRefMobile1)
         etStaffRefProf1 = view.findViewById(R.id.etStaffRefProf1)
@@ -1687,8 +1710,17 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         btnStaffAadhaarUpload?.setOnClickListener {
             chooseBookingDocument(BookingDocumentKind.AADHAAR)
         }
+        btnStaffAadhaarBackUpload?.setOnClickListener {
+            chooseBookingDocument(BookingDocumentKind.AADHAAR_BACK)
+        }
         btnStaffPanUpload?.setOnClickListener {
             chooseBookingDocument(BookingDocumentKind.PAN)
+        }
+        btnStaffCefFrontUpload?.setOnClickListener {
+            chooseBookingDocument(BookingDocumentKind.CEF_FRONT)
+        }
+        btnStaffCefBackUpload?.setOnClickListener {
+            chooseBookingDocument(BookingDocumentKind.CEF_BACK)
         }
         view?.findViewById<View>(R.id.rowStaffSaveDraft)?.setOnClickListener {
             staffSaveAs = SaveAs.DRAFT; refreshStaffSaveRadios()
@@ -2102,6 +2134,9 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     // ---- State transitions ---------------------------------------------
     private fun switchOutcome(o: Outcome) {
         activeOutcome = o
+        // The user explicitly picked an outcome type — leave the chooser and
+        // reveal the corresponding form (#80).
+        outcomeChosen = true
         if (o == Outcome.BOOKING) {
             bookingSub = BookingSub.CLIENT
             bookingStep = if (isStandaloneBookingMode) BookingStep.CLIENT_FORM else BookingStep.FIND_MOBILE
@@ -2125,7 +2160,45 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
      * Single render entrypoint — flips top tabs, sub-tab pills, body
      * visibility, and the CTA label off the current state.
      */
+    /**
+     * #80: the outcome-type chooser. The 4 top tabs (Booking / Site visit /
+     * Postpone / Not Interested) are the selector — none is pre-highlighted and
+     * no form is shown until the user taps one (which flips [outcomeChosen] via
+     * [switchOutcome]). Prevents the field staff from landing in the Booking
+     * form by accident.
+     */
+    private fun renderOutcomeChooser() {
+        styleOutcomeTab(tabBooking, active = false)
+        styleOutcomeTab(tabSiteVisit, active = false)
+        styleOutcomeTab(tabPostpone, active = false)
+        styleOutcomeTab(tabNotInterested, active = false)
+        subTabsScroll?.visibility = View.GONE
+        listOf(
+            bodyFindClient, bodyClientForm, bodyProfessional, bodyOffice, bodyBooking,
+            bodyCharges, bodyPayment, groupBookingChargesAdvance, groupBookingPaymentSchedule,
+            bodyStaff, bodySiteVisit, bodyPostpone, bodyNotInterested,
+        ).forEach { it?.visibility = View.GONE }
+        btnBack?.visibility = View.GONE
+        btnClear?.visibility = View.GONE
+        btnEdit?.visibility = View.GONE
+        btnSubmit?.visibility = View.GONE
+        (bodyComingSoon as? ViewGroup)?.let { g ->
+            (g.getChildAt(1) as? TextView)?.text = "What happened with the client?"
+            (g.getChildAt(2) as? TextView)?.text =
+                "Choose an outcome above — Booking, Site visit, Postpone, or Not Interested — to open its form."
+        }
+        bodyComingSoon?.visibility = View.VISIBLE
+    }
+
     private fun renderState() {
+        // #80: normal CP flow — the user must pick an outcome type first. Until
+        // then show only the 4 choices (nothing pre-selected, no form, no CTA).
+        if (!outcomeChosen) {
+            renderOutcomeChooser()
+            return
+        }
+        btnSubmit?.visibility = View.VISIBLE
+
         // Top tabs (4)
         styleOutcomeTab(tabBooking, active = activeOutcome == Outcome.BOOKING)
         styleOutcomeTab(tabSiteVisit, active = activeOutcome == Outcome.SITE_VISIT)
@@ -2938,9 +3011,15 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             "etStaffAadhar" to et(etStaffAadhar),
             "aadhaarDocumentStorageId" to aadhaarDocumentStorageId,
             "aadhaarDocumentFileName" to aadhaarDocumentFileName,
+            "aadhaarBackDocumentStorageId" to aadhaarBackDocumentStorageId,
+            "aadhaarBackDocumentFileName" to aadhaarBackDocumentFileName,
             "etStaffPancard" to et(etStaffPancard),
             "panDocumentStorageId" to panDocumentStorageId,
             "panDocumentFileName" to panDocumentFileName,
+            "cefFormFrontDocumentStorageId" to cefFormFrontDocumentStorageId,
+            "cefFormFrontDocumentFileName" to cefFormFrontDocumentFileName,
+            "cefFormBackDocumentStorageId" to cefFormBackDocumentStorageId,
+            "cefFormBackDocumentFileName" to cefFormBackDocumentFileName,
             "tvStaffDocPrep" to tv(tvStaffDocPrep),
             // References
             "etStaffRefName1" to et(etStaffRefName1),
@@ -3091,10 +3170,19 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             aadhaarDocumentStorageId = map["aadhaarDocumentStorageId"]?.takeIf { it.isNotBlank() }
             aadhaarDocumentFileName = map["aadhaarDocumentFileName"]?.takeIf { it.isNotBlank() }
             btnStaffAadhaarUpload?.text = aadhaarDocumentFileName?.let { "✓ $it" } ?: "Choose file"
+            aadhaarBackDocumentStorageId = map["aadhaarBackDocumentStorageId"]?.takeIf { it.isNotBlank() }
+            aadhaarBackDocumentFileName = map["aadhaarBackDocumentFileName"]?.takeIf { it.isNotBlank() }
+            btnStaffAadhaarBackUpload?.text = aadhaarBackDocumentFileName?.let { "✓ $it" } ?: "Choose file"
             et(etStaffPancard, "etStaffPancard")
             panDocumentStorageId = map["panDocumentStorageId"]?.takeIf { it.isNotBlank() }
             panDocumentFileName = map["panDocumentFileName"]?.takeIf { it.isNotBlank() }
             btnStaffPanUpload?.text = panDocumentFileName?.let { "✓ $it" } ?: "Choose file"
+            cefFormFrontDocumentStorageId = map["cefFormFrontDocumentStorageId"]?.takeIf { it.isNotBlank() }
+            cefFormFrontDocumentFileName = map["cefFormFrontDocumentFileName"]?.takeIf { it.isNotBlank() }
+            btnStaffCefFrontUpload?.text = cefFormFrontDocumentFileName?.let { "✓ $it" } ?: "Choose file"
+            cefFormBackDocumentStorageId = map["cefFormBackDocumentStorageId"]?.takeIf { it.isNotBlank() }
+            cefFormBackDocumentFileName = map["cefFormBackDocumentFileName"]?.takeIf { it.isNotBlank() }
+            btnStaffCefBackUpload?.text = cefFormBackDocumentFileName?.let { "✓ $it" } ?: "Choose file"
             tv(tvStaffDocPrep, "tvStaffDocPrep")
             et(etStaffRefName1, "etStaffRefName1")
             et(etStaffRefMobile1, "etStaffRefMobile1")
@@ -3427,11 +3515,20 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         advanceProofFileName = null
         aadhaarDocumentStorageId = null
         aadhaarDocumentFileName = null
+        aadhaarBackDocumentStorageId = null
+        aadhaarBackDocumentFileName = null
         panDocumentStorageId = null
         panDocumentFileName = null
+        cefFormFrontDocumentStorageId = null
+        cefFormFrontDocumentFileName = null
+        cefFormBackDocumentStorageId = null
+        cefFormBackDocumentFileName = null
         btnPayProofUpload?.text = "Choose file"
         btnStaffAadhaarUpload?.text = "Choose file"
+        btnStaffAadhaarBackUpload?.text = "Choose file"
         btnStaffPanUpload?.text = "Choose file"
+        btnStaffCefFrontUpload?.text = "Choose file"
+        btnStaffCefBackUpload?.text = "Choose file"
         renderClientImage()
         staffSaveAs = SaveAs.DRAFT
         bookingSub = BookingSub.CLIENT
@@ -4905,7 +5002,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         val target = when (kind) {
             BookingDocumentKind.ADVANCE_PROOF -> btnPayProofUpload
             BookingDocumentKind.AADHAAR -> btnStaffAadhaarUpload
+            BookingDocumentKind.AADHAAR_BACK -> btnStaffAadhaarBackUpload
             BookingDocumentKind.PAN -> btnStaffPanUpload
+            BookingDocumentKind.CEF_FRONT -> btnStaffCefFrontUpload
+            BookingDocumentKind.CEF_BACK -> btnStaffCefBackUpload
         }
         target?.text = "Uploading…"
         target?.isEnabled = false
@@ -4948,9 +5048,21 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     aadhaarDocumentStorageId = storageId
                     aadhaarDocumentFileName = displayName
                 }
+                BookingDocumentKind.AADHAAR_BACK -> {
+                    aadhaarBackDocumentStorageId = storageId
+                    aadhaarBackDocumentFileName = displayName
+                }
                 BookingDocumentKind.PAN -> {
                     panDocumentStorageId = storageId
                     panDocumentFileName = displayName
+                }
+                BookingDocumentKind.CEF_FRONT -> {
+                    cefFormFrontDocumentStorageId = storageId
+                    cefFormFrontDocumentFileName = displayName
+                }
+                BookingDocumentKind.CEF_BACK -> {
+                    cefFormBackDocumentStorageId = storageId
+                    cefFormBackDocumentFileName = displayName
                 }
             }
             target?.text = "✓ $displayName"
@@ -5317,9 +5429,15 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             aadhaar = textOrNull(etStaffAadhar?.text),
             aadhaarDocumentStorageId = aadhaarDocumentStorageId,
             aadhaarDocumentFileName = aadhaarDocumentFileName,
+            aadhaarBackDocumentStorageId = aadhaarBackDocumentStorageId,
+            aadhaarBackDocumentFileName = aadhaarBackDocumentFileName,
             pan = textOrNull(etStaffPancard?.text),
             panDocumentStorageId = panDocumentStorageId,
             panDocumentFileName = panDocumentFileName,
+            cefFormFrontDocumentStorageId = cefFormFrontDocumentStorageId,
+            cefFormFrontDocumentFileName = cefFormFrontDocumentFileName,
+            cefFormBackDocumentStorageId = cefFormBackDocumentStorageId,
+            cefFormBackDocumentFileName = cefFormBackDocumentFileName,
             referenceName1 = textOrNull(etStaffRefName1?.text),
             referenceMobile1 = textOrNull(etStaffRefMobile1?.text),
             referenceProfession1 = textOrNull(etStaffRefProf1?.text),
@@ -5464,9 +5582,12 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         if (bookingStaffBdo == null) missing += "Original BDO"
         if (bookingStaffTelecaller == null) missing += "Original Telecaller"
         requireText("Aadhaar Number", etStaffAadhar?.text)
-        if (aadhaarDocumentStorageId.isNullOrBlank()) missing += "Aadhaar Upload"
+        if (aadhaarDocumentStorageId.isNullOrBlank()) missing += "Aadhaar Front"
+        if (aadhaarBackDocumentStorageId.isNullOrBlank()) missing += "Aadhaar Back"
         requireText("PAN Number", etStaffPancard?.text)
         if (panDocumentStorageId.isNullOrBlank()) missing += "PAN Upload"
+        if (cefFormFrontDocumentStorageId.isNullOrBlank()) missing += "CEF Front"
+        if (cefFormBackDocumentStorageId.isNullOrBlank()) missing += "CEF Back"
         requireText("Reference 1 — Name", etStaffRefName1?.text)
         requireText("Reference 1 — Relation", etStaffRefProf1?.text)
         requireText("Reference 1 — Mobile", etStaffRefMobile1?.text)
@@ -6109,6 +6230,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         // 1. Force the active outcome to Site Visit and re-render so the
         //    SV body is the one on screen.
         activeOutcome = Outcome.SITE_VISIT
+        outcomeChosen = true
         renderState()
 
         // 2. Fade non-SV tabs and make them unclickable.

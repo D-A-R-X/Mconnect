@@ -501,9 +501,11 @@
             android:id="@+id/outcomeBodyContainer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
+            android:layout_marginTop="14dp"
             android:orientation="vertical"
-            android:paddingHorizontal="20dp">
+            android:background="#F5F6F8"
+            android:paddingHorizontal="14dp"
+            android:paddingBottom="6dp">
 
             <!-- Each included layout already has its own root @id (bodyComingSoon,
                  bodyBookingFindClient, etc.) — DO NOT set android:id on the
