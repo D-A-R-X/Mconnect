@@ -50,9 +50,23 @@
         <EditText android:id="@+id/etStaffAadhar" style="@style/OutcomeFieldEdit" android:hint="Enter Details" android:inputType="number" />
     </LinearLayout>
 
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Aadhaar Upload *" />
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Aadhaar Front *" />
     <TextView
         android:id="@+id/btnStaffAadhaarUpload"
+        style="@style/OutcomeFieldValue"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:background="@drawable/bg_outcome_field_pill"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="14dp"
+        android:text="Choose file"
+        android:textColor="#175CD3" />
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Aadhaar Back *" />
+    <TextView
+        android:id="@+id/btnStaffAadhaarBackUpload"
         style="@style/OutcomeFieldValue"
         android:layout_width="match_parent"
         android:layout_height="48dp"
@@ -73,6 +87,36 @@
     <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="PAN Upload *" />
     <TextView
         android:id="@+id/btnStaffPanUpload"
+        style="@style/OutcomeFieldValue"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:background="@drawable/bg_outcome_field_pill"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="14dp"
+        android:text="Choose file"
+        android:textColor="#175CD3" />
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="18dp" android:text="CEF Form" />
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="CEF Front *" />
+    <TextView
+        android:id="@+id/btnStaffCefFrontUpload"
+        style="@style/OutcomeFieldValue"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:background="@drawable/bg_outcome_field_pill"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="14dp"
+        android:text="Choose file"
+        android:textColor="#175CD3" />
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="CEF Back *" />
+    <TextView
+        android:id="@+id/btnStaffCefBackUpload"
         style="@style/OutcomeFieldValue"
         android:layout_width="match_parent"
         android:layout_height="48dp"

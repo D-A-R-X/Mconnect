@@ -3344,6 +3344,27 @@ data class CreateBookingRequest(
     val sourceType: String? = null,
     val sourceClientPlaceVisitId: String? = null,
     val sourceSiteVisitId: String? = null,
+    // Aadhaar back + CEF form front/back (web parity). The booking mutation +
+    // schema accept these; the POST /api/bookings HTTP mapper must forward them.
+    val aadhaarBackDocumentStorageId: String? = null,
+    val aadhaarBackDocumentFileName: String? = null,
+    val cefFormFrontDocumentStorageId: String? = null,
+    val cefFormFrontDocumentFileName: String? = null,
+    val cefFormBackDocumentStorageId: String? = null,
+    val cefFormBackDocumentFileName: String? = null,
+    // Dynamic / self-cash (category A / Flexi free-payment) schedule rows.
+    val flexiPaymentSchedule: List<FlexiPaymentRow>? = null,
+    // Resolved conversion/exchange credit applied to the payable chain.
+    val conversionExchangeAmount: Double? = null,
+    // When true the booking is inserted without kicking off the approval
+    // workflow (stays a draft). Normal mobile submits leave this null.
+    val skipApproval: Boolean? = null,
+)
+
+/** One row of the dynamic (self-cash / Flexi free-payment) balance schedule. */
+data class FlexiPaymentRow(
+    val amount: Double,
+    val dueDate: String, // yyyy-MM-dd
 )
 
 data class CreateBookingResponse(

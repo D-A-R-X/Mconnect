@@ -48,93 +48,312 @@
             android:orientation="vertical"
             android:paddingHorizontal="16dp"
             android:paddingTop="12dp"
-            android:paddingBottom="24dp">
+            android:paddingBottom="40dp">
+
+            <!-- ══════════ BOOKING INFORMATION ══════════ -->
+            <TextView style="@style/BookingSectionHeader" android:text="Booking Information" />
+
+            <TextView style="@style/BookingFieldLabel" android:text="Booking Type *" />
+            <TextView android:id="@+id/tvBookingType" style="@style/BookingFieldRow" android:text="NEW" />
+
+            <TextView style="@style/BookingFieldLabel" android:text="Project *" />
+            <TextView android:id="@+id/tvBookingProject" style="@style/BookingFieldRow" android:text="Select project" />
+
+            <TextView style="@style/BookingFieldLabel" android:text="Plot / Unit *" />
+            <TextView android:id="@+id/tvBookingUnit" style="@style/BookingFieldRow" android:text="Select unit" />
+
+            <TextView style="@style/BookingFieldLabel" android:text="Property Type *" />
+            <TextView android:id="@+id/tvBookingPropertyType" style="@style/BookingFieldRow" android:text="Plot" />
+
+            <TextView style="@style/BookingFieldLabel" android:text="CEF No *" />
+            <EditText android:id="@+id/etBookingCefNo" style="@style/BookingFieldInput" android:inputType="textCapCharacters" android:hint="CEF number" />
+
+            <TextView style="@style/BookingFieldLabel" android:text="Booking Date *" />
+            <TextView android:id="@+id/tvBookingDate" style="@style/BookingFieldRow" />
+
+            <!-- ══════════ CLIENT DETAILS ══════════ -->
+            <TextView style="@style/BookingSectionHeader" android:text="Client Details" />
+
+            <TextView style="@style/BookingFieldLabel" android:text="Mobile Number *" />
+            <EditText android:id="@+id/etBookingMobile" style="@style/BookingFieldInput" android:inputType="phone" android:maxLength="10" android:hint="10-digit mobile" />
+            <TextView android:id="@+id/tvBookingLinkedLead" style="@style/BookingFieldRow" android:layout_marginTop="8dp" android:visibility="gone" android:text="Search lead by phone" />
+
+            <TextView style="@style/BookingFieldLabel" android:text="Title *" />
+            <TextView android:id="@+id/tvBookingTitleField" style="@style/BookingFieldRow" android:text="Mr" />
+
+            <TextView style="@style/BookingFieldLabel" android:text="Client Name *" />
+            <EditText android:id="@+id/etBookingClientName" style="@style/BookingFieldInput" android:inputType="textCapCharacters" android:hint="Full name" />
+
+            <TextView style="@style/BookingFieldLabel" android:text="Father / Spouse Name *" />
+            <EditText android:id="@+id/etBookingFatherSpouse" style="@style/BookingFieldInput" android:inputType="textCapCharacters" android:hint="Father / spouse name" />
+
+            <TextView style="@style/BookingFieldLabel" android:text="Date of Birth *" />
+            <TextView android:id="@+id/tvBookingDob" style="@style/BookingFieldRow" android:text="Select date" />
+
+            <TextView style="@style/BookingFieldLabel" android:text="Anniversary Date" />
+            <TextView android:id="@+id/tvBookingAnniversary" style="@style/BookingFieldRow" android:text="Select date" />
+
+            <TextView style="@style/BookingFieldLabel" android:text="Alternate Number *" />
+            <EditText android:id="@+id/etBookingAlternate" style="@style/BookingFieldInput" android:inputType="phone" android:maxLength="10" android:hint="10-digit number" />
+
+            <TextView style="@style/BookingFieldLabel" android:text="WhatsApp Number *" />
+            <EditText android:id="@+id/etBookingWhatsapp" style="@style/BookingFieldInput" android:inputType="phone" android:maxLength="10" android:hint="10-digit number" />
+            <CheckBox android:id="@+id/cbWhatsappSame" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="Same as personal mobile" android:textSize="12sp" />
+
+            <TextView style="@style/BookingFieldLabel" android:text="Email *" />
+            <EditText android:id="@+id/etBookingEmail" style="@style/BookingFieldInput" android:inputType="textEmailAddress" android:hint="name@example.com" />
+
+            <TextView style="@style/BookingFieldLabel" android:text="Nationality *" />
+            <TextView android:id="@+id/tvBookingNationality" style="@style/BookingFieldRow" android:text="Indian" />
+
+            <TextView style="@style/BookingSubHeader" android:text="Home Address" />
+            <TextView style="@style/BookingFieldLabel" android:text="Door No" />
+            <EditText android:id="@+id/etHomeDoorNo" style="@style/BookingFieldInput" android:inputType="textCapCharacters" android:hint="Door / plot no" />
+            <TextView style="@style/BookingFieldLabel" android:text="Street Name" />
+            <EditText android:id="@+id/etHomeStreet" style="@style/BookingFieldInput" android:inputType="textCapCharacters" android:hint="Street" />
+            <TextView style="@style/BookingFieldLabel" android:text="Address Line 1 *" />
+            <EditText android:id="@+id/etHomeLine1" style="@style/BookingFieldInput" android:inputType="textCapCharacters" android:hint="Area / locality" />
+            <TextView style="@style/BookingFieldLabel" android:text="Address Line 2" />
+            <EditText android:id="@+id/etHomeLine2" style="@style/BookingFieldInput" android:inputType="textCapCharacters" android:hint="Landmark" />
+            <TextView style="@style/BookingFieldLabel" android:text="Pincode *" />
+            <EditText android:id="@+id/etHomePincode" style="@style/BookingFieldInput" android:inputType="number" android:maxLength="6" android:hint="6-digit pincode" />
+            <TextView style="@style/BookingFieldLabel" android:text="District *" />
+            <EditText android:id="@+id/etHomeDistrict" style="@style/BookingFieldInput" android:inputType="textCapCharacters" android:hint="District" />
+
+            <TextView style="@style/BookingSubHeader" android:text="Professional Details" />
+            <TextView style="@style/BookingFieldLabel" android:text="Profession *" />
+            <TextView android:id="@+id/tvBookingProfession" style="@style/BookingFieldRow" android:text="Business" />
+            <TextView style="@style/BookingFieldLabel" android:text="Designation *" />
+            <EditText android:id="@+id/etBookingDesignation" style="@style/BookingFieldInput" android:inputType="textCapCharacters" android:hint="Designation" />
+            <LinearLayout android:id="@+id/rowDepartment" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+                <TextView style="@style/BookingFieldLabel" android:text="Department *" />
+                <TextView android:id="@+id/tvBookingDepartment" style="@style/BookingFieldRow" android:text="Select department" />
+                <LinearLayout android:id="@+id/rowOtherDepartment" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+                    <TextView style="@style/BookingFieldLabel" android:text="Other Department *" />
+                    <EditText android:id="@+id/etBookingOtherDepartment" style="@style/BookingFieldInput" android:inputType="textCapCharacters" android:hint="Department name" />
+                </LinearLayout>
+            </LinearLayout>
+            <TextView style="@style/BookingFieldLabel" android:text="Income Per Annum *" />
+            <EditText android:id="@+id/etBookingIncome" style="@style/BookingFieldInput" android:inputType="text" android:hint="Annual income" />
+
+            <TextView style="@style/BookingSubHeader" android:text="Office Details" />
+            <TextView style="@style/BookingFieldLabel" android:text="Office Name *" />
+            <EditText android:id="@+id/etOfficeName" style="@style/BookingFieldInput" android:inputType="textCapCharacters" android:hint="Office / company name" />
+            <TextView style="@style/BookingFieldLabel" android:text="Office Door No" />
+            <EditText android:id="@+id/etOfficeDoorNo" style="@style/BookingFieldInput" android:inputType="textCapCharacters" android:hint="Door no" />
+            <TextView style="@style/BookingFieldLabel" android:text="Office Street" />
+            <EditText android:id="@+id/etOfficeStreet" style="@style/BookingFieldInput" android:inputType="textCapCharacters" android:hint="Street" />
+            <TextView style="@style/BookingFieldLabel" android:text="Office Address Line 1 *" />
+            <EditText android:id="@+id/etOfficeLine1" style="@style/BookingFieldInput" android:inputType="textCapCharacters" android:hint="Address" />
+            <TextView style="@style/BookingFieldLabel" android:text="Office Address Line 2" />
+            <EditText android:id="@+id/etOfficeLine2" style="@style/BookingFieldInput" android:inputType="textCapCharacters" android:hint="Landmark" />
+            <TextView style="@style/BookingFieldLabel" android:text="Office Area" />
+            <EditText android:id="@+id/etOfficeArea" style="@style/BookingFieldInput" android:inputType="textCapCharacters" android:hint="Area" />
+            <TextView style="@style/BookingFieldLabel" android:text="Office Pincode" />
+            <EditText android:id="@+id/etOfficePincode" style="@style/BookingFieldInput" android:inputType="number" android:maxLength="6" android:hint="6-digit pincode" />
+            <TextView style="@style/BookingFieldLabel" android:text="Office Mobile" />
+            <EditText android:id="@+id/etOfficeMobile" style="@style/BookingFieldInput" android:inputType="phone" android:hint="Office number" />
+            <TextView style="@style/BookingFieldLabel" android:text="Office Email" />
+            <EditText android:id="@+id/etOfficeEmail" style="@style/BookingFieldInput" android:inputType="textEmailAddress" android:hint="office@example.com" />
+
+            <!-- ══════════ SOURCE / REFERRAL ══════════ -->
+            <TextView style="@style/BookingSectionHeader" android:text="Source / Referral" />
+            <TextView style="@style/BookingFieldLabel" android:text="Client Source" />
+            <TextView android:id="@+id/tvBookingClientSource" style="@style/BookingFieldRow" android:text="Select source" />
+            <TextView style="@style/BookingFieldLabel" android:text="Source / Reference Name" />
+            <EditText android:id="@+id/etBookingSourceName" style="@style/BookingFieldInput" android:inputType="textCapCharacters" android:hint="Reference name" />
+            <TextView style="@style/BookingFieldLabel" android:text="Source / Reference Mobile" />
+            <EditText android:id="@+id/etBookingSourceMobile" style="@style/BookingFieldInput" android:inputType="phone" android:hint="Reference mobile" />
+            <TextView style="@style/BookingFieldLabel" android:text="Referral Benefit" />
+            <EditText android:id="@+id/etBookingReferralBenefit" style="@style/BookingFieldInput" android:inputType="text" android:hint="Benefit" />
+            <TextView style="@style/BookingFieldLabel" android:text="Is Against Site Visit? *" />
+            <TextView android:id="@+id/tvBookingIsAgainstSv" style="@style/BookingFieldRow" android:text="Yes" />
+            <LinearLayout android:id="@+id/rowSvDetails" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                <TextView style="@style/BookingFieldLabel" android:text="SV Name *" />
+                <EditText android:id="@+id/etBookingSvName" style="@style/BookingFieldInput" android:inputType="textCapCharacters" android:hint="SV name" />
+                <TextView style="@style/BookingFieldLabel" android:text="SV Mobile No. *" />
+                <EditText android:id="@+id/etBookingSvMobile" style="@style/BookingFieldInput" android:inputType="phone" android:hint="SV mobile" />
+            </LinearLayout>
+
+            <!-- ══════════ FINANCIAL DETAILS ══════════ -->
+            <TextView style="@style/BookingSectionHeader" android:text="Financial Details" />
+            <TextView style="@style/BookingFieldLabel" android:text="Booking Cost (₹) *" />
+            <EditText android:id="@+id/etBookingCost" style="@style/BookingFieldInput" android:inputType="numberDecimal" android:hint="0" />
+            <TextView style="@style/BookingFieldLabel" android:text="Guideline Value (₹) *" />
+            <EditText android:id="@+id/etGuidelineValue" style="@style/BookingFieldInput" android:inputType="numberDecimal" android:hint="0" />
+            <TextView style="@style/BookingFieldLabel" android:text="Special Consideration (₹)" />
+            <EditText android:id="@+id/etSpecialConsideration" style="@style/BookingFieldInput" android:inputType="numberDecimal" android:hint="0" />
+            <LinearLayout android:id="@+id/rowSpecialConsideration" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+                <TextView style="@style/BookingFieldLabel" android:text="Discount Approved By *" />
+                <TextView android:id="@+id/tvDiscountApprovedBy" style="@style/BookingFieldRow" android:text="Select approver" />
+                <TextView style="@style/BookingFieldLabel" android:text="SC Reason *" />
+                <EditText android:id="@+id/etScReason" style="@style/BookingFieldInput" android:inputType="textCapCharacters" android:hint="Reason" />
+                <TextView style="@style/BookingFieldLabel" android:text="SC Validity (days) *" />
+                <EditText android:id="@+id/etScValidity" style="@style/BookingFieldInput" android:inputType="number" android:hint="0" />
+            </LinearLayout>
+            <TextView android:id="@+id/tvAgreedAmount" style="@style/BookingComputed" android:text="Agreed Amount: ₹0" />
+            <TextView style="@style/BookingFieldLabel" android:text="Promotional Offer *" />
+            <EditText android:id="@+id/etPromoOffer" style="@style/BookingFieldInput" android:inputType="text" android:hint="Offer" />
+            <TextView style="@style/BookingFieldLabel" android:text="Offer Value (₹) *" />
+            <EditText android:id="@+id/etPromoOfferValue" style="@style/BookingFieldInput" android:inputType="numberDecimal" android:hint="0" />
+            <TextView style="@style/BookingFieldLabel" android:text="Terms &amp; Conditions *" />
+            <TextView android:id="@+id/tvPromoTnc" style="@style/BookingFieldRow" android:text="Registration within 15 days" />
+
+            <!-- ══════════ CHARGES ══════════ -->
+            <TextView style="@style/BookingSectionHeader" android:text="Charges" />
+            <TextView style="@style/BookingFieldLabel" android:text="Registration Charges (₹) *" />
+            <EditText android:id="@+id/etRegistrationCharges" style="@style/BookingFieldInput" android:inputType="numberDecimal" android:hint="0" />
+            <CheckBox android:id="@+id/cbGstApplicable" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:checked="true" android:text="GST Applicable" android:textSize="12sp" />
+            <TextView style="@style/BookingFieldLabel" android:text="GST Amount (₹) *" />
+            <EditText android:id="@+id/etGstAmount" style="@style/BookingFieldInput" android:inputType="numberDecimal" android:hint="0" />
+            <TextView style="@style/BookingFieldLabel" android:text="Document Charges (₹) *" />
+            <EditText android:id="@+id/etDocumentCharges" style="@style/BookingFieldInput" android:inputType="numberDecimal" android:hint="0" />
+            <TextView style="@style/BookingFieldLabel" android:text="Patta Charges (₹) *" />
+            <EditText android:id="@+id/etPattaCharges" style="@style/BookingFieldInput" android:inputType="numberDecimal" android:hint="0" />
+            <CheckBox android:id="@+id/cbOtherApplicable" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:checked="true" android:text="Other Charges Applicable" android:textSize="12sp" />
+            <TextView style="@style/BookingFieldLabel" android:text="Other Charges (₹) *" />
+            <EditText android:id="@+id/etOtherCharges" style="@style/BookingFieldInput" android:inputType="numberDecimal" android:hint="0" />
+
+            <!-- ══════════ CUSTOMER FUNDING ══════════ -->
+            <TextView style="@style/BookingSectionHeader" android:text="Customer Funding" />
+            <TextView style="@style/BookingFieldLabel" android:text="Customer Payment Category *" />
+            <TextView android:id="@+id/tvPaymentCategory" style="@style/BookingFieldRow" android:text="A - Self Finance / Hand Cash" />
+            <LinearLayout android:id="@+id/rowBankLoan" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+                <TextView style="@style/BookingFieldLabel" android:text="Bank Loan Amount (₹) *" />
+                <EditText android:id="@+id/etLoanAmount" style="@style/BookingFieldInput" android:inputType="numberDecimal" android:hint="0" />
+            </LinearLayout>
+            <TextView android:id="@+id/tvClientPayableSummary" style="@style/BookingComputed" android:text="" android:visibility="gone" />
+            <TextView style="@style/BookingFieldLabel" android:text="Advance Payment Mode *" />
+            <TextView android:id="@+id/tvBookingMode" style="@style/BookingFieldRow" android:text="CASH" />
+            <TextView style="@style/BookingFieldLabel" android:text="Advance Amount (₹) *" />
+            <EditText android:id="@+id/etBookingAdvance" style="@style/BookingFieldInput" android:inputType="numberDecimal" android:hint="0" />
+            <LinearLayout android:id="@+id/rowOnlinePayment" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+                <TextView style="@style/BookingFieldLabel" android:text="Transaction ID *" />
+                <EditText android:id="@+id/etAdvanceTxnId" style="@style/BookingFieldInput" android:inputType="text" android:hint="UTR / Ref no" />
+                <TextView style="@style/BookingFieldLabel" android:text="Payment Proof *" />
+                <TextView android:id="@+id/tvUploadPaymentProof" style="@style/BookingUploadRow" android:text="Upload payment proof" />
+            </LinearLayout>
+            <LinearLayout android:id="@+id/rowInstrumentPayment" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+                <TextView android:id="@+id/lblInstrumentNo" style="@style/BookingFieldLabel" android:text="Cheque No *" />
+                <EditText android:id="@+id/etAdvanceInstrumentNo" style="@style/BookingFieldInput" android:inputType="text" android:hint="Instrument no" />
+                <TextView style="@style/BookingFieldLabel" android:text="Bank *" />
+                <EditText android:id="@+id/etAdvanceBank" style="@style/BookingFieldInput" android:inputType="textCapWords" android:hint="Bank" />
+                <TextView style="@style/BookingFieldLabel" android:text="Branch *" />
+                <EditText android:id="@+id/etAdvanceBranch" style="@style/BookingFieldInput" android:inputType="textCapWords" android:hint="Branch" />
+                <TextView style="@style/BookingFieldLabel" android:text="Instrument Date *" />
+                <TextView android:id="@+id/tvAdvanceInstrumentDate" style="@style/BookingFieldRow" android:text="Select date" />
+            </LinearLayout>
+            <TextView android:id="@+id/tvBalanceAmount" style="@style/BookingComputed" android:text="Balance Amount: ₹0" />
+
+            <!-- ══════════ BALANCE PAYMENT SCHEDULE ══════════ -->
+            <TextView style="@style/BookingSectionHeader" android:text="Balance Payment Schedule" />
+            <TextView style="@style/BookingFieldLabel" android:text="Payment Plan *" />
+            <TextView android:id="@+id/tvPaymentPlan" style="@style/BookingFieldRow" android:text="Flexi" />
+            <TextView style="@style/BookingFieldLabel" android:text="Allotment Due Amount (₹) *" />
+            <EditText android:id="@+id/etAllotmentAmount" style="@style/BookingFieldInput" android:inputType="numberDecimal" android:hint="0" />
+            <TextView style="@style/BookingFieldLabel" android:text="Allotment Due Date *" />
+            <TextView android:id="@+id/tvAllotmentDate" style="@style/BookingFieldRow" android:text="Select date" />
+            <LinearLayout android:id="@+id/rowSecondPayment" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                <TextView style="@style/BookingFieldLabel" android:text="2nd Payment Amount (₹)" />
+                <EditText android:id="@+id/etSecondAmount" style="@style/BookingFieldInput" android:inputType="numberDecimal" android:hint="0" />
+                <TextView style="@style/BookingFieldLabel" android:text="2nd Payment Date" />
+                <TextView android:id="@+id/tvSecondDate" style="@style/BookingFieldRow" android:text="Select date" />
+            </LinearLayout>
+            <LinearLayout android:id="@+id/rowThirdPayment" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+                <TextView style="@style/BookingFieldLabel" android:text="3rd Payment Amount (₹)" />
+                <EditText android:id="@+id/etThirdAmount" style="@style/BookingFieldInput" android:inputType="numberDecimal" android:hint="0" />
+                <TextView style="@style/BookingFieldLabel" android:text="3rd Payment Date" />
+                <TextView android:id="@+id/tvThirdDate" style="@style/BookingFieldRow" android:text="Select date" />
+            </LinearLayout>
+            <LinearLayout android:id="@+id/rowFourthPayment" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+                <TextView style="@style/BookingFieldLabel" android:text="4th Payment Amount (₹)" />
+                <EditText android:id="@+id/etFourthAmount" style="@style/BookingFieldInput" android:inputType="numberDecimal" android:hint="0" />
+                <TextView style="@style/BookingFieldLabel" android:text="4th Payment Date" />
+                <TextView android:id="@+id/tvFourthDate" style="@style/BookingFieldRow" android:text="Select date" />
+            </LinearLayout>
+            <TextView style="@style/BookingFieldLabel" android:text="Preferred Registration Date *" />
+            <TextView android:id="@+id/tvPreferredRegDate" style="@style/BookingFieldRow" android:text="Select date" />
+
+            <!-- ══════════ ORIGINAL STAFF ══════════ -->
+            <TextView style="@style/BookingSectionHeader" android:text="Original Staff" />
+            <TextView style="@style/BookingFieldLabel" android:text="AVP *" />
+            <TextView android:id="@+id/tvStaffAvp" style="@style/BookingFieldRow" android:text="Select AVP" />
+            <TextView style="@style/BookingFieldLabel" android:text="General Manager *" />
+            <TextView android:id="@+id/tvStaffGm" style="@style/BookingFieldRow" android:text="Select GM" />
+            <TextView style="@style/BookingFieldLabel" android:text="Senior Manager *" />
+            <TextView android:id="@+id/tvStaffSeniorManager" style="@style/BookingFieldRow" android:text="Select Senior Manager" />
+            <TextView style="@style/BookingFieldLabel" android:text="BDO *" />
+            <TextView android:id="@+id/tvStaffBdo" style="@style/BookingFieldRow" android:text="Select BDO" />
+            <TextView style="@style/BookingFieldLabel" android:text="Telecaller *" />
+            <TextView android:id="@+id/tvStaffTelecaller" style="@style/BookingFieldRow" android:text="Select Telecaller" />
+
+            <!-- ══════════ KYC ══════════ -->
+            <TextView style="@style/BookingSectionHeader" android:text="KYC" />
+            <TextView style="@style/BookingFieldLabel" android:text="Aadhaar *" />
+            <EditText android:id="@+id/etAadhaar" style="@style/BookingFieldInput" android:inputType="number" android:maxLength="12" android:hint="12-digit Aadhaar number" />
+            <TextView style="@style/BookingFieldLabel" android:text="Aadhaar Front *" />
+            <TextView android:id="@+id/tvUploadAadhaarFront" style="@style/BookingUploadRow" android:text="Upload Aadhaar Front" />
+            <TextView style="@style/BookingFieldLabel" android:text="Aadhaar Back *" />
+            <TextView android:id="@+id/tvUploadAadhaarBack" style="@style/BookingUploadRow" android:text="Upload Aadhaar Back" />
+            <TextView style="@style/BookingFieldLabel" android:text="PAN *" />
+            <EditText android:id="@+id/etPan" style="@style/BookingFieldInput" android:inputType="textCapCharacters" android:maxLength="10" android:hint="PAN NUMBER" />
+            <TextView style="@style/BookingFieldLabel" android:text="PAN Upload *" />
+            <TextView android:id="@+id/tvUploadPan" style="@style/BookingUploadRow" android:text="Upload PAN" />
+            <TextView style="@style/BookingSubHeader" android:text="CEF Form" />
+            <TextView style="@style/BookingFieldLabel" android:text="CEF Front *" />
+            <TextView android:id="@+id/tvUploadCefFront" style="@style/BookingUploadRow" android:text="Upload CEF Front" />
+            <TextView style="@style/BookingFieldLabel" android:text="CEF Back *" />
+            <TextView android:id="@+id/tvUploadCefBack" style="@style/BookingUploadRow" android:text="Upload CEF Back" />
+
+            <!-- ══════════ REFERENCES ══════════ -->
+            <TextView style="@style/BookingSectionHeader" android:text="References" />
+            <TextView style="@style/BookingSubHeader" android:text="Reference 1" />
+            <TextView style="@style/BookingFieldLabel" android:text="Name *" />
+            <EditText android:id="@+id/etRef1Name" style="@style/BookingFieldInput" android:inputType="textCapCharacters" android:hint="Reference name" />
+            <TextView style="@style/BookingFieldLabel" android:text="Relation *" />
+            <TextView android:id="@+id/tvRef1Relation" style="@style/BookingFieldRow" android:text="Select relation" />
+            <TextView style="@style/BookingFieldLabel" android:text="Mobile *" />
+            <EditText android:id="@+id/etRef1Mobile" style="@style/BookingFieldInput" android:inputType="phone" android:maxLength="10" android:hint="10-digit mobile" />
+            <TextView style="@style/BookingSubHeader" android:text="Reference 2" />
+            <TextView style="@style/BookingFieldLabel" android:text="Name *" />
+            <EditText android:id="@+id/etRef2Name" style="@style/BookingFieldInput" android:inputType="textCapCharacters" android:hint="Reference name" />
+            <TextView style="@style/BookingFieldLabel" android:text="Relation *" />
+            <TextView android:id="@+id/tvRef2Relation" style="@style/BookingFieldRow" android:text="Select relation" />
+            <TextView style="@style/BookingFieldLabel" android:text="Mobile *" />
+            <EditText android:id="@+id/etRef2Mobile" style="@style/BookingFieldInput" android:inputType="phone" android:maxLength="10" android:hint="10-digit mobile" />
+
+            <!-- ══════════ FINALIZE ══════════ -->
+            <TextView style="@style/BookingSectionHeader" android:text="Finalize" />
+            <TextView style="@style/BookingFieldLabel" android:text="Document to be Prepared In *" />
+            <TextView android:id="@+id/tvDocPreparedIn" style="@style/BookingFieldRow" android:text="English" />
 
             <TextView
-                style="@style/BookingFieldLabel"
-                android:text="Project" />
-
-            <TextView
-                android:id="@+id/tvBookingProject"
-                style="@style/BookingFieldRow"
-                android:text="Select project" />
-
-            <TextView
-                style="@style/BookingFieldLabel"
-                android:text="Unit" />
-
-            <TextView
-                android:id="@+id/tvBookingUnit"
-                style="@style/BookingFieldRow"
-                android:text="Select unit" />
-
-            <TextView
-                style="@style/BookingFieldLabel"
-                android:text="Booking date" />
-
-            <TextView
-                android:id="@+id/tvBookingDate"
-                style="@style/BookingFieldRow" />
-
-            <TextView
-                style="@style/BookingFieldLabel"
-                android:text="Client name" />
-
-            <EditText
-                android:id="@+id/etBookingClientName"
-                style="@style/BookingFieldInput"
-                android:inputType="textPersonName"
-                android:hint="Full name" />
-
-            <TextView
-                style="@style/BookingFieldLabel"
-                android:text="Mobile number" />
-
-            <EditText
-                android:id="@+id/etBookingMobile"
-                style="@style/BookingFieldInput"
-                android:inputType="phone"
-                android:hint="10-digit mobile" />
-
-            <TextView
-                android:id="@+id/tvBookingLinkedLead"
-                style="@style/BookingFieldRow"
-                android:layout_marginTop="8dp"
-                android:visibility="gone"
-                android:text="Search lead by phone" />
-
-            <TextView
-                style="@style/BookingFieldLabel"
-                android:text="Booking cost (₹)" />
-
-            <EditText
-                android:id="@+id/etBookingCost"
-                style="@style/BookingFieldInput"
-                android:inputType="numberDecimal"
-                android:hint="0" />
-
-            <TextView
-                style="@style/BookingFieldLabel"
-                android:text="Advance amount (₹)" />
-
-            <EditText
-                android:id="@+id/etBookingAdvance"
-                style="@style/BookingFieldInput"
-                android:inputType="numberDecimal"
-                android:hint="0" />
+                android:id="@+id/btnBookingSaveDraft"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:background="@drawable/bg_outcome_field_pill"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_semibold"
+                android:gravity="center"
+                android:padding="14dp"
+                android:text="Save Draft"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textSize="14sp" />
 
             <TextView
                 android:id="@+id/btnBookingSubmit"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
+                android:layout_marginTop="10dp"
                 android:background="@drawable/bg_home_today_visit_action"
                 android:clickable="true"
                 android:focusable="true"
                 android:fontFamily="@font/inter_semibold"
                 android:gravity="center"
                 android:padding="14dp"
-                android:text="Submit booking"
+                android:text="Save &amp; Send for Approval"
                 android:textColor="#FFFFFF"
                 android:textSize="14sp" />
         </LinearLayout>
