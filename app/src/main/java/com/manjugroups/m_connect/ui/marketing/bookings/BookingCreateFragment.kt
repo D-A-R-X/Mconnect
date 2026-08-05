@@ -402,7 +402,26 @@ class BookingCreateFragment : Fragment() {
         val total = BookingCalc.totalPayable(bookingType, gross, gross)
         val advance = BookingCalc.num(et(R.id.etBookingAdvance).text.toString())
         val loan = BookingCalc.bankLoanAmount(paymentCategory, BookingCalc.num(et(R.id.etLoanAmount).text.toString()))
-        val balance = BookingCalc.payableChain(total, loan, advance, 0.0).balanceAmount
+        val payable = BookingCalc.payableChain(total, loan, advance, 0.0)
+        if (advance > payable.customerPayableAmount) {
+            return fail("Advance cannot exceed the Customer Payable Amount after excluding the bank loan")
+        }
+        val balance = payable.balanceAmount
+        val allotment = BookingCalc.num(et(R.id.etAllotmentAmount).text.toString())
+        if (allotment > payable.customerBalanceAfterAdvance) {
+            return fail("Allotment payment cannot exceed the remaining Customer Payable Amount")
+        }
+        val scheduled = listOf(R.id.etSecondAmount, R.id.etThirdAmount, R.id.etFourthAmount)
+            .sumOf { BookingCalc.num(et(it).text.toString()) }
+        val outstandingAfterAllotment = BookingCalc.outstandingAfterAllotment(
+            payable.customerPayableAmount,
+            advance,
+            0.0,
+            allotment,
+        )
+        if (paymentPlan != "Flexi" && scheduled > outstandingAfterAllotment) {
+            return fail("Payment schedule cannot exceed the remaining Customer Payable Amount")
+        }
 
         val req = CreateBookingRequest(
             clientName = name, mobileNumber = mobile, bookingDate = bookingDate,
@@ -463,7 +482,7 @@ class BookingCreateFragment : Fragment() {
             customerPaymentCategory = paymentCategory,
             loanAmountRequested = if (paymentCategory == "B") loan else null,
             paymentPlan = paymentPlan,
-            allotmentDueAmount = BookingCalc.num(et(R.id.etAllotmentAmount).text.toString()),
+            allotmentDueAmount = allotment,
             allotmentDueDate = allotmentDate,
             secondPaymentAmount = et(R.id.etSecondAmount).text.toString().toDoubleOrNull(),
             secondPaymentDate = secondDate,
