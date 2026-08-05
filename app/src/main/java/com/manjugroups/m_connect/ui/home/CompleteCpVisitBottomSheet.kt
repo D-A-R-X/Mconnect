@@ -109,6 +109,12 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private enum class SaveAs { DRAFT, CONFIRMED }
 
     private var activeOutcome: Outcome = Outcome.BOOKING
+    // #80: for the normal CP flow the user must FIRST pick an outcome type
+    // (Booking / Site visit / Postpone / Not Interested) before any form opens —
+    // the Booking form no longer opens by default. Forced modes (SV-cum-CP lock,
+    // standalone booking, site-visit outcome, or a caller-provided outcome arg)
+    // set this true so they skip the chooser.
+    private var outcomeChosen: Boolean = false
     private var bookingSub: BookingSub = BookingSub.CLIENT
     private var bookingStep: BookingStep = BookingStep.FIND_MOBILE
     /**
@@ -755,9 +761,9 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         btnCpLockedReject = view.findViewById(R.id.btnCpLockedReject)
         btnCpLockedConfirm = view.findViewById(R.id.btnCpLockedConfirm)
 
-        // Pre-seed from args if caller passed an outcome.
+        // Pre-seed from args if caller passed an outcome (skips the chooser).
         arguments?.getString(ARG_CP_OUTCOME)?.takeIf { it.isNotBlank() }
-            ?.let { ext -> outcomeFromArg(ext)?.let { activeOutcome = it } }
+            ?.let { ext -> outcomeFromArg(ext)?.let { activeOutcome = it; outcomeChosen = true } }
 
         // If TripNavigationFragment already detected this is an SV-fix
         // CP, switch to Site Visit + fade the other tabs BEFORE the
@@ -771,6 +777,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         val isSvFixedHint = arguments?.getBoolean(ARG_IS_SV_FIXED_HINT, false) == true
         if (isSvFixedHint) {
             activeOutcome = Outcome.SITE_VISIT
+            outcomeChosen = true
         }
 
         wireInteractions()
@@ -820,6 +827,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
         applyEditModeToFields(true)
         activeOutcome = Outcome.BOOKING
+        outcomeChosen = true
         renderState()
     }
 
@@ -859,6 +867,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
 
         activeOutcome = lockedOutcome ?: Outcome.BOOKING
+        outcomeChosen = true
         renderState()
     }
 
@@ -2125,6 +2134,9 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     // ---- State transitions ---------------------------------------------
     private fun switchOutcome(o: Outcome) {
         activeOutcome = o
+        // The user explicitly picked an outcome type — leave the chooser and
+        // reveal the corresponding form (#80).
+        outcomeChosen = true
         if (o == Outcome.BOOKING) {
             bookingSub = BookingSub.CLIENT
             bookingStep = if (isStandaloneBookingMode) BookingStep.CLIENT_FORM else BookingStep.FIND_MOBILE
@@ -2148,7 +2160,45 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
      * Single render entrypoint — flips top tabs, sub-tab pills, body
      * visibility, and the CTA label off the current state.
      */
+    /**
+     * #80: the outcome-type chooser. The 4 top tabs (Booking / Site visit /
+     * Postpone / Not Interested) are the selector — none is pre-highlighted and
+     * no form is shown until the user taps one (which flips [outcomeChosen] via
+     * [switchOutcome]). Prevents the field staff from landing in the Booking
+     * form by accident.
+     */
+    private fun renderOutcomeChooser() {
+        styleOutcomeTab(tabBooking, active = false)
+        styleOutcomeTab(tabSiteVisit, active = false)
+        styleOutcomeTab(tabPostpone, active = false)
+        styleOutcomeTab(tabNotInterested, active = false)
+        subTabsScroll?.visibility = View.GONE
+        listOf(
+            bodyFindClient, bodyClientForm, bodyProfessional, bodyOffice, bodyBooking,
+            bodyCharges, bodyPayment, groupBookingChargesAdvance, groupBookingPaymentSchedule,
+            bodyStaff, bodySiteVisit, bodyPostpone, bodyNotInterested,
+        ).forEach { it?.visibility = View.GONE }
+        btnBack?.visibility = View.GONE
+        btnClear?.visibility = View.GONE
+        btnEdit?.visibility = View.GONE
+        btnSubmit?.visibility = View.GONE
+        (bodyComingSoon as? ViewGroup)?.let { g ->
+            (g.getChildAt(1) as? TextView)?.text = "What happened with the client?"
+            (g.getChildAt(2) as? TextView)?.text =
+                "Choose an outcome above — Booking, Site visit, Postpone, or Not Interested — to open its form."
+        }
+        bodyComingSoon?.visibility = View.VISIBLE
+    }
+
     private fun renderState() {
+        // #80: normal CP flow — the user must pick an outcome type first. Until
+        // then show only the 4 choices (nothing pre-selected, no form, no CTA).
+        if (!outcomeChosen) {
+            renderOutcomeChooser()
+            return
+        }
+        btnSubmit?.visibility = View.VISIBLE
+
         // Top tabs (4)
         styleOutcomeTab(tabBooking, active = activeOutcome == Outcome.BOOKING)
         styleOutcomeTab(tabSiteVisit, active = activeOutcome == Outcome.SITE_VISIT)
@@ -6180,6 +6230,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         // 1. Force the active outcome to Site Visit and re-render so the
         //    SV body is the one on screen.
         activeOutcome = Outcome.SITE_VISIT
+        outcomeChosen = true
         renderState()
 
         // 2. Fade non-SV tabs and make them unclickable.
