@@ -8,6 +8,7 @@
   which is a multi-reason checklist.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/OutcomeBodyCard"
     android:id="@+id/bodyPostpone"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"

@@ -2,6 +2,7 @@
 <!-- Frame 3: full client details form (10 personal fields). -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    style="@style/OutcomeBodyCard"
     android:id="@+id/bodyBookingClientForm"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -581,7 +582,7 @@
             android:src="@drawable/ic_outcome_chevron_down" />
     </LinearLayout>
 
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="20dp" android:text="Home Address" />
+    <TextView style="@style/OutcomeSectionTitle" android:text="Home Address" />
 
     <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="10dp" android:text="Door No *" />
     <LinearLayout style="@style/OutcomeFieldPill">

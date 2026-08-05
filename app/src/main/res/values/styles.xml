@@ -135,6 +135,46 @@
         <item name="android:textSize">15sp</item>
     </style>
 
+    <!-- White rounded card that visually groups one section's fields
+         (Booking Information, Source / Referral, KYC, …). -->
+    <style name="BookingSectionCard">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:layout_marginTop">14dp</item>
+        <item name="android:background">@drawable/bg_booking_card</item>
+        <item name="android:paddingHorizontal">14dp</item>
+        <item name="android:paddingTop">2dp</item>
+        <item name="android:paddingBottom">16dp</item>
+    </style>
+
+    <!-- Card wrapper for one outcome-sheet body/section (Client Details,
+         Booking, Charges, Payment, Staff, KYC…) so each is a distinct
+         white container on the grey sheet backdrop. -->
+    <style name="OutcomeBodyCard">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:layout_marginTop">12dp</item>
+        <item name="android:background">@drawable/bg_booking_card</item>
+        <item name="android:paddingHorizontal">14dp</item>
+        <item name="android:paddingTop">4dp</item>
+        <item name="android:paddingBottom">16dp</item>
+        <item name="android:visibility">gone</item>
+    </style>
+
+    <!-- Section title shown at the top of a BookingSectionCard. -->
+    <style name="BookingCardTitle">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">14dp</item>
+        <item name="android:fontFamily">@font/inter_bold</item>
+        <item name="android:textColor">?attr/colorForegroundPrimary</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textAllCaps">true</item>
+        <item name="android:letterSpacing">0.02</item>
+    </style>
+
     <style name="BookingSubHeader">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>

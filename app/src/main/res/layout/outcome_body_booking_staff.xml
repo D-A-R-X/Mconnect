@@ -3,6 +3,7 @@
      Captures the booking-side staff hierarchy + KYC + references and a
      final Save-as draft/confirmed toggle. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/OutcomeBodyCard"
     android:id="@+id/bodyBookingStaff"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -98,7 +99,7 @@
         android:text="Choose file"
         android:textColor="#175CD3" />
 
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="18dp" android:text="CEF Form" />
+    <TextView style="@style/OutcomeSectionTitle" android:text="CEF Form" />
 
     <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="CEF Front *" />
     <TextView

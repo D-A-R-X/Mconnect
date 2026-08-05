@@ -15,6 +15,7 @@
       still sees the structured information as readable text.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/OutcomeBodyCard"
     android:id="@+id/bodyNotInterested"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
