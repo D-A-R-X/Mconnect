@@ -1,10 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.core.widget.NestedScrollView
+<LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:background="@drawable/bg_auth_sheet">
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_auth_sheet"
+    android:orientation="vertical">
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -300,13 +306,14 @@
                     android:textSize="14sp" />
             </LinearLayout>
 
-            <!-- City -->
+            <!-- District (matches the Booking form; pincode/paste-parser fills
+                 the India Post District value here). -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="14dp"
                 android:fontFamily="@font/inter_medium"
-                android:text="City *"
+                android:text="District *"
                 android:textColor="#344054"
                 android:textSize="13sp" />
 
@@ -331,7 +338,7 @@
                     android:layout_marginStart="10dp"
                     android:background="@null"
                     android:fontFamily="@font/inter_medium"
-                    android:hint="e.g. Salem"
+                    android:hint="e.g. Chennai"
                     android:inputType="text"
                     android:textColor="#101828"
                     android:textColorHint="#9CA3AF"
@@ -680,42 +687,49 @@
         </LinearLayout>
 
         <!-- Buttons -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:orientation="horizontal">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnCancel"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                android:layout_width="0dp"
-                android:layout_height="54dp"
-                android:layout_marginEnd="8dp"
-                android:layout_weight="1"
-                android:fontFamily="@font/inter_bold"
-                android:text="Cancel"
-                android:textAllCaps="false"
-                android:textColor="#475467"
-                android:textSize="15sp"
-                app:cornerRadius="27dp"
-                app:strokeColor="#D0D5DD" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnSubmit"
-                android:layout_width="0dp"
-                android:layout_height="54dp"
-                android:layout_marginStart="8dp"
-                android:layout_weight="1"
-                android:backgroundTint="#1BCA0B"
-                android:fontFamily="@font/inter_bold"
-                android:text="Create visit"
-                android:textAllCaps="false"
-                android:textColor="#FFFFFF"
-                android:textSize="15sp"
-                app:cornerRadius="27dp"
-                app:elevation="0dp" />
-        </LinearLayout>
-
     </LinearLayout>
-</androidx.core.widget.NestedScrollView>
+    </androidx.core.widget.NestedScrollView>
+
+    <!-- Fixed footer: Cancel / Create visit stay pinned to the bottom of the
+         sheet instead of scrolling away with the form. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_auth_sheet"
+        android:elevation="12dp"
+        android:orientation="horizontal"
+        android:paddingHorizontal="20dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="16dp">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnCancel"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="54dp"
+            android:layout_marginEnd="8dp"
+            android:layout_weight="1"
+            android:fontFamily="@font/inter_bold"
+            android:text="Cancel"
+            android:textAllCaps="false"
+            android:textColor="#475467"
+            android:textSize="15sp"
+            app:cornerRadius="27dp"
+            app:strokeColor="#D0D5DD" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSubmit"
+            android:layout_width="0dp"
+            android:layout_height="54dp"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:backgroundTint="#1BCA0B"
+            android:fontFamily="@font/inter_bold"
+            android:text="Create visit"
+            android:textAllCaps="false"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            app:cornerRadius="27dp"
+            app:elevation="0dp" />
+    </LinearLayout>
+</LinearLayout>

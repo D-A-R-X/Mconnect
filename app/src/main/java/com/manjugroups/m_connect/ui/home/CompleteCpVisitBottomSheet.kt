@@ -57,6 +57,8 @@ import com.manjugroups.m_connect.network.SiteVisitAttendeeRequest
 import com.manjugroups.m_connect.network.StaffData
 import com.manjugroups.m_connect.ui.common.SearchableOption
 import com.manjugroups.m_connect.ui.common.SearchableSelectionDialog
+import com.manjugroups.m_connect.ui.common.BookingUploadFieldView
+import com.manjugroups.m_connect.ui.marketing.bookings.BookingCalc
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -115,6 +117,12 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     // standalone booking, site-visit outcome, or a caller-provided outcome arg)
     // set this true so they skip the chooser.
     private var outcomeChosen: Boolean = false
+    // The reusable centre outcome-picker (shown when a type still needs choosing).
+    private var outcomePickerDialog: androidx.appcompat.app.AlertDialog? = null
+    // The Material bottom-sheet container view (design_bottom_sheet). Hidden
+    // (alpha 0) while the picker floats over the screen so the sheet + picker
+    // never show at once; revealed once an outcome is chosen.
+    private var sheetContainerView: View? = null
     private var bookingSub: BookingSub = BookingSub.CLIENT
     private var bookingStep: BookingStep = BookingStep.FIND_MOBILE
     /**
@@ -139,6 +147,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     // specialPaymentEnabled from the latest plot-prefill; either this or the
     // selected project row unlocks the Special plan option.
     private var plotPrefillSpecialPayment: Boolean = false
+    private var plotScheduleMaxDays: Int = 0
     // specialPaymentEnabled resolved from /api/projects/get — that route
     // passes the RAW project doc through on every deployed backend, unlike
     // the trimmed marketing-projects / plot-prefill responses which only
@@ -280,6 +289,11 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
      * the client themself. Field staff can still edit the row.
      */
     private var cachedLeadDisplayName: String? = null
+    // The CP's known client contact (from the loaded visit detail). When set,
+    // choosing the Booking outcome skips the "enter mobile number" step and
+    // opens the client form pre-filled. Null on a manual CP with no contact.
+    private var cpClientPhone: String? = null
+    private var cpClientName: String? = null
 
     /**
      * Cached lead-side attendees array (if the telecaller pre-set any
@@ -448,7 +462,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var tvPayMinimumAdvance: TextView? = null
     private var groupPayDigitalProof: View? = null
     private var etPayTransactionId: EditText? = null
-    private var btnPayProofUpload: TextView? = null
+    private var btnPayProofUpload: BookingUploadFieldView? = null
     private var groupPayInstrument: View? = null
     private var lblPayInstrumentNo: TextView? = null
     private var etPayInstrumentNo: EditText? = null
@@ -489,11 +503,11 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var tvStaffTelecaller: TextView? = null
     private var etStaffAadhar: EditText? = null
     private var etStaffPancard: EditText? = null
-    private var btnStaffAadhaarUpload: TextView? = null
-    private var btnStaffAadhaarBackUpload: TextView? = null
-    private var btnStaffPanUpload: TextView? = null
-    private var btnStaffCefFrontUpload: TextView? = null
-    private var btnStaffCefBackUpload: TextView? = null
+    private var btnStaffAadhaarUpload: BookingUploadFieldView? = null
+    private var btnStaffAadhaarBackUpload: BookingUploadFieldView? = null
+    private var btnStaffPanUpload: BookingUploadFieldView? = null
+    private var btnStaffCefFrontUpload: BookingUploadFieldView? = null
+    private var btnStaffCefBackUpload: BookingUploadFieldView? = null
     private var etStaffRefName1: EditText? = null
     private var etStaffRefMobile1: EditText? = null
     private var etStaffRefProf1: EditText? = null
@@ -586,6 +600,9 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var bookingStaffSm: StaffData? = null
     private var bookingStaffBdo: StaffData? = null
     private var bookingStaffTelecaller: StaffData? = null
+    // Discount approver for a Special Consideration — must send the staff _id
+    // (web parity), not the typed name, or the SC booking reference is invalid.
+    private var bookingStaffDiscount: StaffData? = null
     private var bookingProjectCache: List<MarketingProject> = emptyList()
     private var bookingUnitCacheProjectId: String? = null
     private var bookingUnitCache: List<InventoryUnit> = emptyList()
@@ -643,19 +660,35 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
             )
             androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, true)
+            // Kill the default bottom-sheet slide-up window animation. It
+            // snapshots the (white) window surface and slides that snapshot in,
+            // which flashes for a frame behind the centre picker before the
+            // sheet is hidden.
+            window.setWindowAnimations(R.style.SheetNoWindowAnim)
+            // Make the ENTIRE sheet window invisible from frame 0 (before it is
+            // ever composited) by dropping window opacity to 0. This is the only
+            // reliable way to stop the white sheet flashing behind the centre
+            // picker — view/container alpha applied in the show listener always
+            // races the first frame. revealSheet() restores opacity to 1 once an
+            // outcome is chosen (the centre picker is a separate window, so it
+            // stays fully visible on top meanwhile).
+            window.attributes = window.attributes.apply { alpha = 0f }
         }
         dialog.setOnShowListener { di ->
             val sheet = (di as BottomSheetDialog)
                 .findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
             sheet?.let {
+                sheetContainerView = it
+                // Full-screen PAGE presentation. The whole window is invisible
+                // (window alpha 0, set in onCreateDialog) until an outcome is
+                // chosen, so there's no white flash regardless of frame timing.
+                it.layoutParams = it.layoutParams.apply {
+                    height = ViewGroup.LayoutParams.MATCH_PARENT
+                }
                 val behavior = BottomSheetBehavior.from(it)
-                behavior.state = BottomSheetBehavior.STATE_EXPANDED
+                behavior.peekHeight = resources.displayMetrics.heightPixels
                 behavior.skipCollapsed = true
-                // Pullable now that the form root is a NestedScrollView (was a
-                // plain ScrollView): it hands the scroll off to the BottomSheet
-                // correctly, so scrolling the body scrolls the content and
-                // pulling the handle/header drags the sheet — no more stray
-                // dismiss from a content scroll, which is why drag was disabled.
+                behavior.state = BottomSheetBehavior.STATE_EXPANDED
                 behavior.isDraggable = true
                 isCancelable = true
             }
@@ -672,11 +705,27 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 }
                 host.setTabBarVisible(false)
             }
+            // #80/UX: the outcome type still needs choosing (normal CP, or a
+            // pure-SV row where SV isn't selectable). The sheet was hidden
+            // (alpha 0) above, so float the reusable centre picker ON TOP of
+            // the dimmed screen. Selecting an option reveals the sheet + form.
+            // Forced/locked modes already set outcomeChosen, so they skip the
+            // picker and just fade the full-screen form in.
+            if (outcomeChosen) {
+                revealSheet()
+            } else {
+                maybeShowOutcomePicker()
+            }
         }
         return dialog
     }
 
     override fun onDismiss(dialog: android.content.DialogInterface) {
+        // Tear down the centre picker if it's somehow still attached, so it
+        // never leaks its window when the sheet goes away.
+        outcomePickerDialog?.dismiss()
+        outcomePickerDialog = null
+        sheetContainerView = null
         // Restore the host's tab bar to whatever it was before we opened.
         // Runs on Reject / Confirm / Save / system-back / programmatic
         // dismiss — every exit path funnels through here.
@@ -808,6 +857,91 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         // the Booking outcome tab so the user is creating a booking
         // from scratch, not recording an outcome against a visit.
         if (isStandaloneBookingMode) applyStandaloneBookingMode()
+        // The centre outcome-picker is triggered from onCreateDialog's show
+        // listener (after the sheet window is fully attached) so the dialog
+        // sits ON TOP of the sheet rather than being covered by it.
+    }
+
+    private fun maybeShowOutcomePicker() {
+        if (outcomeChosen) return
+        val options = enabledOutcomeOptions()
+        if (options.isEmpty()) {
+            // Nothing to pick — reveal the sheet so it isn't stuck hidden.
+            revealSheet()
+            return
+        }
+        if (options.size == 1) {
+            // Only one outcome is possible — select it directly, no dialog.
+            revealSheet()
+            switchOutcome(outcomeFromKey(options.first().key))
+            return
+        }
+        // The sheet is already hidden (alpha 0, set in the show listener) so
+        // ONLY the centre picker floats over the screen. The full-screen form
+        // is revealed once an outcome is chosen — the sheet + dialog never show
+        // at once, and the sheet's white page never flashes.
+        outcomePickerDialog?.dismiss()
+        outcomePickerDialog = com.manjugroups.m_connect.ui.common.OutcomeSelectionDialog.show(
+            context = requireContext(),
+            title = "What happened with the client?",
+            subtitle = "Choose an outcome to continue.",
+            options = options,
+            onSelect = { key ->
+                outcomePickerDialog = null
+                revealSheet()
+                switchOutcome(outcomeFromKey(key))
+            },
+            // Backed out without choosing — close the sheet. The user can tap
+            // Complete outcome again to reopen the picker and pick correctly.
+            onCancel = {
+                outcomePickerDialog = null
+                if (isAdded) dismissAllowingStateLoss()
+            },
+        )
+    }
+
+    /** Reveal the sheet once an outcome is chosen: restore the window opacity
+     *  (it was held at 0 since onCreateDialog so nothing flashed behind the
+     *  centre picker) with a short fade. Safe to call more than once. */
+    private fun revealSheet() {
+        val window = dialog?.window ?: return
+        if (window.attributes.alpha >= 1f) return
+        // Fade the window opacity 0 → 1 so the full-screen form appears smoothly.
+        val animator = android.animation.ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 200L
+            addUpdateListener { anim ->
+                dialog?.window?.let { w ->
+                    w.attributes = w.attributes.apply { alpha = anim.animatedValue as Float }
+                }
+            }
+        }
+        animator.start()
+    }
+
+    /** Enabled outcomes for the picker. Disabled ones (e.g. Site Visit on a
+     *  pure-SV row) are omitted so they never appear. */
+    private fun enabledOutcomeOptions():
+        List<com.manjugroups.m_connect.ui.common.OutcomeSelectionDialog.Option> {
+        val opt = com.manjugroups.m_connect.ui.common.OutcomeSelectionDialog::Option
+        val list = mutableListOf<com.manjugroups.m_connect.ui.common.OutcomeSelectionDialog.Option>()
+        list.add(opt("BOOKING", "Converted as Booking", R.drawable.ic_outcome_booking))
+        // Site Visit is not a valid outcome for a row that already IS a site
+        // visit (pure-SV mode) — mirror the disabled SV tab by hiding it.
+        if (!isSiteVisitMode) {
+            list.add(opt("SITE_VISIT", "Site Visit", R.drawable.ic_outcome_site_visit))
+        }
+        list.add(opt("POSTPONE",
+            if (isSiteVisitMode) "Follow up" else "Its Been Postponed",
+            R.drawable.ic_outcome_postpone))
+        list.add(opt("NOT_INTERESTED", "Client Not Interested", R.drawable.ic_outcome_not_interested))
+        return list
+    }
+
+    private fun outcomeFromKey(key: String): Outcome = when (key) {
+        "SITE_VISIT" -> Outcome.SITE_VISIT
+        "POSTPONE" -> Outcome.POSTPONE
+        "NOT_INTERESTED" -> Outcome.NOT_INTERESTED
+        else -> Outcome.BOOKING
     }
 
     private fun applyStandaloneBookingMode() {
@@ -826,6 +960,25 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 .format(Calendar.getInstance().time)
         }
         applyEditModeToFields(true)
+        val projectId = arguments?.getString(ARG_STANDALONE_PROJECT_ID)
+        val unitId = arguments?.getString(ARG_STANDALONE_UNIT_ID)
+        if (!projectId.isNullOrBlank()) {
+            bookingProject = MarketingProject(
+                id = projectId,
+                name = arguments?.getString(ARG_STANDALONE_PROJECT_NAME),
+            )
+            tvBookProject?.text = bookingProject?.name ?: "Selected project"
+        }
+        if (!unitId.isNullOrBlank() && !projectId.isNullOrBlank()) {
+            bookingUnit = InventoryUnit(
+                id = unitId,
+                projectId = projectId,
+                unitNumber = arguments?.getString(ARG_STANDALONE_UNIT_NUMBER),
+                status = "available",
+            )
+            tvBookPlot?.text = bookingUnit?.unitNumber ?: "Selected plot"
+            loadBookingPlotPrefill(force = true)
+        }
         activeOutcome = Outcome.BOOKING
         outcomeChosen = true
         renderState()
@@ -867,7 +1020,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
 
         activeOutcome = lockedOutcome ?: Outcome.BOOKING
-        outcomeChosen = true
+        // A specific locked outcome (opened straight into one form) skips the
+        // picker. A pure-SV row with no locked outcome still shows the picker
+        // (Booking / Follow up / Not Interested — Site Visit hidden).
+        if (lockedOutcome != null) outcomeChosen = true
         renderState()
     }
 
@@ -1175,6 +1331,9 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         etPayDocCharges?.addTextChangedListener(recomputeWatcher)
         etPayPattaCharges?.addTextChangedListener(recomputeWatcher)
         etPayOtherCharges?.addTextChangedListener(recomputeWatcher)
+        etPayLoanAmount?.addTextChangedListener(recomputeWatcher)
+        etBookConversionCredit?.addTextChangedListener(recomputeWatcher)
+        etBookExchangeValue?.addTextChangedListener(recomputeWatcher)
         applySpecialConsiderationVisibility()
         applyAdvancePaymentVisibility()
     }
@@ -1426,6 +1585,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 "Select Booking Type",
                 listOf("NEW", "CONVERSION", "EXCHANGE", "INTERNAL EXCHANGE"),
             ) {
+                clearBookingTypeSpecificState()
                 tvBookType?.text = it
                 refreshBookingTypeSections()
             }
@@ -1628,11 +1788,12 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 listOf(
                     "A - Self Finance / Hand Cash",
                     "B - Loan Customer",
-                    "C - High Risk",
+                    "C - EMI",
                 ),
             ) {
                 tvPayPaymentMode?.text = it
                 applyLoanAmountVisibility()
+                recomputeBookingFinanceDerivedFields()
             }
         }
         view?.findViewById<View>(R.id.rowPayPlan)?.setOnClickListener {
@@ -1653,25 +1814,25 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 clampPaymentDatesToPlan()
             }
         }
-        // Web parity on date windows: allotment due ≤ 10 days from booking
-        // date (all plans); 2nd/3rd/4th ≤ the plan's window (30/60/180).
+        // Web parity on date windows: allotment uses the project's configured
+        // limit; later installments use project/Flexi or plan windows.
         view?.findViewById<View>(R.id.rowPayAllotDate)?.setOnClickListener {
-            pickDate(tvPayAllotDate, maxDateMillis = paymentDateLimitMillis(10))
+            pickDate(tvPayAllotDate, maxDateMillis = paymentDateLimitMillis(allotmentDueDays()))
         }
         view?.findViewById<View>(R.id.rowPay2Date)?.setOnClickListener {
-            pickDate(tvPay2Date, maxDateMillis = paymentDateLimitMillis(paymentPlanDays()))
+            pickDate(tvPay2Date, maxDateMillis = paymentDateLimitMillis(scheduledPaymentMaxDays()))
         }
         view?.findViewById<View>(R.id.rowPay3Date)?.setOnClickListener {
-            pickDate(tvPay3Date, maxDateMillis = paymentDateLimitMillis(paymentPlanDays()))
+            pickDate(tvPay3Date, maxDateMillis = paymentDateLimitMillis(scheduledPaymentMaxDays()))
         }
         view?.findViewById<View>(R.id.rowPay4Date)?.setOnClickListener {
-            pickDate(tvPay4Date, maxDateMillis = paymentDateLimitMillis(paymentPlanDays()))
+            pickDate(tvPay4Date, maxDateMillis = paymentDateLimitMillis(scheduledPaymentMaxDays()))
         }
         view?.findViewById<View>(R.id.rowPayPrefReg)?.setOnClickListener { pickDate(tvPayPrefReg) }
         view?.findViewById<View>(R.id.rowPayInstrumentDate)?.setOnClickListener {
             pickDate(tvPayInstrumentDate)
         }
-        btnPayProofUpload?.setOnClickListener {
+        btnPayProofUpload?.setOnUploadClickListener {
             chooseBookingDocument(BookingDocumentKind.ADVANCE_PROOF)
         }
 
@@ -1691,6 +1852,16 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         view?.findViewById<View>(R.id.rowStaffTelecaller)?.setOnClickListener {
             pickBookingStaff("Select Telecaller", "telecaller") { bookingStaffTelecaller = it; tvStaffTelecaller?.text = it.name ?: "Selected" }
         }
+        // Discount Approved By is a STAFF picker (web sends the staff _id), not a
+        // free-text name. Make the field a tap-to-pick display + store the staff.
+        etChargeDiscountApprovedBy?.isFocusable = false
+        etChargeDiscountApprovedBy?.isFocusableInTouchMode = false
+        view?.findViewById<View>(R.id.rowChargeDiscountApprovedBy)?.setOnClickListener {
+            pickBookingStaff("Select Approver", "discount") {
+                bookingStaffDiscount = it
+                etChargeDiscountApprovedBy?.setText(it.name ?: "Selected")
+            }
+        }
         view?.findViewById<View>(R.id.rowStaffDocPrep)?.setOnClickListener {
             picker(
                 "Document Language",
@@ -1707,19 +1878,19 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         view?.findViewById<View>(R.id.rowStaffRefRelation2)?.setOnClickListener {
             picker("Reference Relation 2", relations) { etStaffRefProf2?.setText(it) }
         }
-        btnStaffAadhaarUpload?.setOnClickListener {
+        btnStaffAadhaarUpload?.setOnUploadClickListener {
             chooseBookingDocument(BookingDocumentKind.AADHAAR)
         }
-        btnStaffAadhaarBackUpload?.setOnClickListener {
+        btnStaffAadhaarBackUpload?.setOnUploadClickListener {
             chooseBookingDocument(BookingDocumentKind.AADHAAR_BACK)
         }
-        btnStaffPanUpload?.setOnClickListener {
+        btnStaffPanUpload?.setOnUploadClickListener {
             chooseBookingDocument(BookingDocumentKind.PAN)
         }
-        btnStaffCefFrontUpload?.setOnClickListener {
+        btnStaffCefFrontUpload?.setOnUploadClickListener {
             chooseBookingDocument(BookingDocumentKind.CEF_FRONT)
         }
-        btnStaffCefBackUpload?.setOnClickListener {
+        btnStaffCefBackUpload?.setOnUploadClickListener {
             chooseBookingDocument(BookingDocumentKind.CEF_BACK)
         }
         view?.findViewById<View>(R.id.rowStaffSaveDraft)?.setOnClickListener {
@@ -1899,6 +2070,36 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         updateExchangeBalance()
     }
 
+    private fun clearBookingTypeSpecificState() {
+        bookConversionManualEntry = false
+        listOf(
+            etBookConversionProject,
+            etBookConversionPlot,
+            etBookConversionCredit,
+            etBookConversionNotes,
+            etBookConversionSourceBooking,
+            etBookExchangeProject,
+            etBookExchangePlot,
+            etBookExchangeExtent,
+            etBookExchangeLookupProject,
+            etBookExchangeLookupPlot,
+            etBookExchangeMobile,
+            etBookExchangeSourceBooking,
+            etBookExchangeValue,
+            etBookExchangeNotes,
+        ).forEach { it?.text?.clear() }
+        bookExchangeManualEntry = false
+        selectedExchangeCandidate = null
+        exchangeSourceCandidates = emptyList()
+        internalExchangeCandidates = emptyList()
+        tvBookExchangeLinkedProperty?.text = "Select exchanged property"
+        tvBookExchangeInternalProject?.text = "Select old project"
+        tvBookExchangeInternalPlot?.text = "Select old plot"
+        tvBookExchangeInternalStatus?.visibility = View.GONE
+        cardBookExchangeSummary?.visibility = View.GONE
+        tvConversionPrefillStatus?.visibility = View.GONE
+    }
+
     private fun loadConversionPrefill(phone: String) {
         if (phone.length < 10) return
         viewLifecycleOwner.lifecycleScope.launch {
@@ -2015,7 +2216,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private fun updateExchangeBalance() {
         try {
             if (textOrNull(tvBookType?.text) != "EXCHANGE") return
-            val total = calculatedTotalPayableAmount() ?: 0.0
+            val total = calculatedGrossTotalPayableAmount() ?: 0.0
             val exchange = numberOrNull(etBookExchangeValue?.text) ?: 0.0
             val balance = (total - exchange).coerceAtLeast(0.0)
             tvBookExchangeBalance?.text = if (balance.isFinite()) {
@@ -2095,7 +2296,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         return String.format(Locale.US, "₹%,.0f", value)
     }
 
-    private fun calculatedTotalPayableAmount(): Double? {
+    private fun calculatedGrossTotalPayableAmount(): Double? {
         val bookingCost = numberOrNull(etChargeBookingCost?.text) ?: return null
         val agreed = (bookingCost - (numberOrNull(etChargeSpecialConsideration?.text) ?: 0.0))
             .coerceAtLeast(0.0)
@@ -2106,6 +2307,64 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             (numberOrNull(etPayPattaCharges?.text) ?: 0.0) +
             (if (payOtherApplicable) numberOrNull(etPayOtherCharges?.text) ?: 0.0 else 0.0)
         return if (total.isFinite()) total else null
+    }
+
+    private data class BookingFinanceSnapshot(
+        val agreedAmount: Double,
+        val grossTotal: Double,
+        val exchangeBalance: Double,
+        val totalPayable: Double,
+        val bankLoan: Double,
+        val conversionCredit: Double,
+        val payable: BookingCalc.PayableChain,
+    )
+
+    /** One calculation source for the app form, matching booking-new-page.tsx. */
+    private fun bookingFinanceSnapshot(): BookingFinanceSnapshot {
+        val bookingType = textOrNull(tvBookType?.text)
+        val bookingCost = numberOrNull(etChargeBookingCost?.text) ?: 0.0
+        val special = numberOrNull(etChargeSpecialConsideration?.text) ?: 0.0
+        val agreed = (bookingCost - special).coerceAtLeast(0.0)
+        val gross = BookingCalc.grossTotalPayable(
+            agreed,
+            numberOrNull(etPayRegCharges?.text) ?: 0.0,
+            payGstApplicable,
+            numberOrNull(etPayGstAmount?.text) ?: 0.0,
+            numberOrNull(etPayDocCharges?.text) ?: 0.0,
+            numberOrNull(etPayPattaCharges?.text) ?: 0.0,
+            payOtherApplicable,
+            numberOrNull(etPayOtherCharges?.text) ?: 0.0,
+        )
+        val exchangeBalance = BookingCalc.exchangeBalancePayable(
+            gross,
+            numberOrNull(etBookExchangeValue?.text) ?: 0.0,
+        )
+        val total = BookingCalc.totalPayable(bookingType, gross, exchangeBalance)
+        val category = parseCustomerPaymentCategory(tvPayPaymentMode?.text)
+        val bankLoan = BookingCalc.bankLoanAmount(
+            category,
+            numberOrNull(etPayLoanAmount?.text) ?: 0.0,
+        )
+        val conversionCredit = if (bookingType == "CONVERSION") {
+            numberOrNull(etBookConversionCredit?.text) ?: 0.0
+        } else {
+            0.0
+        }
+        val payable = BookingCalc.payableChain(
+            total,
+            bankLoan,
+            numberOrNull(etPayAdvanceAmount?.text) ?: 0.0,
+            conversionCredit,
+        )
+        return BookingFinanceSnapshot(
+            agreed,
+            gross,
+            exchangeBalance,
+            total,
+            bankLoan,
+            conversionCredit,
+            payable,
+        )
     }
 
     private fun refreshPaymentToggles() {
@@ -2137,15 +2396,61 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         // The user explicitly picked an outcome type — leave the chooser and
         // reveal the corresponding form (#80).
         outcomeChosen = true
+        // Header shows the chosen outcome's name (the top tabs are hidden now).
+        setOutcomeHeader(o)
         if (o == Outcome.BOOKING) {
             bookingSub = BookingSub.CLIENT
-            bookingStep = if (isStandaloneBookingMode) BookingStep.CLIENT_FORM else BookingStep.FIND_MOBILE
             // Switching back to Booking from another outcome resets
             // the visited-watermark — the user starts at CLIENT and
             // must Next-through again.
             maxVisitedBookingSub = BookingSub.CLIENT
+            // This CP is already tied to a specific client — skip the
+            // "enter mobile number" step and open the client details form
+            // pre-filled from the CP's known contact. Falls back to the
+            // find-mobile step only when we have no phone yet (e.g. the
+            // detail hasn't loaded, or a manual CP with no contact).
+            val cpPhone = cpClientPhone?.filter { it.isDigit() }?.takeIf { it.length >= 6 }
+            if (!isStandaloneBookingMode && cpPhone != null) {
+                bookingStep = BookingStep.CLIENT_FORM
+                prefillBookingClientFromCp(cpPhone)
+            } else {
+                bookingStep = if (isStandaloneBookingMode) BookingStep.CLIENT_FORM
+                    else BookingStep.FIND_MOBILE
+            }
         }
         renderState()
+    }
+
+    /** Header title/subtitle for the chosen outcome (replaces the hidden top
+     *  tabs). Standalone booking + locked-SV set their own headers and never
+     *  route through here, so their titles are preserved. */
+    private fun setOutcomeHeader(o: Outcome) {
+        val (title, subtitle) = when (o) {
+            Outcome.BOOKING -> "Booking" to "Converted to booking"
+            Outcome.SITE_VISIT -> "Site Visit" to "Site visit details"
+            Outcome.POSTPONE ->
+                if (isSiteVisitMode) "Follow up" to "Follow-up details"
+                else "Postpone" to "Postpone this visit"
+            Outcome.NOT_INTERESTED -> "Not Interested" to "Client not interested"
+        }
+        view?.findViewById<TextView>(R.id.tvOutcomeTitle)?.text = title
+        view?.findViewById<TextView>(R.id.tvOutcomeSubtitle)?.text = subtitle
+    }
+
+    /** Open the Booking client form pre-filled for a CP already tied to a
+     *  known client: seed the mobile field(s) and pull the rest from any
+     *  existing lead/client record (same lookup the find-mobile Next runs). */
+    private fun prefillBookingClientFromCp(phone: String) {
+        val digits = phone.filter { it.isDigit() }.takeLast(10)
+        // Pre-arm the guard so the mobile field's TextWatcher doesn't ALSO fire
+        // the lookup when we set the text — we run it once explicitly below.
+        lastLookedUpBookingPhone = digits
+        tvFormPhone?.text = phone
+        etClientMobile?.setText(phone)
+        cpClientName?.takeIf { it.isNotBlank() }?.let { name ->
+            if (etFormName?.text?.toString()?.trim().isNullOrEmpty()) etFormName?.setText(name)
+        }
+        lookupAndPrefillClientByPhone(digits)
     }
 
     private fun switchBookingSub(sub: BookingSub) {
@@ -2198,6 +2503,11 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             return
         }
         btnSubmit?.visibility = View.VISIBLE
+        // The outcome type is now chosen in the centre picker, so the 4 top
+        // tabs (Booking / Site visit / Postpone / Not Interested) are no longer
+        // a selector — hide them. The header title shows the chosen outcome's
+        // name instead (set in switchOutcome / the forced-mode setups).
+        view?.findViewById<View>(R.id.outcomeTopTabs)?.visibility = View.GONE
 
         // Top tabs (4)
         styleOutcomeTab(tabBooking, active = activeOutcome == Outcome.BOOKING)
@@ -3147,7 +3457,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             et(etPayTransactionId, "etPayTransactionId")
             advanceProofStorageId = map["advanceProofStorageId"]?.takeIf { it.isNotBlank() }
             advanceProofFileName = map["advanceProofFileName"]?.takeIf { it.isNotBlank() }
-            btnPayProofUpload?.text = advanceProofFileName?.let { "✓ $it" } ?: "Choose file"
+            btnPayProofUpload?.setUploadedFileName(advanceProofFileName)
             et(etPayInstrumentNo, "etPayInstrumentNo")
             et(etPayBankName, "etPayBankName")
             et(etPayBankBranch, "etPayBankBranch")
@@ -3169,20 +3479,20 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             et(etStaffAadhar, "etStaffAadhar")
             aadhaarDocumentStorageId = map["aadhaarDocumentStorageId"]?.takeIf { it.isNotBlank() }
             aadhaarDocumentFileName = map["aadhaarDocumentFileName"]?.takeIf { it.isNotBlank() }
-            btnStaffAadhaarUpload?.text = aadhaarDocumentFileName?.let { "✓ $it" } ?: "Choose file"
+            btnStaffAadhaarUpload?.setUploadedFileName(aadhaarDocumentFileName)
             aadhaarBackDocumentStorageId = map["aadhaarBackDocumentStorageId"]?.takeIf { it.isNotBlank() }
             aadhaarBackDocumentFileName = map["aadhaarBackDocumentFileName"]?.takeIf { it.isNotBlank() }
-            btnStaffAadhaarBackUpload?.text = aadhaarBackDocumentFileName?.let { "✓ $it" } ?: "Choose file"
+            btnStaffAadhaarBackUpload?.setUploadedFileName(aadhaarBackDocumentFileName)
             et(etStaffPancard, "etStaffPancard")
             panDocumentStorageId = map["panDocumentStorageId"]?.takeIf { it.isNotBlank() }
             panDocumentFileName = map["panDocumentFileName"]?.takeIf { it.isNotBlank() }
-            btnStaffPanUpload?.text = panDocumentFileName?.let { "✓ $it" } ?: "Choose file"
+            btnStaffPanUpload?.setUploadedFileName(panDocumentFileName)
             cefFormFrontDocumentStorageId = map["cefFormFrontDocumentStorageId"]?.takeIf { it.isNotBlank() }
             cefFormFrontDocumentFileName = map["cefFormFrontDocumentFileName"]?.takeIf { it.isNotBlank() }
-            btnStaffCefFrontUpload?.text = cefFormFrontDocumentFileName?.let { "✓ $it" } ?: "Choose file"
+            btnStaffCefFrontUpload?.setUploadedFileName(cefFormFrontDocumentFileName)
             cefFormBackDocumentStorageId = map["cefFormBackDocumentStorageId"]?.takeIf { it.isNotBlank() }
             cefFormBackDocumentFileName = map["cefFormBackDocumentFileName"]?.takeIf { it.isNotBlank() }
-            btnStaffCefBackUpload?.text = cefFormBackDocumentFileName?.let { "✓ $it" } ?: "Choose file"
+            btnStaffCefBackUpload?.setUploadedFileName(cefFormBackDocumentFileName)
             tv(tvStaffDocPrep, "tvStaffDocPrep")
             et(etStaffRefName1, "etStaffRefName1")
             et(etStaffRefMobile1, "etStaffRefMobile1")
@@ -3507,6 +3817,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         payOtherApplicable = true
         payPlan = "Regular"
         plotPrefillSpecialPayment = false
+        plotScheduleMaxDays = 0
         projectDetailSpecialPayment = false
         clientImageStorageId = null
         clientImageFileName = null
@@ -3523,12 +3834,12 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         cefFormFrontDocumentFileName = null
         cefFormBackDocumentStorageId = null
         cefFormBackDocumentFileName = null
-        btnPayProofUpload?.text = "Choose file"
-        btnStaffAadhaarUpload?.text = "Choose file"
-        btnStaffAadhaarBackUpload?.text = "Choose file"
-        btnStaffPanUpload?.text = "Choose file"
-        btnStaffCefFrontUpload?.text = "Choose file"
-        btnStaffCefBackUpload?.text = "Choose file"
+        btnPayProofUpload?.setUploadedFileName(null)
+        btnStaffAadhaarUpload?.setUploadedFileName(null)
+        btnStaffAadhaarBackUpload?.setUploadedFileName(null)
+        btnStaffPanUpload?.setUploadedFileName(null)
+        btnStaffCefFrontUpload?.setUploadedFileName(null)
+        btnStaffCefBackUpload?.setUploadedFileName(null)
         renderClientImage()
         staffSaveAs = SaveAs.DRAFT
         bookingSub = BookingSub.CLIENT
@@ -3585,7 +3896,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private fun applyAdvancePaymentVisibility() {
         val mode = textOrNull(tvBookMode?.text)?.uppercase(Locale.US).orEmpty()
         groupPayDigitalProof?.visibility =
-            if (mode in setOf("UPI", "NEFT", "RTGS", "CHEQUE", "DD")) View.VISIBLE else View.GONE
+            if (mode in setOf("UPI", "NEFT", "RTGS")) View.VISIBLE else View.GONE
         groupPayInstrument?.visibility =
             if (mode in setOf("CHEQUE", "DD")) View.VISIBLE else View.GONE
         lblPayInstrumentNo?.text = if (mode == "DD") "DD No *" else "Cheque No *"
@@ -3880,6 +4191,21 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         try {
             bookingGstPercent = resp.project?.gstPercent
             plotPrefillSpecialPayment = resp.project?.specialPaymentEnabled == true
+            resp.project?.let { prefillProject ->
+                bookingProject = bookingProject?.copy(
+                    specialPaymentEnabled = bookingProject?.specialPaymentEnabled
+                        ?: prefillProject.specialPaymentEnabled,
+                    minimumAdvanceAmount = bookingProject?.minimumAdvanceAmount
+                        ?: prefillProject.minimumAdvanceAmount,
+                    allotmentDueDays = bookingProject?.allotmentDueDays
+                        ?: prefillProject.allotmentDueDays,
+                )
+                bookingProject?.let(::updateMinimumAdvanceHint)
+            }
+            plotScheduleMaxDays = resp.schedules.orEmpty()
+                .mapNotNull { it.daysFromBooking?.toInt() }
+                .maxOrNull()
+                ?: 0
             ensurePaymentPlanAllowed()
             if (resp.project?.specialPaymentEnabled == null) {
                 resolveProjectSpecialPaymentFlag(resp.project?.id ?: bookingProject?.id)
@@ -3987,18 +4313,18 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
 
         // Update Client Payable Summary Card (iOS Parity)
         val bookingCost = numberOrNull(etChargeBookingCost?.text) ?: 0.0
-        val specialConsideration = numberOrNull(etChargeSpecialConsideration?.text) ?: 0.0
-        val agreed = (bookingCost - specialConsideration).coerceAtLeast(0.0)
+        val finance = bookingFinanceSnapshot()
+        val agreed = finance.agreedAmount
         val gstVal = if (payGstApplicable) (numberOrNull(etPayGstAmount?.text) ?: 0.0) else 0.0
         val regVal = numberOrNull(etPayRegCharges?.text) ?: 0.0
         val docVal = numberOrNull(etPayDocCharges?.text) ?: 0.0
         val pattaVal = numberOrNull(etPayPattaCharges?.text) ?: 0.0
         val otherVal = if (payOtherApplicable) (numberOrNull(etPayOtherCharges?.text) ?: 0.0) else 0.0
 
-        val totalPayable = agreed + gstVal + regVal + docVal + pattaVal + otherVal
+        val totalPayable = finance.totalPayable
         val minAdvance = bookingProject?.minimumAdvanceAmount ?: 0.0
         val advanceEntered = numberOrNull(etPayAdvanceAmount?.text) ?: 0.0
-        val balanceAfterAdvance = (totalPayable - advanceEntered).coerceAtLeast(0.0)
+        val balanceAfterAdvance = finance.payable.customerBalanceAfterAdvance
 
         fun fmt(d: Double): String = String.format(Locale.US, "₹%,.0f", if (d.isFinite()) d else 0.0)
 
@@ -5007,8 +5333,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             BookingDocumentKind.CEF_FRONT -> btnStaffCefFrontUpload
             BookingDocumentKind.CEF_BACK -> btnStaffCefBackUpload
         }
-        target?.text = "Uploading…"
-        target?.isEnabled = false
+        target?.setUploading(true)
         viewLifecycleOwner.lifecycleScope.launch {
             val displayName = resolveDocumentName(uri)
             val mime = ctx.contentResolver.getType(uri) ?: "application/octet-stream"
@@ -5028,10 +5353,9 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 }
             }.getOrNull()
             if (!isAdded) return@launch
-            target?.isEnabled = true
             val storageId = uploaded?.storageId
             if (storageId.isNullOrBlank()) {
-                target?.text = "Choose file"
+                target?.setUploadedFileName(null)
                 Toast.makeText(
                     requireContext(),
                     uploaded?.errorMessage ?: "Couldn't upload the selected file",
@@ -5065,7 +5389,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     cefFormBackDocumentFileName = displayName
                 }
             }
-            target?.text = "✓ $displayName"
+            target?.setUploadedFileName(displayName)
             scheduleDraftPushIfActive()
         }
     }
@@ -5094,6 +5418,15 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         "Flexi" -> 60
         "Special" -> 180
         else -> 30
+    }
+
+    private fun allotmentDueDays(): Int =
+        bookingProject?.allotmentDueDays?.toInt()?.takeIf { it > 0 } ?: 10
+
+    private fun scheduledPaymentMaxDays(): Int = if (payPlan == "Flexi") {
+        maxOf(plotScheduleMaxDays, allotmentDueDays())
+    } else {
+        paymentPlanDays()
     }
 
     private fun planLabel(plan: String): String = "$plan (max ${paymentPlanDays(plan)} days)"
@@ -5152,6 +5485,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
 
     /** bookingDate + [days] as a DatePicker max; null without a booking date. */
     private fun paymentDateLimitMillis(days: Int): Long? {
+        if (days <= 0) return null
         val iso = bookingDateForApi() ?: return null
         val parsed = runCatching {
             SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(iso)
@@ -5184,8 +5518,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 }
             }
         }
-        clamp(tvPayAllotDate, 10)
-        val cap = paymentPlanDays()
+        clamp(tvPayAllotDate, allotmentDueDays())
+        val cap = scheduledPaymentMaxDays()
         clamp(tvPay2Date, cap)
         clamp(tvPay3Date, cap)
         clamp(tvPay4Date, cap)
@@ -5194,19 +5528,24 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     /** Save-time guard mirroring the web's validation messages. */
     private fun validatePaymentSchedule(): String? {
         daysFromBooking(tvPayAllotDate?.text)?.let { days ->
-            if (days > 10) {
-                return "Allotment Due Date cannot exceed 10 days from booking date"
+            if (days < 0) return "Allotment Due Date cannot be before booking date"
+            if (days > allotmentDueDays()) {
+                return "Allotment Due Date cannot exceed ${allotmentDueDays()} days from booking date"
             }
         }
-        val cap = paymentPlanDays()
+        val cap = scheduledPaymentMaxDays()
         listOf("2nd" to tvPay2Date, "3rd" to tvPay3Date, "4th" to tvPay4Date)
             .forEach { (label, tv) ->
                 daysFromBooking(tv?.text)?.let { days ->
-                    if (days > cap) {
+                    if (days < 0) return "$label payment date cannot be before booking date"
+                    if (cap > 0 && days > cap) {
                         return "$payPlan plan $label payment date cannot exceed $cap days"
                     }
                 }
             }
+        daysFromBooking(tvPayPrefReg?.text)?.let { days ->
+            if (days < 0) return "Preferred registration date cannot be before booking date"
+        }
         return null
     }
 
@@ -5266,8 +5605,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             finishCta(error = "Booking Date is required")
             return null
         }
-        // Web-parity payment-schedule windows (allotment ≤ 10 days; the
-        // plan's 30/60/180-day cap on the scheduled payment dates).
+        // Web-parity payment-schedule windows from project and plan settings.
         validatePaymentSchedule()?.let { message ->
             finishCta(error = message)
             return null
@@ -5279,7 +5617,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         val specialConsideration = numberOrNull(etChargeSpecialConsideration?.text) ?: 0.0
         val agreedAmount = bookingCost?.minus(specialConsideration)
         val exchangeValue = numberOrNull(etBookExchangeValue?.text)
-        val totalPayable = calculatedTotalPayableAmount()
+        val finance = bookingFinanceSnapshot()
         return CreateBookingRequest(
             clientName = name,
             mobileNumber = phone,
@@ -5363,9 +5701,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 numberOrNull(etBookExchangeExtent?.text) else null,
             exchangeOldRegisteredValue = if (isExchange) exchangeValue else null,
             exchangeNewValue = if (bookingType == "EXCHANGE") agreedAmount else null,
-            exchangeBalancePayable = if (bookingType == "EXCHANGE") {
-                ((totalPayable ?: 0.0) - (exchangeValue ?: 0.0)).coerceAtLeast(0.0)
-            } else null,
+            exchangeBalancePayable = if (bookingType == "EXCHANGE") finance.exchangeBalance else null,
             exchangeNotes = if (isExchange) textOrNull(etBookExchangeNotes?.text) else null,
             cefNo = textOrNull(etBookCef?.text),
             isDuplicateBooking = bookDuplicate,
@@ -5382,7 +5718,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             guidelineValue = numberOrNull(etChargeGuidelineValue?.text),
             specialConsideration = numberOrNull(etChargeSpecialConsideration?.text),
             specialConsiderationReason = textOrNull(etChargeScReason?.text),
-            discountApprovedBy = textOrNull(etChargeDiscountApprovedBy?.text),
+            discountApprovedBy = bookingStaffDiscount?.id,
             specialConsiderationValidity = numberOrNull(etChargeScValidity?.text),
             promotionalOffers = textOrNull(etChargePromoOffers?.text),
             promotionalOffersTnC = textOrNull(tvChargePromoTnc?.text),
@@ -5397,7 +5733,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             otherCharges = numberOrNull(etPayOtherCharges?.text),
             otherChargesApplicable = payOtherApplicable,
             advanceAmount = advanceAmount,
-            balanceAmount = if (bookingCost != null && advanceAmount != null) bookingCost - advanceAmount else null,
+            balanceAmount = finance.payable.balanceAmount,
             paymentMode = textOrNull(tvBookMode?.text),
             advanceTransactionId = textOrNull(etPayTransactionId?.text),
             advancePaymentProofStorageId = advanceProofStorageId,
@@ -5566,13 +5902,31 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         requireText("Payment Plan", tvPayPlan?.text)
         requireText("Allotment Due Amount", etPayAllotDue?.text)
         requireText("Allotment Due Date", tvPayAllotDate?.text)
-        if (payPlan != "Flexi") {
-            requireText("2nd Payment Amount", etPay2Mode?.text)
-            requireText("2nd Payment Date", tvPay2Date?.text)
-            requireText("3rd Payment Amount", etPay3Mode?.text)
-            requireText("3rd Payment Date", tvPay3Date?.text)
-            requireText("4th Payment Amount", etPay4Mode?.text)
-            requireText("4th Payment Date", tvPay4Date?.text)
+        val finance = bookingFinanceSnapshot()
+        val outstanding = BookingCalc.outstandingAfterAllotment(
+            finance.payable.customerPayableAmount,
+            numberOrNull(etPayAdvanceAmount?.text) ?: 0.0,
+            finance.conversionCredit,
+            numberOrNull(etPayAllotDue?.text) ?: 0.0,
+        )
+        if (!usesDynamicPaymentSchedule()) {
+            val schedule = BookingCalc.standardSchedule(
+                outstanding,
+                numberOrNull(etPay2Mode?.text) ?: 0.0,
+                numberOrNull(etPay3Mode?.text) ?: 0.0,
+            )
+            if (outstanding > 0) {
+                requireText("2nd Payment Amount", etPay2Mode?.text)
+                requireText("2nd Payment Date", tvPay2Date?.text)
+            }
+            if (schedule.needsThirdPayment) {
+                requireText("3rd Payment Amount", etPay3Mode?.text)
+                requireText("3rd Payment Date", tvPay3Date?.text)
+            }
+            if (schedule.needsFourthPayment) {
+                requireText("4th Payment Amount", etPay4Mode?.text)
+                requireText("4th Payment Date", tvPay4Date?.text)
+            }
         }
         requireText("Preferred Registration Date", tvPayPrefReg?.text)
 
@@ -5635,12 +5989,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         if (minimumAdvance != null && (advanceAmount ?: 0.0) < minimumAdvance) {
             return "Advance must be at least ₹${minimumAdvance.toLong()} as set in Project Details"
         }
-        val basePayable = calculatedTotalPayableAmount() ?: 0.0
-        val totalPayable = if (textOrNull(tvBookType?.text) == "EXCHANGE") {
-            (basePayable - (numberOrNull(etBookExchangeValue?.text) ?: 0.0)).coerceAtLeast(0.0)
-        } else {
-            basePayable
-        }
+        val finance = bookingFinanceSnapshot()
+        val totalPayable = finance.totalPayable
         if ((advanceAmount ?: 0.0) > totalPayable) {
             return "Advance cannot exceed the total payable amount"
         }
@@ -5651,22 +6001,40 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         if ((advanceAmount ?: 0.0) > totalPayable - loanAmount) {
             return "Advance cannot exceed the Customer Payable Amount after excluding the bank loan"
         }
-        val conversionCredit = if (textOrNull(tvBookType?.text) == "CONVERSION" &&
-            bookConversionManualEntry
-        ) numberOrNull(etBookConversionCredit?.text) ?: 0.0 else 0.0
-        val remainingAfterAdvance = totalPayable - loanAmount -
-            (advanceAmount ?: 0.0) - conversionCredit
+        val conversionCredit = finance.conversionCredit
+        val remainingAfterAdvance = finance.payable.customerBalanceAfterAdvance
         val allotment = numberOrNull(etPayAllotDue?.text) ?: 0.0
         if (allotment > remainingAfterAdvance) {
             return "Allotment payment cannot exceed the remaining Customer Payable Amount"
         }
-        val scheduled = listOf(etPay2Mode, etPay3Mode, etPay4Mode)
-            .sumOf { numberOrNull(it?.text) ?: 0.0 }
-        if (payPlan != "Flexi" && scheduled > remainingAfterAdvance - allotment) {
+        val paymentRows = listOf(
+            etPay2Mode to tvPay2Date,
+            etPay3Mode to tvPay3Date,
+            etPay4Mode to tvPay4Date,
+        )
+        val incompleteRow = paymentRows.firstOrNull { (amount, date) ->
+            val hasAmount = !amount?.text.isNullOrBlank()
+            val hasDate = !date?.text.isNullOrBlank() && dateTextForApi(date?.text) != null
+            hasAmount != hasDate
+        }
+        if (incompleteRow != null) return "Every payment requires both an amount and a date"
+        val scheduled = paymentRows.sumOf { (amount, _) -> numberOrNull(amount?.text) ?: 0.0 }
+        val outstandingAfterAllotment = (remainingAfterAdvance - allotment).coerceAtLeast(0.0)
+        if (scheduled > outstandingAfterAllotment) {
             return "Payment schedule cannot exceed the remaining Customer Payable Amount"
+        }
+        if (
+            parseCustomerPaymentCategory(tvPayPaymentMode?.text) == "A" &&
+            staffSaveAs == SaveAs.CONFIRMED &&
+            kotlin.math.abs(scheduled - outstandingAfterAllotment) > 0.01
+        ) {
+            return "Payment schedule must total the remaining Customer Payable Amount"
         }
         return validatePaymentSchedule()
     }
+
+    private fun usesDynamicPaymentSchedule(): Boolean =
+        payPlan == "Flexi" || parseCustomerPaymentCategory(tvPayPaymentMode?.text) == "A"
 
     // ---- Persistence ------------------------------------------------
     private fun persistBooking() {
@@ -6184,6 +6552,14 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             ?: visit.lead?.contactName?.takeIf { it.isNotBlank() }
             ?: visit.clientPlace?.name?.takeIf { it.isNotBlank() }
 
+        // Known contact for this CP — lets the Booking outcome open the client
+        // form pre-filled (skip the "enter mobile" step). Client master first,
+        // then the telecaller lead, then the place's contact number.
+        cpClientPhone = visit.client?.mobileNumber?.takeIf { it.isNotBlank() }
+            ?: visit.lead?.mobileNumber?.takeIf { it.isNotBlank() }
+            ?: visit.clientPlace?.contactPhone?.takeIf { it.isNotBlank() }
+        cpClientName = cachedLeadDisplayName
+
         // Telecaller-pre-set attendees (rare on a pure manual CP,
         // common on the SV-fixed path) — used by renderVisitorRows.
         cachedPrefilledAttendees = visit.attendees
@@ -6228,9 +6604,16 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         lockedCpVisit = visit
 
         // 1. Force the active outcome to Site Visit and re-render so the
-        //    SV body is the one on screen.
+        //    SV body is the one on screen. If the centre picker happened to be
+        //    up (async lock raced the sync open), close it and restore the
+        //    sheet (it was hidden while the picker showed) — SV is now forced.
+        outcomePickerDialog?.dismiss()
+        outcomePickerDialog = null
+        revealSheet()
         activeOutcome = Outcome.SITE_VISIT
         outcomeChosen = true
+        // Header shows the outcome name (top tabs are hidden now).
+        setOutcomeHeader(Outcome.SITE_VISIT)
         renderState()
 
         // 2. Fade non-SV tabs and make them unclickable.
@@ -6577,6 +6960,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         // No visit to attach to; persistBooking POSTs to /api/bookings
         // instead of the CP / SV outcome paths.
         private const val ARG_STANDALONE_BOOKING = "arg_standalone_booking"
+        private const val ARG_STANDALONE_PROJECT_ID = "arg_standalone_project_id"
+        private const val ARG_STANDALONE_PROJECT_NAME = "arg_standalone_project_name"
+        private const val ARG_STANDALONE_UNIT_ID = "arg_standalone_unit_id"
+        private const val ARG_STANDALONE_UNIT_NUMBER = "arg_standalone_unit_number"
 
         private const val OUTCOME_BOOKING = "converted_to_booking"
         private const val OUTCOME_SITE_VISIT = "converted_to_site_visit"
@@ -6645,10 +7032,19 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
          * hits, so the new row syncs through the existing approval
          * workflow.
          */
-        fun forStandaloneBooking(): CompleteCpVisitBottomSheet =
+        fun forStandaloneBooking(
+            projectId: String? = null,
+            projectName: String? = null,
+            unitId: String? = null,
+            unitNumber: String? = null,
+        ): CompleteCpVisitBottomSheet =
             CompleteCpVisitBottomSheet().apply {
                 arguments = Bundle().apply {
                     putBoolean(ARG_STANDALONE_BOOKING, true)
+                    projectId?.let { putString(ARG_STANDALONE_PROJECT_ID, it) }
+                    projectName?.let { putString(ARG_STANDALONE_PROJECT_NAME, it) }
+                    unitId?.let { putString(ARG_STANDALONE_UNIT_ID, it) }
+                    unitNumber?.let { putString(ARG_STANDALONE_UNIT_NUMBER, it) }
                 }
             }
     }

@@ -29,6 +29,7 @@ import com.manjugroups.m_connect.network.StaffData
 import com.manjugroups.m_connect.network.TelecallerLeadSearchData
 import com.manjugroups.m_connect.ui.common.SearchableOption
 import com.manjugroups.m_connect.ui.common.SearchableSelectionDialog
+import com.manjugroups.m_connect.ui.common.BookingUploadFieldView
 import com.manjugroups.m_connect.ui.common.navigateUp
 import com.manjugroups.m_connect.ui.common.showOnce
 import com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet
@@ -165,14 +166,18 @@ class BookingCreateFragment : Fragment() {
 
     // ── Enum pickers (static option lists) ──────────────────────────────────
     private fun wireEnumPickers() {
-        pick(R.id.tvBookingType, "Booking Type",
-            listOf("NEW", "CONVERSION", "EXCHANGE", "INTERNAL EXCHANGE")) { bookingType = it }
+        // Only NEW is supported here — EXCHANGE / CONVERSION / INTERNAL EXCHANGE
+        // need their old-property lookup + balance/credit math + payload, which
+        // this standalone form does not implement. Offering them would create
+        // bookings with wrong money and missing fields, so they're excluded;
+        // those go through the web. (The CP-outcome flow implements them.)
+        pick(R.id.tvBookingType, "Booking Type", listOf("NEW")) { bookingType = it }
         pick(R.id.tvBookingPropertyType, "Property Type",
             listOf("Plot", "Apartment", "Villa", "Commercial")) { propertyType = it }
         pick(R.id.tvBookingTitleField, "Title",
             listOf("Mr", "Mrs", "Ms", "Dr", "Prof")) { title = it }
         pick(R.id.tvBookingNationality, "Nationality",
-            listOf("Indian", "NRI", "Foreign")) { nationality = it }
+            listOf("Indian", "NRI", "Foreign National")) { nationality = it }
         pick(R.id.tvBookingProfession, "Profession",
             listOf("Business", "Salaried", "Pension")) {
             profession = it; applyConditionalVisibility()
@@ -233,12 +238,12 @@ class BookingCreateFragment : Fragment() {
     }
 
     private fun wireUploads() {
-        uploadRow(R.id.tvUploadAadhaarFront, "aadhaarFront", "Aadhaar Front")
-        uploadRow(R.id.tvUploadAadhaarBack, "aadhaarBack", "Aadhaar Back")
-        uploadRow(R.id.tvUploadPan, "pan", "PAN")
-        uploadRow(R.id.tvUploadCefFront, "cefFront", "CEF Front")
-        uploadRow(R.id.tvUploadCefBack, "cefBack", "CEF Back")
-        uploadRow(R.id.tvUploadPaymentProof, "paymentProof", "Payment Proof")
+        uploadRow(R.id.tvUploadAadhaarFront, "aadhaarFront")
+        uploadRow(R.id.tvUploadAadhaarBack, "aadhaarBack")
+        uploadRow(R.id.tvUploadPan, "pan")
+        uploadRow(R.id.tvUploadCefFront, "cefFront")
+        uploadRow(R.id.tvUploadCefBack, "cefBack")
+        uploadRow(R.id.tvUploadPaymentProof, "paymentProof")
     }
 
     private fun wireCalcWatchers() {
@@ -367,7 +372,13 @@ class BookingCreateFragment : Fragment() {
         val sc = BookingCalc.num(et(R.id.etSpecialConsideration).text.toString())
         if (sc > BookingCalc.num(et(R.id.etBookingCost).text.toString())) return fail("Special consideration can't exceed booking cost")
         if (sc > 0 && discountApproverId == null) return fail("Select who approved the discount")
+        if (sc > 0 && et(R.id.etScReason).text.isNullOrBlank()) return fail("Special consideration reason is required")
+        if (sc > 0 && BookingCalc.num(et(R.id.etScValidity).text.toString()) <= 0) return fail("Special consideration validity (days) is required")
         if (isAgainstSv == "yes" && et(R.id.etBookingSvName).text.isNullOrBlank()) return fail("SV name is required")
+        if (isAgainstSv == "yes" && normalizePhone(et(R.id.etBookingSvMobile).text.toString()).length < 10) return fail("SV mobile must be 10 digits")
+        et(R.id.etBookingSourceMobile).text?.toString()?.trim()?.takeIf { it.isNotEmpty() }?.let {
+            if (normalizePhone(it).length < 10) return fail("Source / Reference mobile must be 10 digits")
+        }
         if (paymentCategory == "B" && BookingCalc.num(et(R.id.etLoanAmount).text.toString()) <= 0) return fail("Bank loan amount is required")
         if (bookingMode in setOf("UPI", "NEFT", "RTGS") && et(R.id.etAdvanceTxnId).text.isNullOrBlank()) return fail("Transaction ID is required")
         if (bookingMode in setOf("CHEQUE", "DD") && et(R.id.etAdvanceInstrumentNo).text.isNullOrBlank()) return fail("Instrument number is required")
@@ -402,6 +413,12 @@ class BookingCreateFragment : Fragment() {
         val total = BookingCalc.totalPayable(bookingType, gross, gross)
         val advance = BookingCalc.num(et(R.id.etBookingAdvance).text.toString())
         val loan = BookingCalc.bankLoanAmount(paymentCategory, BookingCalc.num(et(R.id.etLoanAmount).text.toString()))
+        val minAdvance = proj.minimumAdvanceAmount ?: 0.0
+        if (minAdvance > 0 && advance < minAdvance) {
+            return fail("Advance must be at least ₹${minAdvance.toLong()} as set in Project Details")
+        }
+        if (advance > total) return fail("Advance cannot exceed the total payable amount")
+        if (loan > total) return fail("Bank Loan Amount cannot exceed the Total Property Cost")
         val payable = BookingCalc.payableChain(total, loan, advance, 0.0)
         if (advance > payable.customerPayableAmount) {
             return fail("Advance cannot exceed the Customer Payable Amount after excluding the bank loan")
@@ -421,6 +438,13 @@ class BookingCreateFragment : Fragment() {
         )
         if (paymentPlan != "Flexi" && scheduled > outstandingAfterAllotment) {
             return fail("Payment schedule cannot exceed the remaining Customer Payable Amount")
+        }
+        // Confirmed self-cash (category A): the schedule must total EXACTLY the
+        // remaining outstanding (web parity — draft may be partial).
+        if (paymentCategory == "A" && status == "confirmed" &&
+            kotlin.math.abs(scheduled - outstandingAfterAllotment) > 0.01
+        ) {
+            return fail("Payment schedule must total the remaining Customer Payable Amount")
         }
 
         val req = CreateBookingRequest(
@@ -482,6 +506,10 @@ class BookingCreateFragment : Fragment() {
             customerPaymentCategory = paymentCategory,
             loanAmountRequested = if (paymentCategory == "B") loan else null,
             paymentPlan = paymentPlan,
+            // Flexi = free-payment schedule (web parity); the backend needs this
+            // flag to recognise the dynamic schedule. Was previously omitted.
+            freePayment = paymentPlan == "Flexi",
+            sourceType = "walk_in",
             allotmentDueAmount = allotment,
             allotmentDueDate = allotmentDate,
             secondPaymentAmount = et(R.id.etSecondAmount).text.toString().toDoubleOrNull(),
@@ -545,8 +573,8 @@ class BookingCreateFragment : Fragment() {
     }
 
     // ── Uploads ─────────────────────────────────────────────────────────────
-    private fun uploadRow(id: Int, slot: String, label: String) {
-        tv(id).setOnClickListener {
+    private fun uploadRow(id: Int, slot: String) {
+        uploadField(id).setOnUploadClickListener {
             activeUploadSlot = slot
             filePicker.launch("*/*")
         }
@@ -555,6 +583,7 @@ class BookingCreateFragment : Fragment() {
     private fun uploadFile(slot: String, uri: Uri) {
         val ctx = context ?: return
         val fileName = queryFileName(uri) ?: "$slot.jpg"
+        uploadRowView(slot)?.setUploading(true)
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val bytes = ctx.contentResolver.openInputStream(uri)?.use { it.readBytes() }
@@ -563,25 +592,29 @@ class BookingCreateFragment : Fragment() {
                 val body = bytes.toRequestBody(type.toMediaTypeOrNull())
                 val resp = api.uploadStorageFile(session.bearerToken, body)
                 if (!resp.success || resp.storageId == null) {
+                    uploadRowView(slot)?.setUploading(false)
                     toast(resp.error ?: "Upload failed"); return@launch
                 }
                 uploads[slot] = resp.storageId!! to fileName
-                uploadRowTextView(slot)?.text = "✓ $fileName"
+                uploadRowView(slot)?.setUploadedFileName(fileName)
             } catch (e: Exception) {
+                uploadRowView(slot)?.setUploading(false)
                 toast("Upload failed: ${e.message ?: "unknown"}")
             }
         }
     }
 
-    private fun uploadRowTextView(slot: String): TextView? = when (slot) {
-        "aadhaarFront" -> tv(R.id.tvUploadAadhaarFront)
-        "aadhaarBack" -> tv(R.id.tvUploadAadhaarBack)
-        "pan" -> tv(R.id.tvUploadPan)
-        "cefFront" -> tv(R.id.tvUploadCefFront)
-        "cefBack" -> tv(R.id.tvUploadCefBack)
-        "paymentProof" -> tv(R.id.tvUploadPaymentProof)
+    private fun uploadRowView(slot: String): BookingUploadFieldView? = when (slot) {
+        "aadhaarFront" -> uploadField(R.id.tvUploadAadhaarFront)
+        "aadhaarBack" -> uploadField(R.id.tvUploadAadhaarBack)
+        "pan" -> uploadField(R.id.tvUploadPan)
+        "cefFront" -> uploadField(R.id.tvUploadCefFront)
+        "cefBack" -> uploadField(R.id.tvUploadCefBack)
+        "paymentProof" -> uploadField(R.id.tvUploadPaymentProof)
         else -> null
     }
+
+    private fun uploadField(id: Int): BookingUploadFieldView = root.findViewById(id)
 
     private fun queryFileName(uri: Uri): String? {
         return try {

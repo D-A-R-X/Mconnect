@@ -1,4 +1,6 @@
 <resources>
+    <string name="booking_upload_choose_file">Choose file</string>
+    <string name="booking_upload_uploading">Uploading...</string>
     <string name="app_name">M-connect</string>
     <string name="brand_name">MANJU GROUPS</string>
     <string name="logo_letter">M</string>

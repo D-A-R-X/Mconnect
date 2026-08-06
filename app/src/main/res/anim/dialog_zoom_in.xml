@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Centre "pop" for the outcome picker: scales up from the middle with a
+     slight overshoot and a quick fade, so it springs into place cleanly (no
+     left/right slide). -->
+<set xmlns:android="http://schemas.android.com/apk/res/android">
+    <scale
+        android:duration="220"
+        android:fromXScale="0.80"
+        android:fromYScale="0.80"
+        android:toXScale="1.0"
+        android:toYScale="1.0"
+        android:pivotX="50%"
+        android:pivotY="50%"
+        android:interpolator="@android:anim/overshoot_interpolator" />
+    <alpha
+        android:duration="150"
+        android:fromAlpha="0.0"
+        android:toAlpha="1.0"
+        android:interpolator="@android:anim/decelerate_interpolator" />
+</set>

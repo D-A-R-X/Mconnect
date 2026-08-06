@@ -17,8 +17,9 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.InventoryUnit
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
-import com.manjugroups.m_connect.ui.marketing.bookings.BookingCreateFragment
+import com.manjugroups.m_connect.ui.home.CompleteCpVisitBottomSheet
 import com.manjugroups.m_connect.ui.common.navigateUp
+import com.manjugroups.m_connect.ui.common.showOnce
 import kotlinx.coroutines.launch
 import com.manjugroups.m_connect.ui.common.commitOnce
 
@@ -242,16 +243,12 @@ class ProjectInventoryFragment : Fragment() {
         java.text.NumberFormat.getNumberInstance(java.util.Locale.forLanguageTag("en-IN")).format(value)
 
     private fun openBookingForm(unit: InventoryUnit) {
-        val fragment = BookingCreateFragment.forUnit(
+        CompleteCpVisitBottomSheet.forStandaloneBooking(
             projectId = projectId,
             projectName = projectName,
             unitId = unit.id,
             unitNumber = unit.unitNumber,
-        )
-        parentFragmentManager.beginTransaction()
-            .replace(R.id.fragmentContainer, fragment)
-            .addToBackStack(null)
-            .commitOnce()
+        ).showOnce(parentFragmentManager, "inventory_booking_create")
     }
 
     private fun openLayoutMap() {

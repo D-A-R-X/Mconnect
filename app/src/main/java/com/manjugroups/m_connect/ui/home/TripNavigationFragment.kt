@@ -94,6 +94,15 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     private var googleMap: GoogleMap? = null
     private var routePolyline: Polyline? = null
 
+    // Full-screen map expand/collapse. We reparent the single MapView between
+    // the small preview card and the full-screen host so all markers/camera
+    // state survive the toggle (no second map, no re-render).
+    private var mapCard: FrameLayout? = null
+    private var mapFullScreenContainer: FrameLayout? = null
+    private var mapFullScreenHost: FrameLayout? = null
+    private var isMapFullScreen = false
+    private var mapBackCallback: androidx.activity.OnBackPressedCallback? = null
+
     private var currentLocation: LatLng? = null
     private var destination: LatLng? = null
     private var destinationAddress: String? = null
@@ -181,7 +190,6 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     private var tvTitle: TextView? = null
     private var tvDestName: TextView? = null
     private var tvDestAddress: TextView? = null
-    private var tvOriginName: TextView? = null
     private var tvDistance: TextView? = null
     private var tvEta: TextView? = null
     private var tvStatus: TextView? = null
@@ -296,7 +304,6 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         tvTitle = view.findViewById(R.id.tvTripTitle)
         tvDestName = view.findViewById(R.id.tvTripDestinationName)
         tvDestAddress = view.findViewById(R.id.tvTripDestinationAddress)
-        tvOriginName = view.findViewById(R.id.tvTripOriginName)
         tvDistance = view.findViewById(R.id.tvTripDistance)
         tvEta = view.findViewById(R.id.tvTripEta)
         tvStatus = view.findViewById(R.id.tvTripStatus)
@@ -309,6 +316,11 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         btnCompleteCpDetails = view.findViewById(R.id.btnCompleteCpDetails)
         loadingOverlay = view.findViewById(R.id.tripLoadingOverlay)
         mapView = view.findViewById(R.id.mapViewTrip)
+        mapCard = view.findViewById(R.id.mapCard)
+        mapFullScreenContainer = view.findViewById(R.id.mapFullScreenContainer)
+        mapFullScreenHost = view.findViewById(R.id.mapFullScreenHost)
+        view.findViewById<View>(R.id.btnMapExpand)?.setOnClickListener { expandMap() }
+        view.findViewById<View>(R.id.btnMapCollapse)?.setOnClickListener { collapseMap() }
 
         // Edge-to-edge shell: lift the pinned action row above the gesture nav
         // bar (and the main tab bar when visible) so the swipe button isn't
@@ -385,13 +397,6 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             hasCpRow = !cpVisitIdLocal.isNullOrBlank(),
         )
         tvDestAddress?.text = placeAddress?.takeIf { it.isNotBlank() } ?: "Address not available"
-        tvOriginName?.text = "Current Location"
-        // Summary card "Location" cell — show the destination (address, else
-        // name) rather than the old static "Current Location" placeholder.
-        view.findViewById<TextView>(R.id.tvTripOriginName)?.text =
-            placeAddress?.takeIf { it.isNotBlank() }
-                ?: placeName.takeIf { it.isNotBlank() }
-                ?: "Location not set"
         // Full client address card above the map — wraps, no truncation.
         // Never fall back to the client name here: showing the name in the
         // address slot reads as a real address and hides that coordinates /
@@ -402,6 +407,16 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         bindTripClientHeader(view, placeName)
 
         btnBack?.setOnClickListener { navigateUp() }
+        // System back closes the full-screen map first (if open), otherwise
+        // falls through to normal up-navigation.
+        requireActivity().onBackPressedDispatcher.addCallback(
+            viewLifecycleOwner,
+            object : androidx.activity.OnBackPressedCallback(false) {
+                override fun handleOnBackPressed() {
+                    if (isMapFullScreen) collapseMap()
+                }
+            }.also { mapBackCallback = it },
+        )
         btnOpenMaps?.setOnClickListener { ensureVisitStarted() }
         swipeArrived?.onConfirmed = { onArrivalSwipeConfirmed() }
         btnCompleteCpDetails?.setOnClickListener { onCompleteCpDetailsClicked() }
@@ -755,6 +770,55 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         fetchCurrentLocationAndUpdate()
     }
 
+    /**
+     * Reparent the single MapView from the preview card into the full-screen
+     * host and show the overlay. Keeping one MapView means all markers, the
+     * route line and the camera survive the toggle. In full view we allow
+     * panning + zoom controls (the preview locks them so page scroll works).
+     */
+    private fun expandMap() {
+        if (isMapFullScreen) return
+        val mv = mapView ?: return
+        val host = mapFullScreenHost ?: return
+        (mv.parent as? ViewGroup)?.removeView(mv)
+        host.addView(
+            mv,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+            ),
+        )
+        mapFullScreenContainer?.visibility = View.VISIBLE
+        googleMap?.uiSettings?.isScrollGesturesEnabled = true
+        googleMap?.uiSettings?.isZoomControlsEnabled = true
+        isMapFullScreen = true
+        mapBackCallback?.isEnabled = true
+        renderMapMarkersAndRoute()
+    }
+
+    /** Reparent the MapView back into the preview card (below the loading
+     *  overlay + expand button) and hide the full-screen overlay. */
+    private fun collapseMap() {
+        if (!isMapFullScreen) return
+        val mv = mapView ?: return
+        val card = mapCard ?: return
+        (mv.parent as? ViewGroup)?.removeView(mv)
+        card.addView(
+            mv,
+            0,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+            ),
+        )
+        mapFullScreenContainer?.visibility = View.GONE
+        googleMap?.uiSettings?.isScrollGesturesEnabled = false
+        googleMap?.uiSettings?.isZoomControlsEnabled = false
+        isMapFullScreen = false
+        mapBackCallback?.isEnabled = false
+        renderMapMarkersAndRoute()
+    }
+
     private fun bindTripClientHeader(view: View, clientName: String) {
         val avatar = view.findViewById<TextView>(R.id.tvTripStaffAvatar)
         val nameView = view.findViewById<TextView>(R.id.tvTripStaffName)
@@ -764,7 +828,54 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             .ifBlank { "Client" }
         avatar.text = name.firstOrNull()?.uppercase() ?: "M"
         nameView.text = name
-        roleView.visibility = View.GONE
+        // Primary area / locality shown right under the client name (e.g.
+        // "Medavakkam", "Ashok Nagar"), parsed from the client address. Hidden
+        // when we can't derive an area.
+        val area = primaryAreaFromAddress(destinationAddress)
+        if (area.isNullOrBlank()) {
+            roleView.visibility = View.GONE
+        } else {
+            roleView.text = area
+            roleView.visibility = View.VISIBLE
+            val px = (14 * view.resources.displayMetrics.density).toInt()
+            val pin = androidx.core.content.ContextCompat
+                .getDrawable(view.context, R.drawable.ic_cp_locality)?.mutate()
+            pin?.setBounds(0, 0, px, px)
+            roleView.setCompoundDrawables(pin, null, null, null)
+        }
+    }
+
+    /**
+     * The client's primary area — i.e. the "Address Line 1" the CP form
+     * captures. CP addresses are the labeled, comma-joined shape from
+     * CreateCpVisit: "Door/Plot No: .., Street: .., Address: <line1>,
+     * Landmark: .., City: .., State: .., Pincode: ..". So the area is the
+     * value of the `Address:` segment — NOT the first token (which is the
+     * door/plot number). Falls back to the first non-door token for an
+     * unlabeled backend-composed address. Returns null when nothing usable.
+     */
+    private fun primaryAreaFromAddress(address: String?): String? {
+        val s = address?.trim().orEmpty()
+        if (s.isEmpty()) return null
+        val segments = s.split(",").map { it.trim() }.filter { it.isNotBlank() }
+        // Preferred: the value after the "Address:" label (= addressLine1).
+        val addressLabel = Regex("^Address\\s*:\\s*(.+)$", RegexOption.IGNORE_CASE)
+        segments.firstNotNullOfOrNull { seg ->
+            addressLabel.find(seg)?.groupValues?.get(1)?.trim()?.takeIf { it.isNotBlank() }
+        }?.let { return it }
+        // Fallback (unlabeled "doorNo, area, city, .." shape): skip any other
+        // labeled segments and bare door/plot numbers, take the first real name.
+        val otherLabel = Regex(
+            "^(Door/Plot No|Door No|Street|Landmark|City|State|District|Pincode|Pin)\\s*:",
+            RegexOption.IGNORE_CASE,
+        )
+        val looksLikeDoorNo: (String) -> Boolean = { t ->
+            val cleaned = t.replace(Regex("(?i)\\b(no|door|plot|flat|d\\.?no|#)\\.?\\b"), "").trim()
+            cleaned.isNotEmpty() && cleaned.all { it.isDigit() || it == '/' || it == '-' || it == ' ' }
+        }
+        return segments.firstOrNull { seg ->
+            !otherLabel.containsMatchIn(seg) && !looksLikeDoorNo(seg)
+        }?.takeIf { it.isNotBlank() }
     }
 
     /**
@@ -952,7 +1063,6 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         }
         swipeArrived?.visibility = View.GONE
         btnCompleteCpDetails?.visibility = View.GONE
-        tvOriginName?.text = "Current Location"
         tvDistance?.text = "Calculating..."
         tvEta?.text = "Calculating..."
         geocodeDestinationIfNeeded()
@@ -1077,7 +1187,6 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         viewLifecycleOwner.lifecycleScope.launch {
             val location = fetchCurrentLocation() ?: return@launch
             currentLocation = LatLng(location.latitude, location.longitude)
-            tvOriginName?.text = "Current Location"
             renderMapMarkersAndRoute()
             geocodeDestinationIfNeeded()
         }
@@ -2564,6 +2673,12 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                         id = cpId,
                         outcome = terminalOutcome,
                         notes = noShowReason,
+                        // Not-met completions have NO arrival OTP (the client
+                        // wasn't there) — the proof photo is the sole evidence.
+                        // Pass it so the backend attaches it to the field visit
+                        // before the completion-proof check (which, for a
+                        // client-not-met visit, requires only the photo).
+                        arrivalPhotoStorageId = pendingArrivalStorageId,
                     )
                 )
                 if (!outcomeResp.success) {
@@ -2583,9 +2698,30 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 arrivalInProgress = false
                 cpNoPathPhotoCapture = false
                 swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
-                Toast.makeText(requireContext(), e.message ?: "Network error", Toast.LENGTH_LONG).show()
+                Toast.makeText(
+                    requireContext(),
+                    serverErrorMessage(e) ?: e.message ?: "Network error",
+                    Toast.LENGTH_LONG,
+                ).show()
             }
         }
+    }
+
+    /**
+     * Pull the server's `error`/`message` out of a non-2xx response body so the
+     * user sees the real reason (e.g. "A photo proof of the visit must be
+     * uploaded…") instead of a bare "HTTP 500". Returns null for non-HTTP
+     * errors, so callers fall back to e.message.
+     */
+    private fun serverErrorMessage(e: Throwable): String? {
+        val httpEx = e as? retrofit2.HttpException ?: return null
+        val raw = runCatching { httpEx.response()?.errorBody()?.string() }.getOrNull()
+            ?: return null
+        return runCatching {
+            val obj = com.google.gson.JsonParser.parseString(raw).asJsonObject
+            (obj.get("error")?.asString ?: obj.get("message")?.asString)
+                ?.takeIf { it.isNotBlank() }
+        }.getOrNull()
     }
 
     private fun finalizeCompleteVisit() {
@@ -2634,7 +2770,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
                 Toast.makeText(
                     requireContext(),
-                    "Failed to complete: ${e.message}",
+                    "Failed to complete: ${serverErrorMessage(e) ?: e.message}",
                     Toast.LENGTH_LONG
                 ).show()
             }

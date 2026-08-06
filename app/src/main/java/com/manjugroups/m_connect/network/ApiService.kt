@@ -3049,6 +3049,7 @@ data class MarketingProject(
     // mirroring the web. Null until the backend exposing it is deployed.
     val specialPaymentEnabled: Boolean? = null,
     val minimumAdvanceAmount: Double? = null,
+    val allotmentDueDays: Double? = null,
     val promoOffer: String? = null,
     val projectOfferValue: Double? = null,
     val projectOfferTerms: String? = null,
@@ -3158,6 +3159,8 @@ data class BookingPlotPrefillProject(
     val guidelineRatePerSqft: Double? = null,
     val gstPercent: Double? = null,
     val specialPaymentEnabled: Boolean? = null,
+    val minimumAdvanceAmount: Double? = null,
+    val allotmentDueDays: Double? = null,
     val promoOffer: String? = null,
     val projectOfferValue: Double? = null,
     val projectOfferTerms: String? = null,

@@ -915,9 +915,11 @@ class AttendanceReviewBottomSheet : BottomSheetDialogFragment() {
             .distinctBy { "${it.arrivedAt}:${it.departedAt}" }
             .forEach { playbackStops.add(PbStop(LatLng(it.lat, it.lng), it.address ?: "Stop")) }
 
-        // Travel marker — the top-down rider PNG, rotated to the heading as it
-        // moves along the route during playback.
-        playbackVehicleIcon = vectorToBitmap(R.drawable.ic_travel_marker, null, 44, 66)
+        // Travel marker — the standard red location pin dropped at the staff's
+        // position as it moves along the route during playback (upright pin, not
+        // the rotated rider icon).
+        playbackVehicleIcon =
+            BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)
 
         binding.replaySeekBar.max = (playbackPath.size - 1).coerceAtLeast(1)
         binding.replaySeekBar.progress = 0
@@ -961,17 +963,16 @@ class AttendanceReviewBottomSheet : BottomSheetDialogFragment() {
             cur.latitude + (nxt.latitude - cur.latitude) * t,
             cur.longitude + (nxt.longitude - cur.longitude) * t,
         )
-        val heading = bearing(cur, nxt)
         val m = playbackMarker
         if (m == null) {
             playbackMarker = map.addMarker(
-                MarkerOptions().position(pos).anchor(0.5f, 0.5f).zIndex(20f)
-                    .flat(true).rotation(heading)
-                    .icon(playbackVehicleIcon ?: BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)),
+                // Upright red drop pin anchored at its tip (0.5, 1.0) — a pin
+                // should always point down, so it is NOT flat/rotated.
+                MarkerOptions().position(pos).anchor(0.5f, 1.0f).zIndex(20f)
+                    .icon(playbackVehicleIcon ?: BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)),
             )
         } else {
             m.position = pos
-            m.rotation = heading
         }
         binding.replaySeekBar.progress = i
         binding.tvReplayTime.text = playbackTimes.getOrNull(i)?.let { formatMillisTime(it) } ?: "--"
@@ -982,18 +983,16 @@ class AttendanceReviewBottomSheet : BottomSheetDialogFragment() {
             val fMarker = fullPlaybackMarker
             if (fMarker == null) {
                 fullPlaybackMarker = fm.addMarker(
-                    MarkerOptions().position(pos).anchor(0.5f, 0.5f).zIndex(20f)
-                        .flat(true).rotation(heading)
+                    MarkerOptions().position(pos).anchor(0.5f, 1.0f).zIndex(20f)
                         .icon(
                             playbackVehicleIcon
                                 ?: BitmapDescriptorFactory.defaultMarker(
-                                    BitmapDescriptorFactory.HUE_AZURE,
+                                    BitmapDescriptorFactory.HUE_RED,
                                 ),
                         ),
                 )
             } else {
                 fMarker.position = pos
-                fMarker.rotation = heading
             }
             fullSeekBar?.progress = i
         }

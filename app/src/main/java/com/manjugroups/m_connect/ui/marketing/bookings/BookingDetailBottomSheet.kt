@@ -37,6 +37,8 @@ import com.manjugroups.m_connect.network.StorageUploader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.manjugroups.m_connect.ui.common.SearchableSelectionDialog
+import com.manjugroups.m_connect.ui.common.SearchableOption
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -55,7 +57,37 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
         val value: String?,
         val numeric: Boolean = false,
         val editable: Boolean = true,
+        // When non-null, the field renders as a tap-to-pick dropdown (web
+        // parity — Title / Nationality / Booking Type / etc.) instead of a
+        // free text input. The picked value is still stored in `inputs` so the
+        // save path is unchanged.
+        val options: List<String>? = null,
     )
+
+    // Web-parity dropdown option lists (exact strings from booking-new-page).
+    private object Opt {
+        val title = listOf("Mr", "Mrs", "Ms", "Dr", "Prof")
+        val nationality = listOf("Indian", "NRI", "Foreign National")
+        val profession = listOf("Business", "Salaried", "Pension")
+        val department = listOf("Admin", "Sales", "HR", "Software Developer", "Other")
+        val bookingType = listOf("NEW", "CONVERSION", "EXCHANGE", "INTERNAL EXCHANGE")
+        val propertyType = listOf("Plot", "Apartment", "Villa", "Commercial")
+        val clientSource = listOf(
+            "Direct / Walk-in", "Reference", "Channel Partner",
+            "Site Visit", "Online / Social Media", "Other",
+        )
+        val paymentCategory = listOf(
+            "A - Self Finance / Hand Cash", "B - Loan Customer", "C - EMI",
+        )
+        val bookingMode = listOf("CASH", "UPI", "NEFT", "RTGS", "CHEQUE", "DD")
+        val paymentPlan = listOf("Regular", "Flexi", "Special")
+        val referenceRelation = listOf(
+            "Father", "Mother", "Spouse", "Brother", "Sister", "Son", "Daughter",
+            "Friend", "Colleague", "Neighbour", "Relative", "Other",
+        )
+        val docPreparedIn = listOf("English", "Kannada", "Tamil", "Telugu", "Hindi")
+        val yesNo = listOf("Yes", "No")
+    }
 
     private val api = ApiService.create()
     private lateinit var session: SessionManager
@@ -66,6 +98,12 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
     private val inputs = linkedMapOf<String, EditText>()
     private val fieldContainers = linkedMapOf<String, LinearLayout>()
     private val editableInputs = mutableSetOf<String>()
+    // Preserves in-progress edits across a conditional-flow re-render (e.g.
+    // picking a Profession that shows/hides Department rebuilds the tab).
+    private val draftValues = mutableMapOf<String, String>()
+    // Dropdowns whose value changes the visible field set — picking one snapshots
+    // current edits and re-renders the tab so dependent fields appear/disappear.
+    private val flowTriggerKeys = setOf("profession")
     private var approvalTransactionInput: EditText? = null
 
     private lateinit var title: TextView
@@ -253,6 +291,7 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
                     return@launch
                 }
                 booking = resp.booking
+                seedDraftFromBooking(resp.booking)
                 title.text = resp.booking.bookingRefNo ?: "Booking"
                 subtitle.text = listOfNotNull(
                     resp.booking.clientName,
@@ -298,7 +337,30 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
+    /** Snapshot the current input values so an in-place re-render (triggered by
+     *  a conditional dropdown) doesn't lose the operator's edits. */
+    private fun snapshotInputs() {
+        inputs.forEach { (key, input) -> draftValues[key] = input.text?.toString().orEmpty() }
+    }
+
+    /** Seed the draft with every field's loaded value across ALL tabs so that
+     *  saving from one tab doesn't null out fields on the others (only the
+     *  active tab lives in `inputs`), and so switching tabs keeps edits. */
+    private fun seedDraftFromBooking(b: Booking) {
+        draftValues.clear()
+        (clientFields(b) + bookingFields(b) + paymentFields(b)).forEach { f ->
+            draftValues[f.key] = f.value.orEmpty()
+        }
+    }
+
+    /** Current value for a key — the live edit (draft) if present, else the
+     *  loaded booking value. Used to drive conditional field visibility. */
+    private fun cur(key: String, fallback: String?): String =
+        (draftValues[key] ?: fallback).orEmpty()
+
     private fun renderContent() {
+        // Preserve current edits (of the tab we're leaving) before rebuilding.
+        snapshotInputs()
         inputs.clear()
         fieldContainers.clear()
         editableInputs.clear()
@@ -440,7 +502,8 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
                 layoutParams = LinearLayout.LayoutParams(dp(16), dp(16))
             })
             val input = EditText(requireContext()).apply {
-                setText(field.value.orEmpty())
+                // Prefer a live draft (preserved across a conditional re-render).
+                setText(draftValues[field.key] ?: field.value.orEmpty())
                 textSize = 13f
                 setSingleLine(true)
                 includeFontPadding = false
@@ -463,6 +526,44 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 1f,
             ).apply { marginStart = dp(10) })
+
+            // Dropdown fields: the EditText is a display only (never typed into);
+            // tapping the pill opens the searchable picker with the web options.
+            val options = field.options
+            if (options != null) {
+                input.isFocusable = false
+                input.isFocusableInTouchMode = false
+                input.isCursorVisible = false
+                input.keyListener = null
+                pill.addView(ImageView(requireContext()).apply {
+                    setImageResource(R.drawable.ic_chevron_down)
+                    layoutParams = LinearLayout.LayoutParams(dp(16), dp(16))
+                        .apply { marginStart = dp(6) }
+                })
+                pill.setOnClickListener {
+                    val canEdit = editMode && activeTab != Tab.APPROVAL &&
+                        editableInputs.contains(field.key)
+                    if (!canEdit) return@setOnClickListener
+                    SearchableSelectionDialog.show(
+                        context = requireContext(),
+                        title = field.label,
+                        options = options.map {
+                            SearchableOption(item = it, title = it, subtitle = null, keywords = it)
+                        },
+                        onSelected = { picked ->
+                            input.setText(picked)
+                            // Conditional dropdowns rebuild the tab so dependent
+                            // fields (e.g. Department under a Salaried profession)
+                            // appear/disappear; preserve edits first.
+                            if (flowTriggerKeys.contains(field.key)) {
+                                snapshotInputs()
+                                draftValues[field.key] = picked
+                                renderContent()
+                            }
+                        },
+                    )
+                }
+            }
 
             inputs[field.key] = input
             fieldContainers[field.key] = pill
@@ -786,7 +887,69 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
         val specialConsideration = number("specialConsideration")
         val agreedAmount = bookingCost?.minus(specialConsideration ?: 0.0)
         val advance = number("advanceAmount")
-        val balance = if (agreedAmount != null && advance != null) agreedAmount - advance else number("balanceAmount")
+        // Balance = gross total payable (agreed + registration + GST + document +
+        // patta + other charges) − advance, clamped at 0 — web parity via the
+        // shared BookingCalc engine. The old code used agreedAmount − advance,
+        // which dropped every charge from the balance.
+        val grossTotalPayable = BookingCalc.grossTotalPayable(
+            agreedAmount = agreedAmount,
+            registrationCharges = number("registrationCharges") ?: 0.0,
+            gstApplicable = true,
+            gstAmount = number("gstAmount") ?: 0.0,
+            documentCharges = number("documentCharges") ?: 0.0,
+            pattaCharges = number("pattaCharges") ?: 0.0,
+            otherChargesApplicable = true,
+            otherCharges = number("otherCharges") ?: 0.0,
+        )
+        val balance = if (agreedAmount != null) {
+            BookingCalc.payableChain(
+                totalPayable = grossTotalPayable,
+                bankLoanAmount = 0.0,
+                advanceAmount = advance ?: 0.0,
+                conversionCredit = 0.0,
+            ).balanceAmount
+        } else {
+            number("balanceAmount")
+        }
+
+        // ── Web-parity validation (format + amount rules). Each rule fires only
+        // when the field has a value, so partial edits on a draft aren't blocked
+        // by fields the operator hasn't filled yet. ──────────────────────────
+        fun fail(msg: String): Boolean {
+            Toast.makeText(requireContext(), msg, Toast.LENGTH_LONG).show(); return true
+        }
+        fun digitsOf(key: String) = value(key).filter { it.isDigit() }
+        val phoneChecks = listOf(
+            "mobileNumber" to "Mobile Number",
+            "alternateNumbers" to "Alternate Numbers",
+            "whatsappNumber" to "WhatsApp Number",
+            "referenceMobile1" to "Reference Mobile 1",
+            "referenceMobile2" to "Reference Mobile 2",
+        )
+        for ((key, label) in phoneChecks) {
+            val d = digitsOf(key)
+            if (d.isNotEmpty() && d.length != 10) { if (fail("$label must be exactly 10 digits")) return }
+        }
+        digitsOf("pincode").let { if (it.isNotEmpty() && it.length != 6) { if (fail("Pincode must be exactly 6 digits")) return } }
+        digitsOf("aadhaar").let { if (it.isNotEmpty() && it.length != 12) { if (fail("Aadhaar Number must be exactly 12 digits")) return } }
+        value("pan").let { if (it.isNotEmpty() && it.length != 10) { if (fail("PAN Number must be exactly 10 characters")) return } }
+        if (bookingCost != null && (specialConsideration ?: 0.0) > bookingCost) {
+            if (fail("Special Consideration cannot exceed the Booking Cost")) return
+        }
+        if (advance != null && advance > grossTotalPayable && grossTotalPayable > 0) {
+            if (fail("Advance cannot exceed the total payable amount")) return
+        }
+        val allotment = number("allotmentDueAmount") ?: 0.0
+        val customerBalanceAfterAdvance = BookingCalc.payableChain(
+            totalPayable = grossTotalPayable,
+            bankLoanAmount = 0.0,
+            advanceAmount = advance ?: 0.0,
+            conversionCredit = 0.0,
+        ).customerBalanceAfterAdvance
+        if (allotment > customerBalanceAfterAdvance && grossTotalPayable > 0) {
+            if (fail("Allotment payment cannot exceed the remaining Customer Payable Amount")) return
+        }
+
         val req = UpdateBookingRequest(
             title = valueOrNull("title"),
             clientName = clientName,
@@ -876,38 +1039,41 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
-    private fun clientFields(b: Booking) = listOf(
-        FieldSpec("mobileNumber", "Mobile Number", b.mobileNumber),
-        FieldSpec("title", "Title", b.title),
-        FieldSpec("clientName", "Client Name", b.clientName),
-        FieldSpec("fatherSpouseName", "Father / Spouse Name", b.fatherSpouseName),
-        FieldSpec("dateOfBirth", "Date of Birth", b.dateOfBirth),
-        FieldSpec("anniversaryDate", "Anniversary Date", b.anniversaryDate),
-        FieldSpec("alternateNumbers", "Alternate Numbers", b.alternateNumbers),
-        FieldSpec("whatsappNumber", "WhatsApp Number", b.whatsappNumber),
-        FieldSpec("email", "Email", b.email),
-        FieldSpec("nationality", "Nationality", b.nationality),
-        FieldSpec("homeAddress", "Home Address", b.homeAddress),
-        FieldSpec("pincode", "Pincode", b.pincode),
-        FieldSpec("state", "State", b.state),
-        FieldSpec("district", "District", b.district),
-        FieldSpec("location", "Location", b.location),
-        FieldSpec("profession", "Profession", b.profession),
-        FieldSpec("designation", "Designation", b.designation),
-        FieldSpec("department", "Department", b.department, editable = false),
-        FieldSpec("incomePerAnnum", "Income Per Annum", b.incomePerAnnum),
-        FieldSpec("officeName", "Office Name", b.officeName),
-        FieldSpec("officeMobile", "Office Mobile", b.officeMobile),
-        FieldSpec("officePhone", "Office Phone", b.officePhone),
-        FieldSpec("officeEmail", "Office Email", b.officeEmail),
-        FieldSpec("officeAddress", "Office Address", b.officeAddress),
-        FieldSpec("officeArea", "Office Area", b.officeArea, editable = false),
-        FieldSpec("officePincode", "Office Pincode", b.officePincode, editable = false),
-    )
+    private fun clientFields(b: Booking): List<FieldSpec> = buildList {
+        add(FieldSpec("mobileNumber", "Mobile Number", b.mobileNumber, numeric = true))
+        add(FieldSpec("title", "Title", b.title, options = Opt.title))
+        add(FieldSpec("clientName", "Client Name", b.clientName))
+        add(FieldSpec("fatherSpouseName", "Father / Spouse Name", b.fatherSpouseName))
+        add(FieldSpec("dateOfBirth", "Date of Birth", b.dateOfBirth))
+        add(FieldSpec("anniversaryDate", "Anniversary Date", b.anniversaryDate))
+        add(FieldSpec("alternateNumbers", "Alternate Numbers", b.alternateNumbers, numeric = true))
+        add(FieldSpec("whatsappNumber", "WhatsApp Number", b.whatsappNumber, numeric = true))
+        add(FieldSpec("email", "Email", b.email))
+        add(FieldSpec("nationality", "Nationality", b.nationality, options = Opt.nationality))
+        add(FieldSpec("homeAddress", "Home Address", b.homeAddress))
+        add(FieldSpec("pincode", "Pincode", b.pincode, numeric = true))
+        add(FieldSpec("state", "State", b.state))
+        add(FieldSpec("district", "District", b.district))
+        add(FieldSpec("location", "Location", b.location))
+        add(FieldSpec("profession", "Profession", b.profession, options = Opt.profession))
+        add(FieldSpec("designation", "Designation", b.designation))
+        // Department only when Profession = Salaried (web parity conditional).
+        if (cur("profession", b.profession).equals("Salaried", ignoreCase = true)) {
+            add(FieldSpec("department", "Department", b.department, options = Opt.department))
+        }
+        add(FieldSpec("incomePerAnnum", "Income Per Annum", b.incomePerAnnum, numeric = true))
+        add(FieldSpec("officeName", "Office Name", b.officeName))
+        add(FieldSpec("officeMobile", "Office Mobile", b.officeMobile, numeric = true))
+        add(FieldSpec("officePhone", "Office Phone", b.officePhone))
+        add(FieldSpec("officeEmail", "Office Email", b.officeEmail))
+        add(FieldSpec("officeAddress", "Office Address", b.officeAddress))
+        add(FieldSpec("officeArea", "Office Area", b.officeArea, editable = false))
+        add(FieldSpec("officePincode", "Office Pincode", b.officePincode, editable = false))
+    }
 
     private fun bookingFields(b: Booking): List<FieldSpec> = buildList {
         add(FieldSpec("bookingRefNo", "Booking Ref No", b.bookingRefNo, editable = false))
-        add(FieldSpec("bookingType", "Booking Type", b.bookingType))
+        add(FieldSpec("bookingType", "Booking Type", b.bookingType, options = Opt.bookingType))
         if (b.bookingType == "CONVERSION") {
             add(FieldSpec(
                 "conversionEntryType",
@@ -944,17 +1110,17 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
         add(FieldSpec("bookingDate", "Booking Date", b.bookingDate))
         add(FieldSpec("projectName", "Project", b.projectName, editable = false))
         add(FieldSpec("plotNo", "Plot No", b.plot?.unitNumber ?: b.plotNumber ?: b.plotNo))
-        add(FieldSpec("propertyType", "Property Type", b.propertyType))
-        add(FieldSpec("clientSource", "Client Source", b.clientSource, editable = false))
+        add(FieldSpec("propertyType", "Property Type", b.propertyType, options = Opt.propertyType))
+        add(FieldSpec("clientSource", "Client Source", b.clientSource, options = Opt.clientSource))
         add(FieldSpec("clientSourceName", "Source / Reference Name", b.clientSourceName, editable = false))
         add(FieldSpec("clientSourceMobile", "Source / Reference Mobile", b.clientSourceMobile, editable = false))
         add(FieldSpec("referralBenefit", "Referral Benefit", b.referralBenefit, editable = false))
-        add(FieldSpec("isAgainstSV", "Is Against Site Visit?", yesNo(b.isAgainstSV), editable = false))
+        add(FieldSpec("isAgainstSV", "Is Against Site Visit?", yesNo(b.isAgainstSV), options = Opt.yesNo))
         if (b.isAgainstSV == true) {
             add(FieldSpec("svName", "SV Name", b.svName, editable = false))
             add(FieldSpec("svMobileNo", "SV Mobile No.", b.svMobileNo, editable = false))
         }
-        add(FieldSpec("bookingMode", "Advance Booking Payment", b.bookingMode))
+        add(FieldSpec("bookingMode", "Advance Booking Payment", b.bookingMode, options = Opt.bookingMode))
         add(FieldSpec("bookingCost", "Booking Cost", b.bookingCost?.toString(), numeric = true))
         add(FieldSpec("guidelineValue", "Guideline Value", b.guidelineValue?.toString(), numeric = true))
         add(FieldSpec("specialConsideration", "Special Consideration", b.specialConsideration?.toString(), numeric = true))
@@ -977,7 +1143,7 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
             add(FieldSpec("loanAmountRequested", "Bank Loan Amount", b.loanAmountRequested?.toString(), numeric = true, editable = false))
         }
         add(FieldSpec("advanceAmount", "Advance Amount", b.advanceAmount?.toString(), numeric = true))
-        add(FieldSpec("paymentMode", "Payment Mode", b.paymentMode))
+        add(FieldSpec("paymentMode", "Payment Mode", b.paymentMode, options = Opt.bookingMode))
         add(FieldSpec("advanceTransactionId", "Transaction ID", b.advanceTransactionId, editable = false))
         add(FieldSpec("advancePaymentProofFileName", "Payment Proof", b.advancePaymentProofFileName, editable = false))
         add(FieldSpec("advanceInstrumentNo", "Cheque / DD No.", b.advanceInstrumentNo, editable = false))
@@ -987,7 +1153,7 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun paymentFields(b: Booking) = listOf(
-        FieldSpec("paymentPlan", "Payment Plan", b.paymentPlan, editable = false),
+        FieldSpec("paymentPlan", "Payment Plan", b.paymentPlan, options = Opt.paymentPlan),
         FieldSpec("allotmentDueAmount", "Allotment Due Amount", b.allotmentDueAmount?.toString(), numeric = true),
         FieldSpec("allotmentDueDate", "Allotment Due Date", b.allotmentDueDate),
         FieldSpec("secondPaymentAmount", "2nd Payment Amount", b.secondPaymentAmount?.toString(), numeric = true),
@@ -1002,15 +1168,16 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
         FieldSpec("pan", "PAN", b.pan),
         FieldSpec("panDocumentFileName", "PAN Upload", b.panDocumentFileName, editable = false),
         FieldSpec("referenceName1", "Reference Name 1", b.referenceName1),
-        FieldSpec("referenceMobile1", "Reference Mobile 1", b.referenceMobile1),
-        FieldSpec("referenceProfession1", "Reference Profession 1", b.referenceProfession1),
+        FieldSpec("referenceMobile1", "Reference Mobile 1", b.referenceMobile1, numeric = true),
+        FieldSpec("referenceProfession1", "Reference Relation 1", b.referenceProfession1, options = Opt.referenceRelation),
         FieldSpec("referenceName2", "Reference Name 2", b.referenceName2),
-        FieldSpec("referenceMobile2", "Reference Mobile 2", b.referenceMobile2),
-        FieldSpec("referenceProfession2", "Reference Profession 2", b.referenceProfession2),
-        FieldSpec("docPreparedIn", "Document Prepared In", b.docPreparedIn),
+        FieldSpec("referenceMobile2", "Reference Mobile 2", b.referenceMobile2, numeric = true),
+        FieldSpec("referenceProfession2", "Reference Relation 2", b.referenceProfession2, options = Opt.referenceRelation),
+        FieldSpec("docPreparedIn", "Document Prepared In", b.docPreparedIn, options = Opt.docPreparedIn),
     )
 
-    private fun value(key: String): String = inputs[key]?.text?.toString()?.trim().orEmpty()
+    private fun value(key: String): String =
+        (inputs[key]?.text?.toString() ?: draftValues[key]).orEmpty().trim()
     private fun valueOrNull(key: String): String? = value(key).takeIf { it.isNotBlank() }
     private fun number(key: String): Double? = value(key).takeIf { it.isNotBlank() }?.toDoubleOrNull()
 

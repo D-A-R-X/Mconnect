@@ -28,6 +28,29 @@ class BootReceiver : BroadcastReceiver() {
         }
         val session = SessionManager(context)
         if (!session.isLoggedIn) return
+
+        // Restart the foreground service IMMEDIATELY, synchronously, if the last
+        // persisted session said we were inside a clock-in tracking window. Two
+        // reasons this must happen here and not after the network round-trip:
+        //   1. An APK update / reboot cold-starts the process with nothing
+        //      keeping it alive; deferring the (re)start to an async coroutine
+        //      races process death, so onReceive returns and the app is killed
+        //      before the service ever starts — tracking silently stayed dead
+        //      after every update (the bug users hit: no location until they
+        //      reopened the app).
+        //   2. The FGS background-start exemption granted to BOOT_COMPLETED /
+        //      MY_PACKAGE_REPLACED is only valid for a short window from the
+        //      broadcast; a slow network call can miss it. Starting now uses it.
+        // The bootstrap sync below then reconciles (stops the service if the
+        // server says the shift/visit has since ended — tracking stays strictly
+        // bounded to the clock-in → clock-out window).
+        if (session.shouldTrackNow && !session.activeTrackingSessionId.isNullOrBlank()) {
+            runCatching { GeoTrackService.start(context) }
+        }
+
+        // Keep the receiver (and its process) alive while the reconciling sync
+        // runs — a bare coroutine would be torn down when onReceive returns.
+        val pending = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val api = GeoTrackApi.create()
@@ -38,6 +61,8 @@ class BootReceiver : BroadcastReceiver() {
                 }
             } catch (e: Exception) {
                 Log.w("BootReceiver", "Failed to resume tracking after $eventType: ${e.message}")
+            } finally {
+                pending.finish()
             }
         }
     }

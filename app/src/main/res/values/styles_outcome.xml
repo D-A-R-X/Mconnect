@@ -19,18 +19,19 @@
 
     <!-- Prominent section heading inside an outcome-sheet card (Financial
          Details, Charges & Advance, Customer Funding, KYC…). Bold, uppercase,
-         accent-blue so section names clearly stand out from field labels. -->
+         dark foreground text so section names mirror the web form hierarchy. -->
     <style name="OutcomeSectionTitle">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">18dp</item>
         <item name="android:layout_marginBottom">2dp</item>
         <item name="android:fontFamily">@font/inter_bold</item>
+        <item name="android:textStyle">bold</item>
         <item name="android:includeFontPadding">false</item>
-        <item name="android:textColor">#0B61CA</item>
-        <item name="android:textSize">13sp</item>
+        <item name="android:textColor">?attr/colorForegroundPrimary</item>
+        <item name="android:textSize">14sp</item>
         <item name="android:textAllCaps">true</item>
-        <item name="android:letterSpacing">0.04</item>
+        <item name="android:letterSpacing">0.02</item>
     </style>
 
     <style name="OutcomeFieldPill">

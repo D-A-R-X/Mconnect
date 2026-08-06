@@ -163,12 +163,30 @@
         <item name="android:visibility">gone</item>
     </style>
 
+    <!-- No window enter/exit animation for the CP outcome sheet. The default
+         BottomSheetDialog slide-up snapshots the window surface (white page)
+         and slides it in — which flashes for a frame behind the centre picker
+         before the sheet is hidden. Killing the window animation lets us hide
+         the container and fade the form in ourselves, glitch-free. -->
+    <style name="SheetNoWindowAnim">
+        <item name="android:windowEnterAnimation">@null</item>
+        <item name="android:windowExitAnimation">@null</item>
+    </style>
+
+    <!-- Centre zoom-in/out window animation for the outcome picker dialog, so
+         it pops from the middle instead of the default left/right slide. -->
+    <style name="DialogZoomAnimation">
+        <item name="android:windowEnterAnimation">@anim/dialog_zoom_in</item>
+        <item name="android:windowExitAnimation">@anim/dialog_zoom_out</item>
+    </style>
+
     <!-- Section title shown at the top of a BookingSectionCard. -->
     <style name="BookingCardTitle">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">14dp</item>
         <item name="android:fontFamily">@font/inter_bold</item>
+        <item name="android:textStyle">bold</item>
         <item name="android:textColor">?attr/colorForegroundPrimary</item>
         <item name="android:textSize">14sp</item>
         <item name="android:textAllCaps">true</item>
@@ -192,20 +210,6 @@
         <item name="android:background">@drawable/bg_outcome_field_pill</item>
         <item name="android:padding">12dp</item>
         <item name="android:fontFamily">@font/inter_semibold</item>
-        <item name="android:textColor">?attr/colorAccentPrimary</item>
-        <item name="android:textSize">13sp</item>
-    </style>
-
-    <style name="BookingUploadRow">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:layout_marginTop">6dp</item>
-        <item name="android:background">@drawable/bg_outcome_field_pill</item>
-        <item name="android:clickable">true</item>
-        <item name="android:focusable">true</item>
-        <item name="android:padding">14dp</item>
-        <item name="android:gravity">center</item>
-        <item name="android:fontFamily">@font/inter_medium</item>
         <item name="android:textColor">?attr/colorAccentPrimary</item>
         <item name="android:textSize">13sp</item>
     </style>

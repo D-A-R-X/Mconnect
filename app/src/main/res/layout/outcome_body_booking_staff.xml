@@ -3,6 +3,7 @@
      Captures the booking-side staff hierarchy + KYC + references and a
      final Save-as draft/confirmed toggle. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     style="@style/OutcomeBodyCard"
     android:id="@+id/bodyBookingStaff"
     android:layout_width="match_parent"
@@ -10,7 +11,12 @@
     android:orientation="vertical"
     android:visibility="gone">
 
-    <TextView style="@style/OutcomeFieldLabel" android:text="AVP *" />
+    <TextView
+        style="@style/OutcomeSectionTitle"
+        android:layout_marginTop="2dp"
+        android:text="Original Staff" />
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="10dp" android:text="AVP *" />
     <LinearLayout android:id="@+id/rowStaffAvp" style="@style/OutcomeFieldPillClickable">
         <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_person" />
         <TextView android:id="@+id/tvStaffAvp" style="@style/OutcomeFieldValue" android:hint="Select" />
@@ -45,39 +51,29 @@
         <ImageView style="@style/OutcomeFieldChevron" />
     </LinearLayout>
 
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Aadhaar Details *" />
+    <TextView style="@style/OutcomeSectionTitle" android:text="KYC" />
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="10dp" android:text="Aadhaar Details *" />
     <LinearLayout style="@style/OutcomeFieldPill">
         <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_doc" />
         <EditText android:id="@+id/etStaffAadhar" style="@style/OutcomeFieldEdit" android:hint="Enter Details" android:inputType="number" />
     </LinearLayout>
 
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Aadhaar Front *" />
-    <TextView
+    <com.manjugroups.m_connect.ui.common.BookingUploadFieldView
         android:id="@+id/btnStaffAadhaarUpload"
-        style="@style/OutcomeFieldValue"
         android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:background="@drawable/bg_outcome_field_pill"
-        android:clickable="true"
-        android:focusable="true"
-        android:gravity="center_vertical"
-        android:paddingHorizontal="14dp"
-        android:text="Choose file"
-        android:textColor="#175CD3" />
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        app:buf_label="Aadhaar Front"
+        app:buf_required="true" />
 
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Aadhaar Back *" />
-    <TextView
+    <com.manjugroups.m_connect.ui.common.BookingUploadFieldView
         android:id="@+id/btnStaffAadhaarBackUpload"
-        style="@style/OutcomeFieldValue"
         android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:background="@drawable/bg_outcome_field_pill"
-        android:clickable="true"
-        android:focusable="true"
-        android:gravity="center_vertical"
-        android:paddingHorizontal="14dp"
-        android:text="Choose file"
-        android:textColor="#175CD3" />
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        app:buf_label="Aadhaar Back"
+        app:buf_required="true" />
 
     <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="PAN Details *" />
     <LinearLayout style="@style/OutcomeFieldPill">
@@ -85,51 +81,35 @@
         <EditText android:id="@+id/etStaffPancard" style="@style/OutcomeFieldEdit" android:hint="Enter Details" android:inputType="textCapCharacters" />
     </LinearLayout>
 
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="PAN Upload *" />
-    <TextView
+    <com.manjugroups.m_connect.ui.common.BookingUploadFieldView
         android:id="@+id/btnStaffPanUpload"
-        style="@style/OutcomeFieldValue"
         android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:background="@drawable/bg_outcome_field_pill"
-        android:clickable="true"
-        android:focusable="true"
-        android:gravity="center_vertical"
-        android:paddingHorizontal="14dp"
-        android:text="Choose file"
-        android:textColor="#175CD3" />
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        app:buf_label="PAN Upload"
+        app:buf_required="true" />
 
     <TextView style="@style/OutcomeSectionTitle" android:text="CEF Form" />
 
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="CEF Front *" />
-    <TextView
+    <com.manjugroups.m_connect.ui.common.BookingUploadFieldView
         android:id="@+id/btnStaffCefFrontUpload"
-        style="@style/OutcomeFieldValue"
         android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:background="@drawable/bg_outcome_field_pill"
-        android:clickable="true"
-        android:focusable="true"
-        android:gravity="center_vertical"
-        android:paddingHorizontal="14dp"
-        android:text="Choose file"
-        android:textColor="#175CD3" />
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        app:buf_label="CEF Front"
+        app:buf_required="true" />
 
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="CEF Back *" />
-    <TextView
+    <com.manjugroups.m_connect.ui.common.BookingUploadFieldView
         android:id="@+id/btnStaffCefBackUpload"
-        style="@style/OutcomeFieldValue"
         android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:background="@drawable/bg_outcome_field_pill"
-        android:clickable="true"
-        android:focusable="true"
-        android:gravity="center_vertical"
-        android:paddingHorizontal="14dp"
-        android:text="Choose file"
-        android:textColor="#175CD3" />
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        app:buf_label="CEF Back"
+        app:buf_required="true" />
 
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Reference Name 1 *" />
+    <TextView style="@style/OutcomeSectionTitle" android:text="References" />
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="10dp" android:text="Reference Name 1 *" />
     <LinearLayout style="@style/OutcomeFieldPill">
         <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_person" />
         <EditText android:id="@+id/etStaffRefName1" style="@style/OutcomeFieldEdit" android:hint="Enter Name" android:inputType="textCapWords" />
@@ -167,7 +147,9 @@
         <ImageView style="@style/OutcomeFieldChevron" />
     </LinearLayout>
 
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Document to be prepared in *" />
+    <TextView style="@style/OutcomeSectionTitle" android:text="Finalize" />
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="10dp" android:text="Document to be prepared in *" />
     <LinearLayout android:id="@+id/rowStaffDocPrep" style="@style/OutcomeFieldPillClickable">
         <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_doc" />
         <TextView android:id="@+id/tvStaffDocPrep" style="@style/OutcomeFieldValue" android:hint="Select" />

@@ -225,8 +225,14 @@
                 <LinearLayout android:id="@+id/rowOnlinePayment" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
                     <TextView style="@style/BookingFieldLabel" android:text="Transaction ID *" />
                     <EditText android:id="@+id/etAdvanceTxnId" style="@style/BookingFieldInput" android:inputType="text" android:hint="UTR / Ref no" />
-                    <TextView style="@style/BookingFieldLabel" android:text="Payment Proof *" />
-                    <TextView android:id="@+id/tvUploadPaymentProof" style="@style/BookingUploadRow" android:text="Upload payment proof" />
+                    <com.manjugroups.m_connect.ui.common.BookingUploadFieldView
+                        android:id="@+id/tvUploadPaymentProof"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
+                        app:buf_hint="Upload payment proof"
+                        app:buf_label="Payment Proof"
+                        app:buf_required="true" />
                 </LinearLayout>
                 <LinearLayout android:id="@+id/rowInstrumentPayment" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
                     <TextView android:id="@+id/lblInstrumentNo" style="@style/BookingFieldLabel" android:text="Cheque No *" />
@@ -256,13 +262,13 @@
                     <TextView style="@style/BookingFieldLabel" android:text="2nd Payment Date" />
                     <TextView android:id="@+id/tvSecondDate" style="@style/BookingFieldRow" android:text="Select date" />
                 </LinearLayout>
-                <LinearLayout android:id="@+id/rowThirdPayment" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+                <LinearLayout android:id="@+id/rowThirdPayment" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
                     <TextView style="@style/BookingFieldLabel" android:text="3rd Payment Amount (₹)" />
                     <EditText android:id="@+id/etThirdAmount" style="@style/BookingFieldInput" android:inputType="numberDecimal" android:hint="0" />
                     <TextView style="@style/BookingFieldLabel" android:text="3rd Payment Date" />
                     <TextView android:id="@+id/tvThirdDate" style="@style/BookingFieldRow" android:text="Select date" />
                 </LinearLayout>
-                <LinearLayout android:id="@+id/rowFourthPayment" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+                <LinearLayout android:id="@+id/rowFourthPayment" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
                     <TextView style="@style/BookingFieldLabel" android:text="4th Payment Amount (₹)" />
                     <EditText android:id="@+id/etFourthAmount" style="@style/BookingFieldInput" android:inputType="numberDecimal" android:hint="0" />
                     <TextView style="@style/BookingFieldLabel" android:text="4th Payment Date" />
@@ -292,19 +298,49 @@
                 <TextView style="@style/BookingCardTitle" android:text="KYC" />
                 <TextView style="@style/BookingFieldLabel" android:text="Aadhaar *" />
                 <EditText android:id="@+id/etAadhaar" style="@style/BookingFieldInput" android:inputType="number" android:maxLength="12" android:hint="12-digit Aadhaar number" />
-                <TextView style="@style/BookingFieldLabel" android:text="Aadhaar Front *" />
-                <TextView android:id="@+id/tvUploadAadhaarFront" style="@style/BookingUploadRow" android:text="Upload Aadhaar Front" />
-                <TextView style="@style/BookingFieldLabel" android:text="Aadhaar Back *" />
-                <TextView android:id="@+id/tvUploadAadhaarBack" style="@style/BookingUploadRow" android:text="Upload Aadhaar Back" />
+                <com.manjugroups.m_connect.ui.common.BookingUploadFieldView
+                    android:id="@+id/tvUploadAadhaarFront"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    app:buf_hint="Upload Aadhaar Front"
+                    app:buf_label="Aadhaar Front"
+                    app:buf_required="true" />
+                <com.manjugroups.m_connect.ui.common.BookingUploadFieldView
+                    android:id="@+id/tvUploadAadhaarBack"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    app:buf_hint="Upload Aadhaar Back"
+                    app:buf_label="Aadhaar Back"
+                    app:buf_required="true" />
                 <TextView style="@style/BookingFieldLabel" android:text="PAN *" />
                 <EditText android:id="@+id/etPan" style="@style/BookingFieldInput" android:inputType="textCapCharacters" android:maxLength="10" android:hint="PAN NUMBER" />
-                <TextView style="@style/BookingFieldLabel" android:text="PAN Upload *" />
-                <TextView android:id="@+id/tvUploadPan" style="@style/BookingUploadRow" android:text="Upload PAN" />
+                <com.manjugroups.m_connect.ui.common.BookingUploadFieldView
+                    android:id="@+id/tvUploadPan"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    app:buf_hint="Upload PAN"
+                    app:buf_label="PAN Upload"
+                    app:buf_required="true" />
                 <TextView style="@style/BookingSubHeader" android:text="CEF Form" />
-                <TextView style="@style/BookingFieldLabel" android:text="CEF Front *" />
-                <TextView android:id="@+id/tvUploadCefFront" style="@style/BookingUploadRow" android:text="Upload CEF Front" />
-                <TextView style="@style/BookingFieldLabel" android:text="CEF Back *" />
-                <TextView android:id="@+id/tvUploadCefBack" style="@style/BookingUploadRow" android:text="Upload CEF Back" />
+                <com.manjugroups.m_connect.ui.common.BookingUploadFieldView
+                    android:id="@+id/tvUploadCefFront"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    app:buf_hint="Upload CEF Front"
+                    app:buf_label="CEF Front"
+                    app:buf_required="true" />
+                <com.manjugroups.m_connect.ui.common.BookingUploadFieldView
+                    android:id="@+id/tvUploadCefBack"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    app:buf_hint="Upload CEF Back"
+                    app:buf_label="CEF Back"
+                    app:buf_required="true" />
             </LinearLayout>
 
             <!-- ══════════ REFERENCES ══════════ -->
@@ -333,35 +369,48 @@
                 <TextView android:id="@+id/tvDocPreparedIn" style="@style/BookingFieldRow" android:text="English" />
             </LinearLayout>
 
-            <TextView
-                android:id="@+id/btnBookingSaveDraft"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="18dp"
-                android:background="@drawable/bg_outcome_field_pill"
-                android:clickable="true"
-                android:focusable="true"
-                android:fontFamily="@font/inter_semibold"
-                android:gravity="center"
-                android:padding="14dp"
-                android:text="Save Draft"
-                android:textColor="?attr/colorForegroundPrimary"
-                android:textSize="14sp" />
-
-            <TextView
-                android:id="@+id/btnBookingSubmit"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:background="@drawable/bg_home_today_visit_action"
-                android:clickable="true"
-                android:focusable="true"
-                android:fontFamily="@font/inter_semibold"
-                android:gravity="center"
-                android:padding="14dp"
-                android:text="Save &amp; Send for Approval"
-                android:textColor="#FFFFFF"
-                android:textSize="14sp" />
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
+
+    <!-- Fixed footer: Save Draft + Save & Send for Approval stay pinned to the
+         bottom of the screen instead of scrolling away with the form. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#FFFFFF"
+        android:elevation="12dp"
+        android:orientation="vertical"
+        android:paddingHorizontal="16dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="16dp">
+
+        <TextView
+            android:id="@+id/btnBookingSaveDraft"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_outcome_field_pill"
+            android:clickable="true"
+            android:focusable="true"
+            android:fontFamily="@font/inter_semibold"
+            android:gravity="center"
+            android:padding="14dp"
+            android:text="Save Draft"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/btnBookingSubmit"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_home_today_visit_action"
+            android:clickable="true"
+            android:focusable="true"
+            android:fontFamily="@font/inter_semibold"
+            android:gravity="center"
+            android:padding="14dp"
+            android:text="Save &amp; Send for Approval"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp" />
+    </LinearLayout>
 </LinearLayout>

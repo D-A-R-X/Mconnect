@@ -8,7 +8,12 @@
     android:orientation="vertical"
     android:visibility="gone">
 
-    <TextView style="@style/OutcomeFieldLabel" android:text="Profession *" />
+    <TextView
+        style="@style/OutcomeSectionTitle"
+        android:layout_marginTop="2dp"
+        android:text="Professional Details" />
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="10dp" android:text="Profession *" />
 
     <LinearLayout
         android:id="@+id/rowProfProfession"

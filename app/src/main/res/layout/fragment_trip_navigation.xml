@@ -127,18 +127,24 @@
                     android:textColor="#111827"
                     android:textSize="13sp" />
 
+                <!-- Primary area / locality of the client (e.g. "Medavakkam",
+                     "Ashok Nagar"), shown under the client name. Set + toggled
+                     in bindTripClientHeader; hidden when the area is unknown. -->
                 <TextView
                     android:id="@+id/tvTripStaffRole"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="3dp"
+                    android:layout_marginTop="4dp"
+                    android:drawablePadding="5dp"
                     android:ellipsize="end"
-                    android:fontFamily="@font/inter_regular"
+                    android:fontFamily="@font/inter_medium"
+                    android:gravity="center_vertical"
                     android:includeFontPadding="false"
                     android:maxLines="1"
-                    android:text="Field Executive"
-                    android:textColor="#667085"
-                    android:textSize="11sp" />
+                    android:text=""
+                    android:textColor="#475467"
+                    android:textSize="12sp"
+                    android:visibility="gone" />
             </LinearLayout>
 
             <LinearLayout
@@ -368,57 +374,6 @@
                             android:layout_height="20dp"
                             android:layout_gravity="center"
                             android:contentDescription="@null"
-                            android:src="@drawable/ic_stat_time" />
-                    </FrameLayout>
-
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="12dp"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="@font/inter_regular"
-                            android:includeFontPadding="false"
-                            android:text="Location"
-                            android:textColor="#667085"
-                            android:textSize="10sp" />
-
-                        <TextView
-                            android:id="@+id/tvTripOriginName"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="5dp"
-                            android:ellipsize="end"
-                            android:fontFamily="@font/inter_medium"
-                            android:includeFontPadding="false"
-                            android:maxLines="1"
-                            android:text="Current Location"
-                            android:textColor="#111827"
-                            android:textSize="11sp" />
-                    </LinearLayout>
-                </LinearLayout>
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="38dp"
-                    android:layout_marginTop="14dp"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <FrameLayout
-                        android:layout_width="40dp"
-                        android:layout_height="40dp"
-                        android:background="@drawable/bg_home_trip_stat_icon_v2">
-
-                        <ImageView
-                            android:layout_width="20dp"
-                            android:layout_height="20dp"
-                            android:layout_gravity="center"
-                            android:contentDescription="@null"
                             android:src="@drawable/ic_stat_eta" />
                     </FrameLayout>
 
@@ -608,6 +563,27 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center" />
+        </FrameLayout>
+
+        <!-- Expand-to-full-screen button, bottom-right of the map preview. -->
+        <FrameLayout
+            android:id="@+id/btnMapExpand"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_gravity="bottom|end"
+            android:layout_margin="10dp"
+            android:background="@drawable/bg_map_expand_btn"
+            android:clickable="true"
+            android:contentDescription="Expand map"
+            android:focusable="true">
+
+            <ImageView
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_map_expand"
+                app:tint="#0B61CA" />
         </FrameLayout>
     </FrameLayout>
 
@@ -931,5 +907,51 @@
             android:textSize="14sp"
             android:visibility="gone" />
     </LinearLayout>
+
+    <!-- Full-screen map overlay. Hidden by default; the map preview's expand
+         button reparents the MapView into mapFullScreenHost and shows this.
+         The close (X) button top-right reparents it back to the card. Drawn on
+         top of everything (last child + high elevation) so it covers the trip
+         content and bottom actions. -->
+    <FrameLayout
+        android:id="@+id/mapFullScreenContainer"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="#000000"
+        android:clickable="true"
+        android:elevation="24dp"
+        android:focusable="true"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <FrameLayout
+            android:id="@+id/mapFullScreenHost"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <FrameLayout
+            android:id="@+id/btnMapCollapse"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_gravity="top|end"
+            android:layout_marginTop="16dp"
+            android:layout_marginEnd="16dp"
+            android:background="@drawable/bg_map_expand_btn"
+            android:clickable="true"
+            android:contentDescription="Close full screen map"
+            android:focusable="true">
+
+            <ImageView
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_close"
+                app:tint="#111827" />
+        </FrameLayout>
+    </FrameLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
