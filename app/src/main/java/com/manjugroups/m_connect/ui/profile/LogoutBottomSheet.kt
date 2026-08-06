@@ -97,12 +97,20 @@ class LogoutBottomSheet : BottomSheetDialogFragment() {
                 }
                 runCatching { PushTokenManager.unregisterCurrentToken(ctx, session) }
             }
-            // Free the SERVER session on its OWN budget — this is what releases
-            // the single-device login block so the staff can sign in on another
-            // phone. It must never be starved by the best-effort work above, or
-            // the server session stays active and re-login is refused.
-            kotlinx.coroutines.withTimeoutOrNull(4000) {
-                runCatching { api.logout(session.bearerToken) }
+            // Free the SERVER session before clearing local — this is what
+            // releases the single-device login block so the staff can sign in on
+            // another phone. Retry with a generous timeout so a slow logout hop
+            // (e.g. the external dialer call the endpoint makes) still lands;
+            // otherwise the server session stays active and re-login is refused.
+            var serverLoggedOut = false
+            repeat(2) { attempt ->
+                if (serverLoggedOut) return@repeat
+                kotlinx.coroutines.withTimeoutOrNull(8000) {
+                    runCatching { api.logout(session.bearerToken) }
+                        .getOrNull()
+                        ?.let { if (it.success) serverLoggedOut = true }
+                }
+                if (!serverLoggedOut && attempt < 1) kotlinx.coroutines.delay(400)
             }
             session.clearSession()
             com.manjugroups.m_connect.ui.common.LocalCache.clearAll(ctx)

@@ -1,21 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/completeFormScroll"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:background="@android:color/transparent"
-    android:clipToPadding="false"
-    android:fillViewport="true"
-    android:overScrollMode="never">
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_leave_sheet"
+    android:orientation="vertical">
+
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/completeFormScroll"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:background="@android:color/transparent"
+        android:clipToPadding="false"
+        android:fillViewport="true"
+        android:overScrollMode="never">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@drawable/bg_leave_sheet"
         android:orientation="vertical"
         android:paddingHorizontal="20dp"
         android:paddingTop="10dp"
-        android:paddingBottom="24dp">
+        android:paddingBottom="16dp">
 
         <View
             android:layout_width="40dp"
@@ -653,38 +659,45 @@
             android:textColor="?attr/colorForegroundPrimary"
             android:textSize="14sp" />
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
-            android:orientation="horizontal">
-
-            <androidx.appcompat.widget.AppCompatButton
-                android:id="@+id/btnCancelComplete"
-                android:layout_width="0dp"
-                android:layout_height="46dp"
-                android:layout_marginEnd="6dp"
-                android:layout_weight="1"
-                android:background="@drawable/bg_btn_reject_outline_red"
-                android:fontFamily="@font/inter_semibold"
-                android:text="Cancel"
-                android:textAllCaps="false"
-                android:textColor="#B42318"
-                android:textSize="14sp" />
-
-            <androidx.appcompat.widget.AppCompatButton
-                android:id="@+id/btnSubmitComplete"
-                android:layout_width="0dp"
-                android:layout_height="46dp"
-                android:layout_marginStart="6dp"
-                android:layout_weight="1"
-                android:background="@drawable/bg_button_primary"
-                android:backgroundTint="#0B61CA"
-                android:fontFamily="@font/inter_semibold"
-                android:text="Save"
-                android:textAllCaps="false"
-                android:textColor="@android:color/white"
-                android:textSize="14sp" />
-        </LinearLayout>
     </LinearLayout>
-</androidx.core.widget.NestedScrollView>
+    </androidx.core.widget.NestedScrollView>
+
+    <!-- Fixed footer: Cancel / Save stay pinned to the bottom. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_leave_sheet"
+        android:elevation="12dp"
+        android:orientation="horizontal"
+        android:paddingHorizontal="20dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="18dp">
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/btnCancelComplete"
+            android:layout_width="0dp"
+            android:layout_height="46dp"
+            android:layout_marginEnd="6dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_btn_reject_outline_red"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Cancel"
+            android:textAllCaps="false"
+            android:textColor="#B42318"
+            android:textSize="14sp" />
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/btnSubmitComplete"
+            android:layout_width="0dp"
+            android:layout_height="46dp"
+            android:layout_marginStart="6dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_button_primary"
+            android:backgroundTint="#0B61CA"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Save"
+            android:textAllCaps="false"
+            android:textColor="@android:color/white"
+            android:textSize="14sp" />
+    </LinearLayout>
+</LinearLayout>

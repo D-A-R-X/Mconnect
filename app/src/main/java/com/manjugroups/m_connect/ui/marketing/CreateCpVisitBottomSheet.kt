@@ -138,7 +138,14 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                 .findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
             sheet?.let {
                 it.setBackgroundColor(Color.TRANSPARENT)
+                // Full-height sheet so the Cancel / Create-visit footer can pin
+                // to the bottom while the form scrolls behind it (instead of the
+                // buttons scrolling away with the content).
+                it.layoutParams = it.layoutParams.apply {
+                    height = android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                }
                 val behavior = BottomSheetBehavior.from(it)
+                behavior.peekHeight = resources.displayMetrics.heightPixels
                 behavior.state = BottomSheetBehavior.STATE_EXPANDED
                 behavior.skipCollapsed = true
                 behavior.isDraggable = true

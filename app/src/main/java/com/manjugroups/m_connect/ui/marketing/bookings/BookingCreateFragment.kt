@@ -166,14 +166,18 @@ class BookingCreateFragment : Fragment() {
 
     // ── Enum pickers (static option lists) ──────────────────────────────────
     private fun wireEnumPickers() {
-        pick(R.id.tvBookingType, "Booking Type",
-            listOf("NEW", "CONVERSION", "EXCHANGE", "INTERNAL EXCHANGE")) { bookingType = it }
+        // Only NEW is supported here — EXCHANGE / CONVERSION / INTERNAL EXCHANGE
+        // need their old-property lookup + balance/credit math + payload, which
+        // this standalone form does not implement. Offering them would create
+        // bookings with wrong money and missing fields, so they're excluded;
+        // those go through the web. (The CP-outcome flow implements them.)
+        pick(R.id.tvBookingType, "Booking Type", listOf("NEW")) { bookingType = it }
         pick(R.id.tvBookingPropertyType, "Property Type",
             listOf("Plot", "Apartment", "Villa", "Commercial")) { propertyType = it }
         pick(R.id.tvBookingTitleField, "Title",
             listOf("Mr", "Mrs", "Ms", "Dr", "Prof")) { title = it }
         pick(R.id.tvBookingNationality, "Nationality",
-            listOf("Indian", "NRI", "Foreign")) { nationality = it }
+            listOf("Indian", "NRI", "Foreign National")) { nationality = it }
         pick(R.id.tvBookingProfession, "Profession",
             listOf("Business", "Salaried", "Pension")) {
             profession = it; applyConditionalVisibility()
@@ -368,7 +372,13 @@ class BookingCreateFragment : Fragment() {
         val sc = BookingCalc.num(et(R.id.etSpecialConsideration).text.toString())
         if (sc > BookingCalc.num(et(R.id.etBookingCost).text.toString())) return fail("Special consideration can't exceed booking cost")
         if (sc > 0 && discountApproverId == null) return fail("Select who approved the discount")
+        if (sc > 0 && et(R.id.etScReason).text.isNullOrBlank()) return fail("Special consideration reason is required")
+        if (sc > 0 && BookingCalc.num(et(R.id.etScValidity).text.toString()) <= 0) return fail("Special consideration validity (days) is required")
         if (isAgainstSv == "yes" && et(R.id.etBookingSvName).text.isNullOrBlank()) return fail("SV name is required")
+        if (isAgainstSv == "yes" && normalizePhone(et(R.id.etBookingSvMobile).text.toString()).length < 10) return fail("SV mobile must be 10 digits")
+        et(R.id.etBookingSourceMobile).text?.toString()?.trim()?.takeIf { it.isNotEmpty() }?.let {
+            if (normalizePhone(it).length < 10) return fail("Source / Reference mobile must be 10 digits")
+        }
         if (paymentCategory == "B" && BookingCalc.num(et(R.id.etLoanAmount).text.toString()) <= 0) return fail("Bank loan amount is required")
         if (bookingMode in setOf("UPI", "NEFT", "RTGS") && et(R.id.etAdvanceTxnId).text.isNullOrBlank()) return fail("Transaction ID is required")
         if (bookingMode in setOf("CHEQUE", "DD") && et(R.id.etAdvanceInstrumentNo).text.isNullOrBlank()) return fail("Instrument number is required")
@@ -403,6 +413,12 @@ class BookingCreateFragment : Fragment() {
         val total = BookingCalc.totalPayable(bookingType, gross, gross)
         val advance = BookingCalc.num(et(R.id.etBookingAdvance).text.toString())
         val loan = BookingCalc.bankLoanAmount(paymentCategory, BookingCalc.num(et(R.id.etLoanAmount).text.toString()))
+        val minAdvance = proj.minimumAdvanceAmount ?: 0.0
+        if (minAdvance > 0 && advance < minAdvance) {
+            return fail("Advance must be at least ₹${minAdvance.toLong()} as set in Project Details")
+        }
+        if (advance > total) return fail("Advance cannot exceed the total payable amount")
+        if (loan > total) return fail("Bank Loan Amount cannot exceed the Total Property Cost")
         val payable = BookingCalc.payableChain(total, loan, advance, 0.0)
         if (advance > payable.customerPayableAmount) {
             return fail("Advance cannot exceed the Customer Payable Amount after excluding the bank loan")
@@ -422,6 +438,13 @@ class BookingCreateFragment : Fragment() {
         )
         if (paymentPlan != "Flexi" && scheduled > outstandingAfterAllotment) {
             return fail("Payment schedule cannot exceed the remaining Customer Payable Amount")
+        }
+        // Confirmed self-cash (category A): the schedule must total EXACTLY the
+        // remaining outstanding (web parity — draft may be partial).
+        if (paymentCategory == "A" && status == "confirmed" &&
+            kotlin.math.abs(scheduled - outstandingAfterAllotment) > 0.01
+        ) {
+            return fail("Payment schedule must total the remaining Customer Payable Amount")
         }
 
         val req = CreateBookingRequest(
@@ -483,6 +506,10 @@ class BookingCreateFragment : Fragment() {
             customerPaymentCategory = paymentCategory,
             loanAmountRequested = if (paymentCategory == "B") loan else null,
             paymentPlan = paymentPlan,
+            // Flexi = free-payment schedule (web parity); the backend needs this
+            // flag to recognise the dynamic schedule. Was previously omitted.
+            freePayment = paymentPlan == "Flexi",
+            sourceType = "walk_in",
             allotmentDueAmount = allotment,
             allotmentDueDate = allotmentDate,
             secondPaymentAmount = et(R.id.etSecondAmount).text.toString().toDoubleOrNull(),

@@ -262,13 +262,13 @@
                     <TextView style="@style/BookingFieldLabel" android:text="2nd Payment Date" />
                     <TextView android:id="@+id/tvSecondDate" style="@style/BookingFieldRow" android:text="Select date" />
                 </LinearLayout>
-                <LinearLayout android:id="@+id/rowThirdPayment" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+                <LinearLayout android:id="@+id/rowThirdPayment" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
                     <TextView style="@style/BookingFieldLabel" android:text="3rd Payment Amount (₹)" />
                     <EditText android:id="@+id/etThirdAmount" style="@style/BookingFieldInput" android:inputType="numberDecimal" android:hint="0" />
                     <TextView style="@style/BookingFieldLabel" android:text="3rd Payment Date" />
                     <TextView android:id="@+id/tvThirdDate" style="@style/BookingFieldRow" android:text="Select date" />
                 </LinearLayout>
-                <LinearLayout android:id="@+id/rowFourthPayment" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+                <LinearLayout android:id="@+id/rowFourthPayment" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
                     <TextView style="@style/BookingFieldLabel" android:text="4th Payment Amount (₹)" />
                     <EditText android:id="@+id/etFourthAmount" style="@style/BookingFieldInput" android:inputType="numberDecimal" android:hint="0" />
                     <TextView style="@style/BookingFieldLabel" android:text="4th Payment Date" />

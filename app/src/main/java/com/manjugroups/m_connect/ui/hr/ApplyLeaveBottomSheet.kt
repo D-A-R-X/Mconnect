@@ -79,7 +79,13 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
             sheet?.let {
                 it.setBackgroundColor(Color.TRANSPARENT)
                 it.elevation = 0f
+                // Full-height so the Submit footer pins to the bottom while the
+                // form scrolls behind it.
+                it.layoutParams = it.layoutParams.apply {
+                    height = android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                }
                 val behavior = BottomSheetBehavior.from(it)
+                behavior.peekHeight = resources.displayMetrics.heightPixels
                 behavior.state = BottomSheetBehavior.STATE_EXPANDED
                 behavior.skipCollapsed = true
                 behavior.isDraggable = true

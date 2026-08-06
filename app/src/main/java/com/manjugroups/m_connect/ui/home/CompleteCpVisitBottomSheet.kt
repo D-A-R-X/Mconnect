@@ -600,6 +600,9 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var bookingStaffSm: StaffData? = null
     private var bookingStaffBdo: StaffData? = null
     private var bookingStaffTelecaller: StaffData? = null
+    // Discount approver for a Special Consideration — must send the staff _id
+    // (web parity), not the typed name, or the SC booking reference is invalid.
+    private var bookingStaffDiscount: StaffData? = null
     private var bookingProjectCache: List<MarketingProject> = emptyList()
     private var bookingUnitCacheProjectId: String? = null
     private var bookingUnitCache: List<InventoryUnit> = emptyList()
@@ -1521,7 +1524,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         view?.findViewById<View>(R.id.rowFormDob)?.setOnClickListener { pickDate(tvFormDob) }
         view?.findViewById<View>(R.id.rowFormAnniversary)?.setOnClickListener { pickDate(tvFormAnniversary) }
         view?.findViewById<View>(R.id.rowFormNationality)?.setOnClickListener {
-            picker("Select Nationality", listOf("Indian", "NRI", "Foreign")) { tvFormNationality?.text = it }
+            picker("Select Nationality", listOf("Indian", "NRI", "Foreign National")) { tvFormNationality?.text = it }
         }
 
         // Profession dropdown. Matches the web Booking · Professional
@@ -1848,6 +1851,16 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
         view?.findViewById<View>(R.id.rowStaffTelecaller)?.setOnClickListener {
             pickBookingStaff("Select Telecaller", "telecaller") { bookingStaffTelecaller = it; tvStaffTelecaller?.text = it.name ?: "Selected" }
+        }
+        // Discount Approved By is a STAFF picker (web sends the staff _id), not a
+        // free-text name. Make the field a tap-to-pick display + store the staff.
+        etChargeDiscountApprovedBy?.isFocusable = false
+        etChargeDiscountApprovedBy?.isFocusableInTouchMode = false
+        view?.findViewById<View>(R.id.rowChargeDiscountApprovedBy)?.setOnClickListener {
+            pickBookingStaff("Select Approver", "discount") {
+                bookingStaffDiscount = it
+                etChargeDiscountApprovedBy?.setText(it.name ?: "Selected")
+            }
         }
         view?.findViewById<View>(R.id.rowStaffDocPrep)?.setOnClickListener {
             picker(
@@ -5705,7 +5718,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             guidelineValue = numberOrNull(etChargeGuidelineValue?.text),
             specialConsideration = numberOrNull(etChargeSpecialConsideration?.text),
             specialConsiderationReason = textOrNull(etChargeScReason?.text),
-            discountApprovedBy = textOrNull(etChargeDiscountApprovedBy?.text),
+            discountApprovedBy = bookingStaffDiscount?.id,
             specialConsiderationValidity = numberOrNull(etChargeScValidity?.text),
             promotionalOffers = textOrNull(etChargePromoOffers?.text),
             promotionalOffersTnC = textOrNull(tvChargePromoTnc?.text),
