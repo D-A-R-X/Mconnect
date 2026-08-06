@@ -181,7 +181,6 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     private var tvTitle: TextView? = null
     private var tvDestName: TextView? = null
     private var tvDestAddress: TextView? = null
-    private var tvOriginName: TextView? = null
     private var tvDistance: TextView? = null
     private var tvEta: TextView? = null
     private var tvStatus: TextView? = null
@@ -296,7 +295,6 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         tvTitle = view.findViewById(R.id.tvTripTitle)
         tvDestName = view.findViewById(R.id.tvTripDestinationName)
         tvDestAddress = view.findViewById(R.id.tvTripDestinationAddress)
-        tvOriginName = view.findViewById(R.id.tvTripOriginName)
         tvDistance = view.findViewById(R.id.tvTripDistance)
         tvEta = view.findViewById(R.id.tvTripEta)
         tvStatus = view.findViewById(R.id.tvTripStatus)
@@ -384,14 +382,6 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             isPlaceOnly = isPlaceOnly,
             hasCpRow = !cpVisitIdLocal.isNullOrBlank(),
         )
-        tvDestAddress?.text = placeAddress?.takeIf { it.isNotBlank() } ?: "Address not available"
-        tvOriginName?.text = "Current Location"
-        // Summary card "Location" cell — show the destination (address, else
-        // name) rather than the old static "Current Location" placeholder.
-        view.findViewById<TextView>(R.id.tvTripOriginName)?.text =
-            placeAddress?.takeIf { it.isNotBlank() }
-                ?: placeName.takeIf { it.isNotBlank() }
-                ?: "Location not set"
         // Full client address card above the map — wraps, no truncation.
         // Never fall back to the client name here: showing the name in the
         // address slot reads as a real address and hides that coordinates /
@@ -399,7 +389,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         view.findViewById<TextView>(R.id.tvClientAddressFull)?.text =
             placeAddress?.takeIf { it.isNotBlank() }
                 ?: "Address not available"
-        bindTripClientHeader(view, placeName)
+        bindTripClientHeader(view, placeName, placeAddress)
 
         btnBack?.setOnClickListener { navigateUp() }
         btnOpenMaps?.setOnClickListener { ensureVisitStarted() }
@@ -755,16 +745,49 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         fetchCurrentLocationAndUpdate()
     }
 
-    private fun bindTripClientHeader(view: View, clientName: String) {
+    private fun bindTripClientHeader(view: View, clientName: String, placeAddress: String? = null) {
         val avatar = view.findViewById<TextView>(R.id.tvTripStaffAvatar)
         val nameView = view.findViewById<TextView>(R.id.tvTripStaffName)
+        val areaView = view.findViewById<TextView>(R.id.tvTripClientArea)
         val roleView = view.findViewById<TextView>(R.id.tvTripStaffRole)
         val name = clientName.ifBlank { "Client" }.lowercase().split(" ").filter { it.isNotBlank() }
             .joinToString(" ") { part -> part.replaceFirstChar { it.titlecase() } }
             .ifBlank { "Client" }
         avatar.text = name.firstOrNull()?.uppercase() ?: "M"
         nameView.text = name
+        val area = extractAreaFromAddress(placeAddress)
+        if (!area.isNullOrBlank()) {
+            areaView?.text = area
+            areaView?.visibility = View.VISIBLE
+        } else {
+            areaView?.visibility = View.GONE
+        }
         roleView.visibility = View.GONE
+    }
+
+    private fun extractAreaFromAddress(address: String?): String? {
+        if (address.isNullOrBlank()) return null
+        val skipKeywords = setOf(
+            "state", "pincode", "city", "landmark", "door", "door no", "door/plot no",
+            "street", "floor", "plot", "taluk", "country", "nation", "block"
+        )
+        val tokens = address.split(",").map { it.trim() }.filter { it.isNotBlank() }
+        for (token in tokens) {
+            val effective = if (token.contains(":")) {
+                val colonIdx = token.indexOf(":")
+                val label = token.substring(0, colonIdx).trim().lowercase()
+                if (skipKeywords.any { label.contains(it) }) continue
+                token.substring(colonIdx + 1).trim()
+            } else {
+                token
+            }
+            if (effective.length < 3) continue
+            if (effective.all { it.isDigit() || it == '-' || it == '/' }) continue
+            val digitRatio = effective.count { it.isDigit() }.toFloat() / effective.length
+            if (digitRatio > 0.5f) continue
+            return effective
+        }
+        return null
     }
 
     /**
@@ -952,7 +975,6 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         }
         swipeArrived?.visibility = View.GONE
         btnCompleteCpDetails?.visibility = View.GONE
-        tvOriginName?.text = "Current Location"
         tvDistance?.text = "Calculating..."
         tvEta?.text = "Calculating..."
         geocodeDestinationIfNeeded()
@@ -1077,7 +1099,6 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         viewLifecycleOwner.lifecycleScope.launch {
             val location = fetchCurrentLocation() ?: return@launch
             currentLocation = LatLng(location.latitude, location.longitude)
-            tvOriginName?.text = "Current Location"
             renderMapMarkersAndRoute()
             geocodeDestinationIfNeeded()
         }

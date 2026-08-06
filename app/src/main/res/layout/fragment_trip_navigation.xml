@@ -128,6 +128,20 @@
                     android:textSize="13sp" />
 
                 <TextView
+                    android:id="@+id/tvTripClientArea"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:ellipsize="end"
+                    android:fontFamily="@font/inter_medium"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:textAllCaps="true"
+                    android:textColor="#0B61CA"
+                    android:textSize="9sp"
+                    android:visibility="gone" />
+
+                <TextView
                     android:id="@+id/tvTripStaffRole"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -355,57 +369,6 @@
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="38dp"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <FrameLayout
-                        android:layout_width="40dp"
-                        android:layout_height="40dp"
-                        android:background="@drawable/bg_home_trip_stat_icon_v2">
-
-                        <ImageView
-                            android:layout_width="20dp"
-                            android:layout_height="20dp"
-                            android:layout_gravity="center"
-                            android:contentDescription="@null"
-                            android:src="@drawable/ic_stat_time" />
-                    </FrameLayout>
-
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="12dp"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="@font/inter_regular"
-                            android:includeFontPadding="false"
-                            android:text="Location"
-                            android:textColor="#667085"
-                            android:textSize="10sp" />
-
-                        <TextView
-                            android:id="@+id/tvTripOriginName"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="5dp"
-                            android:ellipsize="end"
-                            android:fontFamily="@font/inter_medium"
-                            android:includeFontPadding="false"
-                            android:maxLines="1"
-                            android:text="Current Location"
-                            android:textColor="#111827"
-                            android:textSize="11sp" />
-                    </LinearLayout>
-                </LinearLayout>
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="38dp"
-                    android:layout_marginTop="14dp"
                     android:gravity="center_vertical"
                     android:orientation="horizontal">
 
