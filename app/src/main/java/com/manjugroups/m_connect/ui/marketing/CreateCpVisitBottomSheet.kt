@@ -283,6 +283,36 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             }
         })
 
+        // Pincode enrichment — parity with the Booking form and the web
+        // UnifiedAddressFields. On a 6-digit pincode, look up India Post and
+        // blank-fill District (from the API District), State, and the locality
+        // (into Address Line 2). Same anti-overwrite policy: only fill fields
+        // the operator left blank so typed values always win.
+        var lastEnrichedPincode: String? = null
+        etPincode.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                val pin = s?.toString().orEmpty().filter { it.isDigit() }
+                if (pin.length != 6 || pin == lastEnrichedPincode) return
+                lastEnrichedPincode = pin
+                viewLifecycleOwner.lifecycleScope.launch {
+                    val enriched = try {
+                        com.manjugroups.m_connect.network.PincodeLookup.lookup(pin)
+                    } catch (_: Throwable) {
+                        null
+                    } ?: return@launch
+                    fun fillIfBlank(et: EditText, value: String?) {
+                        if (value.isNullOrBlank()) return
+                        if (et.text?.toString()?.isBlank() != false) et.setText(value)
+                    }
+                    fillIfBlank(etCity, enriched.district)
+                    fillIfBlank(etState, enriched.state)
+                    fillIfBlank(etAddressLine2, enriched.locality)
+                }
+            }
+        })
+
         btnDropPin.setOnClickListener {
             // Map pin-drop with address search + suggestions (map service).
             // Seed at the current pin if one was already set.
@@ -343,7 +373,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                 return@setOnClickListener
             }
             if (city.isBlank()) {
-                toast("City is required")
+                toast("District is required")
                 return@setOnClickListener
             }
             if (pincode.isBlank() || pincode.length != 6) {

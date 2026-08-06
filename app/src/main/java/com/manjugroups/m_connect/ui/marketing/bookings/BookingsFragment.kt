@@ -42,7 +42,7 @@ import com.manjugroups.m_connect.ui.common.showOnce
  * AppLibrary tile is already permission-gated.
  *
  * The + button in the top bar is only visible when the user has
- * `marketing.bookings.create`; tapping it opens [BookingCreateFragment].
+ * `marketing.bookings.create`; tapping it opens the shared full booking sheet.
  */
 class BookingsFragment : Fragment() {
 

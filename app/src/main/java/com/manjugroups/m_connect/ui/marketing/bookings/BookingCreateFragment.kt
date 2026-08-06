@@ -29,6 +29,7 @@ import com.manjugroups.m_connect.network.StaffData
 import com.manjugroups.m_connect.network.TelecallerLeadSearchData
 import com.manjugroups.m_connect.ui.common.SearchableOption
 import com.manjugroups.m_connect.ui.common.SearchableSelectionDialog
+import com.manjugroups.m_connect.ui.common.BookingUploadFieldView
 import com.manjugroups.m_connect.ui.common.navigateUp
 import com.manjugroups.m_connect.ui.common.showOnce
 import com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet
@@ -233,12 +234,12 @@ class BookingCreateFragment : Fragment() {
     }
 
     private fun wireUploads() {
-        uploadRow(R.id.tvUploadAadhaarFront, "aadhaarFront", "Aadhaar Front")
-        uploadRow(R.id.tvUploadAadhaarBack, "aadhaarBack", "Aadhaar Back")
-        uploadRow(R.id.tvUploadPan, "pan", "PAN")
-        uploadRow(R.id.tvUploadCefFront, "cefFront", "CEF Front")
-        uploadRow(R.id.tvUploadCefBack, "cefBack", "CEF Back")
-        uploadRow(R.id.tvUploadPaymentProof, "paymentProof", "Payment Proof")
+        uploadRow(R.id.tvUploadAadhaarFront, "aadhaarFront")
+        uploadRow(R.id.tvUploadAadhaarBack, "aadhaarBack")
+        uploadRow(R.id.tvUploadPan, "pan")
+        uploadRow(R.id.tvUploadCefFront, "cefFront")
+        uploadRow(R.id.tvUploadCefBack, "cefBack")
+        uploadRow(R.id.tvUploadPaymentProof, "paymentProof")
     }
 
     private fun wireCalcWatchers() {
@@ -545,8 +546,8 @@ class BookingCreateFragment : Fragment() {
     }
 
     // ── Uploads ─────────────────────────────────────────────────────────────
-    private fun uploadRow(id: Int, slot: String, label: String) {
-        tv(id).setOnClickListener {
+    private fun uploadRow(id: Int, slot: String) {
+        uploadField(id).setOnUploadClickListener {
             activeUploadSlot = slot
             filePicker.launch("*/*")
         }
@@ -555,6 +556,7 @@ class BookingCreateFragment : Fragment() {
     private fun uploadFile(slot: String, uri: Uri) {
         val ctx = context ?: return
         val fileName = queryFileName(uri) ?: "$slot.jpg"
+        uploadRowView(slot)?.setUploading(true)
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val bytes = ctx.contentResolver.openInputStream(uri)?.use { it.readBytes() }
@@ -563,25 +565,29 @@ class BookingCreateFragment : Fragment() {
                 val body = bytes.toRequestBody(type.toMediaTypeOrNull())
                 val resp = api.uploadStorageFile(session.bearerToken, body)
                 if (!resp.success || resp.storageId == null) {
+                    uploadRowView(slot)?.setUploading(false)
                     toast(resp.error ?: "Upload failed"); return@launch
                 }
                 uploads[slot] = resp.storageId!! to fileName
-                uploadRowTextView(slot)?.text = "✓ $fileName"
+                uploadRowView(slot)?.setUploadedFileName(fileName)
             } catch (e: Exception) {
+                uploadRowView(slot)?.setUploading(false)
                 toast("Upload failed: ${e.message ?: "unknown"}")
             }
         }
     }
 
-    private fun uploadRowTextView(slot: String): TextView? = when (slot) {
-        "aadhaarFront" -> tv(R.id.tvUploadAadhaarFront)
-        "aadhaarBack" -> tv(R.id.tvUploadAadhaarBack)
-        "pan" -> tv(R.id.tvUploadPan)
-        "cefFront" -> tv(R.id.tvUploadCefFront)
-        "cefBack" -> tv(R.id.tvUploadCefBack)
-        "paymentProof" -> tv(R.id.tvUploadPaymentProof)
+    private fun uploadRowView(slot: String): BookingUploadFieldView? = when (slot) {
+        "aadhaarFront" -> uploadField(R.id.tvUploadAadhaarFront)
+        "aadhaarBack" -> uploadField(R.id.tvUploadAadhaarBack)
+        "pan" -> uploadField(R.id.tvUploadPan)
+        "cefFront" -> uploadField(R.id.tvUploadCefFront)
+        "cefBack" -> uploadField(R.id.tvUploadCefBack)
+        "paymentProof" -> uploadField(R.id.tvUploadPaymentProof)
         else -> null
     }
+
+    private fun uploadField(id: Int): BookingUploadFieldView = root.findViewById(id)
 
     private fun queryFileName(uri: Uri): String? {
         return try {

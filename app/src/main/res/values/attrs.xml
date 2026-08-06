@@ -63,4 +63,10 @@
         <attr name="hh_banner_card_background" format="reference" />
         <attr name="hh_banner_illustration" format="reference" />
     </declare-styleable>
+
+    <declare-styleable name="BookingUploadFieldView">
+        <attr name="buf_label" format="string" />
+        <attr name="buf_hint" format="string" />
+        <attr name="buf_required" format="boolean" />
+    </declare-styleable>
 </resources>

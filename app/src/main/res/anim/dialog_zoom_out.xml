@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Centre zoom-out for the outcome picker: scales down toward the middle with
+     a fade on dismiss. -->
+<set xmlns:android="http://schemas.android.com/apk/res/android"
+    android:interpolator="@android:anim/accelerate_interpolator">
+    <scale
+        android:duration="140"
+        android:fromXScale="1.0"
+        android:fromYScale="1.0"
+        android:toXScale="0.85"
+        android:toYScale="0.85"
+        android:pivotX="50%"
+        android:pivotY="50%" />
+    <alpha
+        android:duration="140"
+        android:fromAlpha="1.0"
+        android:toAlpha="0.0" />
+</set>

@@ -300,13 +300,14 @@
                     android:textSize="14sp" />
             </LinearLayout>
 
-            <!-- City -->
+            <!-- District (matches the Booking form; pincode/paste-parser fills
+                 the India Post District value here). -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="14dp"
                 android:fontFamily="@font/inter_medium"
-                android:text="City *"
+                android:text="District *"
                 android:textColor="#344054"
                 android:textSize="13sp" />
 
@@ -331,7 +332,7 @@
                     android:layout_marginStart="10dp"
                     android:background="@null"
                     android:fontFamily="@font/inter_medium"
-                    android:hint="e.g. Salem"
+                    android:hint="e.g. Chennai"
                     android:inputType="text"
                     android:textColor="#101828"
                     android:textColorHint="#9CA3AF"

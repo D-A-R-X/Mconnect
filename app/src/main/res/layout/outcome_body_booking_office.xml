@@ -8,7 +8,12 @@
     android:orientation="vertical"
     android:visibility="gone">
 
-    <TextView style="@style/OutcomeFieldLabel" android:text="Office Name *" />
+    <TextView
+        style="@style/OutcomeSectionTitle"
+        android:layout_marginTop="2dp"
+        android:text="Office Details" />
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="10dp" android:text="Office Name *" />
     <LinearLayout style="@style/OutcomeFieldPill">
         <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_person" />
         <EditText android:id="@+id/etOfficeName" style="@style/OutcomeFieldEdit" android:hint="Enter Name" android:inputType="textCapWords" />

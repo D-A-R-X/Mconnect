@@ -27,7 +27,6 @@ import com.manjugroups.m_connect.ui.hr.PermissionsFragment
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.ui.marketing.CpVisitsFragment
 import com.manjugroups.m_connect.ui.marketing.SiteVisitsFragment
-import com.manjugroups.m_connect.ui.marketing.bookings.BookingCreateFragment
 import com.manjugroups.m_connect.ui.marketing.bookings.BookingsFragment
 import com.manjugroups.m_connect.ui.profile.ProfileFragment
 import com.manjugroups.m_connect.ui.projects.ProjectExpensesFragment

@@ -9,7 +9,12 @@
     android:orientation="vertical"
     android:visibility="gone">
 
-    <TextView style="@style/OutcomeFieldLabel" android:text="Booking Ref No *" />
+    <TextView
+        style="@style/OutcomeSectionTitle"
+        android:layout_marginTop="2dp"
+        android:text="Booking Information" />
+
+    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="10dp" android:text="Booking Ref No *" />
     <LinearLayout style="@style/OutcomeFieldPill">
         <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_doc" />
         <TextView android:id="@+id/tvBookRefNo" style="@style/OutcomeFieldValue" android:hint="Auto" />
@@ -379,7 +384,7 @@
             android:src="@drawable/ic_outcome_radio_on" />
     </LinearLayout>
 
-    <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="20dp" android:text="Source / Referral" />
+    <TextView style="@style/OutcomeSectionTitle" android:layout_marginTop="20dp" android:text="Source / Referral" />
     <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="10dp" android:text="Client Source" />
     <LinearLayout android:id="@+id/rowBookSource" style="@style/OutcomeFieldPillClickable">
         <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_briefcase" />

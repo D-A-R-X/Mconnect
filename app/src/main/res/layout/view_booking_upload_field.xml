@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<merge xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <TextView
+        android:id="@+id/tvBookingUploadLabel"
+        style="@style/OutcomeFieldLabel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
+    <LinearLayout
+        android:id="@+id/bookingUploadAction"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_outcome_field_pill"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="14dp">
+
+        <ImageView
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_outcome_doc"
+            android:tint="?attr/colorAccentPrimary" />
+
+        <TextView
+            android:id="@+id/tvBookingUploadValue"
+            style="@style/OutcomeFieldValue"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:ellipsize="middle"
+            android:maxLines="1"
+            android:textColor="?attr/colorAccentPrimary" />
+
+        <ProgressBar
+            android:id="@+id/progressBookingUpload"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:indeterminateTint="?attr/colorAccentPrimary"
+            android:visibility="gone" />
+    </LinearLayout>
+</merge>

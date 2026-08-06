@@ -3,6 +3,7 @@
      Top half: registration / GST / document / other charges + advance + mode.
      Bottom half: flexi-payment schedule (allotment + 2nd/3rd/4th installments). -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     style="@style/OutcomeBodyCard"
     android:id="@+id/bodyBookingPayment"
     android:layout_width="match_parent"
@@ -464,19 +465,13 @@
             <EditText android:id="@+id/etPayTransactionId" style="@style/OutcomeFieldEdit" android:hint="UTR / Ref no" android:inputType="text" />
         </LinearLayout>
 
-        <TextView style="@style/OutcomeFieldLabel" android:layout_marginTop="14dp" android:text="Payment Proof *" />
-        <TextView
+        <com.manjugroups.m_connect.ui.common.BookingUploadFieldView
             android:id="@+id/btnPayProofUpload"
-            style="@style/OutcomeFieldValue"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:background="@drawable/bg_outcome_field_pill"
-            android:clickable="true"
-            android:focusable="true"
-            android:gravity="center_vertical"
-            android:paddingHorizontal="14dp"
-            android:text="Choose file"
-            android:textColor="#175CD3" />
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            app:buf_label="Payment Proof"
+            app:buf_required="true" />
     </LinearLayout>
 
     <LinearLayout
