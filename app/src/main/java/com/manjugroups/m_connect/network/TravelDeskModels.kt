@@ -35,6 +35,8 @@ data class TravelDeskAuthUser(
     val address: String? = null,
     /** "driver", "agency", or "agency_staff". */
     val role: String? = null,
+    /** Agency admins are implicitly allowed; staff need this explicit grant. */
+    val canBill: Boolean = false,
 )
 
 data class TravelDeskVerifyOtpResponse(
@@ -86,7 +88,11 @@ data class TravelDeskTrip(
     val lmoName: String? = null,
     val driverName: String? = null,
     val driverPhone: String? = null,
+    val driverAccessToken: String? = null,
+    val driverTripUrl: String? = null,
     val status: String? = null,
+    val travelDeskStatusReasonCode: String? = null,
+    val travelDeskStatusReasonText: String? = null,
     val vehicleId: String? = null,
     val project: TravelDeskProject? = null,
     val vehicle: TravelDeskVehicleRef? = null,
@@ -455,6 +461,7 @@ data class TravelDeskAgencyStaff(
     val name: String,
     val phone: String,
     val whatsapp: String? = null,
+    val canBill: Boolean = false,
     val status: String = "active",
 )
 
@@ -479,4 +486,50 @@ data class UpdateAgencyStaffRequest(
     val phone: String? = null,
     val whatsapp: String? = null,
     val status: String? = null,
+    val canBill: Boolean? = null,
+)
+
+data class FinalizeTravelDeskBillingRequest(
+    val siteVisitId: String,
+    val startKm: Double,
+    val endKm: Double,
+    val startPhotoIds: List<String>? = null,
+    val endPhotoIds: List<String>? = null,
+    val kmRate: Double? = null,
+    val packageAmount: Double? = null,
+    val beta: Double? = null,
+    val beta2: Double? = null,
+    val tollAmount: Double? = null,
+    val hillCharge: Double? = null,
+    val outstationCharge: Double? = null,
+    val permitCharge: Double? = null,
+    val permitTax: Double? = null,
+    val standingCharge: Double? = null,
+    val customCharges: List<TravelDeskAppliedCharge>? = null,
+    val vehicleId: String? = null,
+    val driverName: String? = null,
+    val driverPhone: String? = null,
+)
+
+data class FinalizeTravelDeskCancellationRequest(
+    val siteVisitId: String,
+    val customCharges: List<TravelDeskAppliedCharge>? = null,
+)
+
+data class TravelDeskEvidenceRequest(
+    val siteVisitId: String,
+    val startPhotoIds: List<String>? = null,
+    val startKm: Double? = null,
+    val endPhotoIds: List<String>? = null,
+    val endKm: Double? = null,
+)
+
+data class TravelDeskStatusUpdateRequest(
+    val siteVisitId: String,
+    val reasonCode: String,
+    val reasonText: String? = null,
+    val voiceStorageId: String? = null,
+    val voiceDurationMs: Long? = null,
+    val scheduledDate: String? = null,
+    val scheduledTime: String? = null,
 )

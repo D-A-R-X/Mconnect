@@ -64,7 +64,7 @@
                     android:textColor="#111827"
                     android:textSize="18sp" />
 
-                <!-- Toggle selector tabs: Pending / Assigned / In progress / Completed -->
+                <!-- Toggle selector tabs: Pending / Assigned / In progress / Billing / Completed -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -116,6 +116,21 @@
                         android:text="In progress"
                         android:textColor="#475467"
                         android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/btnTabBilling"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:fontFamily="@font/inter_medium"
+                        android:gravity="center"
+                        android:paddingVertical="8dp"
+                        android:text="Billing"
+                        android:textColor="#475467"
+                        android:textSize="12sp"
+                        android:visibility="gone" />
 
                     <TextView
                         android:id="@+id/btnTabCompleted"

@@ -150,6 +150,7 @@ class AdminFleetStaffFragment : Fragment() {
                         name = form.name,
                         phone = form.phone,
                         whatsapp = form.whatsapp,
+                        canBill = form.canBill,
                     ),
                 ).let { it.success to it.error }
             },
@@ -244,6 +245,7 @@ class AdminFleetStaffFragment : Fragment() {
                 binding.tvStaffStatus.setTextColor(
                     Color.parseColor(if (active) "#065F46" else "#991B1B"),
                 )
+                binding.tvStaffBilling.visibility = if (item.canBill) View.VISIBLE else View.GONE
             }
         }
     }

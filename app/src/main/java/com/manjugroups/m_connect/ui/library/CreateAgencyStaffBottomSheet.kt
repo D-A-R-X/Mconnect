@@ -14,6 +14,7 @@ data class AgencyStaffFormResult(
     val name: String,
     val phone: String,
     val whatsapp: String,
+    val canBill: Boolean,
 )
 
 class CreateAgencyStaffBottomSheet : BottomSheetDialogFragment() {
@@ -79,6 +80,8 @@ class CreateAgencyStaffBottomSheet : BottomSheetDialogFragment() {
         binding.etStaffPhone.setText(current?.phone.orEmpty())
         binding.etStaffWhatsapp.setText(current?.whatsapp.orEmpty())
         binding.btnStaffStatus.visibility = if (current == null) View.GONE else View.VISIBLE
+        binding.cbStaffCanBill.visibility = if (current == null) View.GONE else View.VISIBLE
+        binding.cbStaffCanBill.isChecked = current?.canBill == true
         binding.btnStaffStatus.text =
             if (current?.status.equals("inactive", ignoreCase = true)) "Activate" else "Deactivate"
         if (current?.status.equals("inactive", ignoreCase = true)) {
@@ -142,7 +145,7 @@ class CreateAgencyStaffBottomSheet : BottomSheetDialogFragment() {
             binding.etStaffWhatsapp.error = "Enter a valid WhatsApp number"
             return null
         }
-        return AgencyStaffFormResult(name, phone, whatsapp)
+        return AgencyStaffFormResult(name, phone, whatsapp, binding.cbStaffCanBill.isChecked)
     }
 
     override fun onDestroyView() {

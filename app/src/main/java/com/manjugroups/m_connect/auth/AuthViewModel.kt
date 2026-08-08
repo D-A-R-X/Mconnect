@@ -175,6 +175,7 @@ class AuthViewModel : ViewModel() {
                         },
                         department = AGENCY_DRIVER_DEPARTMENT,
                         status = "active",
+                        canBill = td.user?.canBill == true,
                     ),
                 )
             )

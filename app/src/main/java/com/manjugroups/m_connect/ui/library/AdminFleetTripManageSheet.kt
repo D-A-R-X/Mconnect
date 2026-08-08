@@ -29,6 +29,10 @@ class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
     private var onReassign: (() -> Unit)? = null
     private var onRemove: (() -> Unit)? = null
     private var onComplete: (() -> Unit)? = null
+    private var onOpenDriverLink: (() -> Unit)? = null
+    private var onCopyDriverLink: (() -> Unit)? = null
+    private var onResendDriverWhatsapp: (() -> Unit)? = null
+    private var onUpdateTripStatus: (() -> Unit)? = null
     private var onProgressAction: ((action: String, km: Double?, toll: Double?, beta: Double?) -> Unit)? = null
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
@@ -80,6 +84,28 @@ class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
         bindStatsBar(view, t)
         bindTripRecord(view, t)
         bindProgressActions(view, t)
+
+        view.findViewById<View>(R.id.btnUpdateTripStatus).apply {
+            visibility = if (t.external && !t.cancelled && t.status != "Completed" &&
+                onUpdateTripStatus != null
+            ) View.VISIBLE else View.GONE
+            setOnClickListener {
+                onUpdateTripStatus?.invoke()
+                dismissAllowingStateLoss()
+            }
+        }
+
+        view.findViewById<View>(R.id.driverLinkActions).visibility =
+            if (t.driverTripUrl.isNullOrBlank()) View.GONE else View.VISIBLE
+        view.findViewById<View>(R.id.btnOpenDriverLink).setOnClickListener {
+            onOpenDriverLink?.invoke()
+        }
+        view.findViewById<View>(R.id.btnCopyDriverLink).setOnClickListener {
+            onCopyDriverLink?.invoke()
+        }
+        view.findViewById<View>(R.id.btnResendDriverWhatsapp).setOnClickListener {
+            onResendDriverWhatsapp?.invoke()
+        }
 
         val actions = view.findViewById<View>(R.id.manageActions)
         val note = view.findViewById<TextView>(R.id.tvManageNote)
@@ -370,12 +396,20 @@ class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
             onReassign: () -> Unit,
             onRemove: () -> Unit,
             onComplete: (() -> Unit)?,
+            onOpenDriverLink: (() -> Unit)?,
+            onCopyDriverLink: (() -> Unit)?,
+            onResendDriverWhatsapp: (() -> Unit)?,
+            onUpdateTripStatus: (() -> Unit)?,
             onProgressAction: (action: String, km: Double?, toll: Double?, beta: Double?) -> Unit,
         ): AdminFleetTripManageSheet = AdminFleetTripManageSheet().apply {
             this.trip = trip
             this.onReassign = onReassign
             this.onRemove = onRemove
             this.onComplete = onComplete
+            this.onOpenDriverLink = onOpenDriverLink
+            this.onCopyDriverLink = onCopyDriverLink
+            this.onResendDriverWhatsapp = onResendDriverWhatsapp
+            this.onUpdateTripStatus = onUpdateTripStatus
             this.onProgressAction = onProgressAction
         }
     }

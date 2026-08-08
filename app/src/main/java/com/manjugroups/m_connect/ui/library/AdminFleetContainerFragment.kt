@@ -59,7 +59,7 @@ class AdminFleetContainerFragment : Fragment() {
         binding.tabStaff.visibility =
             if (session.isExternalFleetAgency) View.VISIBLE else View.GONE
         binding.tabSettings.visibility =
-            if (session.isExternalFleetStaff) View.GONE else View.VISIBLE
+            if (session.isExternalFleetStaff && !session.canBillExternalFleet) View.GONE else View.VISIBLE
 
         // Listen for window insets to lift bottom navigation bar safely above system gesture handle
         ViewCompat.setOnApplyWindowInsetsListener(binding.tabBarContainer) { v, insets ->

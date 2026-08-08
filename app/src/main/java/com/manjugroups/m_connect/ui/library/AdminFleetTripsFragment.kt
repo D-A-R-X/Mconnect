@@ -17,9 +17,12 @@ import com.manjugroups.m_connect.databinding.ItemAdminFleetTripBinding
 import com.manjugroups.m_connect.network.AllocateTripRequest
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.CompleteOfflineTripRequest
+import com.manjugroups.m_connect.network.FinalizeTravelDeskBillingRequest
+import com.manjugroups.m_connect.network.FinalizeTravelDeskCancellationRequest
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.TravelDeskApi
 import com.manjugroups.m_connect.network.TravelDeskAppliedCharge
+import com.manjugroups.m_connect.network.TravelDeskStatusUpdateRequest
 import com.manjugroups.m_connect.network.TravelDeskTrip
 import com.manjugroups.m_connect.network.TravelDeskVehicle
 import com.manjugroups.m_connect.network.StorageUploader
@@ -67,6 +70,7 @@ class AdminFleetTripsFragment : Fragment() {
     private var pendingTrips: List<TravelDeskTrip> = emptyList()
     private var assignedActive: List<TravelDeskTrip> = emptyList()
     private var assignedInProgress: List<TravelDeskTrip> = emptyList()
+    private var assignedBilling: List<TravelDeskTrip> = emptyList()
     private var assignedCompleted: List<TravelDeskTrip> = emptyList()
     private var vehicles: List<TravelDeskVehicle> = emptyList()
     private var driverRoster: List<com.manjugroups.m_connect.network.TravelDeskDriver> = emptyList()
@@ -190,6 +194,8 @@ class AdminFleetTripsFragment : Fragment() {
         }
         setupRecyclerView()
         setupFilters()
+        binding.btnTabBilling.visibility =
+            if (!useMmsFleet && session.canBillExternalFleet) View.VISIBLE else View.GONE
 
         binding.scrollAdminTrips.setOnTouchListener { _, event ->
             when (event.actionMasked) {
@@ -272,12 +278,13 @@ class AdminFleetTripsFragment : Fragment() {
                 // trip whose slot has passed is EXPIRED — it also belongs in
                 // Completed (badged separately), NOT sitting in Assigned as if
                 // it were still live. Everything else is in-flight ("Assigned").
+                assignedBilling = assignedRows.filter(::needsAgencyBilling)
                 assignedCompleted = assignedRows.filter(::isTripComplete)
                 assignedInProgress = assignedRows.filter {
-                    !isTripComplete(it) && progressState(it) != "assigned"
+                    !isTripComplete(it) && !needsAgencyBilling(it) && progressState(it) != "assigned"
                 }
                 assignedActive = assignedRows.filter {
-                    !isTripComplete(it) && progressState(it) == "assigned"
+                    !isTripComplete(it) && !needsAgencyBilling(it) && progressState(it) == "assigned"
                 }
                 vehicles = vehiclesResp.rows
                 activeVehicleCount = vehicles.count {
@@ -306,20 +313,24 @@ class AdminFleetTripsFragment : Fragment() {
     private fun hasRecordedOutcome(trip: TravelDeskTrip): Boolean =
         !trip.outcome.isNullOrBlank()
 
-    private fun isTripComplete(trip: TravelDeskTrip): Boolean =
-        hasRecordedOutcome(trip) &&
-            (
-                trip.travelDeskTaskStatus.equals("completed", ignoreCase = true) ||
-                    (
-                        trip.travelDeskTaskStatus == null &&
-                            tripEndedAt(trip) != null &&
-                            trip.travelDeskProofPending != true &&
-                            (
-                                trip.travelAgency == null ||
-                                    trip.travelDeskBillingCompletedAt != null
-                                )
-                        )
-                )
+    private fun isTripComplete(trip: TravelDeskTrip): Boolean {
+        if (trip.travelDeskBillingCompletedAt != null) return true
+        if (!hasRecordedOutcome(trip)) return false
+        if (trip.travelDeskTaskStatus.equals("completed", ignoreCase = true)) return true
+        return trip.travelDeskTaskStatus == null &&
+            tripEndedAt(trip) != null &&
+            trip.travelDeskProofPending != true &&
+            trip.travelAgency == null
+    }
+
+    private fun isCancelledTrip(trip: TravelDeskTrip): Boolean =
+        trip.status.equals("cancelled", ignoreCase = true) ||
+            trip.status.equals("no_show", ignoreCase = true)
+
+    private fun needsAgencyBilling(trip: TravelDeskTrip): Boolean =
+        !useMmsFleet &&
+            trip.travelDeskBillingCompletedAt == null &&
+            (trip.travelDeskEndedAt != null || isCancelledTrip(trip))
 
     private fun progressState(trip: TravelDeskTrip): String {
         if (hasRecordedOutcome(trip) && !isTripComplete(trip)) {
@@ -370,7 +381,11 @@ class AdminFleetTripsFragment : Fragment() {
             onManageClick = { trip -> openManageSheet(trip) },
             onCompleteClick = { trip -> openCompleteOfflineSheet(trip) },
         ).also {
-            it.canCompleteOffline = session.canCompleteOfflineFleet()
+            it.canCompleteOffline = if (session.isExternalFleetAgencyOperator) {
+                session.canBillExternalFleet
+            } else {
+                session.canCompleteOfflineFleet()
+            }
             it.isExternalAgencySession = session.isExternalFleetAgencyOperator
         }
         binding.rvAdminTrips.layoutManager = LinearLayoutManager(requireContext())
@@ -380,7 +395,7 @@ class AdminFleetTripsFragment : Fragment() {
 
     private fun openManageSheet(trip: AdminTrip) {
         val canCompleteThisFleet =
-            session.isExternalFleetAgencyOperator || !trip.external
+            (session.isExternalFleetAgencyOperator && session.canBillExternalFleet) || !trip.external
         AdminFleetTripManageSheet.newInstance(
             trip = trip,
             onReassign = { openAllocateSheet(trip) },
@@ -390,10 +405,125 @@ class AdminFleetTripsFragment : Fragment() {
             } else {
                 null
             },
+            onOpenDriverLink = trip.driverTripUrl?.let { url ->
+                {
+                    startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+                }
+            },
+            onCopyDriverLink = trip.driverTripUrl?.let { url ->
+                {
+                    val clipboard = requireContext().getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                        as android.content.ClipboardManager
+                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Driver trip link", url))
+                    Toast.makeText(requireContext(), "Driver link copied.", Toast.LENGTH_SHORT).show()
+                }
+            },
+            onResendDriverWhatsapp = if (!useMmsFleet && !trip.driverTripUrl.isNullOrBlank()) {
+                { resendDriverWhatsapp(trip) }
+            } else null,
+            onUpdateTripStatus = if (!useMmsFleet) {
+                { openTripStatusDialog(trip) }
+            } else null,
             onProgressAction = { action, km, toll, beta ->
                 submitProgressAction(trip, action, km, toll, beta)
             },
         ).showOnce(parentFragmentManager, "AdminFleetTripManageSheet")
+    }
+
+    private fun resendDriverWhatsapp(trip: AdminTrip) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val response = runCatching {
+                api.resendDriverWhatsapp(
+                    session.bearerToken,
+                    com.manjugroups.m_connect.network.TravelDeskDriverTripRequest(trip.id),
+                )
+            }.getOrNull()
+            Toast.makeText(
+                requireContext(),
+                if (response?.success == true) "WhatsApp queued for the driver."
+                else response?.error ?: "Could not resend WhatsApp.",
+                if (response?.success == true) Toast.LENGTH_SHORT else Toast.LENGTH_LONG,
+            ).show()
+        }
+    }
+
+    private fun openTripStatusDialog(trip: AdminTrip) {
+        val labels = arrayOf("Client unavailable", "Cancel trip", "Postpone trip")
+        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setTitle("Update trip status")
+            .setItems(labels) { _, which ->
+                when (which) {
+                    0 -> promptStatusReason(trip, "not_available", "Client unavailable")
+                    1 -> promptStatusReason(trip, "cancelled", "Cancel trip")
+                    2 -> pickPostponedDate(trip)
+                }
+            }
+            .setNegativeButton("Close", null)
+            .show()
+    }
+
+    private fun promptStatusReason(
+        trip: AdminTrip,
+        reasonCode: String,
+        title: String,
+        scheduledDate: String? = null,
+    ) {
+        val input = android.widget.EditText(requireContext()).apply {
+            hint = "Reason (optional)"
+            minLines = 2
+            setPadding(32, 20, 32, 20)
+        }
+        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setTitle(title)
+            .setView(input)
+            .setNegativeButton("Back", null)
+            .setPositiveButton("Confirm") { _, _ ->
+                submitTripStatus(
+                    trip,
+                    TravelDeskStatusUpdateRequest(
+                        siteVisitId = trip.id,
+                        reasonCode = reasonCode,
+                        reasonText = input.text.toString().trim().ifBlank { null },
+                        scheduledDate = scheduledDate,
+                    ),
+                )
+            }
+            .show()
+    }
+
+    private fun pickPostponedDate(trip: AdminTrip) {
+        val today = java.util.Calendar.getInstance()
+        android.app.DatePickerDialog(
+            requireContext(),
+            { _, year, month, day ->
+                val date = String.format(java.util.Locale.US, "%04d-%02d-%02d", year, month + 1, day)
+                promptStatusReason(trip, "postponed", "Postpone to $date", date)
+            },
+            today.get(java.util.Calendar.YEAR),
+            today.get(java.util.Calendar.MONTH),
+            today.get(java.util.Calendar.DAY_OF_MONTH),
+        ).apply {
+            datePicker.minDate = System.currentTimeMillis() - 1_000L
+        }.show()
+    }
+
+    private fun submitTripStatus(trip: AdminTrip, request: TravelDeskStatusUpdateRequest) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val response = runCatching {
+                api.updateTripStatus(session.bearerToken, request)
+            }.getOrNull()
+            if (_binding == null) return@launch
+            if (response?.success == true) {
+                Toast.makeText(requireContext(), "Trip status updated.", Toast.LENGTH_SHORT).show()
+                refresh()
+            } else {
+                Toast.makeText(
+                    requireContext(),
+                    response?.error ?: "Could not update trip status.",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
     }
 
     /**
@@ -528,11 +658,19 @@ class AdminFleetTripsFragment : Fragment() {
     }
 
     private fun openCompleteOfflineSheet(trip: AdminTrip) {
+        if (session.isExternalFleetAgencyOperator && !session.canBillExternalFleet) {
+            Toast.makeText(requireContext(), "Billing access is required.", Toast.LENGTH_SHORT).show()
+            return
+        }
         if (!session.canCompleteOfflineFleet()) {
             Toast.makeText(requireContext(), "You don't have permission to complete trips offline.", Toast.LENGTH_SHORT).show()
             return
         }
-        if (!trip.outcomeRecorded) {
+        if (trip.cancelled && !useMmsFleet) {
+            openCancellationBilling(trip)
+            return
+        }
+        if (!trip.outcomeRecorded && !trip.billingPending) {
             Toast.makeText(
                 requireContext(),
                 "Complete the Site Visit outcome before adding final fleet details.",
@@ -551,6 +689,60 @@ class AdminFleetTripsFragment : Fragment() {
         AdminFleetCompleteOfflineSheet.newInstance(trip, vehicles) { result ->
             submitCompleteOffline(trip, result)
         }.showOnce(parentFragmentManager, "AdminFleetCompleteOfflineSheet")
+    }
+
+    private fun openCancellationBilling(trip: AdminTrip) {
+        if (!session.canBillExternalFleet) {
+            Toast.makeText(requireContext(), "Billing access is required.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val input = android.widget.EditText(requireContext()).apply {
+            hint = "Cancellation charge"
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER or
+                android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
+            setPadding(32, 16, 32, 16)
+        }
+        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setTitle("Cancellation billing")
+            .setMessage("Enter the cancellation amount for ${trip.clientName}.")
+            .setView(input)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Save") { _, _ ->
+                val amount = input.text.toString().trim().toDoubleOrNull()
+                if (amount == null || amount < 0) {
+                    Toast.makeText(requireContext(), "Enter a valid amount.", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                viewLifecycleOwner.lifecycleScope.launch {
+                    val response = runCatching {
+                        api.finalizeCancellationBilling(
+                            session.bearerToken,
+                            FinalizeTravelDeskCancellationRequest(
+                                siteVisitId = trip.id,
+                                customCharges = listOf(
+                                    TravelDeskAppliedCharge(
+                                        label = "Cancellation allowance",
+                                        amount = amount,
+                                        unit = "trip",
+                                    ),
+                                ),
+                            ),
+                        )
+                    }.getOrNull()
+                    if (_binding == null) return@launch
+                    if (response?.success == true) {
+                        Toast.makeText(requireContext(), "Cancellation billing saved.", Toast.LENGTH_SHORT).show()
+                        refresh()
+                    } else {
+                        Toast.makeText(
+                            requireContext(),
+                            response?.error ?: "Could not save cancellation billing.",
+                            Toast.LENGTH_LONG,
+                        ).show()
+                    }
+                }
+            }
+            .show()
     }
 
     private fun submitCompleteOffline(trip: AdminTrip, result: CompleteOfflineTripResult) {
@@ -620,6 +812,34 @@ class AdminFleetTripsFragment : Fragment() {
                 )
                 if (useMmsFleet) {
                     api.completeOfflineMms(token, request)
+                } else if (trip.billingPending || trip.status == "Completed") {
+                    val startKm = result.startKm
+                        ?: throw IllegalArgumentException("Start km is required")
+                    val endKm = result.endKm
+                        ?: throw IllegalArgumentException("End km is required")
+                    api.finalizeBilling(
+                        token,
+                        FinalizeTravelDeskBillingRequest(
+                            siteVisitId = trip.id,
+                            startKm = startKm,
+                            endKm = endKm,
+                            startPhotoIds = startPhotoId?.let(::listOf),
+                            endPhotoIds = endPhotoId?.let(::listOf),
+                            kmRate = result.kmRate,
+                            packageAmount = result.packageAmount,
+                            beta = result.beta,
+                            beta2 = result.beta2,
+                            tollAmount = result.tollAmount,
+                            hillCharge = result.hillCharge,
+                            outstationCharge = result.outstationCharge,
+                            permitCharge = result.permitCharge,
+                            permitTax = result.permitTax,
+                            standingCharge = result.standingCharge,
+                            vehicleId = result.vehicleId,
+                            driverName = result.driverName,
+                            driverPhone = result.driverPhone,
+                        ),
+                    )
                 } else {
                     api.completeOfflineAgency(token, request)
                 }
@@ -836,6 +1056,7 @@ class AdminFleetTripsFragment : Fragment() {
         binding.btnTabPending.setOnClickListener { applyFilter("Pending") }
         binding.btnTabAssigned.setOnClickListener { applyFilter("Assigned") }
         binding.btnTabInProgress.setOnClickListener { applyFilter("In Progress") }
+        binding.btnTabBilling.setOnClickListener { applyFilter("Billing") }
         binding.btnTabCompleted.setOnClickListener { applyFilter("Completed") }
     }
 
@@ -847,6 +1068,7 @@ class AdminFleetTripsFragment : Fragment() {
             when (filter) {
                 "Assigned" -> 1
                 "In Progress" -> 1
+                "Billing" -> 2
                 "Completed" -> 2
                 else -> 0
             }
@@ -864,6 +1086,7 @@ class AdminFleetTripsFragment : Fragment() {
             Triple(binding.btnTabPending, "Pending", activeFilter == "Pending"),
             Triple(binding.btnTabAssigned, "Assigned", activeFilter == "Assigned"),
             Triple(binding.btnTabInProgress, "In Progress", activeFilter == "In Progress"),
+            Triple(binding.btnTabBilling, "Billing", activeFilter == "Billing"),
             Triple(binding.btnTabCompleted, "Completed", activeFilter == "Completed")
         ).forEach { (btn, _, isActive) ->
             if (isActive) {
@@ -880,6 +1103,7 @@ class AdminFleetTripsFragment : Fragment() {
         val rows = when (filter) {
             "Assigned" -> assignedActive
             "In Progress" -> assignedInProgress
+            "Billing" -> assignedBilling
             "Completed" -> assignedCompleted
             else -> pendingTrips
         }.map { mapTrip(it, filter) }
@@ -902,6 +1126,7 @@ class AdminFleetTripsFragment : Fragment() {
             activeFilter == "Pending" -> "No trips waiting for allocation."
             activeFilter == "Assigned" -> "No trips are currently assigned."
             activeFilter == "In Progress" -> "No ongoing or pending-detail trips."
+            activeFilter == "Billing" -> "No dropped trips are waiting for billing."
             else -> "No completed trips yet."
         }
     }
@@ -938,6 +1163,8 @@ class AdminFleetTripsFragment : Fragment() {
         val progressState = progressState(trip)
         val displayStatus = if (statusLabel == "In Progress") {
             if (progressState == "ongoing") "Ongoing" else "Pending details"
+        } else if (statusLabel == "Billing") {
+            if (isCancelledTrip(trip)) "Cancellation billing" else "Ready to bill"
         } else {
             statusLabel
         }
@@ -987,6 +1214,12 @@ class AdminFleetTripsFragment : Fragment() {
             extraKmReviewReason = trip.travelDeskExtraKmReviewReason,
             external = trip.travelAgency?.name?.isNotBlank() == true,
             agencyName = trip.travelAgency?.name?.trim()?.ifBlank { null },
+            driverTripUrl = trip.driverTripUrl?.takeIf(String::isNotBlank)
+                ?: trip.driverAccessToken?.takeIf(String::isNotBlank)?.let {
+                    "https://traveldesk.aivida.in/driver/trips/$it"
+                },
+            billingPending = statusLabel == "Billing",
+            cancelled = isCancelledTrip(trip),
         )
     }
 
@@ -1044,6 +1277,9 @@ class AdminFleetTripsFragment : Fragment() {
         // "Remove agency", not "Remove driver".
         var external: Boolean = false,
         var agencyName: String? = null,
+        var driverTripUrl: String? = null,
+        var billingPending: Boolean = false,
+        var cancelled: Boolean = false,
     )
 
     private class AdminTripsAdapter(
@@ -1128,6 +1364,14 @@ class AdminFleetTripsFragment : Fragment() {
                         } else {
                             binding.btnAllocate.visibility = View.GONE
                         }
+                    }
+                    item.status == "Ready to bill" || item.status == "Cancellation billing" -> {
+                        binding.tvTripStatus.setBackgroundResource(R.drawable.bg_badge_pending)
+                        binding.tvTripStatus.setTextColor(Color.parseColor("#B54708"))
+                        binding.btnAllocate.visibility = View.VISIBLE
+                        binding.btnAllocate.text = if (item.cancelled) "Bill cancellation" else "Complete billing"
+                        binding.btnAllocate.setBackgroundResource(R.drawable.bg_allocate_button_green)
+                        binding.btnAllocate.setOnClickListener { onCompleteClick(item) }
                     }
                     item.status == "Pending" -> {
                         binding.tvTripStatus.setBackgroundResource(R.drawable.bg_badge_pending)
