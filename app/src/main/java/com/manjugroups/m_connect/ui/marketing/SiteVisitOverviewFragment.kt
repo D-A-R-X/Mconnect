@@ -96,8 +96,12 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
     // Call Client / Call Driver buttons above the pickup address + their numbers.
     private var btnCallClient: View? = null
     private var btnCallDriver: View? = null
+    private var tvCallClient: TextView? = null
+    private var tvCallDriver: TextView? = null
     private var clientPhone: String? = null
     private var driverPhone: String? = null
+    private var clientDisplayName: String? = null
+    private var driverDisplayName: String? = null
 
     private var tvVisitorName: TextView? = null
     private var tvVisitorDetails: TextView? = null
@@ -186,6 +190,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
     private var btnBooking: LinearLayout? = null
     private var btnNotInterested: LinearLayout? = null
     private var btnPostponed: LinearLayout? = null
+    private var btnOther: LinearLayout? = null
     private var btnPostponeSiteVisit: LinearLayout? = null
     private var btnCancelSiteVisit: LinearLayout? = null
 
@@ -235,6 +240,8 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
 
         btnCallClient = view.findViewById(R.id.btnOverviewCallClient)
         btnCallDriver = view.findViewById(R.id.btnOverviewCallDriver)
+        tvCallClient = view.findViewById(R.id.tvOverviewCallClient)
+        tvCallDriver = view.findViewById(R.id.tvOverviewCallDriver)
         btnCallClient?.setOnClickListener { dialPhone(clientPhone) }
         btnCallDriver?.setOnClickListener { dialPhone(driverPhone) }
         refreshCallButtons()
@@ -324,6 +331,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         btnBooking = view.findViewById(R.id.btnOutcomeBooking)
         btnNotInterested = view.findViewById(R.id.btnOutcomeNotInterested)
         btnPostponed = view.findViewById(R.id.btnOutcomePostponed)
+        btnOther = view.findViewById(R.id.btnOutcomeOther)
         btnPostponeSiteVisit = view.findViewById(R.id.btnPostponeSiteVisit)
         btnPostponeSiteVisit?.visibility = View.GONE
         btnPostponeSiteVisit?.setOnClickListener {
@@ -453,6 +461,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         // sheet never displays seeded mock data even for a flash.
         tvTitle?.text = placeName?.takeIf { it.isNotBlank() } ?: "Site Visit"
         val initialName = leadName?.takeIf { it.isNotBlank() }
+        clientDisplayName = initialName?.let { formatPersonName(it) }
         tvClientName?.text = initialName?.let { formatPersonName(it) } ?: "—"
         tvVisitorName?.text = initialName?.let { formatPersonName(it) } ?: "—"
         tvPhone?.text = leadPhone?.takeIf { it.isNotBlank() } ?: "—"
@@ -784,6 +793,8 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
                 btnNotInterested?.alpha = 1.0f
                 btnPostponed?.isEnabled = true
                 btnPostponed?.alpha = 1.0f
+                btnOther?.isEnabled = true
+                btnOther?.alpha = 1.0f
 
                 // Wire each outcome to the shared CP completion sheet,
                 // locked to the chosen form so field staff do not see
@@ -791,6 +802,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
                 btnBooking?.setOnClickListener { openSiteVisitOutcomeSheet("converted_to_booking") }
                 btnNotInterested?.setOnClickListener { openSiteVisitOutcomeSheet("not_interested") }
                 btnPostponed?.setOnClickListener { openSiteVisitOutcomeSheet("follow_up") }
+                btnOther?.setOnClickListener { openSiteVisitOutcomeSheet("other") }
             } else {
                 btnBooking?.isEnabled = false
                 btnBooking?.alpha = 0.4f
@@ -798,6 +810,8 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
                 btnNotInterested?.alpha = 0.4f
                 btnPostponed?.isEnabled = false
                 btnPostponed?.alpha = 0.4f
+                btnOther?.isEnabled = false
+                btnOther?.alpha = 0.4f
 
                 val lockedToast: (View) -> Unit = {
                     Toast.makeText(context, "Outcome opens after the client QR scan (counselling).", Toast.LENGTH_SHORT).show()
@@ -805,6 +819,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
                 btnBooking?.setOnClickListener(lockedToast)
                 btnNotInterested?.setOnClickListener(lockedToast)
                 btnPostponed?.setOnClickListener(lockedToast)
+                btnOther?.setOnClickListener(lockedToast)
             }
         } else {
             // Cab Vehicle: 9-node stepper (Scheduled, Assigned, Reached CP,
@@ -939,6 +954,8 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
                 btnNotInterested?.alpha = 1.0f
                 btnPostponed?.isEnabled = true
                 btnPostponed?.alpha = 1.0f
+                btnOther?.isEnabled = true
+                btnOther?.alpha = 1.0f
 
                 // Wire each outcome to the shared CP completion sheet,
                 // locked to the chosen form so field staff do not see
@@ -946,6 +963,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
                 btnBooking?.setOnClickListener { openSiteVisitOutcomeSheet("converted_to_booking") }
                 btnNotInterested?.setOnClickListener { openSiteVisitOutcomeSheet("not_interested") }
                 btnPostponed?.setOnClickListener { openSiteVisitOutcomeSheet("follow_up") }
+                btnOther?.setOnClickListener { openSiteVisitOutcomeSheet("other") }
             } else {
                 btnBooking?.isEnabled = false
                 btnBooking?.alpha = 0.4f
@@ -953,6 +971,8 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
                 btnNotInterested?.alpha = 0.4f
                 btnPostponed?.isEnabled = false
                 btnPostponed?.alpha = 0.4f
+                btnOther?.isEnabled = false
+                btnOther?.alpha = 0.4f
 
                 val lockedToast: (View) -> Unit = {
                     Toast.makeText(context, "Outcome opens after the client QR scan (counselling).", Toast.LENGTH_SHORT).show()
@@ -960,6 +980,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
                 btnBooking?.setOnClickListener(lockedToast)
                 btnNotInterested?.setOnClickListener(lockedToast)
                 btnPostponed?.setOnClickListener(lockedToast)
+                btnOther?.setOnClickListener(lockedToast)
             }
         }
     }
@@ -971,6 +992,8 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         btnNotInterested?.alpha = 0.4f
         btnPostponed?.isEnabled = false
         btnPostponed?.alpha = 0.4f
+        btnOther?.isEnabled = false
+        btnOther?.alpha = 0.4f
 
         val lockedToast: (View) -> Unit = {
             Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
@@ -978,6 +1001,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         btnBooking?.setOnClickListener(lockedToast)
         btnNotInterested?.setOnClickListener(lockedToast)
         btnPostponed?.setOnClickListener(lockedToast)
+        btnOther?.setOnClickListener(lockedToast)
     }
 
     private fun wireBookingResult() {
@@ -990,6 +1014,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
                 "converted_to_booking" -> "Converted as Booking"
                 "not_interested" -> "Client Not Interested"
                 "postponed", "follow_up" -> "Follow up"
+                "other" -> "Others"
                 else -> return@setFragmentResultListener
             }
 
@@ -1038,9 +1063,14 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
     }
 
     private fun refreshCallButtons() {
+        tvCallClient?.text = callLabel("Client", clientDisplayName)
+        tvCallDriver?.text = callLabel("Driver", driverDisplayName)
         setCallButtonEnabled(btnCallClient, !clientPhone.isNullOrBlank())
         setCallButtonEnabled(btnCallDriver, !driverPhone.isNullOrBlank())
     }
+
+    private fun callLabel(role: String, name: String?): String =
+        name?.takeIf { it.isNotBlank() && it != "—" }?.let { "Call $it" } ?: "Call $role"
 
     private fun setCallButtonEnabled(button: View?, enabled: Boolean) {
         button?.isEnabled = enabled
@@ -1078,6 +1108,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
             ?: visit.lead?.contactName?.takeIf { it.isNotBlank() }
             ?: visit.clientPlace?.name?.takeIf { it.isNotBlank() }
         val displayName = rawDisplayName?.let { formatPersonName(it) } ?: "—"
+        clientDisplayName = displayName
         tvClientName?.text = displayName
         tvVisitorName?.text = displayName
 
@@ -1085,8 +1116,14 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
             ?: visit.lead?.mobileNumber?.takeIf { it.isNotBlank() }
         tvPhone?.text = phone ?: "—"
         clientPhone = phone
-        // The assigned cab driver lives on the SV snapshot (proposedSiteVisit = sv).
+        // CP-linked SVs carry driver contact in proposedSiteVisit; pure-SV
+        // envelopes return it on the root visit. Support both so an assigned
+        // driver's call action does not remain incorrectly disabled.
+        val rawDriverName = visit.proposedSiteVisit?.driverName?.takeIf { it.isNotBlank() }
+            ?: visit.driverName?.takeIf { it.isNotBlank() }
+        driverDisplayName = rawDriverName?.let { formatPersonName(it) }
         driverPhone = visit.proposedSiteVisit?.driverPhone?.takeIf { it.isNotBlank() }
+            ?: visit.driverPhone?.takeIf { it.isNotBlank() }
         refreshCallButtons()
         bindLeadTemperature(visit.lead?.temperature)
 
@@ -1308,6 +1345,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         btnBooking?.isEnabled = false
         btnNotInterested?.isEnabled = false
         btnPostponed?.isEnabled = false
+        btnOther?.isEnabled = false
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
@@ -1379,6 +1417,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
                 btnBooking?.isEnabled = true
                 btnNotInterested?.isEnabled = true
                 btnPostponed?.isEnabled = true
+                btnOther?.isEnabled = true
                 Toast.makeText(
                     requireContext(),
                     e.message ?: "Failed to save outcome",

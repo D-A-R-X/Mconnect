@@ -383,9 +383,23 @@ class TaskManagerFragment : Fragment() {
             } catch (ce: kotlinx.coroutines.CancellationException) {
                 throw ce
             } catch (e: Exception) {
-                Toast.makeText(requireContext(), e.message ?: "Network error", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    requireContext(),
+                    taskMutationError(e) ?: e.message ?: "Network error",
+                    Toast.LENGTH_SHORT,
+                ).show()
             }
         }
+    }
+
+    private fun taskMutationError(error: Throwable): String? {
+        val httpError = error as? retrofit2.HttpException ?: return null
+        val raw = runCatching { httpError.response()?.errorBody()?.string() }.getOrNull()
+            ?.takeIf { it.isNotBlank() }
+            ?: return null
+        return runCatching {
+            org.json.JSONObject(raw).optString("error").trim().takeIf { it.isNotBlank() }
+        }.getOrNull()
     }
 
     private fun formatDeadline(raw: String?): String {
