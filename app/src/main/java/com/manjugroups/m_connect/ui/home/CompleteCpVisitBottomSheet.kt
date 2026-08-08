@@ -117,6 +117,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     // standalone booking, site-visit outcome, or a caller-provided outcome arg)
     // set this true so they skip the chooser.
     private var outcomeChosen: Boolean = false
+    private var otherRemarksShown: Boolean = false
+    private var otherOutcomeSaving: Boolean = false
     // The reusable centre outcome-picker (shown when a type still needs choosing).
     private var outcomePickerDialog: androidx.appcompat.app.AlertDialog? = null
     // The Material bottom-sheet container view (design_bottom_sheet). Hidden
@@ -711,7 +713,9 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             // the dimmed screen. Selecting an option reveals the sheet + form.
             // Forced/locked modes already set outcomeChosen, so they skip the
             // picker and just fade the full-screen form in.
-            if (outcomeChosen) {
+            if (arguments?.getString(ARG_CP_OUTCOME) == OUTCOME_OTHER) {
+                showOtherRemarksSheet()
+            } else if (outcomeChosen) {
                 revealSheet()
             } else {
                 maybeShowOutcomePicker()
@@ -888,8 +892,12 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             options = options,
             onSelect = { key ->
                 outcomePickerDialog = null
-                revealSheet()
-                switchOutcome(outcomeFromKey(key))
+                if (key == "OTHER") {
+                    showOtherRemarksSheet()
+                } else {
+                    revealSheet()
+                    switchOutcome(outcomeFromKey(key))
+                }
             },
             // Backed out without choosing — close the sheet. The user can tap
             // Complete outcome again to reopen the picker and pick correctly.
@@ -934,7 +942,42 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             if (isSiteVisitMode) "Follow up" else "Its Been Postponed",
             R.drawable.ic_outcome_postpone))
         list.add(opt("NOT_INTERESTED", "Client Not Interested", R.drawable.ic_outcome_not_interested))
+        list.add(opt("OTHER", "Others", R.drawable.ic_chat_more_dots))
         return list
+    }
+
+    private fun showOtherRemarksSheet() {
+        if (otherRemarksShown || !isAdded) return
+        otherRemarksShown = true
+        childFragmentManager.setFragmentResultListener(
+            com.manjugroups.m_connect.ui.common.OutcomeRemarksBottomSheet.RESULT_KEY,
+            this,
+        ) { _, result ->
+            otherRemarksShown = false
+            if (!result.getBoolean(
+                    com.manjugroups.m_connect.ui.common.OutcomeRemarksBottomSheet.KEY_SUBMITTED,
+                    false,
+                )
+            ) {
+                dismissAllowingStateLoss()
+                return@setFragmentResultListener
+            }
+            val remarks = result.getString(
+                com.manjugroups.m_connect.ui.common.OutcomeRemarksBottomSheet.KEY_REMARKS,
+            ).orEmpty().trim()
+            val cpVisitId = arguments?.getString(ARG_CP_VISIT_ID).orEmpty()
+            if (!isSiteVisitMode && cpVisitId.isBlank()) {
+                showError("Missing CP visit id")
+                return@setFragmentResultListener
+            }
+            otherOutcomeSaving = true
+            finalizeTerminalOutcome(cpVisitId, OUTCOME_OTHER, remarks)
+        }
+        com.manjugroups.m_connect.ui.common.OutcomeRemarksBottomSheet.newInstance(
+            title = "Other outcome",
+            subtitle = "Add remarks to explain why this visit is being closed.",
+            hint = "What happened with the client?",
+        ).showOnce(childFragmentManager, "other_outcome_remarks")
     }
 
     private fun outcomeFromKey(key: String): Outcome = when (key) {
@@ -5152,8 +5195,11 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 // the sheet shows the actual reason. Mirrors persistSiteVisit's catch.
                 val serverMessage = extractHttpErrorMessage(e)
                 val message = serverMessage ?: e.message ?: "Network error"
+                val wasOtherOutcome = otherOutcomeSaving
                 finishCtaSave(message)
-                Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
+                if (!wasOtherOutcome) {
+                    Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
+                }
             }
         }
     }
@@ -5205,6 +5251,16 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private fun finishCtaSave(error: String) {
         btnSubmit?.isClickable = true
         btnSubmit?.text = "Save"
+        if (otherOutcomeSaving) {
+            otherOutcomeSaving = false
+            Toast.makeText(requireContext(), error, Toast.LENGTH_LONG).show()
+            // The parent completion sheet remains intentionally hidden while
+            // the compact remarks prompt is shown. On failure, close only the
+            // UI flow so it cannot leave an invisible modal over the screen;
+            // the visit itself remains open because no success result is sent.
+            dismissAllowingStateLoss()
+            return
+        }
         showError(error)
     }
 
@@ -6977,6 +7033,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         private const val OUTCOME_POSTPONED = "postponed"
         private const val OUTCOME_FOLLOW_UP = "follow_up"
         private const val OUTCOME_NOT_INTERESTED = "not_interested"
+        private const val OUTCOME_OTHER = "other"
         // SV-cum-CP rejection (distinct from not_interested). Set by
         // the RejectReasonBottomSheet sub-flow with the captured reason
         // shipped as notes; Convex outcomeValidator was extended to

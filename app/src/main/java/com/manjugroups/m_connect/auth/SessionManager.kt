@@ -210,6 +210,10 @@ class SessionManager(context: Context) {
         get() = getCachedBoolean(KEY_FLEET_DRIVER_BY_BACKEND, false)
         set(value) = setCachedBoolean(KEY_FLEET_DRIVER_BY_BACKEND, value)
 
+    var externalFleetCanBill: Boolean
+        get() = getCachedBoolean(KEY_EXTERNAL_FLEET_CAN_BILL, false)
+        set(value) = setCachedBoolean(KEY_EXTERNAL_FLEET_CAN_BILL, value)
+
     /**
      * Fleet-desk staff: designation "Driver" but department "Administration".
      *
@@ -234,6 +238,10 @@ class SessionManager(context: Context) {
 
     val isExternalFleetAgencyOperator: Boolean
         get() = isExternalFleetAgency || isExternalFleetStaff
+
+    /** Matches Travel Desk web: agency admin always bills; staff need a grant. */
+    val canBillExternalFleet: Boolean
+        get() = isExternalFleetAgency || (isExternalFleetStaff && externalFleetCanBill)
 
     /**
      * A driver created BY an external agency. Same synthesised-designation
@@ -769,6 +777,7 @@ class SessionManager(context: Context) {
         private const val KEY_DESIGNATION = "designation"
         private const val KEY_DEPARTMENT = "department"
         private const val KEY_FLEET_DRIVER_BY_BACKEND = "fleet_driver_by_backend"
+        private const val KEY_EXTERNAL_FLEET_CAN_BILL = "external_fleet_can_bill"
         private const val KEY_DRIVER_TRIPS = "driver_trips"
         private const val KEY_IS_NOTIFICATION_ENABLED = "is_notification_enabled"
         private const val KEY_IS_ON_DUTY = "is_on_duty"

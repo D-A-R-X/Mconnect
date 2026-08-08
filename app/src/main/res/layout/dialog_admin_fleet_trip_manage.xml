@@ -487,6 +487,64 @@
                 android:visibility="gone" />
         </LinearLayout>
 
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/btnUpdateTripStatus"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_trip_button_outline"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Report an issue or postpone"
+            android:textAllCaps="false"
+            android:textColor="#0B61CA"
+            android:textSize="13sp"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/driverLinkActions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btnOpenDriverLink"
+                android:layout_width="0dp"
+                android:layout_height="42dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_button_primary"
+                android:backgroundTint="#0B61CA"
+                android:text="Open link"
+                android:textAllCaps="false"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btnCopyDriverLink"
+                android:layout_width="0dp"
+                android:layout_height="42dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_trip_button_outline"
+                android:text="Copy"
+                android:textAllCaps="false"
+                android:textColor="#0B61CA"
+                android:textSize="12sp" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btnResendDriverWhatsapp"
+                android:layout_width="0dp"
+                android:layout_height="42dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_trip_button_outline"
+                android:text="Resend"
+                android:textAllCaps="false"
+                android:textColor="#0B61CA"
+                android:textSize="12sp" />
+        </LinearLayout>
+
         <TextView
             android:id="@+id/tvManageNote"
             android:layout_width="match_parent"

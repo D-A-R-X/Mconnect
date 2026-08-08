@@ -1474,6 +1474,10 @@ data class CpVisitDetail(
     val expectedAttendeeCount: Int? = null,
     val foodPreferences: String? = null,
     val vehiclePreference: String? = null,
+    // Pure-SV detail envelopes expose the assigned driver on the root visit,
+    // while CP-linked SVs keep the same values inside proposedSiteVisit.
+    val driverName: String? = null,
+    val driverPhone: String? = null,
     val isBookingCompleted: Boolean? = null,
     val createdAt: Long? = null,
     val updatedAt: Long? = null,

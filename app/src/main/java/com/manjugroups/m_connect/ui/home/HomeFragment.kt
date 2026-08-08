@@ -2645,6 +2645,10 @@ class HomeFragment : Fragment() {
             } else {
                 null
             },
+            onOpenDriverLink = null,
+            onCopyDriverLink = null,
+            onResendDriverWhatsapp = null,
+            onUpdateTripStatus = null,
             onProgressAction = { action, km, toll, beta ->
                 submitHomeFleetProgressAction(trip, action, km, toll, beta)
             },

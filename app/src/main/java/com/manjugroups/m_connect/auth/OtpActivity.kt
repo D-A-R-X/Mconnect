@@ -270,6 +270,7 @@ class OtpActivity : AppCompatActivity() {
         session.staffId = response.user?.staffId
         session.employeeId = response.user?.employeeId
         session.role = response.user?.role
+        session.externalFleetCanBill = response.user?.canBill == true
         session.mustChangePassword = false
         session.geoTrackingEnabled = response.user?.geoTrackingEnabled == true
         session.geoConsentGiven = false

@@ -15,6 +15,7 @@ import com.manjugroups.m_connect.auth.LoginActivity
 import com.manjugroups.m_connect.auth.OnboardingPrefs
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
+import com.manjugroups.m_connect.network.TravelDeskApi
 import com.manjugroups.m_connect.notifications.PushTokenManager
 import kotlinx.coroutines.launch
 
@@ -22,6 +23,7 @@ class LogoutBottomSheet : BottomSheetDialogFragment() {
 
     private lateinit var session: SessionManager
     private val api = ApiService.create()
+    private val travelDeskApi = TravelDeskApi.create()
     // Guards against double-taps firing the logout (and its navigation) twice.
     private var isLoggingOut = false
 
@@ -106,9 +108,14 @@ class LogoutBottomSheet : BottomSheetDialogFragment() {
             repeat(2) { attempt ->
                 if (serverLoggedOut) return@repeat
                 kotlinx.coroutines.withTimeoutOrNull(8000) {
-                    runCatching { api.logout(session.bearerToken) }
-                        .getOrNull()
-                        ?.let { if (it.success) serverLoggedOut = true }
+                    val success = runCatching {
+                        if (session.isExternalFleetPrincipal) {
+                            travelDeskApi.logout(session.bearerToken).success
+                        } else {
+                            api.logout(session.bearerToken).success
+                        }
+                    }.getOrDefault(false)
+                    if (success) serverLoggedOut = true
                 }
                 if (!serverLoggedOut && attempt < 1) kotlinx.coroutines.delay(400)
             }

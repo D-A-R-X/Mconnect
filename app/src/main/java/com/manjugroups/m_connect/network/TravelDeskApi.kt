@@ -41,6 +41,11 @@ interface TravelDeskApi {
     @POST("api/travel-desk/auth/verify-otp")
     suspend fun verifyOtp(@Body body: TravelDeskVerifyOtpRequest): TravelDeskVerifyOtpResponse
 
+    @POST("api/travel-desk/auth/logout")
+    suspend fun logout(
+        @Header("Authorization") token: String,
+    ): TravelDeskSimpleResponse
+
     @GET("api/travel-desk/trips/pending")
     suspend fun listPending(
         @Header("Authorization") token: String
@@ -235,6 +240,36 @@ interface TravelDeskApi {
         @Header("Authorization") token: String,
         @Body body: TravelDeskDriverTripRequest
     ): TravelDeskAllocateResponse
+
+    @POST("api/travel-desk/trips/resend-driver-whatsapp")
+    suspend fun resendDriverWhatsapp(
+        @Header("Authorization") token: String,
+        @Body body: TravelDeskDriverTripRequest,
+    ): TravelDeskSimpleResponse
+
+    @POST("api/travel-desk/trips/finalize-billing")
+    suspend fun finalizeBilling(
+        @Header("Authorization") token: String,
+        @Body body: FinalizeTravelDeskBillingRequest,
+    ): TravelDeskAllocateResponse
+
+    @POST("api/travel-desk/trips/cancellation-billing")
+    suspend fun finalizeCancellationBilling(
+        @Header("Authorization") token: String,
+        @Body body: FinalizeTravelDeskCancellationRequest,
+    ): TravelDeskAllocateResponse
+
+    @POST("api/travel-desk/trips/evidence")
+    suspend fun submitEvidence(
+        @Header("Authorization") token: String,
+        @Body body: TravelDeskEvidenceRequest,
+    ): TravelDeskSimpleResponse
+
+    @POST("api/travel-desk/trips/status-update")
+    suspend fun updateTripStatus(
+        @Header("Authorization") token: String,
+        @Body body: TravelDeskStatusUpdateRequest,
+    ): TravelDeskSimpleResponse
 
     @POST("api/mms-fleet/dispatch/complete-offline")
     suspend fun completeOfflineMms(

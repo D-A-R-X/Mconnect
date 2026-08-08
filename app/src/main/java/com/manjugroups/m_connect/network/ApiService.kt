@@ -1308,7 +1308,8 @@ data class UserInfo(
     val roleLevel: Int? = null,
     val status: String? = null,
     val geoTrackingEnabled: Boolean = false,
-    val mustChangePassword: Boolean = false
+    val mustChangePassword: Boolean = false,
+    val canBill: Boolean = false,
 )
 data class ValidateSessionResponse(val success: Boolean, val user: UserInfo?)
 data class PincodeLookupEnvelope(
