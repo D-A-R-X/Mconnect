@@ -56,6 +56,9 @@ import com.manjugroups.m_connect.network.MmsFleetDriverSiteVisitRequest
 import com.manjugroups.m_connect.network.StartVisitRequest
 import com.manjugroups.m_connect.network.TrackingBootstrapData
 import com.manjugroups.m_connect.ui.common.navigateUp
+import com.manjugroups.m_connect.ui.common.OutcomeRemarksBottomSheet
+import com.manjugroups.m_connect.ui.common.OutcomeSelectionDialog
+import com.manjugroups.m_connect.ui.marketing.cpTypeSupportsOtherOutcome
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -1779,7 +1782,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         // booking funnel step.
         if (isCpVisit && isOldClient && !cpVisitDecisionCaptured) {
             renderArrivalPhase(alreadyArrived = true)
-            promptOldClientRemarks()
+            promptOldClientOutcome()
             return
         }
 
@@ -1836,6 +1839,129 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         // completes after Submit.
         OldClientRemarksBottomSheet.newInstance()
             .showOnce(parentFragmentManager, "old_client_remarks")
+    }
+
+    /** Old Client and Gift Distribution are dedicated CP flows, so they do
+     *  not use the shared Booking/SV/Postpone picker. Give only these two
+     *  approved special categories their normal action plus Others. */
+    private fun promptOldClientOutcome() {
+        showSpecialCpOutcomeChoice(
+            primaryKey = "OLD_CLIENT_VISITED",
+            primaryLabel = "Old client visited",
+            primaryIcon = R.drawable.ic_outcome_site_visit,
+            onPrimary = ::promptOldClientRemarks,
+        )
+    }
+
+    private fun promptGiftDistributionOutcome() {
+        showSpecialCpOutcomeChoice(
+            primaryKey = "GIFT_DISTRIBUTED",
+            primaryLabel = "Gift distributed",
+            primaryIcon = R.drawable.ic_outcome_booking,
+            onPrimary = ::completeGiftDistributionMet,
+        )
+    }
+
+    private fun showSpecialCpOutcomeChoice(
+        primaryKey: String,
+        primaryLabel: String,
+        primaryIcon: Int,
+        onPrimary: () -> Unit,
+    ) {
+        val options = mutableListOf(
+            OutcomeSelectionDialog.Option(primaryKey, primaryLabel, primaryIcon),
+        )
+        if (cpTypeSupportsOtherOutcome(cpType)) {
+            options += OutcomeSelectionDialog.Option(
+                "OTHER",
+                "Others",
+                R.drawable.ic_chat_more_dots,
+            )
+        }
+        OutcomeSelectionDialog.show(
+            context = requireContext(),
+            title = "What happened with the client?",
+            subtitle = "Choose an outcome to continue.",
+            options = options,
+            onSelect = { selected ->
+                if (selected == "OTHER") promptOtherCpRemarks() else onPrimary()
+            },
+        )
+    }
+
+    private fun promptOtherCpRemarks() {
+        if (!cpTypeSupportsOtherOutcome(cpType)) return
+        setFragmentResultListener(OutcomeRemarksBottomSheet.RESULT_KEY) { _, bundle ->
+            isOpeningOutcomeSheet = false
+            val submitted = bundle.getBoolean(OutcomeRemarksBottomSheet.KEY_SUBMITTED, false)
+            if (!submitted) {
+                swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                return@setFragmentResultListener
+            }
+            val remarks = bundle.getString(OutcomeRemarksBottomSheet.KEY_REMARKS).orEmpty().trim()
+            completeOtherCpVisit(remarks)
+        }
+        OutcomeRemarksBottomSheet.newInstance(
+            title = "Other outcome",
+            subtitle = "Add remarks to explain why this visit is being closed.",
+            hint = "What happened with the client?",
+        ).showOnce(parentFragmentManager, "other_cp_outcome_remarks")
+    }
+
+    private fun completeOtherCpVisit(remarks: String) {
+        val cpId = cpVisitId ?: return
+        if (!cpTypeSupportsOtherOutcome(cpType) || remarks.isBlank()) return
+        swipeArrived?.lockAsBusy("Completing visit…")
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val metResp = geoApi.markClientMet(
+                    session.bearerToken,
+                    com.manjugroups.m_connect.network.MarkClientMetRequest(
+                        id = cpId,
+                        clientMet = true,
+                        clientNoShowReason = null,
+                    ),
+                )
+                if (!metResp.success) {
+                    swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                    Toast.makeText(
+                        requireContext(),
+                        metResp.error ?: "Failed to mark client met",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    return@launch
+                }
+                val outcomeResp = geoApi.setCpVisitOutcome(
+                    session.bearerToken,
+                    com.manjugroups.m_connect.network.SetOutcomeRequest(
+                        id = cpId,
+                        outcome = "other",
+                        notes = remarks,
+                        arrivalPhotoStorageId = pendingArrivalStorageId,
+                    ),
+                )
+                if (!outcomeResp.success) {
+                    swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                    Toast.makeText(
+                        requireContext(),
+                        outcomeResp.error ?: "Failed to close visit",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    return@launch
+                }
+                cpClientMet = true
+                cpOutcome = "other"
+                cpVisitDecisionCaptured = true
+                finalizeCompleteVisit()
+            } catch (e: Exception) {
+                swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                Toast.makeText(
+                    requireContext(),
+                    httpErrorMessage(e) ?: e.message ?: "Network error",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
     }
 
     /** Finalises an Old Client CP after remarks are captured. Same
@@ -2502,8 +2628,8 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             // locked SV mode), so leave that path alone.
             cpIsSvFixed -> showCpCompletionSheet()
             isCollectionCp -> promptCollectionPayment()
-            isOldClient -> promptOldClientRemarks()
-            isGiftDistribution -> completeGiftDistributionMet()
+            isOldClient -> promptOldClientOutcome()
+            isGiftDistribution -> promptGiftDistributionOutcome()
             else -> showCpCompletionSheet()
         }
     }
@@ -2519,8 +2645,8 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         if (!cpIsSvFixed) {
             when {
                 isCollectionCp -> { promptCollectionPayment(); return }
-                isOldClient -> { promptOldClientRemarks(); return }
-                isGiftDistribution -> { completeGiftDistributionMet(); return }
+                isOldClient -> { promptOldClientOutcome(); return }
+                isGiftDistribution -> { promptGiftDistributionOutcome(); return }
             }
         }
         arrivalConfirmedForProgress = true
@@ -2542,6 +2668,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 cpClientMet = cpClientMet,
                 cpOutcome = cpOutcome,
                 isSvFixedHint = svFix,
+                cpType = cpType,
             )
             .showOnce(parentFragmentManager, "cp_visit_complete")
     }

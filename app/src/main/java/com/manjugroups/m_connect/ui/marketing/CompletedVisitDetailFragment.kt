@@ -48,6 +48,7 @@ class CompletedVisitDetailFragment : Fragment() {
     // uses. Lets the "Record Outcome" tap pre-pass the hint so the
     // sheet skips the Booking-tab flash before locking to SV mode.
     private var isSvFixedHint: Boolean = false
+    private var cpType: String? = null
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -430,10 +431,12 @@ class CompletedVisitDetailFragment : Fragment() {
             cpClientMet = null,
             cpOutcome = null,
             isSvFixedHint = isSvFixedHint,
+            cpType = cpType,
         ).showOnce(parentFragmentManager, "CompleteCpVisitBottomSheet")
     }
 
     private fun bindEnriched(root: View, visit: CpVisitDetail) {
+        cpType = visit.cpType
         // Capture SV-via-CP signals for the Record-Outcome reopen path.
         // Mirrors the detection logic in CompleteCpVisitBottomSheet.
         val proposed = visit.proposedSiteVisit

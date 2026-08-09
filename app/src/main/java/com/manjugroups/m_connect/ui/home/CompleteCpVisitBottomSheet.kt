@@ -67,6 +67,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 import com.manjugroups.m_connect.ui.common.showOnce
+import com.manjugroups.m_connect.ui.marketing.cpTypeSupportsOtherOutcome
 
 /**
  * Outcome Information bottom sheet — full Booking flow (7 sub-tabs).
@@ -282,6 +283,9 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
      */
     private val isStandaloneBookingMode: Boolean
         get() = arguments?.getBoolean(ARG_STANDALONE_BOOKING, false) == true
+
+    private val cpType: String?
+        get() = arguments?.getString(ARG_CP_TYPE)
 
     /**
      * Cached display name for the visit's lead/client, set when the
@@ -942,7 +946,11 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             if (isSiteVisitMode) "Follow up" else "Its Been Postponed",
             R.drawable.ic_outcome_postpone))
         list.add(opt("NOT_INTERESTED", "Client Not Interested", R.drawable.ic_outcome_not_interested))
-        list.add(opt("OTHER", "Others", R.drawable.ic_chat_more_dots))
+        // Pure SV retains its own Others outcome. For CP visits the free-text
+        // close path is intentionally limited to the three approved types.
+        if (isSiteVisitMode || cpTypeSupportsOtherOutcome(cpType)) {
+            list.add(opt("OTHER", "Others", R.drawable.ic_chat_more_dots))
+        }
         return list
     }
 
@@ -7000,6 +7008,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         private const val ARG_CP_VISIT_ID = "arg_cp_visit_id"
         private const val ARG_CP_CLIENT_MET = "arg_cp_client_met"
         private const val ARG_CP_OUTCOME = "arg_cp_outcome"
+        private const val ARG_CP_TYPE = "arg_cp_type"
         // Pre-pass from TripNavigationFragment when the upstream
         // reconcile already determined this CP came from a telecaller-
         // fixed SV. Lets us avoid the brief Booking-tab flash while the
@@ -7051,6 +7060,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             cpClientMet: Boolean? = null,
             cpOutcome: String? = null,
             isSvFixedHint: Boolean = false,
+            cpType: String? = null,
         ): CompleteCpVisitBottomSheet =
             CompleteCpVisitBottomSheet().apply {
                 arguments = Bundle().apply {
@@ -7058,6 +7068,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     if (cpClientMet != null) putBoolean(ARG_CP_CLIENT_MET, cpClientMet)
                     if (!cpOutcome.isNullOrBlank()) putString(ARG_CP_OUTCOME, cpOutcome)
                     if (isSvFixedHint) putBoolean(ARG_IS_SV_FIXED_HINT, true)
+                    if (!cpType.isNullOrBlank()) putString(ARG_CP_TYPE, cpType)
                 }
             }
 
