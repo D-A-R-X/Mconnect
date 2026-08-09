@@ -1864,6 +1864,7 @@ class HomeFragment : Fragment() {
                 cpClientMet = visit.cpVisit?.clientMet,
                 cpOutcome = visit.cpVisit?.outcome,
                 isSvFixedHint = visit.visitCategory == "sv_cum_cp",
+                cpType = visit.cpVisit?.cpType,
             )
             .showOnce(parentFragmentManager, "cp_visit_complete")
     }

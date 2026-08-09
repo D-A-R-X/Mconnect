@@ -949,6 +949,7 @@ class CpVisitsFragment : Fragment() {
             cpClientMet = null,
             cpOutcome = null,
             isSvFixedHint = isSvFixed,
+            cpType = visit.cpVisit?.cpType,
         ).showOnce(parentFragmentManager, "CompleteCpVisitBottomSheet")
     }
 
