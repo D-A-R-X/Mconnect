@@ -81,6 +81,11 @@ interface ApiService {
         @Query("date") date: String? = null,
     ): MobileDashboardResponse
 
+    @GET("api/mobile/dialer/config")
+    suspend fun getMobileDialerConfig(
+        @Header("Authorization") token: String,
+    ): MobileDialerConfigResponse
+
     @GET("api/dashboard/calls")
     suspend fun getDashboardCalls(
         @Header("Authorization") token: String,
@@ -3037,6 +3042,43 @@ data class DialDooctiResponse(
     val error: String? = null,
     val stage: String? = null,
     val status: Int? = null,
+)
+
+data class MobileDialerConfigResponse(
+    val success: Boolean,
+    val configured: Boolean = false,
+    val provider: String? = null,
+    val mode: String? = null,
+    val apiUrl: String? = null,
+    val staff: MobileDialerStaff? = null,
+    val mapping: MobileDialerMapping? = null,
+    val features: MobileDialerFeatures? = null,
+    val error: String? = null,
+)
+
+data class MobileDialerStaff(
+    val id: String? = null,
+    val name: String? = null,
+    val employeeId: String? = null,
+)
+
+data class MobileDialerMapping(
+    val staffName: String? = null,
+    val extension: String? = null,
+    val token: String? = null,
+    val tokenExpiresAt: String? = null,
+    val active: Boolean = false,
+)
+
+data class MobileDialerFeatures(
+    val outbound: Boolean = false,
+    val incomingPush: Boolean = false,
+    val pickup: Boolean = false,
+    val hangup: Boolean = false,
+    val mute: Boolean = false,
+    val hold: Boolean = false,
+    val pushProvider: String? = null,
+    val pushConfigSource: String? = null,
 )
 
 // ── Marketing: Projects + Inventory Units (KOS-52) ──────────────────────────

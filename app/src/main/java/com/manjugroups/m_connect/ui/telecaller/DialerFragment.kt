@@ -1,7 +1,9 @@
 package com.manjugroups.m_connect.ui.telecaller
 
+import android.Manifest
 import android.app.AlertDialog
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.os.Bundle
 import android.text.InputType
@@ -14,22 +16,27 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
+import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.DialDooctiRequest
+import com.manjugroups.m_connect.network.MobileDialerConfigResponse
+import com.manjugroups.m_connect.notifications.DialerEvent
+import com.manjugroups.m_connect.notifications.ModernDialerWebViewBridge
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 
 /**
- * Phone dialpad — mirrors the web Telecaller > Dialer screen at
- * `/telecaller/dialer`. Displays a 4×3 keypad, an editable Station number,
- * and a green Call button. Tapping Call hands the number off to the
- * device dialer via an ACTION_DIAL intent (no auto-call permission).
+ * Phone dialpad — mirrors the web Telecaller > Dialer screen. It fetches the
+ * authenticated Modern Dialer mapping from Convex, then controls the embedded
+ * dialer through the same postMessage protocol used by web. The legacy Doocti
+ * bridge remains as a temporary fallback.
  *
  * Station is persisted in SharedPreferences keyed by `dialer.station`.
  */
@@ -37,6 +44,7 @@ class DialerFragment : Fragment() {
 
     private lateinit var prefs: android.content.SharedPreferences
     private val api = ApiService.create()
+    private lateinit var session: SessionManager
 
     private var tvNumber: TextView? = null
     private var tvStation: TextView? = null
@@ -44,10 +52,47 @@ class DialerFragment : Fragment() {
     private var btnCall: View? = null
     private var callIcon: View? = null
     private var callSkeleton: View? = null
+    private var callPanel: View? = null
+    private var tvCallStatus: TextView? = null
+    private var tvCallPeer: TextView? = null
+    private var btnPickup: TextView? = null
+    private var btnHangup: TextView? = null
+    private var btnMute: TextView? = null
+    private var btnHold: TextView? = null
 
     private var entered: String = ""
     private var station: String = DEFAULT_STATION
     private var calling: Boolean = false
+    private var dialerConfig: MobileDialerConfigResponse? = null
+    private var pendingModernDialerPhone: String? = null
+    private var callStage: CallStage = CallStage.IDLE
+    private var activeNumber: String? = null
+    private var muted: Boolean = false
+    private var held: Boolean = false
+
+    private enum class CallStage { IDLE, INCOMING, CONNECTING, IN_CALL }
+
+    private val dialerEventListener: (DialerEvent) -> Unit = { event ->
+        if (isAdded) {
+            requireActivity().runOnUiThread { handleDialerEvent(event) }
+        }
+    }
+
+    private val requestMicrophonePermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        val phone = pendingModernDialerPhone
+        pendingModernDialerPhone = null
+        if (granted && phone != null) {
+            triggerModernDialerOrFallback(phone)
+        } else {
+            Toast.makeText(
+                requireContext(),
+                "Microphone permission is required for Modern Dialer calls",
+                Toast.LENGTH_LONG,
+            ).show()
+        }
+    }
 
     private val keys = listOf(
         "1" to "",
@@ -73,6 +118,7 @@ class DialerFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         prefs = requireContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        session = SessionManager(requireContext())
         station = prefs.getString(KEY_STATION, DEFAULT_STATION) ?: DEFAULT_STATION
 
         view.findViewById<View>(R.id.btnDialerBack).setOnClickListener {
@@ -95,10 +141,40 @@ class DialerFragment : Fragment() {
         btnCall?.setOnClickListener { onCall() }
         callIcon = view.findViewById(R.id.ivDialerCallIcon)
         callSkeleton = view.findViewById(R.id.dialerCallingSkeleton)
+        callPanel = view.findViewById(R.id.dialerCallPanel)
+        tvCallStatus = view.findViewById(R.id.tvDialerCallStatus)
+        tvCallPeer = view.findViewById(R.id.tvDialerCallPeer)
+        btnPickup = view.findViewById(R.id.btnDialerPickup)
+        btnHangup = view.findViewById(R.id.btnDialerHangup)
+        btnMute = view.findViewById(R.id.btnDialerMute)
+        btnHold = view.findViewById(R.id.btnDialerHold)
+
+        btnPickup?.setOnClickListener {
+            ModernDialerWebViewBridge.pickup()
+            callStage = CallStage.CONNECTING
+            renderCallPanel()
+        }
+        btnHangup?.setOnClickListener {
+            ModernDialerWebViewBridge.hangup()
+            resetCallState()
+        }
+        btnMute?.setOnClickListener {
+            muted = !muted
+            ModernDialerWebViewBridge.setMuted(muted)
+            renderCallPanel()
+        }
+        btnHold?.setOnClickListener {
+            held = !held
+            ModernDialerWebViewBridge.setHold(held)
+            renderCallPanel()
+        }
+        ModernDialerWebViewBridge.addListener(dialerEventListener)
 
         renderStation()
         renderNumber()
+        renderCallPanel()
         buildDialpad(view.findViewById(R.id.dialpadGrid))
+        loadDialerConfig()
     }
 
     override fun onResume() {
@@ -114,6 +190,24 @@ class DialerFragment : Fragment() {
         )
         (activity as? MainActivity)?.setTabBarVisible(true)
         super.onPause()
+    }
+
+    override fun onDestroyView() {
+        ModernDialerWebViewBridge.removeListener(dialerEventListener)
+        tvNumber = null
+        tvStation = null
+        btnBackspace = null
+        btnCall = null
+        callIcon = null
+        callSkeleton = null
+        callPanel = null
+        tvCallStatus = null
+        tvCallPeer = null
+        btnPickup = null
+        btnHangup = null
+        btnMute = null
+        btnHold = null
+        super.onDestroyView()
     }
 
     private fun buildDialpad(grid: LinearLayout) {
@@ -205,7 +299,30 @@ class DialerFragment : Fragment() {
     }
 
     private fun renderStation() {
-        tvStation?.text = station
+        val extension = dialerConfig?.mapping?.extension?.takeIf { it.isNotBlank() }
+        tvStation?.text = extension ?: station
+    }
+
+    private fun renderCallPanel() {
+        val visible = callStage != CallStage.IDLE
+        callPanel?.visibility = if (visible) View.VISIBLE else View.GONE
+        if (!visible) return
+
+        tvCallStatus?.text = when (callStage) {
+            CallStage.INCOMING -> "Incoming call"
+            CallStage.CONNECTING -> "Connecting"
+            CallStage.IN_CALL -> "In call"
+            CallStage.IDLE -> ""
+        }
+        tvCallPeer?.text = activeNumber?.takeIf { it.isNotBlank() } ?: "Modern Dialer"
+        btnPickup?.visibility = if (callStage == CallStage.INCOMING) View.VISIBLE else View.GONE
+        btnHangup?.text = if (callStage == CallStage.INCOMING) "Reject" else "Hang up"
+        btnMute?.text = if (muted) "Unmute" else "Mute"
+        btnHold?.text = if (held) "Resume" else "Hold"
+        btnMute?.isEnabled = callStage == CallStage.IN_CALL
+        btnHold?.isEnabled = callStage == CallStage.IN_CALL
+        btnMute?.alpha = if (callStage == CallStage.IN_CALL) 1f else 0.45f
+        btnHold?.alpha = if (callStage == CallStage.IN_CALL) 1f else 0.45f
     }
 
     private fun showStationDialog() {
@@ -240,7 +357,91 @@ class DialerFragment : Fragment() {
             ).show()
             return
         }
-        triggerDoocti(digits, station)
+        triggerModernDialerOrFallback(digits)
+    }
+
+    private fun loadDialerConfig() {
+        if (!session.isLoggedIn) return
+        tvStation?.text = "Checking mapping..."
+        viewLifecycleOwner.lifecycleScope.launch {
+            runCatching { api.getMobileDialerConfig(session.bearerToken) }
+                .onSuccess {
+                    dialerConfig = it
+                    renderStation()
+                }
+                .onFailure {
+                    dialerConfig = null
+                    renderStation()
+                }
+        }
+    }
+
+    private fun triggerModernDialerOrFallback(phone: String) {
+        val config = dialerConfig
+        val token = config?.mapping?.token?.takeIf { it.isNotBlank() }
+        val extension = config?.mapping?.extension?.takeIf { it.isNotBlank() }
+        if (config?.configured == true && token != null && extension != null) {
+            if (!hasMicrophonePermission()) {
+                pendingModernDialerPhone = phone
+                requestMicrophonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                return
+            }
+            triggerModernDialer(phone, config)
+        } else {
+            triggerDoocti(phone, station)
+        }
+    }
+
+    private fun hasMicrophonePermission(): Boolean {
+        return ContextCompat.checkSelfPermission(
+            requireContext(),
+            Manifest.permission.RECORD_AUDIO,
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun triggerModernDialer(
+        phone: String,
+        config: MobileDialerConfigResponse,
+    ) {
+        calling = true
+        callStage = CallStage.CONNECTING
+        activeNumber = phone
+        renderCallPanel()
+        btnCall?.isEnabled = false
+        callIcon?.visibility = View.INVISIBLE
+        callSkeleton?.visibility = View.VISIBLE
+        callSkeleton?.let { SkeletonUtils.startSkeletonPulse(it) }
+        Toast.makeText(requireContext(), "Placing call...", Toast.LENGTH_SHORT).show()
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                ModernDialerWebViewBridge.ensureLoaded(requireContext(), config)
+                ModernDialerWebViewBridge.call(phone)
+                Toast.makeText(requireContext(), "Calling $phone...", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(
+                    requireContext(),
+                    "Modern Dialer failed, trying fallback...",
+                    Toast.LENGTH_SHORT,
+                ).show()
+                val fallback = api.dialDoocti(
+                    DOOCTI_URL,
+                    DialDooctiRequest(phone_number = phone, station = station),
+                )
+                val ok = fallback.ok == true
+                val msg = if (ok) {
+                    "Fallback call placed - your phone will ring shortly"
+                } else {
+                    "Fallback failed: ${fallback.error ?: fallback.stage ?: "unknown"}"
+                }
+                Toast.makeText(requireContext(), msg, Toast.LENGTH_LONG).show()
+            } finally {
+                calling = false
+                btnCall?.isEnabled = true
+                callSkeleton?.let { SkeletonUtils.stopSkeletonPulse(it) }
+                callSkeleton?.visibility = View.GONE
+                callIcon?.visibility = View.VISIBLE
+            }
+        }
     }
 
     private fun triggerDoocti(phone: String, stationNumber: String) {
@@ -277,6 +478,48 @@ class DialerFragment : Fragment() {
                 callIcon?.visibility = View.VISIBLE
             }
         }
+    }
+
+    private fun handleDialerEvent(event: DialerEvent) {
+        when (event.type) {
+            "ready" -> Unit
+            "call:incoming" -> {
+                activeNumber = event.stringPayload("from") ?: "Incoming call"
+                callStage = CallStage.INCOMING
+                muted = false
+                held = false
+                renderCallPanel()
+            }
+            "call:ringing-out" -> {
+                activeNumber = event.stringPayload("to") ?: activeNumber
+                callStage = CallStage.CONNECTING
+                renderCallPanel()
+            }
+            "call:picked-up" -> {
+                callStage = CallStage.CONNECTING
+                renderCallPanel()
+            }
+            "call:answered" -> {
+                activeNumber = event.stringPayload("from")
+                    ?: event.stringPayload("to")
+                    ?: activeNumber
+                callStage = CallStage.IN_CALL
+                renderCallPanel()
+            }
+            "call:ended", "call:error", "call:incoming-suppressed" -> resetCallState()
+        }
+    }
+
+    private fun resetCallState() {
+        callStage = CallStage.IDLE
+        activeNumber = null
+        muted = false
+        held = false
+        renderCallPanel()
+    }
+
+    private fun DialerEvent.stringPayload(key: String): String? {
+        return payload[key] as? String
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
