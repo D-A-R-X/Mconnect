@@ -5,6 +5,8 @@ import android.app.AlertDialog
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.os.Bundle
 import android.text.InputType
 import android.view.Gravity
@@ -30,6 +32,8 @@ import com.manjugroups.m_connect.notifications.DialerEvent
 import com.manjugroups.m_connect.notifications.ModernDialerWebViewBridge
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.common.navigateUp
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -63,6 +67,13 @@ class DialerFragment : Fragment() {
     private var entered: String = ""
     private var station: String = DEFAULT_STATION
     private var calling: Boolean = false
+    // Fails a call out of the "Connecting" state if the softphone never reports
+    // progress (ringing/answered/error) — otherwise a call that can't originate
+    // hangs on "Connecting" forever with no feedback.
+    private var connectingTimeoutJob: Job? = null
+    // Ringback tone played while the destination is ringing (outbound), so the
+    // agent hears that the call is forwarded and ringing. Stopped on answer/end.
+    private var ringbackTone: ToneGenerator? = null
     private var dialerConfig: MobileDialerConfigResponse? = null
     private var pendingModernDialerPhone: String? = null
     private var callStage: CallStage = CallStage.IDLE
@@ -194,6 +205,8 @@ class DialerFragment : Fragment() {
 
     override fun onDestroyView() {
         ModernDialerWebViewBridge.removeListener(dialerEventListener)
+        cancelConnectingTimeout()
+        stopRingback()
         tvNumber = null
         tvStation = null
         btnBackspace = null
@@ -407,6 +420,7 @@ class DialerFragment : Fragment() {
         callStage = CallStage.CONNECTING
         activeNumber = phone
         renderCallPanel()
+        startConnectingTimeout()
         btnCall?.isEnabled = false
         callIcon?.visibility = View.INVISIBLE
         callSkeleton?.visibility = View.VISIBLE
@@ -491,15 +505,24 @@ class DialerFragment : Fragment() {
                 renderCallPanel()
             }
             "call:ringing-out" -> {
+                // The softphone originated and the line is ringing — the call
+                // is progressing, so stop the connect-failure timeout and play
+                // the ringback so the agent hears it forwarding + ringing.
+                cancelConnectingTimeout()
+                startRingback()
                 activeNumber = event.stringPayload("to") ?: activeNumber
                 callStage = CallStage.CONNECTING
                 renderCallPanel()
             }
             "call:picked-up" -> {
+                cancelConnectingTimeout()
+                stopRingback()
                 callStage = CallStage.CONNECTING
                 renderCallPanel()
             }
             "call:answered" -> {
+                cancelConnectingTimeout()
+                stopRingback()
                 activeNumber = event.stringPayload("from")
                     ?: event.stringPayload("to")
                     ?: activeNumber
@@ -511,11 +534,55 @@ class DialerFragment : Fragment() {
     }
 
     private fun resetCallState() {
+        cancelConnectingTimeout()
+        stopRingback()
         callStage = CallStage.IDLE
         activeNumber = null
         muted = false
         held = false
         renderCallPanel()
+    }
+
+    /** Guards against a call that never originates (softphone can't build the
+     *  WebRTC offer / isn't registered): if no progress event arrives, fail out
+     *  of "Connecting" instead of hanging there forever. Cancelled the moment
+     *  any progress event (ringing/picked-up/answered/ended) is received. */
+    private fun startConnectingTimeout() {
+        cancelConnectingTimeout()
+        connectingTimeoutJob = viewLifecycleOwner.lifecycleScope.launch {
+            delay(CONNECTING_TIMEOUT_MS)
+            if (callStage == CallStage.CONNECTING) {
+                calling = false
+                btnCall?.isEnabled = true
+                Toast.makeText(
+                    requireContext(),
+                    "Call didn't connect. The dialer couldn't reach the line — check the station/registration and try again.",
+                    Toast.LENGTH_LONG,
+                ).show()
+                resetCallState()
+            }
+        }
+    }
+
+    private fun cancelConnectingTimeout() {
+        connectingTimeoutJob?.cancel()
+        connectingTimeoutJob = null
+    }
+
+    /** Plays the standard ringback tone (looping) while the call is ringing so
+     *  the agent knows it's forwarded and ringing. Safe to call repeatedly. */
+    private fun startRingback() {
+        if (ringbackTone != null) return
+        ringbackTone = runCatching {
+            ToneGenerator(AudioManager.STREAM_VOICE_CALL, 80).apply {
+                startTone(ToneGenerator.TONE_SUP_RINGTONE)
+            }
+        }.getOrNull()
+    }
+
+    private fun stopRingback() {
+        ringbackTone?.let { runCatching { it.stopTone(); it.release() } }
+        ringbackTone = null
     }
 
     private fun DialerEvent.stringPayload(key: String): String? {
@@ -528,6 +595,9 @@ class DialerFragment : Fragment() {
         private const val PREFS = "mconnect_prefs"
         private const val KEY_STATION = "dialer.station"
         private const val DEFAULT_STATION = "6369487527"
+        // How long to wait for the softphone to report call progress before
+        // giving up on a stuck "Connecting".
+        private const val CONNECTING_TIMEOUT_MS = 40_000L
         private val DOOCTI_URL: String
             get() = com.manjugroups.m_connect.BuildConfig.APP_URL.trimEnd('/') + "/api/doocti-call"
     }

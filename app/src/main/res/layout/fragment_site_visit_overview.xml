@@ -1532,7 +1532,9 @@
                             android:textSize="13sp" />
                     </LinearLayout>
 
-                    <!-- Other terminal outcome -->
+                    <!-- Other terminal outcome — removed for SV (web parity:
+                         SV offers only Convert to Booking / Followup / Not
+                         Interested). Kept in the tree but never shown. -->
                     <LinearLayout
                         android:id="@+id/btnOutcomeOther"
                         android:layout_width="match_parent"
@@ -1542,7 +1544,8 @@
                         android:clickable="true"
                         android:focusable="true"
                         android:gravity="center"
-                        android:orientation="horizontal">
+                        android:orientation="horizontal"
+                        android:visibility="gone">
 
                         <ImageView
                             android:layout_width="14dp"

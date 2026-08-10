@@ -20,7 +20,7 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.manjugroups.m_connect.network.PostSaleCaseSummary
-import com.manjugroups.m_connect.util.ongoingOnly
+import com.manjugroups.m_connect.util.ongoingThenCompleted
 import com.manjugroups.m_connect.network.TelecallerLeadSearchData
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.util.EditableTimeFormat
@@ -800,8 +800,8 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         SearchableSelectionDialog.show(
             context = requireContext(),
             title = "Select project",
-            // Only ongoing projects can take a new visit — hide completed/others.
-            options = items.ongoingOnly().map { p ->
+            // Every ongoing project first, completed projects at the bottom.
+            options = items.ongoingThenCompleted().map { p ->
                 SearchableOption(
                     item = p,
                     title = p.name ?: "Unnamed project",

@@ -2,8 +2,11 @@ package com.manjugroups.m_connect.notifications
 
 import android.annotation.SuppressLint
 import android.Manifest
+import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.pm.PackageManager
+import android.view.ViewGroup
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
@@ -29,7 +32,13 @@ object ModernDialerWebViewBridge {
 
     private var webView: WebView? = null
     private var loadedUrl: String? = null
-    private var ready: Boolean = false
+    // The web dialer only sends a "call" once the embed page has loaded AND the
+    // softphone has registered with Aster (phoneState==="registered"). Sending
+    // before registration — which the app used to do on page-load — makes the
+    // softphone silently drop the call, so it hangs on "Connecting" and never
+    // rings. Track both and only flush queued commands once both are true.
+    private var pageLoaded: Boolean = false
+    private var phoneRegistered: Boolean = false
     private var pendingCommands = mutableListOf<Pair<String, Map<String, Any>>>()
 
     fun addListener(listener: (DialerEvent) -> Unit) {
@@ -50,12 +59,20 @@ object ModernDialerWebViewBridge {
         mainHandler.post {
             try {
                 val view = webView ?: createWebView(context.applicationContext).also { webView = it }
+                // WebRTC (mic capture + audio) only runs when the WebView is
+                // attached to a window. Without this the softphone loaded but
+                // couldn't establish media, so calls showed "connecting" with
+                // no audio and never actually rang the destination. Attach it
+                // (invisibly) to the foreground Activity's window whenever we
+                // (re)load, and re-attach if the Activity has changed.
+                attachToActivityWindow(context, view)
                 if (loadedUrl != url) {
-                    ready = false
+                    pageLoaded = false
+                    phoneRegistered = false
                     loadedUrl = url
                     view.loadUrl(url)
                 }
-                if (ready) onReady(Result.success(Unit)) else onReady(Result.success(Unit))
+                onReady(Result.success(Unit))
             } catch (e: Exception) {
                 onReady(Result.failure(e))
             }
@@ -64,12 +81,19 @@ object ModernDialerWebViewBridge {
 
     fun send(type: String, payload: Map<String, Any> = emptyMap()) {
         mainHandler.post {
-            if (!ready) {
+            // Queue until the page is loaded AND the softphone is registered —
+            // matching the web dialer, which waits for phoneState==="registered"
+            // before dispatching "call".
+            if (!(pageLoaded && phoneRegistered)) {
                 pendingCommands.add(type to payload)
                 return@post
             }
             evaluateCommand(type, payload)
         }
+    }
+
+    private fun maybeFlush() {
+        if (pageLoaded && phoneRegistered) flushPending()
     }
 
     fun call(destination: String) {
@@ -123,9 +147,11 @@ object ModernDialerWebViewBridge {
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView, url: String?) {
                     injectBridge(view)
-                    ready = true
-                    emit(DialerEvent("ready", emptyMap()))
-                    flushPending()
+                    pageLoaded = true
+                    // Do NOT flush here — wait for the softphone's registration
+                    // event (below). If it already registered, maybeFlush sends
+                    // the queued call now.
+                    maybeFlush()
                 }
             }
         }
@@ -181,6 +207,30 @@ object ModernDialerWebViewBridge {
         listeners.forEach { listener -> listener(event) }
     }
 
+    /**
+     * Attach the softphone WebView (invisibly) to the foreground Activity's
+     * window so WebRTC media works. A detached WebView cannot capture the mic
+     * or play audio, so calls placed from it produce no sound and never
+     * originate. Uses a 1x1, fully-transparent view so the user never sees it.
+     * No-op when called from a non-Activity context (e.g. the incoming-call
+     * service in the background) — that path needs an overlay-window host.
+     */
+    private fun attachToActivityWindow(context: Context, view: WebView) {
+        val activity = context.findActivity() ?: return
+        val decor = activity.window?.decorView as? ViewGroup ?: return
+        val currentParent = view.parent as? ViewGroup
+        if (currentParent === decor) return
+        currentParent?.removeView(view)
+        view.alpha = 0f
+        decor.addView(view, ViewGroup.LayoutParams(1, 1))
+    }
+
+    private tailrec fun Context.findActivity(): Activity? = when (this) {
+        is Activity -> this
+        is ContextWrapper -> baseContext.findActivity()
+        else -> null
+    }
+
     private fun buildEmbedUrl(context: Context, token: String): String {
         val deviceId = Settings.Secure.getString(
             context.contentResolver,
@@ -192,6 +242,34 @@ object ModernDialerWebViewBridge {
     private fun urlEncode(value: String): String =
         URLEncoder.encode(value, StandardCharsets.UTF_8.name())
 
+    /**
+     * Update the softphone registration state from a dialer event, then flush
+     * any queued command (e.g. the outbound "call") once registered. Mirrors the
+     * web dialer's phoneState handling: a "ready" event implies registered
+     * unless phoneState says otherwise; "phone:registered"/"phone:state" refine
+     * it. Runs on the main thread (touches the WebView).
+     */
+    private fun onDialerMessage(type: String, parsed: Map<String, Any>) {
+        when (type) {
+            "ready" -> {
+                val ps = parsed["phoneState"] as? String
+                phoneRegistered = ps == null || ps == "registered"
+                maybeFlush()
+            }
+            "phone:registered" -> {
+                phoneRegistered = true
+                maybeFlush()
+            }
+            "phone:state", "phone:status" -> {
+                val st = (parsed["state"] as? String) ?: (parsed["status"] as? String)
+                phoneRegistered = st == "registered"
+                if (phoneRegistered) maybeFlush()
+            }
+            "phone:unregistered" -> phoneRegistered = false
+        }
+        emit(DialerEvent(type, parsed))
+    }
+
     private class AndroidBridge {
         @JavascriptInterface
         fun postMessage(raw: String) {
@@ -200,7 +278,11 @@ object ModernDialerWebViewBridge {
                 ModernDialerWebViewBridge.gson.fromJson(raw, Map::class.java) as Map<String, Any>
             }.getOrNull() ?: return
             val type = parsed["type"] as? String ?: return
-            ModernDialerWebViewBridge.emit(DialerEvent(type, parsed))
+            // The JS bridge runs on a background thread; hop to main to touch
+            // the WebView / flush commands.
+            ModernDialerWebViewBridge.mainHandler.post {
+                ModernDialerWebViewBridge.onDialerMessage(type, parsed)
+            }
         }
     }
 }

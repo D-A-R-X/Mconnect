@@ -1547,6 +1547,13 @@ data class ProposedSiteVisit(
     // `status` and misses the "vehicle assigned" auto-advance + the
     // driver-side timestamp boosts (travelDeskStartedAt etc.).
     val status: String? = null,
+    // The SV's OWN terminal fields. For a CP-linked SV the top-level envelope
+    // carries the linked CP's identity (including the CP's outcome), so the SV
+    // outcome must be read from here — otherwise a converted CP's outcome falsely
+    // locks the SV's outcome buttons.
+    val outcome: String? = null,
+    val convertedBookingId: String? = null,
+    val cancelledAt: Long? = null,
     val travelMode: String? = null,
     val vehicleId: String? = null,
     val travelAgencyId: String? = null,

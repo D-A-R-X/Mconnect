@@ -1257,26 +1257,41 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         hasFleetOnSite = proposed?.travelDeskOnSiteAt != null
         currentTerminalLabel = terminalStepLabelFor(effStatus)
         isOutcomeLocked = isOutcomeAlreadyRecorded(visit)
-        outcomeStatusEligible = isOutcomeStatusEligible(effStatus)
+
+        // Vehicle type first — computeWebParityStepIndex reads it.
+        isOwnVehicleSelected = proposed?.travelMode == "own_vehicle" || visit.vehiclePreference == "own_vehicle"
+
+        // Compute the SAME step index that drives the visible stepper, then open
+        // the outcome whenever the client has reached the site (ON SITE, step 4)
+        // through DROPPED / DONE. This mirrors the web (canRecordOutcomeNow:
+        // status in on_counselling / picked_from_site / dropped) AND survives the
+        // cab case where sv.status lags behind the fleet's travelDesk* return leg
+        // — the earlier status-only check left the outcome greyed at DROPPED.
+        // isOutcomeLocked still closes it the moment an outcome is recorded.
+        val outcomeStepIndex = if (effStatus.isNotEmpty()) {
+            computeWebParityStepIndex(status = effStatus, snapshot = proposed)
+        } else 0
+        val fleetReachedSite = proposed?.travelDeskOnSiteAt != null ||
+            proposed?.travelDeskPickedFromSiteAt != null ||
+            proposed?.travelDeskEndedAt != null
+        outcomeStatusEligible =
+            isOutcomeStatusEligible(effStatus) ||
+            isOutcomeStatusEligible(visit.status) ||
+            fleetReachedSite ||
+            outcomeStepIndex >= ON_SITE_STEP_INDEX
         isFleetOutcomePending = visit.completedOffline == true && visit.outcome.isNullOrBlank()
         updatePostponeVisibility(effStatus)
         updateCancelVisibility(effStatus)
-        
-        // Detect vehicle type and toggle layout visibility
-        isOwnVehicleSelected = proposed?.travelMode == "own_vehicle" || visit.vehiclePreference == "own_vehicle"
+
         toggleStepperVisibility()
 
         if (effStatus.isNotEmpty()) {
-            val stepIndex = computeWebParityStepIndex(
-                status = effStatus,
-                snapshot = proposed,
-            )
-            updateStepper(stepIndex)
+            updateStepper(outcomeStepIndex)
             // Drive the header off the SAME computed step, not the raw
             // status. Agency trips advance via travelDesk* timestamps while
             // sv.status stays "scheduled"; binding the header to the raw
             // status showed "SCHEDULED" over a stepper sitting on DROPPED.
-            bindStatusHeaderForStep(stepIndex, effStatus)
+            bindStatusHeaderForStep(outcomeStepIndex, effStatus)
         }
     }
 
@@ -1455,11 +1470,24 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
      * must still be able to record its outcome. Mirrors the backend setOutcome
      * contract, which accepts "completed" while `outcome` is still empty.
      */
-    private fun isOutcomeAlreadyRecorded(visit: CpVisitDetail): Boolean =
-        !visit.outcome.isNullOrBlank() ||
+    private fun isOutcomeAlreadyRecorded(visit: CpVisitDetail): Boolean {
+        // For a CP-linked SV the mobile envelope carries the linked CP's
+        // identity — including the CP's own outcome / convertedBookingId /
+        // cancelledAt — while the SV's own terminal fields live on
+        // proposedSiteVisit. Prefer the SV's values so a converted CP (whose
+        // outcome is always set) doesn't falsely lock the SV outcome buttons.
+        // When proposedSiteVisit is present (always for an SV envelope) use ONLY
+        // the SV's own fields — never fall back to the leaked top-level CP values,
+        // or a null SV outcome would drop through to the CP's and re-lock.
+        val sv = visit.proposedSiteVisit
+        val outcome = if (sv != null) sv.outcome else visit.outcome
+        val convertedBookingId = if (sv != null) sv.convertedBookingId else visit.convertedBookingId
+        val cancelledAt = if (sv != null) sv.cancelledAt else visit.cancelledAt
+        return !outcome.isNullOrBlank() ||
             isOutcomeRecordedStatus(visit.status) ||
-            visit.convertedBookingId != null ||
-            visit.cancelledAt != null
+            convertedBookingId != null ||
+            cancelledAt != null
+    }
 
     /** Statuses that mean the outcome/terminal decision is already taken —
      *  deliberately EXCLUDES lifecycle "completed"/"done"/"closed" so a trip
@@ -1584,6 +1612,10 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
     }
 
     companion object {
+        // Cab web-parity stepper index for "On Site" (Scheduled 0 · Assigned 1 ·
+        // Reached CP 2 · Picked from CP 3 · On Site 4 · Consulting 5 · Picked
+        // from Site 6 · Dropped 7 · Done 8). Outcome opens at this step or later.
+        private const val ON_SITE_STEP_INDEX = 4
         private const val ARG_VISIT_ID = "arg_visit_id"
         private const val ARG_CLIENT_PLACE_VISIT_ID = "arg_client_place_visit_id"
         private const val ARG_PLACE_NAME = "arg_place_name"
