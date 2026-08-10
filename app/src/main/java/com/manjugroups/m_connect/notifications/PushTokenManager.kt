@@ -37,6 +37,7 @@ object PushTokenManager {
     const val CHANNEL_APPROVALS = "mconnect_approvals"
     const val CHANNEL_LOANS     = "mconnect_loans"
     const val CHANNEL_ALERTS    = "mconnect_alerts"
+    const val CHANNEL_CALLS     = "mconnect_calls"
 
     /**
      * Map a server-side notification `type` to a channel id. Unknown
@@ -78,6 +79,7 @@ object PushTokenManager {
         // Biometric punches are server-synced attendance events the staff
         // can't see any other way, so they ride the high-importance alerts
         // channel for a heads-up instead of the quiet general fallback.
+        "dialer-call-incoming" -> CHANNEL_CALLS
         "geotrack-tamper-alert", "on-duty-started",
         "on-duty-completed", "near-planned-visit",
         "biometric-punch-in", "biometric-punch-out" -> CHANNEL_ALERTS

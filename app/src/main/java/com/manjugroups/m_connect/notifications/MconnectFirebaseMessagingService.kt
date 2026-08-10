@@ -68,6 +68,11 @@ class MconnectFirebaseMessagingService : FirebaseMessagingService() {
         super.onMessageReceived(message)
         Log.d("MconnectFCM", "onMessageReceived: from=${message.from}, data=${message.data}, notificationTitle=${message.notification?.title}, notificationBody=${message.notification?.body}")
 
+        if (ModernDialerCallController.isIncomingCall(message.data)) {
+            ModernDialerCallController.showIncomingCall(this, message.data)
+            return
+        }
+
         if (message.data["type"] == "geotrack_sync") {
             CoroutineScope(Dispatchers.IO).launch {
                 runCatching {
