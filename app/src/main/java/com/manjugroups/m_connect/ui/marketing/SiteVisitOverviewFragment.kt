@@ -1257,7 +1257,18 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         hasFleetOnSite = proposed?.travelDeskOnSiteAt != null
         currentTerminalLabel = terminalStepLabelFor(effStatus)
         isOutcomeLocked = isOutcomeAlreadyRecorded(visit)
-        outcomeStatusEligible = isOutcomeStatusEligible(effStatus)
+        // For CAB visits the SV row status lags behind the fleet's return leg:
+        // the stepper reaches ON SITE / DROPPED via the travelDesk* timestamps
+        // while sv.status is still an earlier value that isn't in the eligible
+        // set — which left the outcome buttons greyed even at DROPPED. Open the
+        // outcome once the client has reached the site (post-QR on-site) and
+        // through every later fleet step; isOutcomeLocked still closes it the
+        // moment an outcome is actually recorded.
+        val fleetReachedSite = proposed?.travelDeskOnSiteAt != null ||
+            proposed?.travelDeskPickedFromSiteAt != null ||
+            proposed?.travelDeskEndedAt != null
+        outcomeStatusEligible =
+            isOutcomeStatusEligible(effStatus) || fleetReachedSite
         isFleetOutcomePending = visit.completedOffline == true && visit.outcome.isNullOrBlank()
         updatePostponeVisibility(effStatus)
         updateCancelVisibility(effStatus)
