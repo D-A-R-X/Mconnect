@@ -1470,11 +1470,24 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
      * must still be able to record its outcome. Mirrors the backend setOutcome
      * contract, which accepts "completed" while `outcome` is still empty.
      */
-    private fun isOutcomeAlreadyRecorded(visit: CpVisitDetail): Boolean =
-        !visit.outcome.isNullOrBlank() ||
+    private fun isOutcomeAlreadyRecorded(visit: CpVisitDetail): Boolean {
+        // For a CP-linked SV the mobile envelope carries the linked CP's
+        // identity — including the CP's own outcome / convertedBookingId /
+        // cancelledAt — while the SV's own terminal fields live on
+        // proposedSiteVisit. Prefer the SV's values so a converted CP (whose
+        // outcome is always set) doesn't falsely lock the SV outcome buttons.
+        // When proposedSiteVisit is present (always for an SV envelope) use ONLY
+        // the SV's own fields — never fall back to the leaked top-level CP values,
+        // or a null SV outcome would drop through to the CP's and re-lock.
+        val sv = visit.proposedSiteVisit
+        val outcome = if (sv != null) sv.outcome else visit.outcome
+        val convertedBookingId = if (sv != null) sv.convertedBookingId else visit.convertedBookingId
+        val cancelledAt = if (sv != null) sv.cancelledAt else visit.cancelledAt
+        return !outcome.isNullOrBlank() ||
             isOutcomeRecordedStatus(visit.status) ||
-            visit.convertedBookingId != null ||
-            visit.cancelledAt != null
+            convertedBookingId != null ||
+            cancelledAt != null
+    }
 
     /** Statuses that mean the outcome/terminal decision is already taken —
      *  deliberately EXCLUDES lifecycle "completed"/"done"/"closed" so a trip
