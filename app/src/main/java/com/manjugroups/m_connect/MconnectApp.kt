@@ -139,5 +139,19 @@ class MconnectApp : Application(), ImageLoaderFactory {
                 NotificationManager.IMPORTANCE_HIGH,
             ).apply { description = "Tamper alerts, on-duty status, planned visit reminders" }
         )
+
+        manager.createNotificationChannel(
+            NotificationChannel(
+                PushTokenManager.CHANNEL_CALLS,
+                "Dialer Calls",
+                NotificationManager.IMPORTANCE_HIGH,
+            ).apply {
+                description = "Incoming Modern Dialer calls"
+                enableLights(true)
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 500, 250, 500, 250, 500)
+                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+            }
+        )
     }
 }
