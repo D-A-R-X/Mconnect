@@ -27,6 +27,7 @@ import androidx.core.content.res.ResourcesCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.setFragmentResultListener
 import androidx.lifecycle.lifecycleScope
+import com.google.android.gms.location.CurrentLocationRequest
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.maps.CameraUpdateFactory
@@ -1212,7 +1213,19 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         return try {
             val client = LocationServices.getFusedLocationProviderClient(requireContext())
             val token = CancellationTokenSource()
-            client.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, token.token).await()
+            // Force a FRESH fix. The old getCurrentLocation(priority) overload
+            // could hand back a cached fused location from where the trip
+            // STARTED — so a staff who has reached the client read as
+            // "79 km away" and could never complete. maxUpdateAge=10s rejects
+            // that stale cache; the GeoTrackService running during the trip
+            // keeps a sub-second fix ready, so this still resolves fast. Wait
+            // up to 20s for GPS before giving up.
+            val request = CurrentLocationRequest.Builder()
+                .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
+                .setMaxUpdateAgeMillis(10_000L)
+                .setDurationMillis(20_000L)
+                .build()
+            client.getCurrentLocation(request, token.token).await()
         } catch (_: Exception) {
             null
         }
@@ -1497,20 +1510,24 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     private fun checkReachingAndAskClientSeen() {
         swipeArrived?.lockAsBusy("Checking location...")
         viewLifecycleOwner.lifecycleScope.launch {
+            // Only a FRESH fix decides the geofence — never the cached
+            // currentLocation, which may be the (far-away) trip-start point and
+            // would wrongly report the staff as kilometres from a client they
+            // have already reached.
             val freshLocation = fetchCurrentLocation()
-            val effLat = freshLocation?.latitude ?: currentLocation?.latitude
-            val effLng = freshLocation?.longitude ?: currentLocation?.longitude
             val dest = destination
-            if (effLat == null || effLng == null || dest == null) {
+            if (freshLocation == null || dest == null) {
                 arrivalInProgress = false
                 swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
                 Toast.makeText(
                     requireContext(),
-                    "Could not verify you are near the client place.",
+                    "Couldn't get a fresh GPS fix. Stand in the open and swipe again.",
                     Toast.LENGTH_LONG
                 ).show()
                 return@launch
             }
+            val effLat = freshLocation.latitude
+            val effLng = freshLocation.longitude
             currentLocation = LatLng(effLat, effLng)
             val distance = haversineMeters(currentLocation!!, dest)
             if (distance > REACHING_RADIUS_METERS) {
@@ -1538,9 +1555,12 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         }
         swipeArrived?.lockAsBusy("Checking location…")
         viewLifecycleOwner.lifecycleScope.launch {
+            // Require a FRESH fix — the server re-checks arrival distance
+            // against this, so a stale cached location (trip-start point) would
+            // make the server reject a staff who is actually at the client.
             val freshLocation = fetchCurrentLocation()
-            val effLat = freshLocation?.latitude ?: currentLocation?.latitude
-            val effLng = freshLocation?.longitude ?: currentLocation?.longitude
+            val effLat = freshLocation?.latitude
+            val effLng = freshLocation?.longitude
             if (effLat == null || effLng == null) {
                 arrivalInProgress = false
                 swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
