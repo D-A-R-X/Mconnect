@@ -917,6 +917,10 @@ data class CreateCpVisitRequest(
     val clientName: String? = null,
     val mobileNumber: String,
     val assignedStaffId: String,
+    // Explicit LMO / Channel Partner / BDO owner (parity with the web CP form).
+    // The backend validates eligibility and falls back to the lead owner /
+    // creator when omitted.
+    val lmoStaffId: String? = null,
     val scheduledDate: String,
     val scheduledTime: String? = null,
     val visitAddress: String,
