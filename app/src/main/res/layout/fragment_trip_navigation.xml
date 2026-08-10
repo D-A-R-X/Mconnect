@@ -471,6 +471,44 @@
             android:visibility="gone" />
     </LinearLayout>
 
+    <!-- Full-width Call client action — sits above the address card so the
+         field staff can ring the client before/at arrival. -->
+    <LinearLayout
+        android:id="@+id/btnCallClient"
+        android:layout_width="0dp"
+        android:layout_height="48dp"
+        android:layout_marginStart="12dp"
+        android:layout_marginTop="12dp"
+        android:layout_marginEnd="12dp"
+        android:background="@drawable/bg_completed_section_card"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center"
+        android:orientation="horizontal"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tripInfoCard">
+
+        <ImageView
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_phone_outline"
+            app:tint="#0B61CA" />
+
+        <TextView
+            android:id="@+id/tvCallClient"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:ellipsize="end"
+            android:fontFamily="@font/inter_semibold"
+            android:maxLines="1"
+            android:text="Call Client"
+            android:textColor="#0B61CA"
+            android:textSize="14sp" />
+    </LinearLayout>
+
     <!-- Client full address card — sits above the map so the operator can read
          the whole client address without truncation. -->
     <LinearLayout
@@ -489,7 +527,7 @@
         android:paddingBottom="12dp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/tripInfoCard">
+        app:layout_constraintTop_toBottomOf="@id/btnCallClient">
 
         <FrameLayout
             android:layout_width="40dp"

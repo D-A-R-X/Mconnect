@@ -409,6 +409,18 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 ?: "Address not available"
         bindTripClientHeader(view, placeName)
 
+        // Full-width "Call client" action above the address card. Hidden when
+        // the trip carries no client mobile so the constraint chain collapses
+        // cleanly (the address card slides up under the trip-info card).
+        val btnCallClient = view.findViewById<View>(R.id.btnCallClient)
+        val callDigits = clientMobile?.filter { it.isDigit() }.orEmpty()
+        if (callDigits.length >= 10) {
+            btnCallClient?.visibility = View.VISIBLE
+            btnCallClient?.setOnClickListener { dialPhone(callDigits) }
+        } else {
+            btnCallClient?.visibility = View.GONE
+        }
+
         btnBack?.setOnClickListener { navigateUp() }
         // System back closes the full-screen map first (if open), otherwise
         // falls through to normal up-navigation.
@@ -2840,6 +2852,18 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
      * uploaded…") instead of a bare "HTTP 500". Returns null for non-HTTP
      * errors, so callers fall back to e.message.
      */
+    /** Opens the phone dialer pre-filled with the client's number (ACTION_DIAL,
+     *  so no CALL_PHONE permission is needed and the staff confirms the call). */
+    private fun dialPhone(phone: String) {
+        val intent = android.content.Intent(
+            android.content.Intent.ACTION_DIAL,
+            android.net.Uri.parse("tel:$phone"),
+        )
+        runCatching { startActivity(intent) }.onFailure {
+            Toast.makeText(requireContext(), "No dialer app available", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun serverErrorMessage(e: Throwable): String? {
         val httpEx = e as? retrofit2.HttpException ?: return null
         val raw = runCatching { httpEx.response()?.errorBody()?.string() }.getOrNull()

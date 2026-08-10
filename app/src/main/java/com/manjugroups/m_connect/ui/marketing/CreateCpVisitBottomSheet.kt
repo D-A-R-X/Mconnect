@@ -48,6 +48,8 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
     // Selected variables
     private var selectedStaff: StaffData? = null
     private var selectedProject: MarketingProject? = null
+    // LMO / Channel Partner / BDO owner — required, mirrors the web CP form.
+    private var selectedLmo: StaffData? = null
     private var selectedDate: String = ""
     private var selectedTime: String = ""
     // CP Type — visit intent enum (sv_cum_cp / follow_up / booking_cp /
@@ -167,6 +169,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         val etPhone = view.findViewById<EditText>(R.id.etClientPhone)
         val etStaff = view.findViewById<EditText>(R.id.etFieldStaff)
         val etProj = view.findViewById<EditText>(R.id.etProject)
+        val etLmo = view.findViewById<EditText>(R.id.etLmo)
         val etCpType = view.findViewById<EditText>(R.id.etCpType)
         val etDateTime = view.findViewById<EditText>(R.id.etDateTime)
 
@@ -212,6 +215,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         // Setup click listeners for spinners
         etStaff.setOnClickListener { pickStaff(etStaff) }
         etProj.setOnClickListener { pickProject(etProj) }
+        etLmo.setOnClickListener { pickLmo(etLmo) }
         etCpType.setOnClickListener { pickCpType(etCpType) }
         etDateTime.setOnClickListener { pickDateTime(etDateTime) }
 
@@ -283,8 +287,12 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                         fillIfBlank(etState, f.state)
                         fillIfBlank(etPincode, f.pincode)
                         tvAddressParseStatus.text = "Address auto-filled"
-                    } catch (e: Exception) {
-                        tvAddressParseStatus.text = e.message ?: "Parse failed"
+                    } catch (_: Exception) {
+                        // The splitter is opportunistic (OpenAI-backed) — if it's
+                        // unavailable, never dump a raw "HTTP 500" at the user;
+                        // they can just fill the fields below by hand.
+                        tvAddressParseStatus.text =
+                            "Couldn't auto-split — fill the address fields below manually."
                     }
                 }
             }
@@ -350,6 +358,14 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                 return@setOnClickListener
             }
 
+            // Client name is required. For an existing client/lead it auto-fills
+            // from the phone lookup; for a new number the staff must type it, so
+            // the CP always stores a named client (never a phone-named one).
+            if (etClientName.text.toString().trim().isBlank()) {
+                toast("Client name is required")
+                return@setOnClickListener
+            }
+
             val staff = selectedStaff
             if (staff == null || staff.id.isNullOrBlank()) {
                 toast("Select field staff")
@@ -359,6 +375,12 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             val project = selectedProject
             if (project == null || project.id.isNullOrBlank()) {
                 toast("Select project")
+                return@setOnClickListener
+            }
+
+            val lmo = selectedLmo
+            if (lmo == null || lmo.id.isNullOrBlank()) {
+                toast("Select the LMO, Channel Partner, or BDO")
                 return@setOnClickListener
             }
 
@@ -469,6 +491,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                             clientName = etClientName.text.toString().trim().takeIf { it.isNotBlank() },
                             mobileNumber = phone,
                             assignedStaffId = staff.id,
+                            lmoStaffId = lmo.id,
                             scheduledDate = selectedDate,
                             scheduledTime = selectedTime,
                             visitAddress = compiledAddress,
@@ -490,7 +513,11 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                     dismissAllowingStateLoss()
                 } catch (e: Exception) {
                     btnSubmit.isEnabled = true
-                    toast(e.message ?: "Failed to create CP visit")
+                    // The create route returns real reasons (staff busy, duplicate
+                    // slot, "Collection CP requires a booking", etc.) as a 500 with
+                    // a JSON { error } body. Retrofit throws on the 500, so read the
+                    // body — otherwise the user only ever sees a bare "HTTP 500".
+                    toast(serverErrorMessage(e) ?: e.message ?: "Failed to create CP visit")
                 }
             }
         }
@@ -500,15 +527,58 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
      *  on first 10-digit phone entry, only patches blank fields. */
     private fun autofillFromLead(phone: String, view: View) {
         viewLifecycleOwner.lifecycleScope.launch {
+            // 1) Telecaller-lead autofill (name + address), blank-only.
             try {
                 val resp = api.searchTelecallerLeadsByPhone(session.bearerToken, phone)
-                if (!resp.success || resp.leads.isEmpty()) return@launch
-                val lead = resp.leads.first()
-                applyLeadAutofill(view, lead)
+                if (resp.success && resp.leads.isNotEmpty()) {
+                    applyLeadAutofill(view, resp.leads.first())
+                }
             } catch (_: Exception) {
                 // Silent — autofill is opportunistic, never block submit.
             }
+            if (!isAdded) return@launch
+            // 2) Clients-master fallback — many numbers exist as a client (an
+            // existing buyer) with NO telecaller lead, or with a lead whose
+            // contactName is blank. Fill any still-blank name / address from the
+            // clients row keyed by this mobile so the real client name shows.
+            try {
+                val resp = api.searchClientByPhone(session.bearerToken, phone)
+                val client = resp.client
+                if (isAdded && resp.success && client != null) {
+                    applyClientAutofill(view, client)
+                }
+            } catch (_: Exception) {
+                // Silent — fallback is opportunistic too.
+            }
         }
+    }
+
+    /** Blank-only fill from the clients master (searchClientByPhone). Runs after
+     *  the lead autofill so it only closes gaps — never overwrites typed text or
+     *  a value the lead already supplied. */
+    private fun applyClientAutofill(
+        view: View,
+        c: com.manjugroups.m_connect.network.ClientProfile,
+    ) {
+        fun fillIfBlank(id: Int, value: String?) {
+            if (value.isNullOrBlank()) return
+            val et = view.findViewById<EditText>(id) ?: return
+            if (et.text?.toString()?.isBlank() != false) et.setText(value.trim())
+        }
+        fillIfBlank(R.id.etClientName, c.clientName)
+        fillIfBlank(R.id.etDoorNo, c.doorNo)
+        fillIfBlank(R.id.etStreet, c.streetName)
+        fillIfBlank(R.id.etAddressLine1, c.addressLine1 ?: c.homeAddress ?: c.formattedAddress)
+        fillIfBlank(R.id.etAddressLine2, c.addressLine2 ?: c.landmark)
+        fillIfBlank(R.id.etCity, c.district)
+        fillIfBlank(R.id.etState, c.state)
+        fillIfBlank(R.id.etPincode, c.pincode)
+        if (pinLat == null && c.lat != null) pinLat = c.lat
+        if (pinLng == null && c.lng != null) pinLng = c.lng
+        if (pinMapsLink.isBlank() && !c.googleMapsLink.isNullOrBlank()) {
+            pinMapsLink = c.googleMapsLink!!
+        }
+        renderPinLocation(view)
     }
 
     private fun applyLeadAutofill(view: View, lead: TelecallerLeadSearchData) {
@@ -644,6 +714,66 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             selectedStaff = staff
             label.setText(staff.name ?: "Selected")
         }
+    }
+
+    /** LMO / Channel Partner / BDO owner picker — reuses the staff list but
+     *  filters to the same eligible roles the web CP form allows. */
+    private fun pickLmo(label: EditText) {
+        if (staffCache.isNotEmpty()) {
+            showLmoPicker(label, staffCache)
+            return
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.getStaff(session.bearerToken)
+                if (!resp.success) {
+                    toast("Failed to load staff list")
+                    return@launch
+                }
+                staffCache = resp.staff
+                showLmoPicker(label, resp.staff)
+            } catch (e: Exception) {
+                toast("Network error: ${e.message}")
+            }
+        }
+    }
+
+    private fun showLmoPicker(label: EditText, items: List<StaffData>) {
+        val eligible = items.filter { isEligibleLmo(it) }
+        SearchableSelectionDialog.show(
+            context = requireContext(),
+            title = "Select LMO / Channel Partner / BDO",
+            options = eligible.map { s ->
+                SearchableOption(
+                    item = s,
+                    title = s.name ?: "Unnamed Staff",
+                    subtitle = listOfNotNull(s.employeeId, s.designation, s.department)
+                        .joinToString(" • "),
+                    keywords = listOfNotNull(s.id, s.name, s.employeeId, s.designation, s.department)
+                        .joinToString(" "),
+                )
+            },
+            emptyMessage = "No eligible active staff found",
+        ) { staff ->
+            selectedLmo = staff
+            label.setText(staff.name ?: "Selected")
+        }
+    }
+
+    /** Mirrors convex/marketing/lib/cpVisitLmo.ts: an active Telesales LMO,
+     *  Channel Partner, or Sales & Marketing BDO. */
+    private fun isEligibleLmo(s: StaffData): Boolean {
+        if (!"active".equals(s.status, ignoreCase = true)) return false
+        val dept = s.department?.lowercase(java.util.Locale.ROOT).orEmpty()
+        val desig = s.designation?.lowercase(java.util.Locale.ROOT).orEmpty()
+        val telesalesLmo = dept.contains("telesales") &&
+            (desig == "lmo" || desig.contains("lead management executive") ||
+                desig.contains("telecaller"))
+        val channelPartner = dept.contains("channel partner")
+        val salesMarketingBdo = dept.contains("sales") && dept.contains("marketing") &&
+            (desig == "bdo" || desig.contains("business development officer") ||
+                desig.contains("business development executive"))
+        return telesalesLmo || channelPartner || salesMarketingBdo
     }
 
     private fun pickProject(label: EditText) {
@@ -802,6 +932,22 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
 
     private fun toast(message: String) {
         Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
+    }
+
+    /** Pull the backend's real error out of an HTTP failure body. The CP-create
+     *  route returns business errors (staff busy, duplicate slot, "Collection CP
+     *  requires a booking", invalid staff, etc.) as a 500 with a JSON { error }
+     *  body; Retrofit throws on the non-2xx, so without this the toast only shows
+     *  a bare "HTTP 500". */
+    private fun serverErrorMessage(e: Throwable): String? {
+        val httpEx = e as? retrofit2.HttpException ?: return null
+        val raw = runCatching { httpEx.response()?.errorBody()?.string() }.getOrNull()
+            ?: return null
+        return runCatching {
+            val obj = com.google.gson.JsonParser.parseString(raw).asJsonObject
+            (obj.get("error")?.asString ?: obj.get("message")?.asString)
+                ?.takeIf { it.isNotBlank() }
+        }.getOrNull()
     }
 
     companion object {

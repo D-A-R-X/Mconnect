@@ -1104,9 +1104,13 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         // an em-dash only when the backend has nothing — the previous
         // "Client" / "AKASH.B" / "22 yrs Veg" fallbacks made empty
         // records look populated and indistinguishable from real ones.
+        // Client name comes only from the resolved client / lead — NEVER from
+        // clientPlace.name. For a pure SV the backend synthesizes clientPlace
+        // from the PROJECT, so clientPlace.name is the project name; using it
+        // here leaked the project ("GS - TMZ 4.0 Phase II") into the client
+        // field. "—" is correct when the backend has no client/lead name.
         val rawDisplayName = visit.client?.clientName?.takeIf { it.isNotBlank() }
             ?: visit.lead?.contactName?.takeIf { it.isNotBlank() }
-            ?: visit.clientPlace?.name?.takeIf { it.isNotBlank() }
         val displayName = rawDisplayName?.let { formatPersonName(it) } ?: "—"
         clientDisplayName = displayName
         tvClientName?.text = displayName
