@@ -15,6 +15,7 @@ import com.manjugroups.m_connect.auth.IamUpdateBus
 import com.manjugroups.m_connect.databinding.FragmentAppLibraryBinding
 import kotlinx.coroutines.launch
 import com.manjugroups.m_connect.ui.common.applySmoothTransitions
+import com.manjugroups.m_connect.ui.common.pushDetail
 import com.manjugroups.m_connect.ui.common.applyShrinkableBlueHeaderBackground
 import com.manjugroups.m_connect.ui.common.dismissRefresh
 import com.manjugroups.m_connect.ui.common.setBottomCornerRadius
@@ -866,19 +867,11 @@ class AppLibraryFragment : Fragment() {
     }
 
     private fun openScreen(fragment: Fragment) {
-        parentFragmentManager.beginTransaction()
-            .applySmoothTransitions()
-            .replace(R.id.fragmentContainer, fragment)
-            .addToBackStack(null)
-            .commitOnce()
+        parentFragmentManager.pushDetail(fragment)
     }
 
     private fun comingSoon(feature: String) {
-        parentFragmentManager.beginTransaction()
-            .applySmoothTransitions()
-            .replace(R.id.fragmentContainer, PlaceholderFragment.newInstance("$feature - Coming Soon"))
-            .addToBackStack(null)
-            .commitOnce()
+        parentFragmentManager.pushDetail(PlaceholderFragment.newInstance("$feature - Coming Soon"))
     }
 
     override fun onResume() {

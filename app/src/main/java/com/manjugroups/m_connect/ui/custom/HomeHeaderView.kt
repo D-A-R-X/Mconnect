@@ -20,6 +20,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.ViewHomeHeaderBinding
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.ui.common.ProfilePhotos
+import com.manjugroups.m_connect.ui.common.pushDetail
 import com.manjugroups.m_connect.ui.notifications.NotificationsFragment
 import com.manjugroups.m_connect.ui.profile.ProfileFragment
 import kotlinx.coroutines.CoroutineScope
@@ -210,14 +211,8 @@ class HomeHeaderView @JvmOverloads constructor(
         val openProfile = View.OnClickListener {
             onProfileClickListener?.invoke() ?: run {
                 val resolvedFragment = fragment ?: getFragment(this)
-                resolvedFragment?.parentFragmentManager?.beginTransaction()
-                    ?.replace(R.id.fragmentContainer, ProfileFragment())
-                    ?.addToBackStack(null)
-                    ?.commitOnce() ?: run {
-                        getFragmentActivity(context)?.supportFragmentManager?.beginTransaction()
-                            ?.replace(R.id.fragmentContainer, ProfileFragment())
-                            ?.addToBackStack(null)
-                            ?.commitOnce()
+                resolvedFragment?.parentFragmentManager?.pushDetail(ProfileFragment()) ?: run {
+                        getFragmentActivity(context)?.supportFragmentManager?.pushDetail(ProfileFragment())
                     }
             }
         }
@@ -227,14 +222,8 @@ class HomeHeaderView @JvmOverloads constructor(
         binding.btnHomeBell.setOnClickListener {
             onBellClickListener?.invoke() ?: run {
                 val resolvedFragment = fragment ?: getFragment(this)
-                resolvedFragment?.parentFragmentManager?.beginTransaction()
-                    ?.replace(R.id.fragmentContainer, NotificationsFragment())
-                    ?.addToBackStack(null)
-                    ?.commitOnce() ?: run {
-                        getFragmentActivity(context)?.supportFragmentManager?.beginTransaction()
-                            ?.replace(R.id.fragmentContainer, NotificationsFragment())
-                            ?.addToBackStack(null)
-                            ?.commitOnce()
+                resolvedFragment?.parentFragmentManager?.pushDetail(NotificationsFragment()) ?: run {
+                        getFragmentActivity(context)?.supportFragmentManager?.pushDetail(NotificationsFragment())
                     }
             }
         }

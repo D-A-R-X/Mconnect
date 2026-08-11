@@ -44,6 +44,7 @@ import com.manjugroups.m_connect.network.StartDmRequest
 import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.ui.common.applySmoothTransitions
+import com.manjugroups.m_connect.ui.common.pushDetail
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentChatMessagesBinding
 import com.manjugroups.m_connect.network.ApiService
@@ -481,17 +482,12 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                             return@onSuccess
                         }
                         
-                        parentFragmentManager.beginTransaction()
-                            .applySmoothTransitions()
-                            .replace(
-                                R.id.fragmentContainer,
-                                ChatMessagesFragment.forConversation(
-                                    id = conversationId,
-                                    name = foundStaff?.name ?: name
-                                )
+                        parentFragmentManager.pushDetail(
+                            ChatMessagesFragment.forConversation(
+                                id = conversationId,
+                                name = foundStaff?.name ?: name
                             )
-                            .addToBackStack(null)
-                            .commitOnce()
+                        )
                     }.onFailure {
                         toast("Unable to start direct message")
                     }
@@ -2870,11 +2866,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                 photoUrl = chatPhotoUrl
             )
         }
-        parentFragmentManager.beginTransaction()
-            .applySmoothTransitions()
-            .replace(R.id.fragmentContainer, fragment)
-            .addToBackStack(null)
-            .commitOnce()
+        parentFragmentManager.pushDetail(fragment)
     }
 
     private fun handlePickedAttachments(uris: List<Uri>) {

@@ -5,6 +5,7 @@ import androidx.fragment.app.FragmentActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.network.DailyTaskData
 import com.manjugroups.m_connect.ui.common.applySmoothTransitions
+import com.manjugroups.m_connect.ui.common.pushDetail
 import com.manjugroups.m_connect.ui.common.commitOnce
 
 /**
@@ -53,11 +54,7 @@ object TaskNavRouter {
         }
 
         if (fragment != null) {
-            activity.supportFragmentManager.beginTransaction()
-                .applySmoothTransitions()
-                .replace(R.id.fragmentContainer, fragment)
-                .addToBackStack(null)
-                .commitOnce()
+            activity.supportFragmentManager.pushDetail(fragment)
         } else {
             showWebTaskDialog(activity, task)
         }

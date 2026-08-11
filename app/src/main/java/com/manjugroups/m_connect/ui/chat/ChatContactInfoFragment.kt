@@ -17,6 +17,7 @@ import com.manjugroups.m_connect.databinding.FragmentChatContactInfoBinding
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.common.navigateUp
+import com.manjugroups.m_connect.ui.common.pushDetail
 import kotlinx.coroutines.launch
 import com.manjugroups.m_connect.ui.common.commitOnce
 
@@ -77,24 +78,16 @@ class ChatContactInfoFragment : Fragment() {
         
         binding.rowMedia.setOnClickListener {
             val subtitle = binding.tvHeaderSubtitle.text?.toString().orEmpty()
-            parentFragmentManager.beginTransaction()
-                .replace(
-                    R.id.fragmentContainer,
-                    ChatMediaFragment.newInstance(channelId, conversationId, title, subtitle)
-                )
-                .addToBackStack(null)
-                .commitOnce()
+            parentFragmentManager.pushDetail(
+                ChatMediaFragment.newInstance(channelId, conversationId, title, subtitle)
+            )
         }
         
         // Search button in header behaves same as search row
         binding.btnSearch.setOnClickListener {
-            parentFragmentManager.beginTransaction()
-                .replace(
-                    R.id.fragmentContainer,
-                    ChatSearchFragment.newInstance(channelId, conversationId, title)
-                )
-                .addToBackStack(null)
-                .commitOnce()
+            parentFragmentManager.pushDetail(
+                ChatSearchFragment.newInstance(channelId, conversationId, title)
+            )
         }
 
         // Phone button in header dial digits

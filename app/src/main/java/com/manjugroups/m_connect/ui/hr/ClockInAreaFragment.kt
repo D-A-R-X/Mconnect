@@ -46,6 +46,7 @@ import com.manjugroups.m_connect.network.TodayShiftDay
 import com.manjugroups.m_connect.network.TodayShiftResponse
 import com.manjugroups.m_connect.network.TodayShiftSchedule
 import com.manjugroups.m_connect.ui.common.navigateUp
+import com.manjugroups.m_connect.ui.common.pushDetail
 import java.util.Calendar
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -596,19 +597,15 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
         address: String?,
     ) {
         if (!isAdded || parentFragmentManager.isStateSaved) return
-        parentFragmentManager.beginTransaction()
-            .replace(
-                R.id.fragmentContainer,
-                SelfieClockInDetailFragment.newInstance(
-                    mode = mode.name,
-                    photoPath = photoPath,
-                    latitude = latitude,
-                    longitude = longitude,
-                    address = address,
-                ),
-            )
-            .addToBackStack(null)
-            .commitOnce()
+        parentFragmentManager.pushDetail(
+            SelfieClockInDetailFragment.newInstance(
+                mode = mode.name,
+                photoPath = photoPath,
+                latitude = latitude,
+                longitude = longitude,
+                address = address,
+            ),
+        )
     }
 
     private suspend fun fetchLocationOrNull(): Location? {

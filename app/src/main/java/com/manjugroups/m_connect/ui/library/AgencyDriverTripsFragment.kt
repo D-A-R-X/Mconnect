@@ -13,6 +13,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentAgencyDriverTripsBinding
 import com.manjugroups.m_connect.network.TravelDeskApi
 import com.manjugroups.m_connect.network.TravelDeskDriverTrip
+import com.manjugroups.m_connect.ui.common.pushDetail
 import com.manjugroups.m_connect.ui.profile.ProfileFragment
 import kotlinx.coroutines.launch
 
@@ -74,11 +75,7 @@ class AgencyDriverTripsFragment : Fragment() {
         }
 
         binding.btnDriverProfile.setOnClickListener {
-            parentFragmentManager.beginTransaction()
-                .setReorderingAllowed(true)
-                .replace(R.id.fragmentContainer, ProfileFragment())
-                .addToBackStack(null)
-                .commit()
+            parentFragmentManager.pushDetail(ProfileFragment())
         }
 
         binding.tabAssigned.setOnClickListener { selectTab(Tab.ASSIGNED) }
@@ -234,26 +231,21 @@ class AgencyDriverTripsFragment : Fragment() {
             trip.scheduledDate?.takeIf { it.isNotBlank() },
             (trip.pickupTime ?: trip.scheduledTime)?.takeIf { it.isNotBlank() },
         ).joinToString(" · ")
-        parentFragmentManager.beginTransaction()
-            .setReorderingAllowed(true)
-            .replace(
-                R.id.fragmentContainer,
-                AgencyDriverTripDetailFragment.newInstance(
-                    id = id,
-                    title = trip.project?.name?.takeIf { it.isNotBlank() } ?: "Site visit",
-                    whenText = whenText,
-                    address = trip.pickupAddress.orEmpty(),
-                    pickupLat = trip.pickupLat,
-                    pickupLng = trip.pickupLng,
-                    pickupMapsLink = trip.pickupGoogleMapsLink,
-                    vehicle = trip.vehicle?.vehicleNumber.orEmpty(),
-                    phase = phase,
-                    canOperateToday = trip.canOperateToday != false,
-                    onSiteAtMs = trip.travelDeskOnSiteAt ?: 0L,
-                ),
-            )
-            .addToBackStack(null)
-            .commit()
+        parentFragmentManager.pushDetail(
+            AgencyDriverTripDetailFragment.newInstance(
+                id = id,
+                title = trip.project?.name?.takeIf { it.isNotBlank() } ?: "Site visit",
+                whenText = whenText,
+                address = trip.pickupAddress.orEmpty(),
+                pickupLat = trip.pickupLat,
+                pickupLng = trip.pickupLng,
+                pickupMapsLink = trip.pickupGoogleMapsLink,
+                vehicle = trip.vehicle?.vehicleNumber.orEmpty(),
+                phase = phase,
+                canOperateToday = trip.canOperateToday != false,
+                onSiteAtMs = trip.travelDeskOnSiteAt ?: 0L,
+            ),
+        )
     }
 
     private fun phaseLabel(phase: String): String = when (phase) {

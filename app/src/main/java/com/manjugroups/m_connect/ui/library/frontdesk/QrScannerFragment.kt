@@ -27,6 +27,7 @@ import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import com.manjugroups.m_connect.R
+import com.manjugroups.m_connect.ui.common.pushDetail
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentQrScannerBinding
 import com.manjugroups.m_connect.network.ApiService
@@ -165,10 +166,7 @@ class QrScannerFragment : Fragment() {
         // permitted roles see the history log of check-ins / check-outs.
         binding.btnHistory.visibility = if (canViewHistory) View.VISIBLE else View.GONE
         binding.btnHistory.setOnClickListener {
-            parentFragmentManager.beginTransaction()
-                .replace(R.id.fragmentContainer, QrHistoryFragment())
-                .addToBackStack(null)
-                .commitOnce()
+            parentFragmentManager.pushDetail(QrHistoryFragment())
         }
 
         binding.btnHistoryVerification.setOnClickListener {
@@ -178,10 +176,7 @@ class QrScannerFragment : Fragment() {
             bindCameraUseCases() // Re-bind to start preview
             isScanningActive = true // Resume scan
 
-            parentFragmentManager.beginTransaction()
-                .replace(R.id.fragmentContainer, QrHistoryFragment())
-                .addToBackStack(null)
-                .commitOnce()
+            parentFragmentManager.pushDetail(QrHistoryFragment())
         }
 
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->

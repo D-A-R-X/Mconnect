@@ -16,6 +16,7 @@ import coil.transform.CircleCropTransformation
 import com.manjugroups.m_connect.BuildConfig
 import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
+import com.manjugroups.m_connect.ui.common.pushDetail
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentAdminFleetSettingsBinding
 import com.manjugroups.m_connect.network.ApiService
@@ -172,18 +173,12 @@ class AdminFleetSettingsFragment : Fragment() {
 
         binding.rowLanguage.setOnClickListener {
             // Replace full screen container in MainActivity so sub-fragment shows full screen
-            requireActivity().supportFragmentManager.beginTransaction()
-                .replace(R.id.fragmentContainer, LanguageFragment())
-                .addToBackStack(null)
-                .commitOnce()
+            requireActivity().supportFragmentManager.pushDetail(LanguageFragment())
         }
 
         binding.rowAppearance.setOnClickListener {
             // Replace full screen container in MainActivity so sub-fragment shows full screen
-            requireActivity().supportFragmentManager.beginTransaction()
-                .replace(R.id.fragmentContainer, AppearanceFragment())
-                .addToBackStack(null)
-                .commitOnce()
+            requireActivity().supportFragmentManager.pushDetail(AppearanceFragment())
         }
 
         binding.rowRateSystem.setOnClickListener {

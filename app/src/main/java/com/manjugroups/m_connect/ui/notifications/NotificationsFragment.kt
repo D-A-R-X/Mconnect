@@ -6,6 +6,7 @@ import android.os.Bundle
 import com.manjugroups.m_connect.ui.common.dismissRefresh
 import com.manjugroups.m_connect.ui.common.setupPullToRefresh
 import com.manjugroups.m_connect.ui.common.applySmoothTransitions
+import com.manjugroups.m_connect.ui.common.pushDetail
 import android.text.format.DateUtils
 import android.view.LayoutInflater
 import android.view.View
@@ -358,11 +359,7 @@ class NotificationsFragment : Fragment() {
             val hasAccess = required == null || required.any { session.hasPermission(it) }
             when {
                 fragment != null && hasAccess -> {
-                    parentFragmentManager.beginTransaction()
-                        .applySmoothTransitions()
-                        .replace(R.id.fragmentContainer, fragment)
-                        .addToBackStack(null)
-                        .commitOnce()
+                    parentFragmentManager.pushDetail(fragment)
                 }
                 fragment != null -> {
                     Toast.makeText(

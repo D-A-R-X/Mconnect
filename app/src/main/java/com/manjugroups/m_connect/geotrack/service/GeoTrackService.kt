@@ -134,6 +134,12 @@ class GeoTrackService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var syncJob: Job? = null
     private var heartbeatJob: Job? = null
+    // Last flight-mode / location-off state we reported a tamper for. Lets the
+    // heartbeat loop catch a change whose system broadcast was missed (app
+    // killed + restarted, or the toggle flipped while backgrounded) so a
+    // persistent tamper is never silently lost as a plain "heartbeat missed".
+    private var lastAirplaneReported: Boolean? = null
+    private var lastLocationEnabledReported: Boolean? = null
     private var cleanupJob: Job? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
@@ -280,6 +286,11 @@ class GeoTrackService : Service() {
         try { requestActivityRecognition() } catch (e: Exception) { Log.e(TAG, "Activity recognition failed: ${e.message}") }
         try { registerReceivers() } catch (e: Exception) { Log.e(TAG, "Receiver registration failed: ${e.message}") }
 
+        // Flag a device that STARTED already in flight mode / with location off
+        // as tampering right away, instead of waiting for a broadcast that
+        // already fired or the first heartbeat tick.
+        serviceScope.launch { emitTamperOnStateChange(isAirplaneModeOn(), isLocationEnabled()) }
+
         startSyncLoop()
         startHeartbeatLoop()
         startCleanupLoop()
@@ -328,32 +339,18 @@ class GeoTrackService : Service() {
         unregisterReceivers()
         unregisterNetworkCallback()
 
-        // Final sync — guarded by a short timed wakelock so it can complete
-        // even if the device is dozing at teardown.
-        runBlocking(Dispatchers.IO) {
-            try {
-                runWithSyncWakeLock {
-                    syncPoints()
-                    syncEvents()
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "Final sync failed: ${e.message}")
-            }
-            // Anything still unsent (offline at clock-out, mid-teardown
-            // failure) is handed to WorkManager: it survives this process
-            // and flushes the tail the moment connectivity returns, so the
-            // web timeline backfills without waiting for the next clock-in.
-            try {
-                val leftoverPoints = db.locationPointDao().getUnsentCount()
-                val leftoverEvents = db.pendingGeoTrackEventDao().getPendingCount()
-                if (leftoverPoints > 0 || leftoverEvents > 0) {
-                    Log.i(TAG, "Teardown leftovers: $leftoverPoints points, $leftoverEvents events — scheduling flush worker")
-                    GeoTrackFlushWorker.enqueue(this@GeoTrackService)
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "Leftover check failed: ${e.message}")
-            }
-        }
+        // Final flush is handed entirely to WorkManager — NEVER block here.
+        // onDestroy runs on the MAIN thread; the previous runBlocking network
+        // sync froze the UI thread into an ANR whenever the backend was slow.
+        // That is the "app crashes after making a call" report: ending a call
+        // tears down this service, onDestroy fired the blocking sync, the 40-
+        // 60s backend latency stalled it well past the ANR window, and the
+        // system killed the app. GeoTrackFlushWorker drains the SAME point +
+        // event buffers off-thread, survives process death, is network-
+        // constrained, and retries with backoff until the buffer is empty —
+        // so nothing is lost by not syncing inline. Enqueue unconditionally;
+        // it no-ops when the buffer is already empty.
+        GeoTrackFlushWorker.enqueue(applicationContext)
 
         syncJob?.cancel()
         heartbeatJob?.cancel()
@@ -893,6 +890,12 @@ class GeoTrackService : Service() {
                 val sessionId = session.activeTrackingSessionId
                 val deviceId = session.trackingDeviceId
                 val tickAt = System.currentTimeMillis()
+                val airplane = isAirplaneModeOn()
+                val locEnabled = isLocationEnabled()
+                // Catch a flight-mode / location-off change whose broadcast we
+                // missed. reportTamper de-dupes, so re-reporting the same state
+                // is cheap and a genuine repeat still fires.
+                emitTamperOnStateChange(airplane, locEnabled)
                 try {
                     runWithSyncWakeLock {
                         api.heartbeat(
@@ -903,6 +906,8 @@ class GeoTrackService : Service() {
                                 batteryPct = battery,
                                 appVersion = BuildConfig.VERSION_NAME,
                                 recordedAt = tickAt,
+                                airplaneMode = airplane,
+                                locationEnabled = locEnabled,
                             )
                         )
                     }
@@ -914,7 +919,8 @@ class GeoTrackService : Service() {
                     // visibility for that window. The sync loop +
                     // network-callback replay it via the same flush
                     // path used for tamper events; the server then has
-                    // a complete heartbeat history with no gaps.
+                    // a complete heartbeat history with no gaps — now WITH the
+                    // device state so a flight-mode gap is attributable.
                     runCatching {
                         GeoTrackEventQueue.enqueue(
                             context = this@GeoTrackService,
@@ -924,6 +930,8 @@ class GeoTrackService : Service() {
                                 if (deviceId != null) put("deviceId", deviceId)
                                 if (battery != null) put("batteryPct", battery)
                                 put("appVersion", BuildConfig.VERSION_NAME)
+                                put("airplaneMode", airplane)
+                                put("locationEnabled", locEnabled)
                             },
                             occurredAt = tickAt,
                         )
@@ -977,12 +985,40 @@ class GeoTrackService : Service() {
     // ── Tamper ──
 
     @SuppressLint("MissingPermission")
+    /**
+     * Report a tamper when flight-mode or the master location toggle changed
+     * since we last reported it — a safety net for a system broadcast we missed
+     * (app killed + restarted, or toggled while backgrounded), and the way a
+     * device that STARTED in flight mode / with location off gets flagged as
+     * tampering instead of a plain "heartbeat missed". On the very first tick
+     * only the tamper state (airplane ON / location OFF) is surfaced, so a
+     * normal start doesn't spam "airplane off".
+     */
+    private suspend fun emitTamperOnStateChange(airplane: Boolean, locationEnabled: Boolean) {
+        val firstAirplane = lastAirplaneReported == null
+        if (lastAirplaneReported != airplane) {
+            lastAirplaneReported = airplane
+            if (!firstAirplane || airplane) {
+                reportTamper(if (airplane) "AIRPLANE_MODE_ON" else "AIRPLANE_MODE_OFF")
+            }
+        }
+        val firstLoc = lastLocationEnabledReported == null
+        if (lastLocationEnabledReported != locationEnabled) {
+            lastLocationEnabledReported = locationEnabled
+            if (!firstLoc || !locationEnabled) {
+                reportTamper(if (locationEnabled) "LOCATION_ENABLED" else "LOCATION_DISABLED")
+            }
+        }
+    }
+
     private suspend fun reportTamper(eventType: String) {
         try {
             val throttled = eventType == "GPS_DISABLED" ||
                 eventType == "AIRPLANE_MODE_ON" ||
                 eventType == "GPS_ENABLED" ||
-                eventType == "AIRPLANE_MODE_OFF"
+                eventType == "AIRPLANE_MODE_OFF" ||
+                eventType == "LOCATION_DISABLED" ||
+                eventType == "LOCATION_ENABLED"
             val queued = if (throttled) {
                 GeoTrackEventQueue.enqueueDistinct(
                     this,
@@ -1182,6 +1218,19 @@ class GeoTrackService : Service() {
 
     private fun isGpsEnabled(): Boolean =
         (getSystemService(LOCATION_SERVICE) as LocationManager).isProviderEnabled(LocationManager.GPS_PROVIDER)
+
+    /** The device's MASTER location toggle — turning "Location" off in Quick
+     *  Settings, distinct from just the GPS provider. This is the "location
+     *  turned off" the RO cares about for tamper. */
+    private fun isLocationEnabled(): Boolean {
+        val lm = getSystemService(LOCATION_SERVICE) as LocationManager
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            lm.isLocationEnabled
+        } else {
+            lm.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+                lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+        }
+    }
 
     private fun hasBackgroundLocationPermission(): Boolean =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

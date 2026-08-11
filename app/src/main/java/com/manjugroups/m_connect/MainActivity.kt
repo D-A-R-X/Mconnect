@@ -40,6 +40,7 @@ import com.manjugroups.m_connect.ui.hr.PermissionsFragment
 import com.manjugroups.m_connect.ui.library.AppLibraryFragment
 import com.manjugroups.m_connect.geotrack.TrackingCheckWorker
 import com.manjugroups.m_connect.ui.common.applySmoothTransitions
+import com.manjugroups.m_connect.ui.common.pushDetail
 import kotlinx.coroutines.launch
 import com.manjugroups.m_connect.ui.common.showOnce
 import com.manjugroups.m_connect.ui.common.commitOnce
@@ -589,11 +590,7 @@ class MainActivity : AppCompatActivity() {
      */
     /** Open the mobile Task Manager screen (banner Complete + notification tap). */
     fun openTaskManager() {
-        supportFragmentManager.beginTransaction()
-            .applySmoothTransitions()
-            .replace(R.id.fragmentContainer, com.manjugroups.m_connect.ui.tasks.TaskManagerFragment())
-            .addToBackStack(null)
-            .commitOnce()
+        supportFragmentManager.pushDetail(com.manjugroups.m_connect.ui.tasks.TaskManagerFragment())
     }
 
     fun refreshTasksBanner(force: Boolean = false) {
@@ -1916,11 +1913,7 @@ class MainActivity : AppCompatActivity() {
                 fragment?.let {
                     // Notification intents can arrive after onSaveInstanceState;
                     // a plain commit() would throw IllegalStateException.
-                    supportFragmentManager.beginTransaction()
-                        .applySmoothTransitions()
-                        .replace(R.id.fragmentContainer, it)
-                        .addToBackStack(null)
-                        .commitAllowingStateLoss()
+                    supportFragmentManager.pushDetail(it, allowStateLoss = true)
                 }
             }
             WorkflowNotificationRoute.TAB_CHAT -> {
@@ -1946,11 +1939,7 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 fragment?.let {
-                    supportFragmentManager.beginTransaction()
-                        .applySmoothTransitions()
-                        .replace(R.id.fragmentContainer, it)
-                        .addToBackStack(null)
-                        .commitAllowingStateLoss()
+                    supportFragmentManager.pushDetail(it, allowStateLoss = true)
                 }
             }
             else -> selectTab(TAB_HOME)

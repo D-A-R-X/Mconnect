@@ -28,6 +28,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.common.navigateUp
+import com.manjugroups.m_connect.ui.common.pushDetail
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -114,13 +115,9 @@ class ChatMediaFragment : Fragment() {
 
         // Search button action (navigates to ChatSearchFragment)
         btnMediaSearch.setOnClickListener {
-            parentFragmentManager.beginTransaction()
-                .replace(
-                    R.id.fragmentContainer,
-                    ChatSearchFragment.newInstance(channelId, conversationId, title)
-                )
-                .addToBackStack(null)
-                .commitOnce()
+            parentFragmentManager.pushDetail(
+                ChatSearchFragment.newInstance(channelId, conversationId, title)
+            )
         }
 
         // Tab Views

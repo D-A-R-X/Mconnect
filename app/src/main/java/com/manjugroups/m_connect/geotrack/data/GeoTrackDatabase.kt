@@ -12,14 +12,16 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         LocationPointEntity::class,
         PendingGeoTrackEventEntity::class,
         PendingChatMessageEntity::class,
+        PendingPunchEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class GeoTrackDatabase : RoomDatabase() {
     abstract fun locationPointDao(): LocationPointDao
     abstract fun pendingGeoTrackEventDao(): PendingGeoTrackEventDao
     abstract fun pendingChatMessageDao(): PendingChatMessageDao
+    abstract fun pendingPunchDao(): PendingPunchDao
 
     companion object {
         @Volatile
@@ -72,6 +74,31 @@ abstract class GeoTrackDatabase : RoomDatabase() {
             }
         }
 
+        // V5 adds the offline attendance-punch queue. Same shape as the
+        // Room-generated CREATE for PendingPunchEntity.
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS pending_punches (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        isPunchIn INTEGER NOT NULL,
+                        clientPunchTime TEXT NOT NULL,
+                        latitude REAL,
+                        longitude REAL,
+                        address TEXT,
+                        photoPath TEXT,
+                        deviceId TEXT,
+                        source TEXT NOT NULL DEFAULT 'mobile',
+                        createdAt INTEGER NOT NULL,
+                        attemptCount INTEGER NOT NULL DEFAULT 0,
+                        lastError TEXT
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun getInstance(context: Context): GeoTrackDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -79,7 +106,7 @@ abstract class GeoTrackDatabase : RoomDatabase() {
                     GeoTrackDatabase::class.java,
                     "geotrack_db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .build()
                 INSTANCE = instance
                 instance

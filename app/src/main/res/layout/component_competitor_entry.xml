@@ -69,6 +69,20 @@
         android:hint="https://maps.app.goo.gl/..."
         android:inputType="textUri" />
 
+    <TextView android:id="@+id/btnCompetitorViewMap"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_call_button_blue"
+        android:clickable="true"
+        android:focusable="true"
+        android:fontFamily="@font/inter_semibold"
+        android:paddingHorizontal="14dp"
+        android:paddingVertical="8dp"
+        android:text="View on map / Adjust pin"
+        android:textColor="#FFFFFF"
+        android:textSize="13sp" />
+
     <TextView style="@style/InspectionFieldLabel" android:text="Project Name *" />
     <EditText android:id="@+id/inputProjectName"
         style="@style/InspectionFieldPlainInput"

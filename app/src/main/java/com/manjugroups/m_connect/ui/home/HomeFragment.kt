@@ -28,6 +28,7 @@ import com.manjugroups.m_connect.ui.common.ProfilePhotos
 import com.manjugroups.m_connect.ui.common.LocalCache
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.common.applySmoothTransitions
+import com.manjugroups.m_connect.ui.common.pushDetail
 import com.manjugroups.m_connect.ui.common.applyShrinkableBlueHeaderBackground
 import com.manjugroups.m_connect.ui.common.dismissRefresh
 import com.manjugroups.m_connect.ui.common.setBottomCornerRadius
@@ -1366,11 +1367,7 @@ class HomeFragment : Fragment() {
             .getOrNull() ?: android.graphics.Typeface.DEFAULT
 
     private fun openScreen(fragment: androidx.fragment.app.Fragment) {
-        parentFragmentManager.beginTransaction()
-            .applySmoothTransitions()
-            .replace(R.id.fragmentContainer, fragment)
-            .addToBackStack(null)
-            .commitOnce()
+        parentFragmentManager.pushDetail(fragment)
     }
 
     private fun createVisitItem(
@@ -1730,25 +1727,20 @@ class HomeFragment : Fragment() {
             visit.scheduledStartTime?.takeIf { it.isNotBlank() },
         ).joinToString(" · ")
         val today = com.manjugroups.m_connect.util.VisitExpiry.todayInIndia()
-        parentFragmentManager.beginTransaction()
-            .setReorderingAllowed(true)
-            .replace(
-                R.id.fragmentContainer,
-                com.manjugroups.m_connect.ui.library.AgencyDriverTripDetailFragment.newInstance(
-                    id = visit.id,
-                    title = visit.placeName ?: "Site visit",
-                    whenText = whenText,
-                    address = visit.placeAddress.orEmpty(),
-                    pickupLat = visit.placeLat,
-                    pickupLng = visit.placeLng,
-                    vehicle = "",
-                    phase = visit.status,
-                    canOperateToday = visit.scheduledDate == today,
-                    internal = true,
-                ),
-            )
-            .addToBackStack(null)
-            .commit()
+        parentFragmentManager.pushDetail(
+            com.manjugroups.m_connect.ui.library.AgencyDriverTripDetailFragment.newInstance(
+                id = visit.id,
+                title = visit.placeName ?: "Site visit",
+                whenText = whenText,
+                address = visit.placeAddress.orEmpty(),
+                pickupLat = visit.placeLat,
+                pickupLng = visit.placeLng,
+                vehicle = "",
+                phase = visit.status,
+                canOperateToday = visit.scheduledDate == today,
+                internal = true,
+            ),
+        )
     }
 
     private fun openDriverTripDetail(visit: TodayVisit) {
@@ -1767,23 +1759,18 @@ class HomeFragment : Fragment() {
             if (id == visit.id) openTripNavigationForVisit(visit)
         }
 
-        parentFragmentManager.beginTransaction()
-            .setReorderingAllowed(true)
-            .replace(
-                R.id.fragmentContainer,
-                DriverTripDetailFragment.newInstance(
-                    visitId = visit.id,
-                    title = visit.placeName ?: "Site visit",
-                    whenText = whenText,
-                    address = visit.placeAddress.orEmpty(),
-                    status = visit.status,
-                    scheduledDate = visit.scheduledDate,
-                    lat = visit.placeLat,
-                    lng = visit.placeLng,
-                ),
-            )
-            .addToBackStack(null)
-            .commit()
+        parentFragmentManager.pushDetail(
+            DriverTripDetailFragment.newInstance(
+                visitId = visit.id,
+                title = visit.placeName ?: "Site visit",
+                whenText = whenText,
+                address = visit.placeAddress.orEmpty(),
+                status = visit.status,
+                scheduledDate = visit.scheduledDate,
+                lat = visit.placeLat,
+                lng = visit.placeLng,
+            ),
+        )
     }
 
     private fun openTripNavigationForVisit(visit: TodayVisit) {
@@ -1807,21 +1794,13 @@ class HomeFragment : Fragment() {
                 visit.scheduledEndTime ?: visit.scheduledStartTime,
             ),
         )
-        parentFragmentManager.beginTransaction()
-            .applySmoothTransitions()
-            .replace(R.id.fragmentContainer, fragment)
-            .addToBackStack(null)
-            .commitOnce()
+        parentFragmentManager.pushDetail(fragment)
     }
 
     private fun openCompletedVisitDetail(visit: TodayVisit) {
         val fragment = com.manjugroups.m_connect.ui.marketing
             .CompletedVisitDetailFragment.forVisit(visit)
-        parentFragmentManager.beginTransaction()
-            .applySmoothTransitions()
-            .replace(R.id.fragmentContainer, fragment)
-            .addToBackStack(null)
-            .commitOnce()
+        parentFragmentManager.pushDetail(fragment)
     }
 
     /**
@@ -1982,11 +1961,7 @@ class HomeFragment : Fragment() {
             destLat = place.lat,
             destLng = place.lng
         )
-        parentFragmentManager.beginTransaction()
-            .applySmoothTransitions()
-            .replace(R.id.fragmentContainer, fragment)
-            .addToBackStack(null)
-            .commitOnce()
+        parentFragmentManager.pushDetail(fragment)
     }
 
     private fun applyItemSpacing(itemView: View, index: Int, total: Int) {
@@ -2284,14 +2259,9 @@ class HomeFragment : Fragment() {
             "Clock in to start your trip",
             android.widget.Toast.LENGTH_SHORT,
         ).show()
-        parentFragmentManager.beginTransaction()
-            .applySmoothTransitions()
-            .replace(
-                R.id.fragmentContainer,
-                com.manjugroups.m_connect.ui.hr.ClockInAreaFragment(),
-            )
-            .addToBackStack(null)
-            .commitOnce()
+        parentFragmentManager.pushDetail(
+            com.manjugroups.m_connect.ui.hr.ClockInAreaFragment(),
+        )
     }
 
     // ── Fleet administrator dispatch queue ──────────────────────────────
@@ -3363,10 +3333,7 @@ class HomeFragment : Fragment() {
 
         binding.btnOverlayQr.setOnClickListener {
             animatePanel(open = false, showTabBarOnClose = false)
-            parentFragmentManager.beginTransaction()
-                .replace(R.id.fragmentContainer, com.manjugroups.m_connect.ui.library.frontdesk.QrScannerFragment())
-                .addToBackStack(null)
-                .commitOnce()
+            parentFragmentManager.pushDetail(com.manjugroups.m_connect.ui.library.frontdesk.QrScannerFragment())
         }
     }
 

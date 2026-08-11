@@ -38,6 +38,7 @@ import com.manjugroups.m_connect.network.StaffData
 import com.manjugroups.m_connect.ui.common.LocalCache
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.common.applySmoothTransitions
+import com.manjugroups.m_connect.ui.common.pushDetail
 import com.manjugroups.m_connect.ui.common.dismissRefresh
 import com.manjugroups.m_connect.ui.common.setupPullToRefresh
 import kotlinx.coroutines.Job
@@ -147,11 +148,7 @@ class ChatListFragment : Fragment() {
                         ChatMessagesFragment.forChannel(item.id, item.title)
                 }
 
-                parentFragmentManager.beginTransaction()
-                    .applySmoothTransitions()
-                    .replace(R.id.fragmentContainer, fragment)
-                    .addToBackStack(null)
-                    .commitOnce()
+                parentFragmentManager.pushDetail(fragment)
             },
             onItemLongClick = { _, item ->
                 toggleChatSelection(item.id)
@@ -1581,17 +1578,12 @@ class ChatListFragment : Fragment() {
                     toast("Unable to start direct message")
                     return@onSuccess
                 }
-                parentFragmentManager.beginTransaction()
-                    .applySmoothTransitions()
-                    .replace(
-                        R.id.fragmentContainer,
-                        ChatMessagesFragment.forConversation(
-                            id = conversationId,
-                            name = staff.name ?: "Chat"
-                        )
+                parentFragmentManager.pushDetail(
+                    ChatMessagesFragment.forConversation(
+                        id = conversationId,
+                        name = staff.name ?: "Chat"
                     )
-                    .addToBackStack(null)
-                    .commitOnce()
+                )
             }.onFailure {
                 toast("Unable to start direct message")
             }
@@ -1614,17 +1606,12 @@ class ChatListFragment : Fragment() {
                     toast("Unable to create conversation")
                     return@onSuccess
                 }
-                parentFragmentManager.beginTransaction()
-                    .applySmoothTransitions()
-                    .replace(
-                        R.id.fragmentContainer,
-                        ChatMessagesFragment.forConversation(
-                            id = conversationId,
-                            name = displayName ?: "Group chat"
-                        )
+                parentFragmentManager.pushDetail(
+                    ChatMessagesFragment.forConversation(
+                        id = conversationId,
+                        name = displayName ?: "Group chat"
                     )
-                    .addToBackStack(null)
-                    .commitOnce()
+                )
             }.onFailure {
                 toast("Unable to create conversation")
             }
@@ -1648,17 +1635,12 @@ class ChatListFragment : Fragment() {
                     toast("Unable to create channel")
                     return@onSuccess
                 }
-                parentFragmentManager.beginTransaction()
-                    .applySmoothTransitions()
-                    .replace(
-                        R.id.fragmentContainer,
-                        ChatMessagesFragment.forChannel(
-                            id = channelId,
-                            name = name
-                        )
+                parentFragmentManager.pushDetail(
+                    ChatMessagesFragment.forChannel(
+                        id = channelId,
+                        name = name
                     )
-                    .addToBackStack(null)
-                    .commitOnce()
+                )
             }.onFailure {
                 toast("Unable to create channel")
             }
