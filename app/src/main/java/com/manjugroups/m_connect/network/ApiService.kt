@@ -1674,7 +1674,10 @@ data class PunchRequest(
     val photo: String? = null,
     val deviceId: String? = null,
     val source: String = "mobile",
-    val remarks: String? = null
+    val remarks: String? = null,
+    // ISO-8601 device time captured at the moment the staff tapped punch. Lets
+    // a slow/offline-then-synced punch record the real tap time server-side.
+    val clientPunchTime: String? = null
 )
 data class PunchResponse(
     val success: Boolean,

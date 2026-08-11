@@ -19,6 +19,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.InspectionAreaEntry
 import com.manjugroups.m_connect.network.InspectionCompetitor
+import com.manjugroups.m_connect.ui.common.showOnce
 import com.manjugroups.m_connect.network.InspectionReportData
 import com.manjugroups.m_connect.network.InspectionSaveRequest
 import kotlinx.coroutines.CoroutineScope
@@ -115,6 +116,13 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
         bindAreaTab(view)
         bindMarketTab(view)
         bindCompetitorsTab(view)
+        // Land location: view / adjust the property's pin on the full-screen map.
+        // The Google Map Link field holds "lat,lng"; a dropped pin writes it back.
+        view.findViewById<View>(R.id.btnLandViewMap)?.setOnClickListener {
+            openLocationMap(fieldText(view, R.id.fieldMapLink)) { lat, lng ->
+                setFieldText(view, R.id.fieldMapLink, "$lat,$lng")
+            }
+        }
         bindTabs(view)
 
         val nextBtn = view.findViewById<TextView>(R.id.btnInspectionNext)
@@ -762,6 +770,38 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
             ?.setText(value)
     }
 
+    /** Open the full-screen map centered on the location parsed from [current]
+     *  (a "lat,lng" string or a Google Maps URL), letting the inspector view it,
+     *  search, and drop/adjust the pin. [onPicked] receives the chosen coords. */
+    private fun openLocationMap(current: String?, onPicked: (Double, Double) -> Unit) {
+        val coords = parseLatLng(current)
+        val sheet = com.manjugroups.m_connect.ui.common.MapPinDropBottomSheet
+            .newInstance(coords?.first, coords?.second)
+        sheet.setListener { result -> onPicked(result.lat, result.lng) }
+        sheet.showOnce(parentFragmentManager, "inspection_map_pin")
+    }
+
+    /** Parse coordinates from a "lat,lng" string OR a Google Maps URL
+     *  (…@lat,lng…, ?q=lat,lng, or …!3dlat!4dlng…). Null when none is found. */
+    private fun parseLatLng(value: String?): Pair<Double, Double>? {
+        val s = value?.trim().orEmpty()
+        if (s.isEmpty()) return null
+        val patterns = listOf(
+            Regex("""^\s*(-?\d{1,3}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)\s*$"""),
+            Regex("""@(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)"""),
+            Regex("""[?&]q=(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)"""),
+            Regex("""!3d(-?\d{1,3}\.\d+)!4d(-?\d{1,3}\.\d+)"""),
+        )
+        for (re in patterns) {
+            re.find(s)?.let { m ->
+                val lat = m.groupValues[1].toDoubleOrNull()
+                val lng = m.groupValues[2].toDoubleOrNull()
+                if (lat != null && lng != null) return lat to lng
+            }
+        }
+        return null
+    }
+
     private fun trailingText(root: View, fieldId: Int): String =
         root.findViewById<View>(fieldId)
             ?.findViewById<TextView>(R.id.fieldTrailingText)
@@ -1168,6 +1208,16 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
         entry.findViewById<View>(R.id.competitorDelete).setOnClickListener {
             container.removeView(entry)
             renumberCompetitors(container)
+        }
+
+        // View / adjust this competitor's location on the full-screen map. The
+        // Google Map Link field holds the coordinates ("lat,lng") the web list
+        // reads, so a dropped pin writes back the same shape.
+        val compMapInput = entry.findViewById<android.widget.EditText>(R.id.inputCompetitorMapLink)
+        entry.findViewById<View>(R.id.btnCompetitorViewMap).setOnClickListener {
+            openLocationMap(compMapInput.text?.toString()) { lat, lng ->
+                compMapInput.setText("$lat,$lng")
+            }
         }
 
         // Approval Type dropdown (None / CMDA / DTCP / Panchayat). Default to

@@ -10,6 +10,8 @@ import android.view.ViewGroup
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.util.Log
+import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
 import android.webkit.WebChromeClient
@@ -23,8 +25,12 @@ import java.nio.charset.StandardCharsets
 import java.util.concurrent.CopyOnWriteArrayList
 
 object ModernDialerWebViewBridge {
+    private const val TAG = "ModernDialer"
     private const val DIALER_ORIGIN = "https://dialer.theairix.com"
     private const val JS_INTERFACE = "MconnectDialerBridge"
+    // If the softphone never reports registration, flush queued commands anyway
+    // after this long so a call attempt isn't silently stuck "connecting".
+    private const val FALLBACK_FLUSH_MS = 6_000L
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val gson = Gson()
@@ -39,6 +45,7 @@ object ModernDialerWebViewBridge {
     // rings. Track both and only flush queued commands once both are true.
     private var pageLoaded: Boolean = false
     private var phoneRegistered: Boolean = false
+    private var fallbackFlushPosted: Boolean = false
     private var pendingCommands = mutableListOf<Pair<String, Map<String, Any>>>()
 
     fun addListener(listener: (DialerEvent) -> Unit) {
@@ -69,7 +76,9 @@ object ModernDialerWebViewBridge {
                 if (loadedUrl != url) {
                     pageLoaded = false
                     phoneRegistered = false
+                    fallbackFlushPosted = false
                     loadedUrl = url
+                    Log.i(TAG, "loading dialer embed: $url")
                     view.loadUrl(url)
                 }
                 onReady(Result.success(Unit))
@@ -94,6 +103,20 @@ object ModernDialerWebViewBridge {
 
     private fun maybeFlush() {
         if (pageLoaded && phoneRegistered) flushPending()
+    }
+
+    /** Safety net: if the softphone never reports registration, send any queued
+     *  command anyway after a short delay so a call isn't stuck "connecting"
+     *  forever. Logs when it fires so a stuck registration is visible. */
+    private fun scheduleFallbackFlush() {
+        if (fallbackFlushPosted) return
+        fallbackFlushPosted = true
+        mainHandler.postDelayed({
+            if (!phoneRegistered && pageLoaded && pendingCommands.isNotEmpty()) {
+                Log.w(TAG, "registration not confirmed in ${FALLBACK_FLUSH_MS}ms — flushing ${pendingCommands.size} queued cmd(s) anyway")
+                flushPending()
+            }
+        }, FALLBACK_FLUSH_MS)
     }
 
     fun call(destination: String) {
@@ -140,18 +163,30 @@ object ModernDialerWebViewBridge {
                         val allowed = resources.filter {
                             hasMicPermission && it == PermissionRequest.RESOURCE_AUDIO_CAPTURE
                         }.toTypedArray()
+                        Log.i(TAG, "onPermissionRequest: mic=$hasMicPermission granted=${allowed.size}")
                         if (allowed.isNotEmpty()) request.grant(allowed) else request.deny()
                     }
+                }
+
+                // Forward the softphone page's console output to logcat — the
+                // fastest way to see WHY a call doesn't originate (WebRTC /
+                // registration / SIP errors live here). Filter: `adb logcat -s
+                // ModernDialer`.
+                override fun onConsoleMessage(msg: ConsoleMessage?): Boolean {
+                    msg ?: return false
+                    Log.i(TAG, "[web] ${msg.messageLevel()} ${msg.message()} (${msg.sourceId()}:${msg.lineNumber()})")
+                    return true
                 }
             }
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView, url: String?) {
+                    Log.i(TAG, "page loaded: $url")
                     injectBridge(view)
                     pageLoaded = true
-                    // Do NOT flush here — wait for the softphone's registration
-                    // event (below). If it already registered, maybeFlush sends
-                    // the queued call now.
+                    // Prefer waiting for the softphone's registration event, but
+                    // never stay stuck: if it doesn't arrive, flush anyway.
                     maybeFlush()
+                    scheduleFallbackFlush()
                 }
             }
         }
@@ -187,6 +222,7 @@ object ModernDialerWebViewBridge {
     }
 
     private fun evaluateCommand(type: String, payload: Map<String, Any>) {
+        Log.i(TAG, "→ command to softphone: $type $payload")
         val data = mutableMapOf<String, Any>(
             "source" to "modern-dialer-control",
             "type" to type,
@@ -250,6 +286,7 @@ object ModernDialerWebViewBridge {
      * it. Runs on the main thread (touches the WebView).
      */
     private fun onDialerMessage(type: String, parsed: Map<String, Any>) {
+        Log.i(TAG, "← event from softphone: $type (registered=$phoneRegistered) $parsed")
         when (type) {
             "ready" -> {
                 val ps = parsed["phoneState"] as? String

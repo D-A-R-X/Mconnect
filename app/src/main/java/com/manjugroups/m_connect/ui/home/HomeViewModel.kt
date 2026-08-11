@@ -14,6 +14,9 @@ import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.MmsFleetDriverTrip
 import com.manjugroups.m_connect.network.PunchRequest
 import com.manjugroups.m_connect.network.StorageUploader
+import com.manjugroups.m_connect.attendance.PunchSyncWorker
+import com.manjugroups.m_connect.geotrack.data.GeoTrackDatabase
+import com.manjugroups.m_connect.geotrack.data.PendingPunchEntity
 import com.manjugroups.m_connect.network.TrackingBootstrapData
 import com.manjugroups.m_connect.network.StartVisitRequest
 import com.manjugroups.m_connect.network.AssignedPlace
@@ -92,6 +95,10 @@ class HomeViewModel : ViewModel() {
     private var cachedState: HomeUiState.Loaded? = null
 
     fun loadHomeData(bearerToken: String, context: Context? = null) {
+        // Flush any offline-queued punches whenever the home screen loads, so a
+        // punch taken with no network syncs as soon as the staff is back online
+        // and the app is opened. Cheap: the worker no-ops when the queue's empty.
+        context?.let { PunchSyncWorker.enqueue(it) }
         viewModelScope.launch {
             try {
                 val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
@@ -200,6 +207,11 @@ class HomeViewModel : ViewModel() {
         _uiState.value = current.copy(isPunching = true)
 
         viewModelScope.launch {
+            // Capture the REAL tap time up front. Everything below (photo upload,
+            // geocode, the punch call) can be slowed by a weak network; sending
+            // this device time means the punch is recorded at the moment the
+            // staff tapped, not when the server finally receives it.
+            val punchIso = isoNow()
             try {
                 // Step 1: Upload photo if available
                 var storageId: String? = null
@@ -220,7 +232,8 @@ class HomeViewModel : ViewModel() {
                     address = address,
                     photo = storageId,
                     deviceId = SessionManager(context).trackingDeviceId,
-                    source = "mobile"
+                    source = "mobile",
+                    clientPunchTime = punchIso,
                 )
 
                 val response = if (isPunchIn) {
@@ -230,6 +243,9 @@ class HomeViewModel : ViewModel() {
                 }
 
                 if (response.success) {
+                    // We're online — flush any punches that were queued offline
+                    // on an earlier attempt so they don't linger.
+                    PunchSyncWorker.enqueue(context)
                     _punchEvent.emit(PunchEvent.Success(if (isPunchIn) "Punched In!" else "Punched Out!"))
                     val bootstrap = response.trackingBootstrap ?: runCatching {
                         geoApi.getTrackingBootstrap(
@@ -253,10 +269,67 @@ class HomeViewModel : ViewModel() {
                     _punchEvent.emit(PunchEvent.Error(response.error ?: "Punch failed"))
                 }
             } catch (e: Exception) {
+                // Network / server failure — DON'T lose the punch. Queue it with
+                // the real tap time (and photo) so it syncs when connectivity
+                // returns and records the time the staff actually punched.
+                val queued = enqueueOfflinePunch(context, isPunchIn, punchIso, lat, lng, photoFile)
                 _uiState.value = current.copy(isPunching = false)
-                _punchEvent.emit(PunchEvent.Error(e.message ?: "Network error"))
+                if (queued) {
+                    PunchSyncWorker.enqueue(context)
+                    _punchEvent.emit(
+                        PunchEvent.Success(
+                            if (isPunchIn) "Punched in offline — will sync when online"
+                            else "Punched out offline — will sync when online"
+                        )
+                    )
+                } else {
+                    _punchEvent.emit(PunchEvent.Error(e.message ?: "Network error"))
+                }
             }
         }
+    }
+
+    /** ISO-8601 device time with UTC offset (e.g. 2026-08-11T09:00:00.123+05:30);
+     *  the backend parses this and records it as the punch time. */
+    private fun isoNow(): String =
+        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", Locale.US).format(Date())
+
+    /** Persist a failed punch to the offline queue (with its photo copied to a
+     *  stable location so it survives until sync). Returns true when queued. */
+    private suspend fun enqueueOfflinePunch(
+        context: Context,
+        isPunchIn: Boolean,
+        punchIso: String,
+        lat: Double?,
+        lng: Double?,
+        photoFile: File?,
+    ): Boolean = try {
+        val persistedPhoto = photoFile
+            ?.takeIf { it.exists() }
+            ?.let { src ->
+                runCatching {
+                    val dir = File(context.filesDir, "punch_queue").apply { mkdirs() }
+                    val dst = File(dir, "punch_${System.currentTimeMillis()}_${src.name}")
+                    src.copyTo(dst, overwrite = true)
+                    dst.absolutePath
+                }.getOrNull()
+            }
+        GeoTrackDatabase.getInstance(context).pendingPunchDao().insert(
+            PendingPunchEntity(
+                isPunchIn = isPunchIn,
+                clientPunchTime = punchIso,
+                latitude = lat,
+                longitude = lng,
+                address = null,
+                photoPath = persistedPhoto,
+                deviceId = SessionManager(context).trackingDeviceId,
+                source = "mobile",
+                createdAt = System.currentTimeMillis(),
+            )
+        )
+        true
+    } catch (_: Exception) {
+        false
     }
 
     // ── Trip / Visit Selection ──

@@ -936,19 +936,24 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         List<com.manjugroups.m_connect.ui.common.OutcomeSelectionDialog.Option> {
         val opt = com.manjugroups.m_connect.ui.common.OutcomeSelectionDialog::Option
         val list = mutableListOf<com.manjugroups.m_connect.ui.common.OutcomeSelectionDialog.Option>()
+        // An SV-cum-CP completion IS a site visit, so it uses the SV-style
+        // outcome set (Booking / Follow up / Not Interested / Others) — the same
+        // as pure-SV mode — rather than the CP set. Without this it showed the
+        // CP options ("Site Visit", "Its Been Postponed") which don't apply.
+        val svStyle = isSiteVisitMode || cpType == "sv_cum_cp"
         list.add(opt("BOOKING", "Converted as Booking", R.drawable.ic_outcome_booking))
         // Site Visit is not a valid outcome for a row that already IS a site
-        // visit (pure-SV mode) — mirror the disabled SV tab by hiding it.
-        if (!isSiteVisitMode) {
+        // visit (pure-SV / sv_cum_cp) — mirror the disabled SV tab by hiding it.
+        if (!svStyle) {
             list.add(opt("SITE_VISIT", "Site Visit", R.drawable.ic_outcome_site_visit))
         }
         list.add(opt("POSTPONE",
-            if (isSiteVisitMode) "Follow up" else "Its Been Postponed",
+            if (svStyle) "Follow up" else "Its Been Postponed",
             R.drawable.ic_outcome_postpone))
         list.add(opt("NOT_INTERESTED", "Client Not Interested", R.drawable.ic_outcome_not_interested))
-        // Pure SV retains its own Others outcome. For CP visits the free-text
-        // close path is intentionally limited to the three approved types.
-        if (isSiteVisitMode || cpTypeSupportsOtherOutcome(cpType)) {
+        // Pure SV / sv_cum_cp retain the Others outcome. For other CP visits the
+        // free-text close path is intentionally limited to the approved types.
+        if (svStyle || cpTypeSupportsOtherOutcome(cpType)) {
             list.add(opt("OTHER", "Others", R.drawable.ic_chat_more_dots))
         }
         return list
@@ -6556,6 +6561,24 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                         LOG_TAG,
                         "detect: cpVisitId=$cpVisitId no SV-fix signal -> normal mode (defaults seeded)",
                     )
+                    // The synchronous isSvFixedHint (applied for every sv_cum_cp
+                    // row to avoid a first-paint flicker) locked the sheet to
+                    // Site Visit and set outcomeChosen=true, which suppressed the
+                    // outcome picker. Now that the server confirms there is NO
+                    // actual SV-fix, REVERT the hint so the outcome dialog
+                    // (Booking / Follow up / Not Interested / Others) opens —
+                    // otherwise an sv_cum_cp with no pre-fixed SV stays stuck on a
+                    // locked Site Visit with no options to choose.
+                    val hintApplied =
+                        arguments?.getBoolean(ARG_IS_SV_FIXED_HINT, false) == true
+                    if (hintApplied && outcomeChosen && activeOutcome == Outcome.SITE_VISIT) {
+                        outcomeChosen = false
+                        listOf(tabBooking, tabPostpone, tabNotInterested).forEach { tab ->
+                            tab.cell?.isClickable = true
+                            tab.cell?.alpha = 1f
+                        }
+                        maybeShowOutcomePicker()
+                    }
                     return@launch
                 }
                 val source = when {

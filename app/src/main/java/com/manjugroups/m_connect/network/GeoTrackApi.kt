@@ -577,6 +577,12 @@ data class HeartbeatRequest(
     // timestamp so offline-queued heartbeats backfill the web battery/uptime
     // history at their ORIGINAL time instead of the replay time.
     val recordedAt: Long? = null,
+    // Device state at this tick. Lets the server attribute a gap ACCURATELY:
+    // a missed-heartbeat window whose surrounding (buffered) heartbeats show
+    // airplaneMode=true / locationEnabled=false is FLIGHT MODE / LOCATION OFF
+    // tampering — not just a no-signal dead zone.
+    val airplaneMode: Boolean? = null,
+    val locationEnabled: Boolean? = null,
 )
 
 data class TamperReportRequest(
