@@ -339,32 +339,18 @@ class GeoTrackService : Service() {
         unregisterReceivers()
         unregisterNetworkCallback()
 
-        // Final sync — guarded by a short timed wakelock so it can complete
-        // even if the device is dozing at teardown.
-        runBlocking(Dispatchers.IO) {
-            try {
-                runWithSyncWakeLock {
-                    syncPoints()
-                    syncEvents()
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "Final sync failed: ${e.message}")
-            }
-            // Anything still unsent (offline at clock-out, mid-teardown
-            // failure) is handed to WorkManager: it survives this process
-            // and flushes the tail the moment connectivity returns, so the
-            // web timeline backfills without waiting for the next clock-in.
-            try {
-                val leftoverPoints = db.locationPointDao().getUnsentCount()
-                val leftoverEvents = db.pendingGeoTrackEventDao().getPendingCount()
-                if (leftoverPoints > 0 || leftoverEvents > 0) {
-                    Log.i(TAG, "Teardown leftovers: $leftoverPoints points, $leftoverEvents events — scheduling flush worker")
-                    GeoTrackFlushWorker.enqueue(this@GeoTrackService)
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "Leftover check failed: ${e.message}")
-            }
-        }
+        // Final flush is handed entirely to WorkManager — NEVER block here.
+        // onDestroy runs on the MAIN thread; the previous runBlocking network
+        // sync froze the UI thread into an ANR whenever the backend was slow.
+        // That is the "app crashes after making a call" report: ending a call
+        // tears down this service, onDestroy fired the blocking sync, the 40-
+        // 60s backend latency stalled it well past the ANR window, and the
+        // system killed the app. GeoTrackFlushWorker drains the SAME point +
+        // event buffers off-thread, survives process death, is network-
+        // constrained, and retries with backoff until the buffer is empty —
+        // so nothing is lost by not syncing inline. Enqueue unconditionally;
+        // it no-ops when the buffer is already empty.
+        GeoTrackFlushWorker.enqueue(applicationContext)
 
         syncJob?.cancel()
         heartbeatJob?.cancel()

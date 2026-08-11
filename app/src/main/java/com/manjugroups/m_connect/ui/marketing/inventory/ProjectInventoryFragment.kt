@@ -19,6 +19,7 @@ import com.manjugroups.m_connect.network.InventoryUnit
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.home.CompleteCpVisitBottomSheet
 import com.manjugroups.m_connect.ui.common.navigateUp
+import com.manjugroups.m_connect.ui.common.pushDetail
 import com.manjugroups.m_connect.ui.common.showOnce
 import kotlinx.coroutines.launch
 import com.manjugroups.m_connect.ui.common.commitOnce
@@ -256,10 +257,7 @@ class ProjectInventoryFragment : Fragment() {
             projectId = projectId,
             projectName = projectName,
         )
-        parentFragmentManager.beginTransaction()
-            .replace(R.id.fragmentContainer, fragment)
-            .addToBackStack(null)
-            .commitOnce()
+        parentFragmentManager.pushDetail(fragment)
     }
 
     private fun prettyScope(scope: String): String = when (scope) {

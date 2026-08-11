@@ -16,6 +16,7 @@ import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.MarketingProject
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.common.navigateUp
+import com.manjugroups.m_connect.ui.common.pushDetail
 import kotlinx.coroutines.launch
 import com.manjugroups.m_connect.ui.common.commitOnce
 
@@ -132,9 +133,6 @@ class InventoryProjectsListFragment : Fragment() {
             projectName = project.name ?: "Project",
             projectScope = project.scope,
         )
-        parentFragmentManager.beginTransaction()
-            .replace(R.id.fragmentContainer, fragment)
-            .addToBackStack(null)
-            .commitOnce()
+        parentFragmentManager.pushDetail(fragment)
     }
 }

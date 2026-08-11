@@ -18,6 +18,7 @@ import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.StaffFullData
 import com.manjugroups.m_connect.ui.chat.ChatMessagesFragment
 import com.manjugroups.m_connect.ui.common.navigateUp
+import com.manjugroups.m_connect.ui.common.pushDetail
 import kotlinx.coroutines.launch
 import com.manjugroups.m_connect.ui.common.commitOnce
 
@@ -264,11 +265,8 @@ class StaffDetailFragment : Fragment() {
                     val dmResp = api.startDm(session.bearerToken,
                         com.manjugroups.m_connect.network.StartDmRequest(targetId))
                     if (dmResp.success && dmResp.conversationId != null) {
-                        parentFragmentManager.beginTransaction()
-                            .replace(R.id.fragmentContainer,
-                                ChatMessagesFragment.forConversation(dmResp.conversationId, name))
-                            .addToBackStack(null)
-                            .commitOnce()
+                        parentFragmentManager.pushDetail(
+                            ChatMessagesFragment.forConversation(dmResp.conversationId, name))
                     }
                 } catch (_: Exception) { }
             }

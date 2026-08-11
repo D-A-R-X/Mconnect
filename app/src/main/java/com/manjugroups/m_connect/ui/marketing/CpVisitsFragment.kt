@@ -37,6 +37,7 @@ import com.manjugroups.m_connect.ui.home.TripNavigationFragment
 import com.manjugroups.m_connect.ui.hr.AttendanceFlowViewModel
 import com.manjugroups.m_connect.ui.common.navigateUp
 import com.manjugroups.m_connect.ui.common.applySmoothTransitions
+import com.manjugroups.m_connect.ui.common.pushDetail
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -965,55 +966,40 @@ class CpVisitsFragment : Fragment() {
             "Clock in to continue",
             android.widget.Toast.LENGTH_SHORT,
         ).show()
-        parentFragmentManager.beginTransaction()
-            .applySmoothTransitions()
-            .replace(
-                R.id.fragmentContainer,
-                com.manjugroups.m_connect.ui.hr.ClockInAreaFragment(),
-            )
-            .addToBackStack(null)
-            .commitOnce()
+        parentFragmentManager.pushDetail(
+            com.manjugroups.m_connect.ui.hr.ClockInAreaFragment(),
+        )
     }
 
     private fun openCompletedDetail(visit: TodayVisit) {
-        parentFragmentManager.beginTransaction()
-            .applySmoothTransitions()
-            .replace(
-                R.id.fragmentContainer,
-                CompletedVisitDetailFragment.forVisit(visit),
-            )
-            .addToBackStack(null)
-            .commitOnce()
+        parentFragmentManager.pushDetail(
+            CompletedVisitDetailFragment.forVisit(visit),
+        )
     }
 
     private fun openVisit(visit: TodayVisit) {
-        parentFragmentManager.beginTransaction()
-            .applySmoothTransitions()
-            .replace(
-                R.id.fragmentContainer,
-                TripNavigationFragment.forVisit(
-                    visitId = visit.id,
-                    placeName = visit.placeName,
-                    placeAddress = visit.placeAddress,
-                    destLat = visit.placeLat,
-                    destLng = visit.placeLng,
-                    status = visit.status,
-                    tripType = visit.tripType,
-                    clientPlaceVisitId = visit.clientPlaceVisitId,
-                    cpClientMet = visit.cpVisit?.clientMet,
-                    cpOutcome = visit.cpVisit?.outcome,
-                    visitCategory = visit.visitCategory,
-                    cpType = visit.cpVisit?.cpType,
-                    clientMobile = visit.leadPhone,
-                    lmoName = visit.lmoName,
-                    deadline = com.manjugroups.m_connect.util.VisitDeadline.format(
-                        visit.scheduledDate,
-                        visit.scheduledEndTime ?: visit.scheduledStartTime,
-                    ),
-                )
+        parentFragmentManager.pushDetail(
+            TripNavigationFragment.forVisit(
+                visitId = visit.id,
+                placeName = visit.placeName,
+                placeAddress = visit.placeAddress,
+                destLat = visit.placeLat,
+                destLng = visit.placeLng,
+                status = visit.status,
+                tripType = visit.tripType,
+                clientPlaceVisitId = visit.clientPlaceVisitId,
+                cpClientMet = visit.cpVisit?.clientMet,
+                cpOutcome = visit.cpVisit?.outcome,
+                visitCategory = visit.visitCategory,
+                cpType = visit.cpVisit?.cpType,
+                clientMobile = visit.leadPhone,
+                lmoName = visit.lmoName,
+                deadline = com.manjugroups.m_connect.util.VisitDeadline.format(
+                    visit.scheduledDate,
+                    visit.scheduledEndTime ?: visit.scheduledStartTime,
+                ),
             )
-            .addToBackStack(null)
-            .commitOnce()
+        )
     }
 
     // ---------- Formatting helpers ----------

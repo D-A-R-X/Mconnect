@@ -1029,7 +1029,7 @@
                     android:layout_height="46dp"
                     android:layout_marginEnd="5dp"
                     android:layout_weight="1"
-                    android:background="@drawable/bg_completed_section_card"
+                    android:background="@drawable/bg_call_button_blue"
                     android:clickable="true"
                     android:focusable="true"
                     android:gravity="center"
@@ -1040,7 +1040,7 @@
                         android:layout_height="16dp"
                         android:contentDescription="@null"
                         android:src="@drawable/ic_phone_outline"
-                        app:tint="#0B61CA" />
+                        app:tint="#FFFFFF" />
 
                     <TextView
                         android:id="@+id/tvOverviewCallClient"
@@ -1051,7 +1051,7 @@
                         android:fontFamily="@font/inter_semibold"
                         android:maxLines="1"
                         android:text="Call Client"
-                        android:textColor="#0B61CA"
+                        android:textColor="#FFFFFF"
                         android:textSize="13sp" />
                 </LinearLayout>
 
@@ -1061,7 +1061,7 @@
                     android:layout_height="46dp"
                     android:layout_marginStart="5dp"
                     android:layout_weight="1"
-                    android:background="@drawable/bg_completed_section_card"
+                    android:background="@drawable/bg_call_button_blue"
                     android:clickable="true"
                     android:focusable="true"
                     android:gravity="center"
@@ -1072,7 +1072,7 @@
                         android:layout_height="16dp"
                         android:contentDescription="@null"
                         android:src="@drawable/ic_phone_outline"
-                        app:tint="#0B61CA" />
+                        app:tint="#FFFFFF" />
 
                     <TextView
                         android:id="@+id/tvOverviewCallDriver"
@@ -1083,7 +1083,7 @@
                         android:fontFamily="@font/inter_semibold"
                         android:maxLines="1"
                         android:text="Call Driver"
-                        android:textColor="#0B61CA"
+                        android:textColor="#FFFFFF"
                         android:textSize="13sp" />
                 </LinearLayout>
             </LinearLayout>

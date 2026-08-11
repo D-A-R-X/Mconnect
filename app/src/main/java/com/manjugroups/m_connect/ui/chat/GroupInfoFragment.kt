@@ -36,6 +36,7 @@ import com.manjugroups.m_connect.ui.common.ProfilePhotos
 import com.manjugroups.m_connect.ui.common.SearchableOption
 import com.manjugroups.m_connect.ui.common.SearchableSelectionDialog
 import com.manjugroups.m_connect.ui.common.navigateUp
+import com.manjugroups.m_connect.ui.common.pushDetail
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -111,13 +112,9 @@ class GroupInfoFragment : Fragment() {
         renderIdentity(title, null, null)
 
         binding.rowMedia.setOnClickListener {
-            parentFragmentManager.beginTransaction()
-                .replace(
-                    R.id.fragmentContainer,
-                    ChatMediaFragment.newInstance(channelId, conversationId, currentTitle(), ""),
-                )
-                .addToBackStack(null)
-                .commitOnce()
+            parentFragmentManager.pushDetail(
+                ChatMediaFragment.newInstance(channelId, conversationId, currentTitle(), ""),
+            )
         }
         setupMuteRow()
         binding.btnEditGroup.setOnClickListener { showEditNameDescription() }
@@ -359,13 +356,9 @@ class GroupInfoFragment : Fragment() {
                 ).conversationId
             }.getOrNull()
             if (_binding == null || convId.isNullOrBlank()) return@launch
-            parentFragmentManager.beginTransaction()
-                .replace(
-                    R.id.fragmentContainer,
-                    ChatMessagesFragment.forConversation(convId, member.staffName ?: "Chat"),
-                )
-                .addToBackStack(null)
-                .commitOnce()
+            parentFragmentManager.pushDetail(
+                ChatMessagesFragment.forConversation(convId, member.staffName ?: "Chat"),
+            )
         }
     }
 

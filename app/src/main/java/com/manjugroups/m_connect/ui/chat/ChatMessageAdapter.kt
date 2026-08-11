@@ -19,6 +19,7 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import coil.load
 import com.manjugroups.m_connect.R
+import com.manjugroups.m_connect.ui.common.pushDetail
 import com.manjugroups.m_connect.databinding.ItemChatDateSeparatorBinding
 import com.manjugroups.m_connect.databinding.ItemChatMessageReceivedBinding
 import com.manjugroups.m_connect.databinding.ItemChatMessageSentBinding
@@ -400,10 +401,7 @@ class ChatMessageAdapter(
                             lon = telemetry.lon,
                             label = telemetry.label
                         )
-                        activity.supportFragmentManager.beginTransaction()
-                            .replace(R.id.fragmentContainer, mapFragment)
-                            .addToBackStack(null)
-                            .commitOnce()
+                        activity.supportFragmentManager.pushDetail(mapFragment)
                     } else {
                         val uriString = String.format(Locale.US, "geo:%f,%f?q=%f,%f(%s)", telemetry.lat, telemetry.lon, telemetry.lat, telemetry.lon, Uri.encode(telemetry.label))
                         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uriString))
@@ -609,10 +607,7 @@ class ChatMessageAdapter(
                             lon = telemetry.lon,
                             label = telemetry.label
                         )
-                        activity.supportFragmentManager.beginTransaction()
-                            .replace(R.id.fragmentContainer, mapFragment)
-                            .addToBackStack(null)
-                            .commitOnce()
+                        activity.supportFragmentManager.pushDetail(mapFragment)
                     } else {
                         val uriString = String.format(Locale.US, "geo:%f,%f?q=%f,%f(%s)", telemetry.lat, telemetry.lon, telemetry.lat, telemetry.lon, Uri.encode(telemetry.label))
                         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uriString))

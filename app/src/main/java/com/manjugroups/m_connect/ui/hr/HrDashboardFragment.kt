@@ -24,6 +24,7 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Lifecycle
 import com.manjugroups.m_connect.ui.common.applySmoothTransitions
+import com.manjugroups.m_connect.ui.common.pushDetail
 import com.manjugroups.m_connect.ui.common.applyShrinkableBlueHeaderBackground
 import com.manjugroups.m_connect.ui.common.dismissRefresh
 import com.manjugroups.m_connect.ui.common.setBottomCornerRadius
@@ -244,11 +245,7 @@ class HrDashboardFragment : Fragment() {
                 HomeFenceWarningDialog.show(parentFragmentManager)
                 return@setOnClickListener
             }
-            parentFragmentManager.beginTransaction()
-                .applySmoothTransitions()
-                .replace(R.id.fragmentContainer, ClockInAreaFragment())
-                .addToBackStack(null)
-                .commitOnce()
+            parentFragmentManager.pushDetail(ClockInAreaFragment())
         }
 
         binding.btnOnDutyDisabled.setOnClickListener {
@@ -1481,20 +1478,15 @@ class HrDashboardFragment : Fragment() {
         address: String?,
     ) {
         if (!isAdded || parentFragmentManager.isStateSaved) return
-        parentFragmentManager.beginTransaction()
-            .applySmoothTransitions()
-            .replace(
-                R.id.fragmentContainer,
-                SelfieClockInDetailFragment.newInstance(
-                    mode = mode.name,
-                    photoPath = photoPath,
-                    latitude = latitude,
-                    longitude = longitude,
-                    address = address,
-                ),
-            )
-            .addToBackStack(null)
-            .commitOnce()
+        parentFragmentManager.pushDetail(
+            SelfieClockInDetailFragment.newInstance(
+                mode = mode.name,
+                photoPath = photoPath,
+                latitude = latitude,
+                longitude = longitude,
+                address = address,
+            ),
+        )
     }
 
     private fun updateAttendanceLoadingUi() {

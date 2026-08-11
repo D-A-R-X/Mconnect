@@ -27,6 +27,11 @@ import java.util.concurrent.CopyOnWriteArrayList
 object ModernDialerWebViewBridge {
     private const val TAG = "ModernDialer"
     private const val DIALER_ORIGIN = "https://dialer.theairix.com"
+    // Origin the host page runs as (the trusted PARENT the embed expects — the
+    // same site the web dialer is embedded in). loadDataWithBaseURL gives the
+    // host this origin so the iframe sees a proper parent, WebRTC/getUserMedia
+    // is allowed (https), and control messages are accepted.
+    private const val HOST_BASE_URL = "https://mg.theairix.com"
     private const val JS_INTERFACE = "MconnectDialerBridge"
     // If the softphone never reports registration, flush queued commands anyway
     // after this long so a call attempt isn't silently stuck "connecting".
@@ -78,8 +83,22 @@ object ModernDialerWebViewBridge {
                     phoneRegistered = false
                     fallbackFlushPosted = false
                     loadedUrl = url
-                    Log.i(TAG, "loading dialer embed: $url")
-                    view.loadUrl(url)
+                    Log.i(TAG, "loading dialer embed (iframe host): $url")
+                    // Load a HOST page (origin = HOST_BASE_URL) that embeds the
+                    // dialer in an IFRAME and relays postMessages to/from it —
+                    // EXACTLY how the working web dialer runs. The embed page is
+                    // built to talk to a PARENT window; loading it top-level and
+                    // self-posting (the old approach) meant the softphone never
+                    // received the call command or reported registration, so
+                    // calls hung on "connecting". contentWindow.postMessage from
+                    // a trusted parent origin is what makes it respond.
+                    view.loadDataWithBaseURL(
+                        HOST_BASE_URL,
+                        buildHostHtml(url),
+                        "text/html",
+                        "utf-8",
+                        null,
+                    )
                 }
                 onReady(Result.success(Unit))
             } catch (e: Exception) {
@@ -180,8 +199,9 @@ object ModernDialerWebViewBridge {
             }
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView, url: String?) {
-                    Log.i(TAG, "page loaded: $url")
-                    injectBridge(view)
+                    Log.i(TAG, "host page loaded: $url")
+                    // The host page's own script relays messages to/from the
+                    // iframe — no bridge injection needed here.
                     pageLoaded = true
                     // Prefer waiting for the softphone's registration event, but
                     // never stay stuck: if it doesn't arrive, flush anyway.
@@ -229,14 +249,9 @@ object ModernDialerWebViewBridge {
         )
         data.putAll(payload)
         val json = gson.toJson(data)
-        val script = """
-            (function() {
-              var data = $json;
-              window.postMessage(data, '$DIALER_ORIGIN');
-              window.dispatchEvent(new MessageEvent('message', { data: data, origin: 'mconnect-android' }));
-            })();
-        """.trimIndent()
-        webView?.evaluateJavascript(script, null)
+        // Hand the command to the host page, which posts it to the iframe's
+        // contentWindow (the dialer) with the trusted parent origin.
+        webView?.evaluateJavascript("window.__mdSend($json)", null)
     }
 
     private fun emit(event: DialerEvent) {
@@ -265,6 +280,43 @@ object ModernDialerWebViewBridge {
         is Activity -> this
         is ContextWrapper -> baseContext.findActivity()
         else -> null
+    }
+
+    /** Host page that embeds the dialer in an iframe and relays postMessages —
+     *  mirrors the web ModernDialerProvider (iframe + sendDialer/onMessage). */
+    private fun buildHostHtml(embedUrl: String): String {
+        val safeSrc = embedUrl.replace("\"", "&quot;")
+        return """
+            <!doctype html><html><head><meta charset="utf-8">
+            <meta name="viewport" content="width=device-width,initial-scale=1">
+            <style>html,body{margin:0;height:100%;background:#fff}
+            iframe{position:fixed;inset:0;width:100%;height:100%;border:0}</style></head>
+            <body>
+            <iframe id="mdframe" src="$safeSrc" allow="microphone; autoplay; camera"></iframe>
+            <script>
+            (function(){
+              var ORIGIN = "$DIALER_ORIGIN";
+              var frame = document.getElementById('mdframe');
+              // native -> dialer: post the control message to the iframe window.
+              window.__mdSend = function(d){
+                try { frame.contentWindow.postMessage(d, ORIGIN); }
+                catch(e){ console.error('mdSend failed', e); }
+              };
+              // dialer -> native: relay any 'modern-dialer' event from the iframe.
+              window.addEventListener('message', function(ev){
+                try {
+                  if (ev.origin !== ORIGIN) return;
+                  var d = ev.data;
+                  if (d && d.source === 'modern-dialer') {
+                    $JS_INTERFACE.postMessage(JSON.stringify(d));
+                  }
+                } catch(e){}
+              });
+              frame.addEventListener('load', function(){ console.log('md iframe loaded'); });
+            })();
+            </script>
+            </body></html>
+        """.trimIndent()
     }
 
     private fun buildEmbedUrl(context: Context, token: String): String {

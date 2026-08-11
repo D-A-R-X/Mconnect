@@ -480,7 +480,7 @@
         android:layout_marginStart="12dp"
         android:layout_marginTop="12dp"
         android:layout_marginEnd="12dp"
-        android:background="@drawable/bg_completed_section_card"
+        android:background="@drawable/bg_call_button_blue"
         android:clickable="true"
         android:focusable="true"
         android:gravity="center"
@@ -494,7 +494,7 @@
             android:layout_height="18dp"
             android:contentDescription="@null"
             android:src="@drawable/ic_phone_outline"
-            app:tint="#0B61CA" />
+            app:tint="#FFFFFF" />
 
         <TextView
             android:id="@+id/tvCallClient"
@@ -505,7 +505,7 @@
             android:fontFamily="@font/inter_semibold"
             android:maxLines="1"
             android:text="Call Client"
-            android:textColor="#0B61CA"
+            android:textColor="#FFFFFF"
             android:textSize="14sp" />
     </LinearLayout>
 

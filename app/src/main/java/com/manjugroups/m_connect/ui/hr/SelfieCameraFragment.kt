@@ -27,6 +27,7 @@ import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.databinding.FragmentSelfieCameraBinding
 import com.manjugroups.m_connect.ui.common.navigateUp
+import com.manjugroups.m_connect.ui.common.pushDetail
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.io.File
@@ -248,19 +249,15 @@ class SelfieCameraFragment : Fragment(), OnMapReadyCallback {
         address: String?,
     ) {
         if (!isAdded || parentFragmentManager.isStateSaved) return
-        parentFragmentManager.beginTransaction()
-            .replace(
-                R.id.fragmentContainer,
-                SelfieClockInDetailFragment.newInstance(
-                    mode = mode,
-                    photoPath = photoPath,
-                    latitude = latitude,
-                    longitude = longitude,
-                    address = address,
-                ),
-            )
-            .addToBackStack(null)
-            .commitOnce()
+        parentFragmentManager.pushDetail(
+            SelfieClockInDetailFragment.newInstance(
+                mode = mode,
+                photoPath = photoPath,
+                latitude = latitude,
+                longitude = longitude,
+                address = address,
+            ),
+        )
     }
 
     private fun createPunchPhotoFile(): File? {

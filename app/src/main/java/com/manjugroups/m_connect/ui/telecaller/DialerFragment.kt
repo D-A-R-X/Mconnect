@@ -5,8 +5,11 @@ import android.app.AlertDialog
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.ToneGenerator
+import android.os.Build
 import android.os.Bundle
 import android.text.InputType
 import android.view.Gravity
@@ -74,6 +77,7 @@ class DialerFragment : Fragment() {
     // Ringback tone played while the destination is ringing (outbound), so the
     // agent hears that the call is forwarded and ringing. Stopped on answer/end.
     private var ringbackTone: ToneGenerator? = null
+    private var audioFocusRequest: AudioFocusRequest? = null
     private var dialerConfig: MobileDialerConfigResponse? = null
     private var pendingModernDialerPhone: String? = null
     private var callStage: CallStage = CallStage.IDLE
@@ -207,6 +211,7 @@ class DialerFragment : Fragment() {
         ModernDialerWebViewBridge.removeListener(dialerEventListener)
         cancelConnectingTimeout()
         stopRingback()
+        stopCallAudio()
         tvNumber = null
         tvStation = null
         btnBackspace = null
@@ -377,20 +382,54 @@ class DialerFragment : Fragment() {
         if (!session.isLoggedIn) return
         tvStation?.text = "Checking mapping..."
         viewLifecycleOwner.lifecycleScope.launch {
-            runCatching { api.getMobileDialerConfig(session.bearerToken) }
-                .onSuccess {
-                    dialerConfig = it
-                    renderStation()
-                }
-                .onFailure {
-                    dialerConfig = null
-                    renderStation()
-                }
+            val cfg = fetchDialerConfigWithRetry()
+            dialerConfig = cfg
+            renderStation()
         }
+    }
+
+    /** The modern-dialer config is essential: the extension + WebRTC token come
+     *  from it. A transient failure (the prod backend was returning 27s
+     *  responses, past OkHttp's 30s timeout) must NOT be treated as "no mapping"
+     *  — otherwise a configured account silently drops to the decommissioned
+     *  Doocti endpoint (mms.aivida.in → HTTP 404) and shows the wrong station.
+     *  Retry a few times before giving up. */
+    private suspend fun fetchDialerConfigWithRetry(
+        attempts: Int = 3,
+    ): MobileDialerConfigResponse? {
+        repeat(attempts) { i ->
+            val r = runCatching { api.getMobileDialerConfig(session.bearerToken) }
+                .getOrNull()
+            if (r != null) return r
+            if (i < attempts - 1) delay(1500)
+        }
+        return null
     }
 
     private fun triggerModernDialerOrFallback(phone: String) {
         val config = dialerConfig
+        if (config != null) {
+            routeCall(phone, config)
+            return
+        }
+        // Config hasn't loaded yet (or a prior fetch failed transiently). Fetch
+        // it inline before deciding, so we don't wrongly fall through to Doocti.
+        calling = true
+        btnCall?.isEnabled = false
+        tvStation?.text = "Checking mapping..."
+        viewLifecycleOwner.lifecycleScope.launch {
+            val fetched = fetchDialerConfigWithRetry()
+            calling = false
+            btnCall?.isEnabled = true
+            if (fetched != null) {
+                dialerConfig = fetched
+                renderStation()
+            }
+            routeCall(phone, fetched)
+        }
+    }
+
+    private fun routeCall(phone: String, config: MobileDialerConfigResponse?) {
         val token = config?.mapping?.token?.takeIf { it.isNotBlank() }
         val extension = config?.mapping?.extension?.takeIf { it.isNotBlank() }
         if (config?.configured == true && token != null && extension != null) {
@@ -400,6 +439,14 @@ class DialerFragment : Fragment() {
                 return
             }
             triggerModernDialer(phone, config)
+        } else if (config == null) {
+            // Couldn't reach the config service at all — don't place a call on
+            // the dead Doocti endpoint; tell the user to retry.
+            Toast.makeText(
+                requireContext(),
+                "Couldn't reach the dialer service. Check your connection and try again.",
+                Toast.LENGTH_LONG,
+            ).show()
         } else {
             triggerDoocti(phone, station)
         }
@@ -420,6 +467,7 @@ class DialerFragment : Fragment() {
         callStage = CallStage.CONNECTING
         activeNumber = phone
         renderCallPanel()
+        startCallAudio()
         startConnectingTimeout()
         btnCall?.isEnabled = false
         callIcon?.visibility = View.INVISIBLE
@@ -536,6 +584,7 @@ class DialerFragment : Fragment() {
     private fun resetCallState() {
         cancelConnectingTimeout()
         stopRingback()
+        stopCallAudio()
         callStage = CallStage.IDLE
         activeNumber = null
         muted = false
@@ -583,6 +632,46 @@ class DialerFragment : Fragment() {
     private fun stopRingback() {
         ringbackTone?.let { runCatching { it.stopTone(); it.release() } }
         ringbackTone = null
+    }
+
+    /** Put the audio system into VoIP call mode + take audio focus so the
+     *  WebView's WebRTC can actually acquire the mic and route call audio. The
+     *  softphone was failing with "Could not start audio source" / "Unable to
+     *  select communication device" because the app never entered this mode
+     *  (OPPO/ColorOS blocks the audio source otherwise). */
+    private fun startCallAudio() {
+        val am = context?.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+        runCatching {
+            am.mode = AudioManager.MODE_IN_COMMUNICATION
+            val attrs = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val req = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                    .setAudioAttributes(attrs)
+                    .build()
+                audioFocusRequest = req
+                am.requestAudioFocus(req)
+            } else {
+                @Suppress("DEPRECATION")
+                am.requestAudioFocus(null, AudioManager.STREAM_VOICE_CALL, AudioManager.AUDIOFOCUS_GAIN)
+            }
+        }
+    }
+
+    private fun stopCallAudio() {
+        val am = context?.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                audioFocusRequest?.let { am.abandonAudioFocusRequest(it) }
+            } else {
+                @Suppress("DEPRECATION")
+                am.abandonAudioFocus(null)
+            }
+            audioFocusRequest = null
+            am.mode = AudioManager.MODE_NORMAL
+        }
     }
 
     private fun DialerEvent.stringPayload(key: String): String? {

@@ -23,6 +23,7 @@ import com.manjugroups.m_connect.network.StaffFullData
 import com.manjugroups.m_connect.notifications.PushTokenManager
 import com.manjugroups.m_connect.ui.common.ProfilePhotos
 import com.manjugroups.m_connect.ui.common.applySmoothTransitions
+import com.manjugroups.m_connect.ui.common.pushDetail
 import kotlinx.coroutines.launch
 import com.manjugroups.m_connect.ui.common.showOnce
 import com.manjugroups.m_connect.ui.common.commitOnce
@@ -172,19 +173,11 @@ class ProfileFragment : Fragment() {
         binding.rowPersonalData.setOnClickListener(openEditProfile)
 
         binding.rowLanguage.setOnClickListener {
-            parentFragmentManager.beginTransaction()
-                .applySmoothTransitions()
-                .replace(R.id.fragmentContainer, LanguageFragment())
-                .addToBackStack(null)
-                .commitOnce()
+            parentFragmentManager.pushDetail(LanguageFragment())
         }
 
         binding.rowAppearance.setOnClickListener {
-            parentFragmentManager.beginTransaction()
-                .applySmoothTransitions()
-                .replace(R.id.fragmentContainer, AppearanceFragment())
-                .addToBackStack(null)
-                .commitOnce()
+            parentFragmentManager.pushDetail(AppearanceFragment())
         }
 
         bindNotificationToggle()

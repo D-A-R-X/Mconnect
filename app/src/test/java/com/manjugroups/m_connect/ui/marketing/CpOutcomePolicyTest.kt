@@ -10,8 +10,11 @@ class CpOutcomePolicyTest {
     fun `others is available only for the approved CP categories`() {
         assertTrue(cpTypeSupportsOtherOutcome("booking_cp"))
         assertTrue(cpTypeSupportsOtherOutcome(" GIFT_DISTRIBUTION "))
-        assertTrue(cpTypeSupportsOtherOutcome("Old_Client"))
 
+        // Old Client CP no longer offers "Others" — both its outcomes already
+        // capture remarks, so the free-text option was redundant (web parity:
+        // CP_TYPES_WITH_OTHER_OUTCOME = {booking_cp, gift_distribution}).
+        assertFalse(cpTypeSupportsOtherOutcome("Old_Client"))
         assertFalse(cpTypeSupportsOtherOutcome("collection_cp"))
         assertFalse(cpTypeSupportsOtherOutcome("follow_up"))
         assertFalse(cpTypeSupportsOtherOutcome("sv_cum_cp"))

@@ -118,6 +118,12 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     // standalone booking, site-visit outcome, or a caller-provided outcome arg)
     // set this true so they skip the chooser.
     private var outcomeChosen: Boolean = false
+    // True when a caller-supplied STANDARD outcome arg (booking / site_visit /
+    // postpone / not_interested) pre-selected the form and skipped the chooser.
+    // detectAndApplyLockedSvMode uses this to reopen the "What happened with
+    // the client?" chooser when the visit is still PENDING — a stray/leaked
+    // outcome must not silently drop a fresh completion into a form.
+    private var outcomeArgPreselected: Boolean = false
     private var otherRemarksShown: Boolean = false
     private var otherOutcomeSaving: Boolean = false
     // The reusable centre outcome-picker (shown when a type still needs choosing).
@@ -820,7 +826,13 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
 
         // Pre-seed from args if caller passed an outcome (skips the chooser).
         arguments?.getString(ARG_CP_OUTCOME)?.takeIf { it.isNotBlank() }
-            ?.let { ext -> outcomeFromArg(ext)?.let { activeOutcome = it; outcomeChosen = true } }
+            ?.let { ext ->
+                outcomeFromArg(ext)?.let {
+                    activeOutcome = it
+                    outcomeChosen = true
+                    outcomeArgPreselected = true
+                }
+            }
 
         // If TripNavigationFragment already detected this is an SV-fix
         // CP, switch to Site Visit + fade the other tabs BEFORE the
@@ -6459,6 +6471,20 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     // the telecaller already prepared". This helper detects that
     // payload and re-shapes the sheet accordingly.
 
+    /** A visit is "already decided" — a genuine re-open, not a fresh
+     *  completion — when it (or its field-visit) is completed/cancelled or
+     *  carries a completion timestamp. Only then may a caller-supplied outcome
+     *  legitimately skip the "What happened with the client?" chooser. A stray
+     *  outcome on a still-pending row does NOT count. */
+    private fun visitAlreadyDecided(visit: CpVisitDetail): Boolean {
+        val status = visit.status?.lowercase(Locale.getDefault())
+        val fieldStatus = visit.fieldVisit?.status?.lowercase(Locale.getDefault())
+        return visit.completedAt != null ||
+            visit.fieldVisit?.completedAt != null ||
+            status == "completed" || status == "cancelled" ||
+            fieldStatus == "completed"
+    }
+
     private fun detectAndApplyLockedSvMode() {
         val cpVisitId = arguments?.getString(ARG_CP_VISIT_ID)
         if (cpVisitId.isNullOrBlank()) {
@@ -6577,6 +6603,16 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                             tab.cell?.isClickable = true
                             tab.cell?.alpha = 1f
                         }
+                        maybeShowOutcomePicker()
+                    } else if (outcomeArgPreselected && !visitAlreadyDecided(visit)) {
+                        // A caller-supplied / leaked STANDARD outcome pushed the
+                        // sheet straight into a form and skipped the chooser on a
+                        // still-PENDING visit (the leaked-outcome case). Reopen
+                        // the "What happened with the client?" chooser so the
+                        // field staff actually picks the outcome. Genuine re-opens
+                        // of an already-completed visit are excluded above and keep
+                        // their recorded outcome's form.
+                        outcomeChosen = false
                         maybeShowOutcomePicker()
                     }
                     return@launch
