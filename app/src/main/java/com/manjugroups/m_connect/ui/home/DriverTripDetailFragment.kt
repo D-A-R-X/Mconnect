@@ -86,6 +86,11 @@ class DriverTripDetailFragment : Fragment(), OnMapReadyCallback {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
+        // Edge-to-edge shell: drop the header below the status bar so the back
+        // button + title don't sit under the notch / status icons.
+        com.manjugroups.m_connect.ui.common.BottomActionInsets
+            .applyStatusBarTop(binding.detailHeaderBar)
+
         binding.btnTripDetailBack.setOnClickListener {
             parentFragmentManager.popBackStack()
         }
