@@ -9050,3 +9050,19 @@ not committed, pushed, or deployed.
   clientPlaceVisits.ts. Committed+pushed max (f45f8576). REMAINING BLOCKER for it to show live: admin must
   deploy max Convex to the backend the app hits — until then the live backend has no out-of-geofence branch
   and every completion completes directly (this is why the user saw "Completed").
+
+- 2026-08-12 — Diagnosed "outcome stays locked after scanning SV QR" (evidence-backed trace). ROOT CAUSE:
+  markOnCounsellingFromQr never advances the SV to on_counselling (route from commit af137cfc "secure SV QR"
+  not on the backend the app hits, OR canStartQrCounselling authorization rejects) AND the app SILENTLY
+  swallowed the failure — QrScannerFragment.markSiteVisitOnCounselling opened the outcome page even on
+  success==false, stranding the user on a greyed dead-end (setSiteVisitOutcome then rejects on_site). Confirmed
+  my OTP/geofence CP changes did NOT regress this: SV outcomes route entirely through setSiteVisitOutcome /
+  createBooking (isSiteVisitMode), never clientPlaceVisits.setOutcome; the saveOutcome SV-via-CP branch is dead
+  code (0 callers); assertRequiredCpCompletionProof exists only in clientPlaceVisits.ts. FIX (app): on
+  counselling-start failure, surface the REAL error and resumeScanning() instead of navigating to a greyed
+  outcome page; only open the outcome on success. Also hardened SiteVisitOverviewFragment.isOutcomeAlreadyRecorded
+  to read sv.status (not top-level CP status) for the lock check. DEFINITIVE unlock still requires the admin to
+  deploy the secure-SV-QR backend (af137cfc: markOnCounsellingFromQr + /markOnCounselling + /siteVisits/setOutcome
+  routes). COUNT: audit confirms pending/approve/reject accounting is exactly-once; no per-client >3 completed
+  gate exists to skew. (Pre-existing, unrelated: convertToSiteVisit + rejectAsFinanciallyIneligible omit the
+  rollup diff — flagged, not fixed.)

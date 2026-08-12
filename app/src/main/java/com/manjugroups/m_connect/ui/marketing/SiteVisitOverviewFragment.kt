@@ -1483,8 +1483,13 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         val outcome = if (sv != null) sv.outcome else visit.outcome
         val convertedBookingId = if (sv != null) sv.convertedBookingId else visit.convertedBookingId
         val cancelledAt = if (sv != null) sv.cancelledAt else visit.cancelledAt
+        // Read the SV's OWN status when present (same precedence as the fields
+        // above) so a CP-linked envelope whose top-level status is the CP's can
+        // never false-lock the SV outcome. getForMobileId mirrors sv.status onto
+        // the top level today, but this keeps it correct if that ever changes.
+        val statusForLock = if (sv?.status?.isNotBlank() == true) sv.status else visit.status
         return !outcome.isNullOrBlank() ||
-            isOutcomeRecordedStatus(visit.status) ||
+            isOutcomeRecordedStatus(statusForLock) ||
             convertedBookingId != null ||
             cancelledAt != null
     }
