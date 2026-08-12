@@ -1,32 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Out-of-geofence completion warning. Shown when the field staff swipes to
-  complete but their fresh GPS fix is well away from the client's saved
-  location. Captures a required reason (shown to the approving GM) and lets
-  them Cancel or Complete; Complete runs the normal photo + OTP flow and the
-  server holds the completion for GM approval.
+  Out-of-geofence completion warning. Shown as a centered floating dialog when
+  the field staff swipes to complete but their fresh GPS fix is well away from
+  the client's saved location. Captures a required reason (shown to the
+  approving GM) and lets them Cancel or Complete; Complete runs the normal
+  photo + OTP flow and the server holds the completion for GM approval.
 -->
 <androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@drawable/bg_bottom_sheet_white_rounded"
+    android:background="@drawable/bg_dialog_card"
     android:fillViewport="true">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:paddingHorizontal="20dp"
-        android:paddingTop="12dp"
+        android:paddingHorizontal="24dp"
+        android:paddingTop="24dp"
         android:paddingBottom="24dp">
-
-        <!-- Drag handle -->
-        <View
-            android:layout_width="40dp"
-            android:layout_height="4dp"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginBottom="16dp"
-            android:background="@drawable/bg_grey_rounded" />
 
         <!-- Warning icon -->
         <FrameLayout
@@ -41,8 +34,7 @@
                 android:layout_gravity="center"
                 android:contentDescription="@null"
                 android:src="@drawable/ic_location_pin"
-                app:tint="#B54708"
-                xmlns:app="http://schemas.android.com/apk/res-auto" />
+                app:tint="#B54708" />
         </FrameLayout>
 
         <TextView

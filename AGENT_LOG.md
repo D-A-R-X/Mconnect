@@ -9023,3 +9023,10 @@ not committed, pushed, or deployed.
   CpApprovalQueueBottomSheet restyled to the design system (Inter fonts, bg_bottom_sheet_white_rounded
   root, bg_grey_rounded handle, pill-styled reject input). :app compile GREEN. build.gradle.kts test-backend
   switch (api-mfpl→next-spaniel-814) intentionally left UNSTAGED. Web CP backend still NEEDS CONVEX DEPLOY.
+
+- 2026-08-12 — CP out-of-geofence warning changed from bottom sheet to a centered FLOATING dialog per
+  request. OutOfGeofenceWarningBottomSheet now extends DialogFragment (was BottomSheetDialogFragment);
+  onStart floats it centered (transparent window, dimmed scrim, width = screen-2*28dp capped at 400dp).
+  Layout switched to bg_dialog_card (all-corner rounded), dropped the drag handle. Same
+  onComplete/onCancel contract + required-reason validation; TripNavigationFragment wiring unchanged
+  (showOnce is defined on DialogFragment). :app compile GREEN.

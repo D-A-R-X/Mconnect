@@ -1,23 +1,28 @@
 package com.manjugroups.m_connect.ui.home
 
 import android.content.DialogInterface
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.EditText
 import android.widget.TextView
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import androidx.fragment.app.DialogFragment
 import com.manjugroups.m_connect.R
+import kotlin.math.roundToInt
 
 /**
- * Out-of-geofence completion warning sheet. Shown when the field staff swipes
- * to complete but their fresh GPS fix is well away from the client's saved
- * location. Captures a REQUIRED reason (surfaced to the approving GM) and lets
- * them Cancel or Complete. [onComplete] fires with the reason; [onCancel] fires
- * on any non-complete dismissal (Cancel, back, tap-outside).
+ * Out-of-geofence completion warning. Shown as a centered FLOATING dialog when
+ * the field staff swipes to complete but their fresh GPS fix is well away from
+ * the client's saved location. Captures a REQUIRED reason (surfaced to the
+ * approving GM) and lets them Cancel or Complete. [onComplete] fires with the
+ * reason; [onCancel] fires on any non-complete dismissal (Cancel, back, tap
+ * outside).
  */
-class OutOfGeofenceWarningBottomSheet : BottomSheetDialogFragment() {
+class OutOfGeofenceWarningBottomSheet : DialogFragment() {
 
     var onComplete: ((reason: String) -> Unit)? = null
     var onCancel: (() -> Unit)? = null
@@ -28,6 +33,20 @@ class OutOfGeofenceWarningBottomSheet : BottomSheetDialogFragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?,
     ): View = inflater.inflate(R.layout.sheet_out_of_geofence_warning, container, false)
+
+    override fun onStart() {
+        super.onStart()
+        // Float as a centered card: transparent window so the rounded card
+        // shows, dimmed scrim behind, width capped with side margins.
+        dialog?.window?.let { window ->
+            window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            val margin = (28 * resources.displayMetrics.density).roundToInt()
+            val maxWidth = (400 * resources.displayMetrics.density).roundToInt()
+            val width = (resources.displayMetrics.widthPixels - margin * 2)
+                .coerceAtMost(maxWidth)
+            window.setLayout(width, WindowManager.LayoutParams.WRAP_CONTENT)
+        }
+    }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
