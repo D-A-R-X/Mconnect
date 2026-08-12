@@ -1529,17 +1529,12 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             val effLat = freshLocation.latitude
             val effLng = freshLocation.longitude
             currentLocation = LatLng(effLat, effLng)
-            val distance = haversineMeters(currentLocation!!, dest)
-            if (distance > REACHING_RADIUS_METERS) {
-                arrivalInProgress = false
-                swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
-                Toast.makeText(
-                    requireContext(),
-                    "You are ${formatDistance(distance)} away. Move within ${formatDistance(REACHING_RADIUS_METERS.toDouble())} to complete.",
-                    Toast.LENGTH_LONG
-                ).show()
-                return@launch
-            }
+            // Geofence gate removed — staff may complete a visit from anywhere.
+            // The client arrival OTP is the real proof of presence, and the old
+            // distance block mis-fired whenever the stored client coordinate
+            // disagreed with the device fix (the "web/app show different
+            // coordinates" confusion). We still capture the fresh fix above for
+            // the record; we just no longer block on how far it is from dest.
             arrivalConfirmedForProgress = true
             applyStatusPill("Reaching")
             swipeArrived?.reset(newLabel = "Swipe to Complete Trip")

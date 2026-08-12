@@ -73,6 +73,12 @@ object AttendanceStatusBadge {
                 return set(pill, "Week Off", FG_NEUTRAL, R.drawable.bg_pill_white)
             "holiday" ->
                 return set(pill, "Holiday", FG_NEUTRAL, R.drawable.bg_pill_white)
+            // Comp Off is a paid, HR-approved day off (a spent comp-off credit).
+            // Without this case it fell through to the punch-derivation below,
+            // hit "no clock-in", and mislabelled as Absent — the mobile-vs-web
+            // "shows absent" mismatch. Render it neutrally like Week Off.
+            "comp-off", "comp_off", "compoff", "compensatory" ->
+                return set(pill, "Comp Off", FG_NEUTRAL, R.drawable.bg_pill_white)
         }
 
         // ── No HR verdict — derive from punch activity ──
