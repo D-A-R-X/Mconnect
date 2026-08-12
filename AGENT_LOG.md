@@ -9040,3 +9040,13 @@ not committed, pushed, or deployed.
   Second gate even after deploy: fail-open when resolveHandoffManagerStaffId returns undefined (staff has
   no reportingTo GM) → completes directly by design. Both explain the symptom. Awaiting user decision on
   (a) deploying max, (b) fail-open vs fail-closed-with-fallback-approver.
+
+- 2026-08-12 — Decisions from user: admin will run the Convex deploy (I do NOT deploy); out-of-geofence
+  must ALWAYS require approval. Implemented fail-CLOSED on web max (convex/marketing/clientPlaceVisits.ts):
+  needsApproval = outOfGeofence (unconditional), and gmStaffId = reporting/department GM ?? active
+  super-admin fallback (new resolveCpApprovalFallbackApproverStaffId, normalizeRole from ../../lib/iam-model)
+  so an out-of-geofence completion is never auto-completed and never stranded. approvalGmName (shown to
+  staff as "Awaiting: <GM>") derives from completionApproval.gmStaffId, now always set. tsc clean for
+  clientPlaceVisits.ts. Committed+pushed max (f45f8576). REMAINING BLOCKER for it to show live: admin must
+  deploy max Convex to the backend the app hits — until then the live backend has no out-of-geofence branch
+  and every completion completes directly (this is why the user saw "Completed").
