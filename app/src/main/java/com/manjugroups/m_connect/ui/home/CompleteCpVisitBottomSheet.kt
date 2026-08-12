@@ -824,44 +824,37 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         btnCpLockedReject = view.findViewById(R.id.btnCpLockedReject)
         btnCpLockedConfirm = view.findViewById(R.id.btnCpLockedConfirm)
 
-        // Pre-seed from args if caller passed an outcome (skips the chooser).
-        arguments?.getString(ARG_CP_OUTCOME)?.takeIf { it.isNotBlank() }
-            ?.let { ext ->
-                outcomeFromArg(ext)?.let {
-                    activeOutcome = it
-                    outcomeChosen = true
-                    outcomeArgPreselected = true
-                }
-            }
-
-        // If TripNavigationFragment already detected this is an SV-fix
-        // CP, switch to Site Visit + fade the other tabs BEFORE the
-        // first renderState() call. Without this the user briefly sees
-        // the Booking tab default for one frame while the async detect
-        // resolves, then it snaps to locked Site Visit — visible as a
-        // flicker. Applying the hint synchronously here makes the first
-        // paint show locked Site Visit straight away. detectAndApply
-        // below still runs and refines the pre-fill values + final
-        // verification.
+        // Whether TripNavigationFragment flagged this as an SV-fixed CP
+        // (sv_cum_cp). For those we deliberately DO NOT pre-commit an outcome:
+        // the "What happened with the client?" picker shows first, and
+        // detectAndApplyLockedSvMode swaps to the locked Site Visit form ONLY
+        // when the row is a genuine telecaller-fixed SV (applyLockedSvMode
+        // dismisses the picker itself). The old code set outcomeChosen=true +
+        // faded tabs synchronously to avoid a first-paint flicker, but that
+        // made the show-listener reveal a form which async-detect then reverted
+        // to the picker — the sheet flashed a form, closed it, and reopened a
+        // form (the reported glitch). Keeping the sheet on the picker until
+        // detect resolves removes the race entirely: the sheet is hidden
+        // (alpha 0) behind the picker, so no form paints and nothing flickers.
         val isSvFixedHint = arguments?.getBoolean(ARG_IS_SV_FIXED_HINT, false) == true
-        if (isSvFixedHint) {
-            activeOutcome = Outcome.SITE_VISIT
-            outcomeChosen = true
+
+        // Pre-seed from args if the caller passed a standard outcome (skips the
+        // chooser). Suppressed for sv_cum_cp so a caller-supplied / leaked CP
+        // outcome cannot skip the picker or re-trigger the reveal-then-picker
+        // glitch — the picker (or the SV lock) decides the outcome there.
+        if (!isSvFixedHint) {
+            arguments?.getString(ARG_CP_OUTCOME)?.takeIf { it.isNotBlank() }
+                ?.let { ext ->
+                    outcomeFromArg(ext)?.let {
+                        activeOutcome = it
+                        outcomeChosen = true
+                        outcomeArgPreselected = true
+                    }
+                }
         }
 
         wireInteractions()
         renderState()
-
-        if (isSvFixedHint) {
-            // Pale-out the non-SV tabs immediately so the first paint
-            // matches the locked layout. detectAndApplyLockedSvMode
-            // below adds the read-only / Reject-Confirm footer once
-            // the server-side payload arrives.
-            listOf(tabBooking, tabPostpone, tabNotInterested).forEach { tab ->
-                tab.cell?.isClickable = false
-                tab.cell?.alpha = 0.35f
-            }
-        }
 
         // Check whether the CP visit was pre-fixed by the telecaller. If
         // so, lock the sheet to Site Visit and surface Reject / Confirm.
