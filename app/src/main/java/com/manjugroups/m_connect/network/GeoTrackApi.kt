@@ -1530,6 +1530,11 @@ data class CpVisitDetail(
     val notes: String? = null,
     val completedAt: Long? = null,
     val cancelledAt: Long? = null,
+    // Out-of-geofence completion approval (top-level in the mobile compact
+    // list shape — this is what /clientPlaceVisits/my deserializes into).
+    val approvalGmName: String? = null,
+    val rejectRemark: String? = null,
+    val reassignedFromRejection: Boolean? = null,
     val expectedAttendeeCount: Int? = null,
     val foodPreferences: String? = null,
     val vehiclePreference: String? = null,

@@ -428,7 +428,12 @@ class CpVisitsFragment : Fragment() {
     private fun com.manjugroups.m_connect.network.CpVisitDetail.toCpListVisitOrNull(): TodayVisit? {
         val cpId = this.id ?: return null
         val scheduled = this.scheduledDate ?: return null
-        val effectiveStatus = this.fieldVisit?.status?.takeIf { it.isNotBlank() }
+        // The CP-level "pending_gm_approval" hold must win over the fieldVisit
+        // lifecycle: the app calls completeVisit after every outcome, so the
+        // fieldVisit reads "completed" while the CP is actually held. Without
+        // this the card would show "Completed" instead of "Pending Approval".
+        val effectiveStatus = this.status?.takeIf { it == "pending_gm_approval" }
+            ?: this.fieldVisit?.status?.takeIf { it.isNotBlank() }
             ?: this.status?.takeIf { it.isNotBlank() }
             ?: "scheduled"
         val proposedHasFields = this.proposedSiteVisit?.let { p ->
@@ -500,6 +505,9 @@ class CpVisitsFragment : Fragment() {
             clientPlaceId = this.clientPlaceId ?: cpId,
             scheduledDate = scheduled,
             status = effectiveStatus,
+            approvalGmName = this.approvalGmName,
+            rejectRemark = this.rejectRemark,
+            reassignedFromRejection = this.reassignedFromRejection,
             visitCategory = category,
             placeName = displayName,
             placeAddress = this.clientPlace?.address
