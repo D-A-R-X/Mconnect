@@ -2,6 +2,7 @@ package com.manjugroups.m_connect.ui.marketing
 
 import android.app.AlertDialog
 import android.graphics.Color
+import android.graphics.Typeface
 import android.os.Bundle
 import android.text.InputType
 import android.view.Gravity
@@ -16,11 +17,13 @@ import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.content.res.ResourcesCompat
 import androidx.core.view.setPadding
 import androidx.fragment.app.FragmentManager
 import androidx.lifecycle.lifecycleScope
 import coil.load
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.CpApprovalActionRequest
 import com.manjugroups.m_connect.network.CpApprovalItem
@@ -48,6 +51,9 @@ class CpApprovalQueueBottomSheet : BottomSheetDialogFragment() {
     private fun dp(v: Int): Int =
         (v * resources.displayMetrics.density).roundToInt()
 
+    private fun font(res: Int): Typeface? =
+        runCatching { ResourcesCompat.getFont(requireContext(), res) }.getOrNull()
+
     override fun onCreateView(
         inflater: LayoutInflater,
         parent: ViewGroup?,
@@ -56,29 +62,37 @@ class CpApprovalQueueBottomSheet : BottomSheetDialogFragment() {
         session = SessionManager(requireContext())
         val root = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(16), dp(20), dp(24))
+            setPadding(dp(20), dp(12), dp(20), dp(24))
+            background = ResourcesCompat.getDrawable(
+                resources, R.drawable.bg_bottom_sheet_white_rounded, null,
+            )
         }
 
         // Drag handle
         root.addView(View(requireContext()).apply {
             layoutParams = LinearLayout.LayoutParams(dp(40), dp(4)).apply {
                 gravity = Gravity.CENTER_HORIZONTAL
-                bottomMargin = dp(14)
+                bottomMargin = dp(16)
             }
-            setBackgroundColor(Color.parseColor("#D0D5DD"))
+            background = ResourcesCompat.getDrawable(
+                resources, R.drawable.bg_grey_rounded, null,
+            )
         })
 
         root.addView(TextView(requireContext()).apply {
             text = "CP completions to approve"
             textSize = 18f
             setTextColor(Color.parseColor("#101828"))
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            includeFontPadding = false
+            typeface = font(R.font.inter_semibold) ?: typeface
         })
         root.addView(TextView(requireContext()).apply {
             text = "Out-of-geofence completions waiting on your approval."
             textSize = 13f
             setTextColor(Color.parseColor("#667085"))
-            setPadding(0, dp(2), 0, dp(14))
+            includeFontPadding = false
+            typeface = font(R.font.inter_regular) ?: typeface
+            setPadding(0, dp(4), 0, dp(16))
         })
 
         progress = ProgressBar(requireContext()).apply {
@@ -92,6 +106,7 @@ class CpApprovalQueueBottomSheet : BottomSheetDialogFragment() {
             textSize = 14f
             setTextColor(Color.parseColor("#667085"))
             gravity = Gravity.CENTER
+            typeface = font(R.font.inter_regular) ?: typeface
             setPadding(0, dp(24), 0, dp(24))
             visibility = View.GONE
         }
@@ -144,12 +159,16 @@ class CpApprovalQueueBottomSheet : BottomSheetDialogFragment() {
             text = item.clientName ?: "Client"
             textSize = 15f
             setTextColor(Color.parseColor("#101828"))
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            includeFontPadding = false
+            typeface = font(R.font.inter_semibold) ?: typeface
         })
         card.addView(TextView(requireContext()).apply {
             text = "by ${item.staffName ?: "Field staff"}"
             textSize = 12f
             setTextColor(Color.parseColor("#475467"))
+            includeFontPadding = false
+            typeface = font(R.font.inter_regular) ?: typeface
+            setPadding(0, dp(2), 0, 0)
         })
 
         val distance = item.distanceMeters?.let { "${it.roundToInt()} m out of geofence" }
@@ -159,7 +178,9 @@ class CpApprovalQueueBottomSheet : BottomSheetDialogFragment() {
                 text = place
                 textSize = 12f
                 setTextColor(Color.parseColor("#B54708"))
-                setPadding(0, dp(4), 0, 0)
+                includeFontPadding = false
+                typeface = font(R.font.inter_medium) ?: typeface
+                setPadding(0, dp(6), 0, 0)
             })
         }
         item.outcome?.takeIf { it.isNotBlank() }?.let { outcome ->
@@ -167,6 +188,8 @@ class CpApprovalQueueBottomSheet : BottomSheetDialogFragment() {
                 text = "Outcome: ${outcome.replace('_', ' ')}"
                 textSize = 12f
                 setTextColor(Color.parseColor("#475467"))
+                includeFontPadding = false
+                typeface = font(R.font.inter_regular) ?: typeface
                 setPadding(0, dp(2), 0, 0)
             })
         }
@@ -176,6 +199,8 @@ class CpApprovalQueueBottomSheet : BottomSheetDialogFragment() {
                 text = "Staff reason: $remark"
                 textSize = 12f
                 setTextColor(Color.parseColor("#101828"))
+                includeFontPadding = false
+                typeface = font(R.font.inter_regular) ?: typeface
                 setPadding(0, dp(4), 0, 0)
             })
         }
@@ -221,8 +246,9 @@ class CpApprovalQueueBottomSheet : BottomSheetDialogFragment() {
         gravity = Gravity.CENTER
         textSize = 14f
         setTextColor(Color.parseColor(fg))
-        setTypeface(typeface, android.graphics.Typeface.BOLD)
-        setPadding(dp(12), dp(11), dp(12), dp(11))
+        includeFontPadding = false
+        typeface = font(R.font.inter_semibold) ?: typeface
+        setPadding(dp(12), dp(13), dp(12), dp(13))
         background = roundedBg(bg, bg)
         isClickable = true
         setOnClickListener { onClick() }
@@ -254,8 +280,20 @@ class CpApprovalQueueBottomSheet : BottomSheetDialogFragment() {
     private fun promptReject(item: CpApprovalItem) {
         val input = EditText(requireContext()).apply {
             hint = "Reason for rejecting"
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
-            setPadding(dp(16), dp(12), dp(16), dp(12))
+            setHintTextColor(Color.parseColor("#94A3B8"))
+            setTextColor(Color.parseColor("#101828"))
+            textSize = 13f
+            gravity = Gravity.TOP or Gravity.START
+            minLines = 3
+            inputType = InputType.TYPE_CLASS_TEXT or
+                InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or
+                InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            includeFontPadding = false
+            typeface = font(R.font.inter_regular) ?: typeface
+            background = ResourcesCompat.getDrawable(
+                resources, R.drawable.bg_outcome_field_pill, null,
+            )
+            setPadding(dp(14), dp(12), dp(14), dp(12))
         }
         val wrap = FrameLayout(requireContext()).apply {
             setPadding(dp(20), dp(8), dp(20), 0)
