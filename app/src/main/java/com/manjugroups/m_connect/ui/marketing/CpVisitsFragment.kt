@@ -695,6 +695,10 @@ class CpVisitsFragment : Fragment() {
         val cancelled = isCancelled(status)
         val completed = isCompleted(status)
         val inProgress = isInProgress(status)
+        // Out-of-geofence completion held for the GM: outcome is recorded but
+        // the visit isn't final until the GM approves (→ completed) or rejects
+        // (→ reopened for this staff).
+        val pendingApproval = status == "pending_gm_approval"
         val needsCpDetails = (visit.tripType == "client_place" || visit.clientPlaceVisitId != null) &&
             status == "arrived" && visit.cpVisit?.outcome.isNullOrBlank()
         // "Outcome pending" — the trip is over (status=completed) but the
@@ -733,6 +737,23 @@ class CpVisitsFragment : Fragment() {
                 actionIcon.visibility = View.VISIBLE
                 actionIcon.imageTintList = null
                 tapMode = TapMode.NONE
+            }
+            pendingApproval -> {
+                // Outcome recorded but out of geofence — waiting on the GM.
+                statusPill.background = ContextCompat.getDrawable(ctx, R.drawable.bg_home_trip_status_progress)
+                statusDot.background = ContextCompat.getDrawable(ctx, R.drawable.bg_home_trip_status_dot)
+                statusText.text = "Pending Approval"
+                statusText.setTextColor(Color.parseColor("#B54708"))
+
+                actionBtn.background = ContextCompat.getDrawable(ctx, R.drawable.bg_cpv_action_completed)
+                // Tell the staff exactly which GM they're waiting on.
+                actionLabel.text = visit.approvalGmName?.trim()?.takeIf { it.isNotEmpty() }
+                    ?.let { "Awaiting: $it" } ?: "Awaiting GM"
+                actionLabel.setTextColor(Color.parseColor("#1F7A3F"))
+                actionIcon.setImageResource(R.drawable.ic_cpv_action_completed)
+                actionIcon.visibility = View.VISIBLE
+                actionIcon.imageTintList = null
+                tapMode = TapMode.COMPLETED_DETAIL
             }
             isOutcomePending -> {
                 // CP visit's trip is complete but the outcome was never
