@@ -326,6 +326,13 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         view.findViewById<View>(R.id.btnMapExpand)?.setOnClickListener { expandMap() }
         view.findViewById<View>(R.id.btnMapCollapse)?.setOnClickListener { collapseMap() }
 
+        // Edge-to-edge shell: drop the top bar below the status bar so the back
+        // button + title don't sit under the notch / status icons.
+        view.findViewById<View>(R.id.topBar)?.let {
+            com.manjugroups.m_connect.ui.common.BottomActionInsets
+                .applyStatusBarTop(it)
+        }
+
         // Edge-to-edge shell: lift the pinned action row above the gesture nav
         // bar (and the main tab bar when visible) so the swipe button isn't
         // jammed against the bottom edge.
@@ -1529,16 +1536,45 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             val effLat = freshLocation.latitude
             val effLng = freshLocation.longitude
             currentLocation = LatLng(effLat, effLng)
-            // Geofence gate removed — staff may complete a visit from anywhere.
-            // The client arrival OTP is the real proof of presence, and the old
-            // distance block mis-fired whenever the stored client coordinate
-            // disagreed with the device fix (the "web/app show different
-            // coordinates" confusion). We still capture the fresh fix above for
-            // the record; we just no longer block on how far it is from dest.
-            arrivalConfirmedForProgress = true
-            applyStatusPill("Reaching")
-            swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
-            CpClientSeenBottomSheet().showOnce(parentFragmentManager, "cp_client_seen")
+
+            // Continue into the normal completion flow (client-seen → photo →
+            // OTP). Extracted so the out-of-geofence warning below can gate it.
+            val proceed = {
+                arrivalConfirmedForProgress = true
+                applyStatusPill("Reaching")
+                swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                CpClientSeenBottomSheet().showOnce(parentFragmentManager, "cp_client_seen")
+            }
+
+            // Geofence is no longer a HARD block (the arrival OTP is the real
+            // proof of presence, and the old block mis-fired on stale client
+            // coordinates), but when the staff is clearly away from the client's
+            // saved location, warn first: completing from here is allowed but the
+            // server holds it for GM approval. Cancel aborts; Complete runs the
+            // normal photo + OTP flow.
+            val distance = haversineMeters(currentLocation!!, dest)
+            if (distance > GEOFENCE_APPROVAL_RADIUS_METERS) {
+                swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                    .setTitle("You're not near the client location")
+                    .setMessage(
+                        "You appear to be ${formatDistance(distance)} from the client's " +
+                            "saved location. Do you still want to complete this visit? " +
+                            "It will need your GM's approval.",
+                    )
+                    .setNegativeButton("Cancel") { d, _ ->
+                        arrivalInProgress = false
+                        d.dismiss()
+                    }
+                    .setPositiveButton("Complete") { d, _ ->
+                        d.dismiss()
+                        proceed()
+                    }
+                    .setCancelable(false)
+                    .show()
+                return@launch
+            }
+            proceed()
         }
     }
 
@@ -3005,6 +3041,10 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
 
     companion object {
         private const val REACHING_RADIUS_METERS = 500
+        // Client geofence used for the out-of-range completion warning. Matches
+        // the backend default (CP_GEOFENCE_DEFAULT_RADIUS_M) so the warning
+        // fires for the same completions the server holds for GM approval.
+        private const val GEOFENCE_APPROVAL_RADIUS_METERS = 300.0
         private const val ARG_VISIT_ID = "arg_visit_id"
         private const val ARG_PLACE_ID = "arg_place_id"
         private const val ARG_PLACE_NAME = "arg_place_name"
