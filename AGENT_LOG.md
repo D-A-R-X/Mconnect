@@ -7,9 +7,11 @@
 
 ## Mandatory Update Rule
 
-Every AI must update this file on **every response/turn** and after every
-meaningful change. This applies even when the response only reports status,
-answers a question, performs an investigation, or makes no file changes.
+**MUST DO — non-negotiable:** Every AI (Claude / Antigravity / Gemini / any
+model) must update this file **after each and every response/turn**, without
+exception, and after every meaningful change. This applies even when the
+response only reports status, answers a question, performs an investigation, or
+makes no file changes. A turn is not finished until its AGENT_LOG entry is written.
 
 Each turn's entry must state:
 
@@ -6613,3 +6615,2438 @@ not committed, pushed, or deployed.
   pull errors on max (site-visits-list-page 1304/1331/1402, clientPlaceVisits
   808-809, whatsappInbound 201, http.ts 11068) would block a convex/web deploy —
   not mine, flagged for a cleanup pass.
+
+## Session 121 (main-chat) — SV confirm IAM gate (marketing.siteVisits.confirm)
+- Bug: LMO (and any user) could Confirm SV without permission — the Confirm SV
+  button was always shown and `confirmPendingHandoffAsSiteVisit` had NO auth.
+- New permission `marketing.siteVisits.confirm` added to lib/iam-model.ts
+  (PERMISSIONS catalog + "Marketing — Site Visits" group + module tree). Super
+  admins inherit it via ALL_PERMISSIONS; every other designation must be granted
+  it explicitly (this is the intended gate).
+- Backend gated (all three confirm paths):
+  1. convex/marketing/outOfStationHandoffs.ts `confirmPendingHandoffAsSiteVisit`
+     mutation + `...AndSendWhatsApp` action now take sessionToken and call
+     requirePermissionForSession(..., "marketing.siteVisits.confirm").
+  2. convex/dailyTasks.ts updateStatus — completing a handoff-source task (web
+     dropdown + mobile swipe via /api/dailyTasks/updateStatus) now checks
+     loadEffectivePermissions before internalConfirmHandoffAsSv (closes the
+     task-manager bypass).
+- Frontend hidden + guarded:
+  - components/handoff/handoff-resolution-dialog.tsx (Confirm SV button) — gated
+    on can("marketing.siteVisits.confirm"), passes sessionToken.
+  - features/telecaller/leads/detail/components/GmHandoffBanner.tsx — new
+    canConfirm prop hides "Complete & create SV"; wired from lead-detail-page.tsx
+    which also passes sessionToken to the confirm action.
+- Web-only UI; mobile confirm path is covered by the backend gate (no app change).
+- convex + web tsc clean for all edited files (pre-existing *.test.ts and prior
+  pull errors unchanged). STAGED for mfpl deploy — not deployed, not pushed.
+- ACTION NEEDED post-deploy: an IAM admin must grant marketing.siteVisits.confirm
+  to the designations that legitimately confirm SVs (GM / senior managers),
+  otherwise even authorized non-admin confirmers lose the button.
+
+## Session 122 (main-chat) — SV handoff "Awaiting" staff mismatch after Super Admin edit
+- Bug reported: after Super Admin edits staff (esp. GM) in the Resolve Site Visit
+  Handoff modal and saves, the pending SV list "Awaiting" still shows the old
+  staff (e.g. modal GM = KALYANARAMAN.D but list Awaiting = GM · SRIKANTH.M).
+- Investigation (read-only trace): the list "Awaiting" cell renders h.manager
+  (features/marketing/pages/site-visits-list-page.tsx:2653) which comes from
+  listPending → ctx.db.get(row.managerStaffId) (outOfStationHandoffs.ts:168).
+  Schema defines managerStaffId AS proposedSiteVisit.gmStaffId (schema.ts:6707).
+  updatePendingHandoff already recomputes managerStaffId from the edited GM, and
+  the web modal's buildProposedSiteVisit re-sends gmStaffId — so on `max` the
+  edit→Awaiting sync is already correct and reactive. Conclusion: the LIVE site
+  runs the older backend; this Convex logic is STAGED for the mfpl deploy (same
+  situation as the rejected-SV fix). No app change needed.
+- Genuine gap fixed (defensive, safe): updatePendingHandoff previously only
+  recomputed managerStaffId from the gmStaffId the client RE-SENT. A partial
+  payload that patched proposedSiteVisit WITHOUT gmStaffId left managerStaffId
+  stale. Changed convex/marketing/outOfStationHandoffs.ts (updatePendingHandoff)
+  to resolve an effectiveGmStaffId = args.proposedSiteVisit.gmStaffId ??
+  row.proposedSiteVisit.gmStaffId, and re-sync managerStaffId whenever it differs
+  from the current manager — self-heals stale approvers on any edit. No-op in
+  steady state; validates the GM is active (throws otherwise).
+- Files changed: convex/marketing/outOfStationHandoffs.ts (1 mutation). No app or
+  travel-desk change. Web frontend unchanged (already correct).
+- Validation: npx tsc --noEmit on the edited convex file → clean (exit 0).
+  Pre-existing *.test.ts / prior-pull errors elsewhere unchanged, not mine.
+- Deployment requirement: STAGED for mfpl Convex deploy — NOT deployed, NOT
+  pushed (awaiting user's "push all changes"). Until deploy, the live site will
+  keep showing the old Awaiting value because it runs the older backend.
+- Also strengthened the AGENT_LOG Mandatory Update Rule wording per user request
+  (update after each response by ANY AI, non-negotiable).
+
+## Session 123 (main-chat) — SV outcome form must stay recordable through completed
+- Reported (app, SiteVisitOverviewFragment): a cab SV at DROPPED (and completed
+  SVs) showed the Outcome buttons (Converted as Booking / Client Not Interested /
+  Follow up) greyed/locked. User: outcome must be recordable from on_counselling
+  through every later status INCLUDING completed/done, and must not be "incomplete".
+- Root cause:
+  1. App locked the form via isTerminalOutcome(visit) which trips on
+     isTerminalOutcomeStatus(visit.status) — and that set includes lifecycle
+     "completed"/"done"/"closed". A cab trip finished (or fleet completed-offline)
+     sets a terminal-ish status before field staff record the sales outcome, so
+     the form locked with no outcome recorded.
+  2. Backend setOutcome (convex/marketing/siteVisits.ts) assertTransition only
+     accepted on_counselling/picked_from_site/dropped — it REJECTS "completed",
+     so even if the button were enabled, submit would error.
+- Fixes:
+  - App (SiteVisitOverviewFragment.kt): new isOutcomeAlreadyRecorded(visit) +
+    isOutcomeRecordedStatus() that lock ONLY on an actually-recorded/terminal
+    outcome (non-blank visit.outcome, cancelled/no_show/converted_to_booking/
+    not_interested/postponed/other status, convertedBookingId, cancelledAt) —
+    NOT on bare lifecycle completed/done/closed. isOutcomeLocked now uses it
+    (both enriched bind ~1214 and first-frame bind ~439). isOutcomeStatusEligible
+    now also includes completed/complete/done/closed so buttons enable when the
+    lifecycle is finished but the outcome is still pending. Both cab and
+    own-vehicle gate branches share these vars, so both are fixed.
+  - Backend (siteVisits.ts setOutcome): assertTransition now accepts "completed"
+    as a source status WHEN no outcome exists yet (outcomeAlreadyRecorded =
+    Boolean(visit.outcome)). Once an outcome is recorded, "completed" is dropped
+    from the set so setOutcome can't silently overwrite (edit goes via editOutcome).
+- Not changed (scoped out): QR-scan getByQrPayload canRecordOutcome guards
+  (2358 / 2564) still on_counselling/picked_from_site/dropped — the reported
+  surface is the detail Outcome form, not the QR flow. Flag if QR should match.
+- Validation: convex `tsc --noEmit` clean for siteVisits.ts; app
+  `:app:compileDebugKotlin` BUILD SUCCESSFUL (JBR).
+- Deployment: convex change STAGED for mfpl deploy (not deployed). App change is
+  local (rebuild/reinstall APK to see it). NOT pushed — awaiting "push all changes".
+
+## Session 124 (main-chat) — push all changes
+- User: "push all changes". Committed + pushed this session's work.
+- APP (Mconnect, branch merge): commit 3a0f4715 (SiteVisitOverviewFragment.kt —
+  outcome-through-completed fix). Pushed to origin merge → BOTH remotes
+  (manjugroupsdev + D-A-R-X). f3a67498..3a0f4715. .idea/* and AGENT_LOG.md
+  deliberately NOT committed (IDE noise / local-only log).
+- WEB (manjusitedevelopment, branch max): commit 9df8c35e — 7 files:
+  marketing.siteVisits.confirm IAM gate (iam-model.ts, outOfStationHandoffs.ts,
+  dailyTasks.ts, handoff-resolution-dialog.tsx, lead-detail-page.tsx,
+  GmHandoffBanner.tsx) + updatePendingHandoff Awaiting re-sync + siteVisits.ts
+  setOutcome completed-source. Pushed to origin max. fed8b57c..9df8c35e.
+- No push to main (rule honored). Convex NOT deployed (staged for mfpl).
+- Validation before push: convex tsc clean (my files); app compileDebugKotlin OK.
+
+## Session 125 (main-chat) — OTP entry field must appear even when OTP request limit reached
+- Reported (app, Trip Details / TripNavigationFragment "Swipe to Complete Trip"):
+  when the server returns "Maximum OTP requests reached for this visit", the app
+  only toasted and reset the swipe — no OTP field appeared, so a staff given the
+  code by an admin (who can view the client OTP) had nowhere to enter it.
+- Root cause: requestArrivalOtpThenOpenCamera() treated ANY resp.success==false as
+  a hard block (toast + return), never opening ArrivalOtpBottomSheet. The rate
+  limit is on GENERATING OTPs, not verifying them.
+- Fix (app, TripNavigationFragment.kt only): in the !resp.success branch, detect
+  the OTP request rate-limit (errMsg contains maximum otp / otp requests reached /
+  max otp / too many otp). On that specific case, show an informative toast and
+  FALL THROUGH to the normal proof + OTP-entry flow (camera→upload→OTP sheet for
+  standard, direct OTP sheet for gift distribution) instead of returning. Genuine
+  location/distance blocks and other errors still hard-stop as before. alreadyVerified
+  branch now sets arrivalInProgress=false explicitly (moved off the shared top-of-
+  block reset).
+- Verified backend needs NO change: convex/hr/fieldVisitOtp.ts verifyArrivalOtp
+  checks the stored arrivalOtpHash + expiry + MAX_VERIFY_ATTEMPTS only — it is
+  independent of the request-count limit, so an admin-relayed still-valid OTP
+  verifies (and it re-validates arrival location at verify time). ArrivalOtpBottomSheet
+  does not auto-send on open (caller sends once; sheet only verifies + manual resend),
+  so opening it on the fallback doesn't re-hit the limit.
+- Validation: :app:compileDebugKotlin BUILD SUCCESSFUL (JBR). No web/convex change.
+- Deployment: app-only, local — rebuild/reinstall APK to see it. NOT pushed
+  (awaiting "push all changes").
+
+## Session 126 (main-chat) — push OTP fallback
+- "push all changes". APP (Mconnect, merge): commit 5dd19879 (TripNavigationFragment.kt
+  OTP-limit fallback). Pushed origin merge → BOTH remotes. 3a0f4715..5dd19879.
+- No web/convex change this turn. .idea/* + AGENT_LOG.md not committed. No main push.
+
+## Session 127 (main-chat) — CP visit: address=name/number, 0,0 map, not-showing-on-mobile, confirm-gate regression
+- Reported: CP visits with missing map coords show the client name/number in the
+  ADDRESS field; a CP that is "in-progress" on web does not appear at all in the
+  mobile CP Visits list (super-admin, searching by mobile → No Matches); staff hit
+  OTP max-tries and can't end the CP (loops back to "Start Trip").
+- Diagnosis (with subagent trace):
+  * enrichVisit recovers an address from clientPlace/client but the mobile LIST
+    endpoint listMobileCompact (clientPlaceVisits.ts) returned coords from
+    NON-EXISTENT columns visit.lat/visit.lng (schema fields are visitLat/visitLng)
+    and never returned a resolved clientPlace object → every list row shipped
+    coordinate-less + address-less → TripNavigationFragment fell back to showing
+    the client NAME in the address slot and pinned the map at 0,0.
+  * Mobile CP list capped at 20 rows with CLIENT-SIDE search → a viewAll
+    (super-admin) caller could never find a specific client company-wide.
+  * OTP "can't end": already fixed in Session 125 (TripNavigationFragment OTP-limit
+    fallback), pending their APK rebuild.
+- Fixes:
+  * convex/marketing/clientPlaceVisits.ts listMobileCompact: fetch clientPlace,
+    resolve address (visitAddress||clientPlace.address||formattedAddress||
+    client.homeAddress||client.location) + coords (visitLat/Lng||clientPlace||
+    client) + maps link; return visitLat/visitLng + lat/lng + a clientPlace object.
+    Raised row cap 20→200.
+  * convex/http.ts /api/marketing/clientPlaceVisits/my: limit cap 20→200.
+  * app GeoTrackApi.getMyMarketingCpVisits: new optional limit query param;
+    CpVisitsFragment requests limit=200 (browsable list search now reaches any
+    client). Home/today merges unchanged (default limit).
+  * app TripNavigationFragment: address card no longer falls back to client name
+    (shows "Address not available" instead of the misleading name).
+- ALSO fixed a regression from Session 121: http.ts /api/marketing/
+  outOfStationHandoffs/confirm called confirmPendingHandoffAsSiteVisitAndSendWhatsApp
+  WITHOUT the now-required sessionToken (tsc error). Now passes sessionToken=auth.token
+  (bearer == session token via authenticateRequest), gating the mobile confirm path
+  with marketing.siteVisits.confirm too.
+- Validation: convex tsc clean for clientPlaceVisits.ts + http.ts; app
+  :app:compileDebugKotlin BUILD SUCCESSFUL.
+- Deployment: convex changes STAGED for mfpl deploy (address/coords/limit/confirm-gate
+  fix are NOT live until deployed). App changes need an APK rebuild. NOT pushed yet.
+- STILL PENDING (earlier ask): add drop-pin/map location picker to the WEB client
+  page (features/marketing/pages/client-detail-page.tsx) + persist client.lat/lng —
+  this is the durable coord source so CP visits inherit a pin going forward.
+
+## Session 128 (main-chat) — use client's stored address for CP address + map pin
+- User: clients already have addresses stored in the web Clients tab — use that in
+  the CP address field and mark the map pin.
+- Added composeClientAddress(client) in convex/marketing/clientPlaceVisits.ts:
+  joins the client master's stored address columns (doorNo, addressLine1/2,
+  landmark, homeAddress[="Full Address"], location[=city], district, state,
+  pincode), deduped case-insensitively, → one geocodable line. Now used as the
+  address fallback in BOTH listMobileCompact (mobile list) and enrichVisit (detail)
+  so a CP visit with no address of its own shows the client's real address.
+- Map pin: client rows have no saved lat/lng, but the app already geocodes the
+  address when coords are missing (TripNavigationFragment.geocodeDestinationIfNeeded
+  → DirectionsClient.geocodeAddress). usableCoordPair rejects null/out-of-range/
+  (0,0), so the compact mapper returns null coords for those → forPlace() omits
+  ARG_DEST_LAT/LNG → geocode runs on the client-derived address → pin drops. No app
+  change needed this turn.
+- Validation: convex tsc clean for clientPlaceVisits.ts.
+- Deployment: convex change STAGED for mfpl deploy (not live until deployed). NOT pushed.
+- Still pending: web client-page drop-pin + persisting client.lat/lng (durable pin
+  shown everywhere incl. web, avoids per-open geocoding).
+
+## Session 129 (main-chat) — app shows "Start Trip" while web shows in-progress (CP status desync)
+- Reported: staff already started/reached the CP and is trying to record the
+  outcome, but the app shows "Start Trip" again (Not Started) while the web shows
+  Field visit = in-progress. OTP also blocks completion (2 sends done, not verified).
+- Root cause: the spawned fieldVisits row carries the AUTHORITATIVE trip status
+  (in-progress/arrived/completed); the clientPlaceVisit's own status stays
+  "scheduled" until the outcome is recorded. HomeViewModel.toTodayVisitOrNull
+  (line 518) already prefers fieldVisit.status, and TripNavigationFragment (line
+  445-459) maps "in-progress" → renderArrivalPhase(false) = the started arrival
+  flow. BUT listMobileCompact returned only fieldVisitId, never the resolved
+  fieldVisit object → this.fieldVisit was null → effectiveStatus fell to the CP
+  "scheduled" → app re-offered "Start Trip".
+- Fix: convex/marketing/clientPlaceVisits.ts listMobileCompact now fetches the
+  fieldVisit (via fieldVisitId) and returns a fieldVisit object
+  { _id, status, arrivalRequestedAt, arrivalVerifiedAt }. The app then reads the
+  in-progress status and shows the arrival/complete flow instead of Start Trip,
+  matching web. No app change needed (app already consumes fieldVisit.status).
+- OTP-blocking-completion is the Session 125 fix (OTP-limit fallback opens the
+  entry field so the staff types the admin-revealed OTP) — pending APK rebuild.
+- Validation: convex tsc clean for clientPlaceVisits.ts.
+- Deployment: convex change STAGED for mfpl deploy (not live until deployed). NOT pushed.
+
+## Session 130 (main-chat) — Edit CP Visit modal: assigned staff shows raw id; deploy-gated mobile symptoms
+- User (now testing web on localhost:3000 = updated code): Edit CP Visit modal
+  "Staff name" shows a raw staff id instead of the assigned staff; address still
+  not on mobile + trip still asks to Start; also address fields duplicating.
+- FIXED: components/lead/edit-cp-visit-dialog.tsx eligibleStaffItems now always
+  includes the currently-assigned telecallerStaffId (found in staffList) even when
+  it fails the CP "eligible LMO" category filter (assigned staff was a BDO), so the
+  SearchableSelect resolves the saved id → readable name instead of the raw id.
+  Added telecallerStaffId to the memo deps. tsc clean for the file.
+- FOUND but NOT changed (needs coordinated backend+frontend fix on the OTHER
+  chat's pin feature — flagged to user, not touched to avoid clobbering it):
+  address duplication. handleSave folds street into addressLine2
+  ([street, addressLine2].join) while joinUnifiedAddress already includes street,
+  and updateLocationAndNotes has no streetName arg, so each save+reopen grows the
+  address ("5/215 5/215 Vivekanadar Street ..."). Proposed fix: add streetName arg
+  to updateLocationAndNotes + patch clientPlace.streetName; frontend send street
+  separately and store addressLine2 as-is.
+- CRUX (repeated): mobile symptoms (address not available, 0,0 map, "Start Trip"
+  desync) are ALL already fixed in code (Sessions 127-129: listMobileCompact
+  address/coords/fieldVisit status, composeClientAddress) but the MOBILE app hits
+  the DEPLOYED backend (api-mfpl), which does NOT have these convex changes. They
+  stay invisible on mobile until convex is deployed to whatever the app targets.
+- No push this turn. Web change staged on max.
+
+## Session 131 (main-chat) — address duplication fix + robustness assessment (deploy guarantee)
+- Confirmed app BASE_URL defaults to https://api-mfpl.theairix.com/ (prod) — the
+  freshly-installed phone hits PROD, which lacks Sessions 127-129 convex fixes.
+  That is why mobile still shows "Address not available" / 0,0 / Start-Trip: the
+  fixes live on the user's localhost convex (web), NOT on api-mfpl. Everything
+  mobile is blocked on deploying convex to the backend the app targets.
+- Fixed address duplication (Edit CP Visit modal): components/lead/
+  edit-cp-visit-dialog.tsx handleSave no longer folds location.street into
+  addressLine2 (joinUnifiedAddress already includes street) — stopped the
+  save+reopen growth ("5/215 5/215 5/215 ..."). Reverted an attempted streetName
+  persist (clientPlaces has no streetName column). Typed my staff-picker additions.
+  NOTE: existing corrupted addresses don't self-heal — a re-save with clean fields
+  is needed once; going forward no growth.
+- Also (Session 130) edit-cp-visit-dialog staff picker now always includes the
+  assigned staff so it shows the name not the raw id. tsc: only pre-existing
+  baseline implicit-any at lines 77/87 remain (staffList loosely typed, not mine).
+- Robustness assessment for "will deploy show address+marker on ALL past/corrupted
+  CP & SV":
+  * ADDRESS text — yes after deploy: resolvedAddress falls back to
+    composeClientAddress(client) for CP; SV uses pickupAddress/project.
+  * MARKER — only guaranteed when coords exist OR geocoding succeeds. Infra exists:
+    clientPlaceGeocoding.ts backfills + persists coords for BOTH CP (clientPlaces)
+    and SV (pickup*), triggered by the /my route for missing-coord rows, plus
+    app-side per-open geocode. BUT: (1) depends on Google Geocoding API being
+    ENABLED — earlier REQUEST_DENIED would make ALL coord-less geocoding fail;
+    (2) the backfill geocodes the (possibly corrupted) visit/place address, so it
+    should prefer the client's CLEAN composeClientAddress; (3) backfill is gradual
+    (12/list-load) not one-shot.
+- Proposed next (not yet built): one-shot backfill over all CP+SV geocoding the
+  client's CLEAN address + persisting coords, so past/corrupted rows get a precise
+  pin. Gated on confirming the Geocoding API is enabled (a Google Cloud setting —
+  I cannot change it).
+- Validation: convex tsc clean for clientPlaceVisits.ts. Web baseline 77/87 only.
+- Nothing pushed. Convex changes STAGED for mfpl deploy.
+
+## Session 132 (main-chat) — "Start Trip again" after exiting Trip Details (deploy-independent app fix)
+- Repro: staff starts the nadhiya trip on the phone, exits Trip Details, re-opens
+  → shows "Start Trip" again.
+- Root cause: Trip Details renders from the backend list-row status. The CP row's
+  own status stays "scheduled" until the OUTCOME is recorded; the in-progress
+  state lives on the fieldVisit. reconcileCpVisitStatusFromServer already reads
+  cp.fieldVisit?.status (my Session 129 field) — but the phone hits PROD
+  (api-mfpl) where listMobileCompact does NOT yet return fieldVisit, so effective
+  falls back to cp.status="scheduled" → pre-start phase → "Start Trip".
+- Fix (APP-ONLY, works on the CURRENT prod backend, NO convex deploy needed —
+  just rebuild the APK): TripNavigationFragment now records started trips on-device
+  (SharedPreferences "trip_local_started", keyed by visitId/cpVisitId/placeId).
+  * markVisitLocallyStarted() on successful Start Trip.
+  * bindInitialArgs + reconcile "else" branch: if the backend status is pre-start
+    (scheduled/assigned/pending/blank) AND this device started it, render the
+    enroute/arrival phase instead of Start Trip. Backend arrived/completed still
+    win (checked first).
+  * clearVisitLocallyStarted() on server-terminal status (reconcile completed
+    branch) and in finalizeCompleteVisit() so a finished trip isn't masked.
+- Self-limiting: the bridge only applies while the backend still says pre-start;
+  once the row advances (arrived/completed) the backend branches take over.
+- Validation: :app:compileDebugKotlin BUILD SUCCESSFUL.
+- Deployment: APP-ONLY — rebuild/reinstall the APK and it works against prod as-is.
+  (Once convex is deployed, reconcile's fieldVisit.status path also kicks in and
+  gives the more precise arrived/enroute state.) NOT pushed.
+
+## Session 133 (main-chat) — verify + push all changes
+- Verification: full convex tsc → my files clean (clientPlaceVisits.ts has ZERO
+  errors, even removed the pre-existing visit.lat/lng ones); remaining errors in
+  http.ts (12107/12117/17429) + edit-cp-visit-dialog (77/87) are pre-existing
+  baseline implicit-any on lines I did not touch. app :app:compileDebugKotlin
+  BUILD SUCCESSFUL. Edge review: local-started bridge self-limits (only when
+  backend pre-start) + clears on completion/terminal; reconcile fetch widened to
+  limit=200 so the CP is reliably found; listMobileCompact override-after-spread
+  order correct; only browsable list requests limit=200 (Home unchanged).
+- Pushed: APP merge 5dd19879..36959228 → BOTH remotes. WEB max 9df8c35e..6aca8869.
+- LIVE reality (honest): APP changes (Start-Trip local bridge, address fallback,
+  list limit) work on CURRENT prod after an APK REBUILD — no convex deploy needed
+  for the Start-Trip fix. WEB/convex changes (address/coords/fieldVisit resolution,
+  confirm-gate, duplication) need a CONVEX DEPLOY to mfpl to show live.
+- Remaining gaps I could NOT close (flagged, not "zero-flaw"): (1) convex not
+  deployed; (2) existing corrupted addresses (nadhiya) don't self-heal — need a
+  clean re-save; (3) coord-less rows pin only if Google Geocoding API is enabled
+  (old REQUEST_DENIED); (4) SV pickup path unchanged this session; (5) repo-wide
+  pre-existing baseline tsc errors remain (cleanup pass would help a strict deploy).
+
+## Session 134 (main-chat) — Schedule SV: client-name field + create Client/Lead for new clients
+- Feature: when the "Schedule site visit" modal finds no lead for the phone, allow
+  scheduling for a NEW client — capture the client name and persist a Client (+
+  Lead) record so it shows on the Clients page and links to the visit. User chose
+  Client+Lead creation and Client-as-source-of-truth (bidirectional) sync.
+- Investigation: building blocks already exist — clients.upsertByMobile (find/create
+  client by phone with profile name+address+lat/lng, and propagateClientNameToLeads
+  links it to leads by phone); telecallerLeads.create (dedups by phone, returns lead).
+  Prior no-lead path was BROKEN (submit used selectedLead!._id; validation at ~1423
+  required a lead).
+- Implemented (features/marketing/pages/site-visits-list-page.tsx, web only, no
+  backend change): cClientName state + reset; "Client name" field rendered when
+  phone has no lead match (required); createLead + upsertClient useMutation hooks;
+  validation now requires name+10-digit phone (not a linked lead) for non-direct_sv;
+  in handleCreate, compute effectiveLeadId = selectedLead ?? (createLead + upsertClient
+  with name/address/coords, sourceLeadId link); all leadId call-sites
+  (requestOutOfStationHandoff, createClientPlaceVisit, createVisit) now use
+  effectiveLeadId. Existing lead-linked flow unchanged (creation skipped when a lead
+  is selected). Bonus: the new client is saved WITH lat/lng, so future visits inherit
+  a real map pin (addresses the client-has-no-coords gap for new clients).
+- Validation: web tsc clean for the file (no errors at all).
+- REMAINING (bidirectional write-back the user asked for): editing a VISIT's address
+  should patch the linked Client too (updateLocationAndNotes / SV edit → clients).
+  Client→visit direction works now (clientId linkage + propagateClientNameToLeads);
+  visit→client write-back is the outstanding piece. Not yet built.
+- New feature — NOT pushed; user should test on localhost first. Convex unchanged
+  so this works on their running dev backend immediately.
+
+## Session 135 (main-chat) — Booking port Phase 1: API contract + backend HTTP gap
+- Task: port the web New Booking form (booking-new-page.tsx, 4116 lines: 3 tabs,
+  ~60 fields, GST/schedule/self-cash calcs, 7 doc uploads, ~100-field payload) to
+  the app to full parity (UI + all logic/calcs/rules/types). Mapped both sides via
+  2 subagents (web form spec + backend contract). Backend: single mutation
+  api.bookings.create; HTTP POST /api/bookings already exists (only clientName,
+  mobileNumber, bookingDate required; server derives ref-no, charges subtotal,
+  *AtBooking snapshots, exchange balance; perm = marketing.bookings.create).
+- Finding: Kotlin CreateBookingRequest was ALREADY ~90% complete (~95 fields).
+  Missing: aadhaarBack/cefFront/cefBack doc ids+names, flexiPaymentSchedule,
+  conversionExchangeAmount, skipApproval. Backend HTTP mapper
+  (bookingCreateArgsFromHttpBody) did NOT forward aadhaarBack/cefFront/cefBack or
+  conversionExchangeAmount (mutation+schema DO accept them) — real gap.
+- Phase 1 DONE: (app) ApiService.kt CreateBookingRequest + new FlexiPaymentRow data
+  class — added the 6 doc fields, flexiPaymentSchedule, conversionExchangeAmount,
+  skipApproval. (web) convex/http.ts mapper now forwards aadhaarBack/cefFront/cefBack
+  (+FileName) + conversionExchangeAmount. Deliberately did NOT map skipApproval from
+  HTTP (a mobile client must not bypass the booking approval workflow; web never
+  sends it). Validation: :app:compileDebugKotlin BUILD SUCCESSFUL; convex tsc clean
+  for http.ts region.
+- REMAINING (Phases 2-5, large, multi-turn): calc engine (bookingGst + payable chain
+  + booking-payment-schedule incl self-cash balancing, ported verbatim); rebuild
+  fragment_booking_create.xml with all 3 sections/~60 fields; BookingCreateFragment
+  logic (pickers, plot/lead/client prefill, conditional visibility by
+  bookingType/category/mode/plan/profession/isAgainstSV, uppercasing, ordered
+  first-error validation, 7 doc uploads via POST /api/storage/upload); verify vs
+  checklist. Current mobile form uses only ~8 fields.
+- NOT pushed. Convex change staged.
+
+## Session 136 (main-chat) — Booking port Phases 2-4: calc engine + full form UI
+- Built the mobile New Booking form to broad web parity. Files:
+  * app BookingCalc.kt (NEW) — verbatim port of web derived values: agreedAmount,
+    GST (bookingGst), grossTotalPayable, exchangeBalancePayable, totalPayable,
+    bankLoanAmount, payableChain, minimumAllotmentAmount, outstandingAfterAllotment,
+    standardSchedule (2nd/3rd/4th clamping), planDays, self-cash rebalanceFinalRow.
+  * app res/layout/fragment_booking_create.xml — rebuilt from ~8 fields to full
+    multi-section form (~55 fields): Booking Info, Client Details (+Home/Office
+    address, professional), Source/Referral, Financial, Charges, Customer Funding,
+    Balance Payment Schedule, Original Staff, KYC (Aadhaar/PAN/CEF uploads),
+    References, Finalize. + Save Draft / Save & Send for Approval.
+  * app res/values/styles.xml — added BookingSectionHeader/SubHeader/Computed/UploadRow.
+  * app BookingCreateFragment.kt — full rewrite: enum pickers (AlertDialog), project/
+    unit/staff pickers (SearchableSelectionDialog), 9 date pickers, plot-pricing
+    prefill (getBookingPlotPrefill), live calc → agreed/GST/balance/client-payable
+    displays, conditional visibility (profession/dept, isAgainstSV, SC>0, category B,
+    online/instrument mode, other-dept), lead lookup + client-name prefill, 7 KYC/proof
+    uploads (GetContent → uploadStorageFile → storageId+fileName), ordered required-
+    field validation, full CreateBookingRequest payload incl. flexiPaymentSchedule
+    from 2nd/3rd/4th rows.
+- Validation: :app:compileDebugKotlin BUILD SUCCESSFUL (resources + R.id all resolve).
+- Phase 1 (Session 135): API model complete + backend http mapper forwards
+  aadhaarBack/cefFront/cefBack + conversionExchangeAmount.
+- HONEST GAPS still not built (documented, not claimed done): CONVERSION/EXCHANGE/
+  INTERNAL-EXCHANGE sub-forms (type picker exists; type-specific fields + source
+  lookups not rendered — payload supports them); dynamic self-cash add/remove
+  payment rows (standard 2nd/3rd/4th used instead, mapped to flexiPaymentSchedule);
+  pincode auto-fill + map pin (home lat/lng/googleMapsLink not sent); reporting-chain
+  auto-defaults for original staff; standard-schedule auto-amount clamping in UI.
+- NOT pushed (large new UI — should be tested on a build first). Convex http.ts
+  change staged.
+
+## Session 137 (main-chat) — KYC uploads added to the VISIT→BOOKING sheet too
+- User: KYC document upload + more still missing in the app. Root cause: there are
+  TWO booking-create surfaces. Session 136 rebuilt the standalone BookingCreateFragment
+  (has all 7 doc uploads). But the common path — CompleteCpVisitBottomSheet (the
+  "Converted as Booking" flow from a CP/SV outcome, ~6500 lines) — only had
+  Aadhaar-front + PAN + pay-proof, missing Aadhaar-BACK + CEF-front/back.
+- Fixed CompleteCpVisitBottomSheet + its layout (outcome_body_booking_staff.xml):
+  added Aadhaar Back, CEF Front, CEF Back upload buttons; BookingDocumentKind enum
+  +AADHAAR_BACK/CEF_FRONT/CEF_BACK; state vars; findViewById; click handlers;
+  chooseBookingDocument target + result when-branches; draft save/restore; clearForm
+  reset; required-upload validation (Aadhaar Front/Back, PAN, CEF Front/Back); and
+  the CreateBookingRequest payload now sends aadhaarBack/cefFront/cefBack ids+names.
+- Validation: :app:compileDebugKotlin BUILD SUCCESSFUL (both surfaces + layouts).
+- Depends on Session 135 backend (http.ts mapper forwards the 3 new doc fields) —
+  staged for mfpl deploy; until deployed those ids won't persist server-side.
+
+### Session 107 - GitHub #805: SV cum CP completed on Android → SV not in Site Visits (IN PROGRESS)
+
+**Date:** 2026-08-02
+**Session:** fork. HIGH-priority issue #805 assigned to DARX. Spans Android
+(Mconnect) + backend/web (manjusitedevelopment). Investigating both layers.
+
+- Symptom: complete a `cpType=sv_cum_cp` CP from Android (outcome→interested) →
+  linked SV never shows in Marketing > Site Visits scheduled/list.
+- Intended: CP outcome "interested" + CP.convertedSiteVisitId → backend flips the
+  linked SV confirmationStatus "pending"→"confirmed" → SV appears in Site Visits.
+- Suspects: (a) Android completes the CP WITHOUT calling setCpVisitOutcome
+  ("interested") — my Session-94 sv_cum_cp routing/lock fix was dev-only +
+  UNCOMMITTED, and env reverted to prod, so prod app may skip the confirm sheet;
+  (b) backend flip condition false / sets a status the list excludes; (c) web SV
+  list filter drops the flipped SV. Two Explore agents mapping backend/web + the
+  Android completion path + git state of the Session-94 fix. Fix TBD after.
+- MAIN CHAT: if you touch clientPlaceVisits.setOutcome flip or the siteVisits list
+  query for this, coordinate here.
+
+## Session 138 (main-chat) — push booking work
+- APP (merge): commit cc2888c2 — full New Booking form (BookingCreateFragment +
+  BookingCalc + layout + styles) + KYC uploads on the visit->booking sheet
+  (CompleteCpVisitBottomSheet + outcome_body_booking_staff.xml) + CreateBookingRequest
+  expansion. Pushed origin merge -> BOTH remotes (36959228..cc2888c2).
+- WEB (max): commit 523f20fe — http.ts mapper forwards aadhaarBack/cefFront/cefBack
+  + conversionExchangeAmount. 6aca8869..523f20fe.
+- Rebuild the APK to see the KYC uploads on both booking surfaces. Convex change
+  needs mfpl deploy for the new doc ids to persist server-side.
+
+### Session 107 (cont.) - #805 ROOT CAUSE found
+
+- Mobile: CLEARED. Android reliably calls setCpVisitOutcome("interested") for
+  sv_cum_cp (confirm sheet opens via isSvCumCp routing, locks on
+  convertedSiteVisitId → persistSvCumCpConfirm). Fix is COMMITTED in HEAD
+  (bce67214 + e681195b). Not the gap.
+- Backend/web ROOT CAUSE: the WEB Create-CP-Visit dialog creates sv_cum_cp CPs via
+  clientPlaceVisits.createFromMobile → createCpVisitRows, which tags cpType but
+  NEVER creates a linked siteVisits row and NEVER sets convertedSiteVisitId
+  (clientPlaceVisits.ts:1991-2019). The setOutcome "interested" flip
+  (clientPlaceVisits.ts:2677-2696) ONLY flips a pre-existing linked SV — it never
+  CREATES one; outer guard `visit.convertedSiteVisitId` is falsy → whole block
+  skipped. So no SV ever exists → nothing to show. Web list query
+  (listConfirmedPaginated + isConfirmedHistoryVisit) is FINE — a confirmed SV
+  would appear in Scheduled.
+- Fix options (BACKEND, deploy-gated, main chat's MMS domain — coordinate):
+  (A) creation-side: createCpVisitRows pre-creates a PENDING linked SV +
+      convertedSiteVisitId when cpType=sv_cum_cp (design-aligned; SV shows in
+      Fixed/pending from creation, mobile lock works, existing flip confirms it).
+  (B) completion self-heal: setOutcome creates the SV if sv_cum_cp + missing
+      (also fixes already-created CPs).
+  Design Q: auto-created SV's staff (incharge = CP's field staff? or office
+  assigns?) + pending-vs-confirmed. Test gap: no test covers the CP→SV flip;
+  add a regression test. NOTHING implemented yet — awaiting approach decision.
+
+## Session 139 (main-chat) — investigating #805: SV cum CP completion doesn't create SV
+- High-pri issue: completing a CP with cpType=sv_cum_cp from Android → related SV
+  not visible in Marketing > Site Visits.
+- Trace so far: two sv_cum_cp shapes — (1) telecaller "Fix SV" pre-creates a
+  PENDING paired SV (CP.convertedSiteVisitId set); mobile Confirm →
+  persistSvCumCpConfirm → setCpVisitOutcome(interested) → backend clientPlaceVisits
+  .setOutcome (~line 2677) flips that SV confirmationStatus pending→confirmed → SV
+  shows. (2) CP created via the WEB "Create CP Visit" modal with CP Type=SV cum CP
+  appears to store cpType only (NO proposedSiteVisit, NO convertedSiteVisitId) →
+  mobile lock-signals (proposedSiteVisit/lead sv_fixed/party/convertedSv) all FALSE
+  → normal CP outcome "Interested" recorded → backend confirm-block requires
+  convertedSiteVisitId (absent) → NO SV ever created. Matches the screenshots
+  (completed CP, outcome Interested, no SV).
+- convertToSiteVisit (2892) requires a projectId (from proposed or args) + arrival
+  proof; the CP row itself carries projectId/assignedStaff/scheduledDate, so it may
+  be materialisable from the CP alone.
+- Dispatched a subagent to confirm exact web-create storage + whether convert can
+  run from the bare CP, then implement minimal fix (backend setOutcome materialise
+  vs mobile route). No code changed yet.
+
+### Session 107 (cont.) - #805 FIXED (backend, deploy-gated)
+
+- Fix (option A, creation-side): `clientPlaceVisits.createCpVisitRows` now, when
+  `cpType==="sv_cum_cp"` && projectId present, inserts a PENDING linked siteVisits
+  row (status "scheduled", confirmationStatus "pending", confirmationRequiredBy
+  "cp", origin "client_place_visit", inchargeStaffId = args.assignedStaffId [CP's
+  field staff], telecallerId/assignedTelecallerStaffId = leadTelecaller,
+  address/coords/attendees/etc. mirroring convertToSiteVisit) and patches the CP
+  with convertedSiteVisitId (clientPlaceVisits.ts:2037-2076). No-project → skips
+  gracefully. The existing setOutcome "interested" flip (2731+) confirms it on CP
+  completion; reject path cancels it. End-to-end: SV shows in Site Visits
+  Fixed/pending from creation → Scheduled (confirmed) after mobile CP completion;
+  mobile confirm-lock now works (convertedSiteVisitId present).
+- Test: new convex/siteVisitCumCpLink.test.ts (2 tests) — createFromMobile
+  sv_cum_cp → pending linked SV + convertedSiteVisitId → setOutcome("interested")
+  → SV confirmed + in listConfirmedPaginated; + no-project skip. `npx vitest run
+  convex/siteVisit convex/travelDeskProof` = 9 files / 34 tests ALL PASS.
+- Skipped rollup call (patchSiteVisitStatsForChange non-exported; convertToSiteVisit
+  also omits it) — pre-existing byStatus-only limitation, list unaffected.
+- DEPLOY-GATED + main-chat MMS domain: uncommitted, NOT deployed (never-deploy,
+  prod). Needs a convex deploy to take effect on prod. Only NEW sv_cum_cp CPs get
+  the SV; already-created CPs (no link) would need the option-B self-heal.
+
+## Session 140 (main-chat) — FIX #805: SV cum CP completion now materialises the SV
+- Root cause (confirmed by trace): web "Create CP Visit" modal stores a sv_cum_cp
+  CP with cpType + projectId + assignedStaff but NO proposedSiteVisit / no
+  convertedSiteVisitId. Mobile classified sv_cum_cp only from proposed/lead/party
+  heuristics — never from the real cpType — so it fell to direct_cp, recorded a
+  plain "Interested" outcome, and setOutcome (which only CONFIRMS an existing
+  linked SV, never creates one) produced no Site Visit.
+- Fix:
+  * app HomeViewModel.toTodayVisitOrNull: classify category="sv_cum_cp" when
+    cpType=="sv_cum_cp" (authoritative) in addition to the soft signals. This
+    makes isSvFixedHint true → the sheet opens on the SITE_VISIT form (paled other
+    tabs, seeded from CP) → submit routes to persistSiteVisit → convertToSiteVisit,
+    which materialises the SV (confirmed/scheduled, linked) so it shows in Site
+    Visits. Mirrors the web's "Convert to Site Visit" behaviour.
+  * convex clientPlaceVisits.ts convertToSiteVisit: projectId now falls back to
+    visit.projectId (was args.projectId ?? proposed.projectId only) — defense so a
+    bare sv_cum_cp CP never throws "projectId required".
+- Works against CURRENT prod backend after an APK rebuild (mobile passes projectId
+  from the SV form picker; the backend fallback is extra safety, staged for deploy).
+- Validation: convex tsc clean; :app:compileDebugKotlin BUILD SUCCESSFUL.
+
+## Session 141 (main-chat) — push #805 fix
+- APP (merge): 6704ff32 (HomeViewModel sv_cum_cp classify-by-cpType). Both remotes.
+- WEB (max): 98ca4267 (convertToSiteVisit projectId fallback). 523f20fe..98ca4267.
+
+## Session 142 (main-chat) — FIX #80: CP outcome must ask type first, not open Booking form
+- Issue: normal CP (esp. Follow-up) completion opened the full Outcome Information
+  form with Booking pre-selected + client-details form — field staff land in the
+  wrong flow by accident.
+- Fix (app, CompleteCpVisitBottomSheet): added `outcomeChosen` (default false).
+  renderState now shows renderOutcomeChooser() until an outcome type is picked —
+  the 4 top tabs (Booking/Site visit/Postpone/Not Interested) act as the selector,
+  none pre-highlighted, all forms + CTA hidden, with a "What happened with the
+  client?" prompt (reusing bodyComingSoon's text). Tapping a tab → switchOutcome →
+  outcomeChosen=true → the corresponding form opens. Forced modes set
+  outcomeChosen=true so they skip the chooser: arg-provided outcome, isSvFixedHint
+  (sv_cum_cp lock), applyStandaloneBookingMode, applySiteVisitOutcomeMode,
+  applyLockedSvMode. Collection/old-client/gift CPs use their own dedicated prompts
+  (never reach this sheet). No layout change.
+- Validation: :app:compileDebugKotlin BUILD SUCCESSFUL. App-only; rebuild APK to see it.
+
+## Session 143 (main-chat) — push all changes
+- WEB (max): f6e9d541 — my Session-134 SV client-name feature
+  (features/marketing/pages/site-visits-list-page.tsx) was still uncommitted;
+  committed + pushed. Pre-existing baseline staff implicit-any (1312/1339/1411)
+  unchanged, not mine.
+- NOT pushed / surfaced to user: convex/siteVisitCumCpLink.test.ts (untracked) — a
+  #805 test I did NOT author (uses a different "pre-create pending SV at CP
+  creation" approach); left for the concurrent fork/DARX to own.
+- APP: nothing to push (only .idea + AGENT_LOG modified, both intentionally
+  uncommitted). All prior app fixes already pushed (…80682f87).
+
+## Session 144 (main-chat) — booking form: sections as card containers (web parity)
+- Request: separate each booking tab's sections into card containers (Booking
+  Information, Source/Referral, Financial Details, KYC, …) like the web.
+- styles.xml: added BookingSectionCard + BookingCardTitle (standalone form) and
+  OutcomeBodyCard (sheet bodies) — white rounded cards (reuse bg_booking_card).
+- Standalone New Booking (fragment_booking_create.xml): rewrote so every section
+  (Booking Information / Client Details / Source-Referral / Financial / Charges /
+  Customer Funding / Payment Schedule / Original Staff / KYC / References /
+  Finalize) is its own white card with a title, on a grey backdrop. All field ids
+  preserved.
+- Visit->Booking sheet (dialog_cp_visit_complete.xml + 11 outcome_body_*.xml):
+  greyed outcomeBodyContainer (#F5F6F8) and applied style=OutcomeBodyCard to each
+  body root (find_client, client_form, professional, office, booking, charges,
+  payment, staff[KYC], site_visit, postpone, not_interested) so each section
+  renders as a distinct card across all tabs.
+- Validation: :app:assembleDebug BUILD SUCCESSFUL (all layouts/resources link).
+- App-only, cosmetic. NOT pushed (rebuild APK to view). Reminder honored: AGENT_LOG
+  updated this turn (standing rule).
+
+## Session 145 (main-chat) - push current MMS and app changes
+- Re-audited all three repositories on 2026-08-05. MMS `max` has one untracked
+  SV/CP linkage test, Mconnect `merge` has the documented booking/outcome layout
+  card changes, and Travel Desk `aizen` is clean.
+- `AGENT_LOG.md` and `.idea/deploymentTargetSelector.xml` remain local-only and
+  will not be staged. Validation, commit, and push are in progress.
+- Validation passed: the MMS `siteVisitCumCpLink` regression suite is 2/2 and
+  `git diff --check` is clean. The first Android assemble attempt hit a stale
+  Gradle output-cleanup lock; after stopping the daemon, `:app:assembleDebug`
+  completed successfully. This was an environment lock, not a resource error.
+- Committed and pushed MMS `max` commit
+  `d1b04676cf8905e129c245e4456aba1db5c0c24c` (`test(site-visits): cover SV
+  cum CP linkage`). The company remote tip matches.
+- Committed and pushed Mconnect `merge` commit
+  `811bcb1eef4e00fa95bc8ae13935e5c4ada287c2` (`style(bookings): group form
+  sections into cards`) to both `manjugroupsdev/Mconnect` and
+  `D-A-R-X/Mconnect`; both remote tips match.
+- Travel Desk `aizen` was explicitly pushed and remains up to date. MMS and
+  Travel Desk worktrees are clean. Mconnect retains only the intentionally
+  local `.idea/deploymentTargetSelector.xml` and mandatory `AGENT_LOG.md`.
+- Push task completed. No application or Convex deployment was performed.
+
+## Session 145 (main-chat) — highlight booking section names
+- Sheet section headers (Financial Details, Charges & Advance, Customer Funding,
+  Payment Schedule, CEF Form, Home Address, Office Address) used the plain muted
+  OutcomeFieldLabel (12sp #475467) so they read like field labels.
+- Added OutcomeSectionTitle style (styles_outcome.xml): bold, uppercase, accent
+  blue #0B61CA, 13sp, letter-spacing — a clear section highlight. Applied it to
+  all 7 headers across outcome_body_booking_charges/payment/staff/client_form/
+  office.xml.
+- Validation: :app:assembleDebug BUILD SUCCESSFUL (one transient daemon-stop, clean
+  on re-run). App-only cosmetic; rebuild APK to view. NOT pushed. AGENT_LOG updated
+  (standing rule).
+
+## Session 146 (main-chat) - GitHub SV/Booking issue document audit
+- Started the requested end-to-end review of
+  `C:/Users/surya/Downloads/GitHub_Issues_SV_Booking.docx`.
+- Re-read the mandatory repository instructions and document-processing workflow,
+  confirmed the current MMS/Mconnect/Travel Desk repository baselines, and loaded
+  the bundled document runtime. No product files have been edited yet; issue
+  extraction and ownership mapping are in progress.
+- Extracted all seven reported defects: Immediate-SV rejection visibility, Confirm
+  SV IAM enforcement, Immediate-SV edited staff consistency, mobile payment
+  schedule arithmetic, mobile CEF front/back uploads, Not Interested visibility
+  plus Awaiting cleanup, and Same Area SV Field Staff assignment. Initial ownership
+  is MMS/Convex for 1/2/3/6/7 and Mconnect plus shared booking contracts for 4/5.
+- Audited the current implementations before editing. Rejection history, Confirm
+  SV IAM enforcement, CEF front/back upload wiring, Not Interested persistence,
+  and fleet Awaiting cleanup already had production fixes on the current branch.
+- MMS: fixed the remaining Same Area form defect by introducing a distinct,
+  required Field Staff picker. Site Incharge continues to populate the SV while
+  Field Staff now populates the linked CP `assignedStaffId`; the Schedule action
+  is disabled until that assignment is present.
+- MMS: added `convex/siteVisitManagementIssues.test.ts` covering Immediate-SV
+  rejection actor/time/reason visibility, server-side Confirm IAM denial, fresh
+  staff-name enrichment after Super Admin edits, and Not Interested completion
+  removal from fleet Awaiting. Focused Vitest result: 4/4 passed. A known
+  convex-test scheduled IRIS action emitted a transaction-cleanup warning after
+  the assertions, but did not fail the suite.
+- Mconnect: added standalone booking validation based on `BookingCalc` so Advance,
+  Allotment, and scheduled instalments are each deducted exactly once and an
+  over-allocated schedule is rejected before submission. Added unit coverage for
+  the payable chain and standard schedule; Android validation was pending at
+  this intermediate step and is recorded below.
+- Final validation: MMS focused SV regression suites passed 10/10 across the new
+  issue pack plus history, reassignment, and outcome guards; ESLint passed for
+  both changed MMS files; both MMS and Mconnect `git diff --check` passed.
+  Mconnect `testDebugUnitTest` and `:app:assembleDebug` both completed
+  successfully. Web `tsc --noEmit` no longer reported a source diagnostic after
+  repairing duplicated generated `.next/dev/types` fragments, but exceeded the
+  120-second validation window; focused ESLint and Vitest are the completed web
+  checks. No Travel Desk code was required because none of the seven document
+  issues belongs to that portal. No commit, push, or deployment was performed.
+
+## Session 147 (main-chat) - release gate and push SV/booking fixes
+- User requested publishing the completed issue-document fixes only after a
+  final regression check. Reconfirmed repository scope: MMS `max` contains the
+  Same Area Field Staff fix and its regression suite; Mconnect `merge` contains
+  booking schedule validation and unit coverage; Travel Desk `aizen` is clean.
+- Confirmed that `.idea/deploymentTargetSelector.xml` and this mandatory
+  `AGENT_LOG.md` are local-only and will not be staged. Final validation,
+  intentional staging, commits, and pushes are in progress.
+- Release gate results: MMS focused SV suites passed 10/10 and focused ESLint
+  passed. Mconnect `testDebugUnitTest` plus `:app:assembleDebug` completed with
+  `BUILD SUCCESSFUL`. Repo-wide MMS `tsc --noEmit --incremental false` reached
+  the established unrelated implicit-`any`/unknown-type baseline across many
+  legacy modules; neither changed MMS file appeared in its diagnostics.
+- Proceeding with scoped commits because the affected paths pass their focused
+  checks and the Android app compiles. No Travel Desk commit is needed.
+- Committed and pushed MMS `max` commit
+  `b6154719` (`fix(site-visits): separate same-area field staff`) to
+  `manjugroupsdev/manjusitedevelopment`.
+- Committed and pushed Mconnect `merge` commit
+  `b862cd3f` (`fix(bookings): validate remaining payment schedule`) to both
+  `manjugroupsdev/Mconnect` and `D-A-R-X/Mconnect`.
+- The mandatory log and Android Studio deployment target remain local-only.
+  Remote-tip verification is the final remaining step; no application or
+  Convex deployment was performed.
+- Remote verification completed: MMS origin `max` exactly matches
+  `b6154719134433384d6c13b3c8ecaec7e3f4d407`; both company and DARX Mconnect
+  `merge` exactly match `b862cd3fcda5ff16e8f38eb3e4af8aa9bc152088`.
+  MMS and Travel Desk worktrees are clean. Mconnect contains only the two
+  intentionally uncommitted local-only files noted above. Push task complete.
+
+## Session 148 (main-chat) - bold booking section hierarchy
+- User requested web-parity emphasis for every booking section topic in the
+  Android booking forms. Audited the standalone form and CP/SV outcome-sheet
+  layouts: standalone headings already share `BookingCardTitle`, but the outcome
+  flow is missing explicit headings for Booking Information, Client Details,
+  Original Staff, KYC, and References, while Source / Referral still uses a
+  normal field-label style. Styling and layout corrections are in progress.
+- Updated shared heading styles to enforce bold weight explicitly and use the
+  same dark, uppercase 14sp hierarchy as the web booking form. Added missing
+  outcome-form headings for Client Details, Professional Details, Office
+  Details, Booking Information, Original Staff, KYC, References, and Finalize;
+  promoted Source / Referral from a field label to a section heading. Existing
+  input IDs, visibility logic, and event wiring were not changed.
+- Validation: `:app:assembleDebug` completed successfully and resource linking
+  accepted every updated layout/style. `git diff --check` passed. Full
+  `:app:lintDebug` reached the existing project baseline (93 errors / 6940
+  warnings), beginning with an unrelated `MissingPermission` in
+  `ClockInAreaFragment.kt`; no finding was reported against the changed XML.
+- This is an uncommitted Android-only presentation change. The local IDE file
+  and mandatory log remain outside product scope; no push or deployment was
+  requested.
+
+## Session 149 (main-chat) - reusable booking uploads and web parity audit
+- User requested a reusable upload input and a deep parity pass between the MMS
+  web booking-creation form and both Android booking paths, including conditional
+  dropdown-driven fields, calculations, validation, and payloads.
+- Initial inspection found six standalone upload rows sharing only a visual
+  style while their state handling remains fragment-specific; the CP/SV outcome
+  path duplicates five KYC/CEF upload controls plus payment proof. A reusable
+  component and a web-to-app rule matrix are being prepared before edits.
+- Added `BookingUploadFieldView`, a reusable labeled upload control with one
+  visual treatment, selected-file state, and upload progress state. Replaced
+  payment proof, Aadhaar front/back, PAN, and CEF front/back controls in both
+  Android booking entry paths.
+- Audited the active CP/SV/standalone outcome form against the MMS web source
+  `features/marketing/pages/booking-new-page.tsx`. Corrected payment category C
+  to `C - EMI` and routed exchange, loan, advance, and conversion-credit totals
+  through the shared `BookingCalc` engine.
+- Aligned schedule validation with the web rules: only needed standard
+  installments are required, half-filled rows are rejected, schedules cannot
+  exceed the remaining payable amount, and confirmed self-cash schedules must
+  exactly cover the outstanding balance.
+- Corrected dropdown-dependent behavior discovered by the rule matrix:
+  category C now stores/displays `C - EMI`, nationality stores the web union
+  value `Foreign`, cheque/DD no longer exposes online payment proof, and a
+  booking-type change clears stale conversion/exchange values before rendering
+  the newly selected branch.
+- Added project `allotmentDueDays`/prefill metadata support and enforced project
+  allotment windows, configured project/Flexi schedule windows, and no payment
+  or preferred-registration date before the booking date.
+- Removed the remaining split creation behavior: inventory unit booking now
+  opens `CompleteCpVisitBottomSheet.forStandaloneBooking(...)` with project and
+  plot preselected. Bookings list, inventory, CP outcome, and SV outcome now all
+  execute the same dropdown logic, calculations, validation, upload component,
+  and request builder. The legacy fragment remains compiled for compatibility
+  but is no longer referenced by a live navigation path.
+- Added focused `BookingCalcTest` coverage for exchange/loan/advance/credit
+  deduction order and for omitting unused installment rows.
+- Validation completed: `:app:assembleDebug` and `:app:testDebugUnitTest` both
+  pass after the final changes; `git diff --check` passes (line-ending warnings
+  only). No files were committed or pushed. `.idea/deploymentTargetSelector.xml`
+  remains an unrelated local user change and this mandatory log remains
+  local-only.
+
+## Session 146 (main-chat) — reusable centre outcome-picker + full-screen form
+- Request: replace the in-sheet outcome tabs with a centre-floating dialog (SV-
+  outcome-button design, single colour, icons, hides disabled options); selecting
+  opens the form full-screen; reusable; no backend/flow/logic change; back-out +
+  re-select must work. User chose: present the EXISTING form full-screen (safe).
+- Built ui/common/OutcomeSelectionDialog.kt (reusable): centre AlertDialog, one
+  filled accent-blue pill per enabled outcome (icon+label, reuse ic_outcome_*),
+  86% width, cancelable. + drawable bg_outcome_choice_pill.
+- CompleteCpVisitBottomSheet: (1) onCreateDialog now presents FULL-SCREEN (sheet
+  layoutParams height=MATCH_PARENT, peekHeight=screen) — page-like, all callers
+  get it automatically. (2) maybeShowOutcomePicker() shows the dialog when a type
+  still needs choosing; enabledOutcomeOptions() hides Site Visit on pure-SV rows
+  (disabled-tab parity); 1 option → auto-select, no dialog; cancel → dismiss sheet
+  (re-tap Complete outcome to retry). Forced modes (sv_cum_cp/standalone/locked
+  outcome/arg outcome) keep outcomeChosen=true and skip the picker. pure-SV mode
+  no longer force-selects Booking (shows the 3-option picker instead) unless a
+  specific outcome is locked. applyLockedSvMode + onDismiss tear down the picker
+  (no window leak). switchOutcome(existing) does the selection — NO form/submit/
+  backend change.
+- Validation: :app:compileDebugKotlin BUILD SUCCESSFUL. App-only UI/UX; rebuild
+  APK to view. NOT pushed. AGENT_LOG updated (standing rule).
+
+## Session 147 (main-chat) — picker: hide sheet behind it + rounded corners
+- Fix 1 (both showing): the full-screen sheet was visible behind the centre
+  picker. maybeShowOutcomePicker now sets the sheet's view INVISIBLE + drops its
+  scrim (window dimAmount 0) while the picker is up, so ONLY the dialog floats
+  over the (dimmed) screen. On select → view VISIBLE + dim restored → full-screen
+  form appears. onCancel dismisses the sheet. applyLockedSvMode (async SV lock)
+  also restores view visibility so the forced SV form isn't left invisible.
+  (Used the Fragment `view` property — this sheet has no `root` field.)
+- Fix 2 (rounded corners): OutcomeSelectionDialog container now uses
+  bg_outcome_dialog (22dp radius white) + transparent dialog window so only the
+  rounded card shows (no square system frame).
+- Forced/locked modes (sv_cum_cp/standalone/locked outcome) skip the picker
+  entirely — unchanged. No backend/flow/form-logic change.
+- Validation: :app:compileDebugKotlin BUILD SUCCESSFUL. App-only; rebuild APK.
+  NOT pushed. AGENT_LOG updated (standing rule).
+
+## Session 148 (main-chat) — picker: fix blank-white via alpha-hide + top-of-window
+- Bug: "click Complete CP → dialog for a second → blank white." Root cause was
+  window layering — maybeShowOutcomePicker ran in onViewCreated (before the sheet
+  window was attached) so the AlertDialog ended up BEHIND the full-screen white
+  sheet; hiding only the fragment `view` (INVISIBLE) left the design_bottom_sheet
+  white container covering everything.
+- Fix: moved the picker trigger into onCreateDialog's setOnShowListener (fires
+  AFTER the sheet window is fully attached → the AlertDialog is added on top).
+  Cache the design_bottom_sheet container (sheetContainerView); when an outcome
+  still needs choosing, set that container alpha=0 so the WHOLE sheet (white page
+  included) is invisible while the centre picker floats over the dimmed screen.
+  On select / single-option / async SV-lock → revealSheet() restores alpha=1 and
+  the full-screen form appears. onDismiss clears sheetContainerView (no leak).
+- Removed the old view.visibility/ setDimAmount(0f) juggling (replaced by the
+  alpha hide). applyLockedSvMode now calls revealSheet(). No form/submit/backend/
+  flow/condition change — pure presentation timing fix.
+- Validation: :app:compileDebugKotlin BUILD SUCCESSFUL. App-only UI/UX; rebuild
+  APK to view. NOT pushed. AGENT_LOG updated (standing rule).
+
+## Session 149 (main-chat) — picker: centre zoom animation + click-safety confirmed
+- Animation: the default dialog slide read as a left→right zoom. Added
+  res/anim/dialog_zoom_in.xml + dialog_zoom_out.xml (scale 0.85→1.0 from
+  pivot 50%/50% + alpha fade) and style DialogZoomAnimation; OutcomeSelectionDialog
+  now calls window.setWindowAnimations(...) so the picker pops from the middle.
+- Click-safety (user worried a tap finalizes the outcome): confirmed switchOutcome()
+  only sets activeOutcome + outcomeChosen and calls renderState() — it just reveals
+  that outcome's full-screen form. No submit/save/API. Outcome is finalized only by
+  the form's own Confirm/Save; Back arrow returns to re-pick. No logic change.
+- Validation: :app:assembleDebug BUILD SUCCESSFUL. App-only UI/UX; APK built.
+  NOT pushed. AGENT_LOG updated (standing rule).
+
+## Session 150 (main-chat) — picker: kill sheet-slide glimpse (window anim snapshot)
+- Bug: sheet's white page flashed for a frame behind the centre picker on open.
+  Root cause: the default BottomSheetDialog window enter animation snapshots the
+  window surface (white container, before our alpha-hide lands) and slides that
+  snapshot up — so hiding the container afterward can't erase the already-captured
+  frame.
+- Fix: added style SheetNoWindowAnim (windowEnter/ExitAnimation @null) and set it
+  via window.setWindowAnimations(...) in onCreateDialog → no snapshot slide.
+  Show listener now sets the container alpha=0 FIRST (before layout/expand) always;
+  then outcomeChosen → revealSheet() fades it in (180ms), else the centre picker
+  floats and reveals on select. revealSheet() is now an alpha 0→1 animate (was an
+  instant flip) for a smooth glitch-free entrance on both paths.
+- No form/submit/backend/flow change — presentation-only.
+- Validation: :app:assembleDebug BUILD SUCCESSFUL. App-only; APK built. NOT pushed.
+  AGENT_LOG updated (standing rule).
+
+## Session 151 (main-chat) — form: hide top tabs (show outcome name) + booking client prefill
+- Change 1 (no tabs in the form): once an outcome is picked in the centre dialog
+  the 4 top tabs are redundant. renderState() now hides R.id.outcomeTopTabs when
+  outcomeChosen; new setOutcomeHeader(outcome) sets the header title/subtitle to
+  the chosen name (Booking / Site Visit / Follow up|Postpone / Not Interested).
+  Called from switchOutcome (picker path) + applyLockedSvMode (forced SV).
+  Standalone booking keeps its own "New Booking" header (never routes through
+  switchOutcome). Booking sub-tabs (Client/Booking/Staff) are unchanged.
+- Change 2 (booking opens client form prefilled): CP is tied to a known client,
+  so the "enter mobile number" step is skipped. Captured cpClientPhone/cpClientName
+  in seedSvDefaultsFromCpVisit from visit.client.mobileNumber → lead.mobileNumber →
+  clientPlace.contactPhone. switchOutcome(BOOKING) non-standalone: if a phone is
+  known → bookingStep=CLIENT_FORM + prefillBookingClientFromCp() (seeds mobile/name
+  fields, pre-arms the TextWatcher guard to avoid a double lookup, runs the same
+  lead/client auto-fill as the find-mobile Next). Falls back to FIND_MOBILE only
+  when no phone yet (manual CP / detail not loaded). Standalone unchanged.
+- No backend/persistence/validation change — presentation + prefill routing only.
+- Validation: :app:assembleDebug BUILD SUCCESSFUL (only pre-existing deprecation
+  warnings). App-only; APK built. NOT pushed. AGENT_LOG updated (standing rule).
+
+## Session 152 (main-chat) — Trip Details: full-screen map expand/collapse
+- Added a bottom-right expand button (btnMapExpand, ic_map_expand on white circle
+  bg_map_expand_btn) on the trip map preview card in fragment_trip_navigation.xml.
+- Added a full-screen overlay (mapFullScreenContainer, elevation 24dp, GONE) as the
+  last child of the root ConstraintLayout, with mapFullScreenHost + a top-right
+  close X (btnMapCollapse, ic_close on the same white circle).
+- TripNavigationFragment: expandMap()/collapseMap() REPARENT the single MapView
+  between the preview card and the full-screen host — one map, so all markers,
+  route line and camera survive the toggle (no second map, no re-render cost).
+  Preview locks pan (isScrollGesturesEnabled=false so page scroll works); full view
+  enables pan + zoom controls. renderMapMarkersAndRoute() re-fits camera on toggle.
+- System back closes full screen first via an OnBackPressedCallback (enabled only
+  while expanded), else normal up-nav. Collapse re-inserts the map at index 0 so the
+  loading overlay + expand button stay on top.
+- Validation: :app:assembleDebug BUILD SUCCESSFUL. App-only UI; APK built. NOT
+  pushed. AGENT_LOG updated (standing rule).
+
+## Session 153 (main-chat) — Trip Details: drop Location tile, add area under name
+- Removed the "Location / Current Location" info tile (tvTripOriginName) from the
+  right stat column in fragment_trip_navigation.xml; ETA tile lost its now-redundant
+  top margin so it aligns as the column's first row. Deleted the tvOriginName field
+  + all 4 code references (the id no longer exists).
+- Repurposed the name-subtitle line (tvTripStaffRole, previously hidden) to show the
+  client's primary area/locality under the name, with an ic_cp_locality pin. New
+  primaryAreaFromAddress() parses it from the client address: strips a leading
+  "Address:", takes the text before ", City:", else the first comma token
+  (e.g. "Medavakkam", "Ashok Nagar"). Hidden when no area derivable.
+- No backend/flow change — presentation only.
+- Validation: :app:assembleDebug BUILD SUCCESSFUL. App-only; APK built. NOT pushed.
+  AGENT_LOG updated (standing rule).
+
+## Session 154 (main-chat) — diagnose "HTTP 500" on CP trip completion (no device/prod access)
+- Constraint: staff device inaccessible; prod (api-mfpl) is live, no deploy, no repro.
+  adb found at %LOCALAPPDATA%\Android\Sdk\platform-tools; OkHttp BODY logging present
+  but earlier 500 had scrolled out; `convex logs` CLI won't auth (cloud deploy key
+  ≠ log streaming). Diagnosed from CODE instead.
+- ROOT CAUSE (code-level, prod-access-free): marketing CP routes markClientMet/
+  setOutcome return {status:500,error} on ANY thrown error (http.ts ~11083/11125),
+  unlike geotrack routes (200). setOutcome treats any non-"postponed" outcome as
+  status="completed" → runs assertRequiredCpCompletionProof (clientPlaceVisits.ts
+  ~2805/591) which THROWS unless fieldVisit has BOTH arrivalVerifiedAt (arrival OTP)
+  AND arrivalPhotoStorageId (selfie). Missing → 500. App's catch shows only the
+  Retrofit "HTTP 500" (drops the real body message).
+- Real message ≈ "Arrival OTP must be verified before completing this CP visit"
+  (matches the staff's earlier OTP-max-tries / can't-end-CP report).
+- Latent bug: "client not seen" path (TripNavigationFragment completeCpVisitWithoutClient
+  ~2653) sends outcome "other" with no OTP/selfie → can NEVER satisfy client-present
+  proof → always 500. setOutcome has no clientMet===false exemption.
+- Proposed: (A) app-side — surface server error body instead of bare "HTTP 500"
+  (safe, no deploy); (B) backend (staged, owner deploys) — skip proof when
+  clientMet===false and/or admin override for OTP-stuck CPs.
+- No code changed yet (diagnosis turn). AGENT_LOG updated (standing rule).
+
+## Session 155 (main-chat) — FIX CP completion 500: not-met needs photo only, no OTP
+- Per user: the client-NOT-met flow is photo-proof-only by long-standing design; the
+  arrival-OTP requirement on it is the regression causing HTTP 500.
+- App (Mconnect, TripNavigationFragment):
+  • completeCpVisitWithoutClient now passes arrivalPhotoStorageId=pendingArrivalStorageId
+    to setCpVisitOutcome so the proof photo is attached to the field visit BEFORE the
+    completion-proof check (was omitted → proof failed).
+  • Added serverErrorMessage(e): parses the non-2xx response body's error/message so a
+    future failure shows the real reason instead of a bare "HTTP 500". Wired into the
+    not-met catch and finalizeCompleteVisit catch.
+- Backend (manjusitedevelopment, STAGED — owner must deploy to prod api-mfpl):
+  • convex/marketing/clientPlaceVisits.ts assertRequiredCpCompletionProof: skip the
+    arrival-OTP requirement when visit.clientMet === false; still require the photo.
+  • convex/hr/fieldVisits.ts completeVisit: same exemption (fetch the clientPlaceVisit,
+    skip OTP when clientMet===false); still require the photo. Message generalized to
+    "A photo proof of the visit…". Met visits UNCHANGED (still require OTP + photo).
+- Why both: not-met path calls markClientMet(false) → setOutcome → completeVisit; both
+  setOutcome's proof helper AND completeVisit gate OTP for CP visits, so both needed the
+  exemption; the app photo-pass makes the photo present at setOutcome's check time.
+- Validation: :app:assembleDebug BUILD SUCCESSFUL; tsc clean on both edited convex files
+  (only pre-existing app/** implicit-any baseline remains). NOT pushed; backend NOT
+  deployed (never-deploy rule). AGENT_LOG updated (standing rule).
+
+## Session 156 (main-chat) — picker polish: kill sheet flash, center text, better pop-in
+- Sheet flash on "Complete CP details": the white came from BOTH the fragment root
+  (?attr/colorSurfacePrimary) AND the design_bottom_sheet container's own surface bg;
+  a frame slipped through because the sheet was already MATCH_PARENT+EXPANDED when
+  alpha-0 landed. Fix: while the picker is pending, keep the sheet at height=0 +
+  peekHeight 0 + STATE_COLLAPSED + alpha 0 (nothing on screen). revealSheet() now
+  grows it to MATCH_PARENT + STATE_EXPANDED and fades alpha 0→1 only on selection /
+  forced-outcome. No white can flash regardless of frame timing.
+- Button text centering: OutcomeSelectionDialog buttons were TextViews with a compound
+  drawable (pins to the edge, leaves text visually off-centre). Rebuilt each as a
+  horizontal LinearLayout(gravity=CENTER) with ImageView + TextView so icon+label
+  centre as a group.
+- Enter animation: dialog_zoom_in now scales 0.80→1.0 with overshoot_interpolator
+  (220ms) + a 150ms fade — a clean centre "pop" instead of the flat scale.
+- No logic/flow/backend change — presentation only.
+- Validation: :app:assembleDebug BUILD SUCCESSFUL (only pre-existing deprecation warn).
+  App-only; APK built. NOT pushed. AGENT_LOG updated (standing rule).
+
+## Session 157 (main-chat) — area-under-name now = Address Line 1 (fix parser)
+- User: the client's primary area is the "Address Line 1" field; show THAT under the
+  name on CP trips. Session 153's parser was wrong for many addresses.
+- Root: CP addresses are labeled/comma-joined (CreateCpVisitBottomSheet:359) —
+  "Door/Plot No: .., Street: .., Address: <line1>, Landmark: .., City: .., State: ..,
+  Pincode: ..". addressLine1 is the "Address:" segment, NOT the first token; the old
+  parser (strip leading "Address:", take before ", City:") returned "Door/Plot No: 92".
+- Fix (app-only, no deploy): primaryAreaFromAddress in TripNavigationFragment now
+  extracts the value of the "Address:" labeled segment (= addressLine1). Fallback for
+  an unlabeled backend-composed address ("doorNo, area, city, ..") skips other labeled
+  segments + bare door/plot numbers and takes the first real name. Uses the existing
+  placeAddress (TodayVisit has no discrete addressLine1; exposing one would need a
+  backend deploy — avoided).
+- Validation: :app:assembleDebug BUILD SUCCESSFUL. App-only; APK built. NOT pushed.
+  Ships with the still-unpushed Session 153 area line. AGENT_LOG updated (standing rule).
+
+## Session 158 (main-chat) — GitHub_Issues_SV_Booking.docx: 7-issue audit + fix
+- Parsed the docx (7 issues: 2 mobile, 5 web). Extracted to scratchpad/issues.txt.
+- MOBILE #4 (payment schedule double-subtraction): VERIFIED ALREADY FIXED. Both
+  BookingCreateFragment (teammate commit b862cd3f) and CompleteCpVisitBottomSheet
+  compute the schedule cap as customerPayable − advance − allotment, EACH SUBTRACTED
+  ONCE (BookingCalc.outstandingAfterAllotment / customerBalanceAfterAdvance). Equality
+  accepted (> comparison). BookingCalcTest passes.
+- MOBILE #5 (CEF Form uploads missing): VERIFIED ALREADY FIXED on BOTH surfaces.
+  BookingCreateFragment has Upload CEF Front/Back rows (tvUploadCefFront/Back),
+  required-field validation, and payload (cefFormFront/BackDocumentStorageId/FileName);
+  CompleteCpVisitBottomSheet has BookingDocumentKind.CEF_FRONT/CEF_BACK wired. Model
+  CreateBookingRequest carries all 4 CEF fields.
+- WEB #1,#2,#3,#6,#7: launched 2 Explore audits (SV display: #1/#6/#7; IAM+edit:
+  #2/#3) to locate exact fix sites before editing. Fixes will be STAGED (never-deploy).
+- Validation so far: :app:testDebugUnitTest (BookingCalcTest) BUILD SUCCESSFUL.
+
+## Session 158 (cont) — 7-issue pack: resolution
+- #1 SV rejection not visible (WEB): FIXED. Rejected immediate SVs are cancelled
+  outOfStationHandoffs (never siteVisits rows) → invisible. Added a "Rejected" pipeline
+  tab: lib/site-visits-list-state.ts (union + PIPELINE_TABS + removed the parse redirect),
+  site-visits-list-page.tsx (new useQuery listRejectedForViewer, filteredRejectedHandoffs,
+  TabsTrigger, render branch → existing FixedHandoffsList variant="rejected"; fixed the
+  LIFECYCLE_TAB_STATUSES/LABELS/map-cast types for the new tab). STAGED.
+- #2 Confirm SV IAM (WEB): ALREADY FIXED on max — marketing.siteVisits.confirm declared
+  (lib/iam-model.ts) + enforced FE (handoff-resolution-dialog, GmHandoffBanner) + BE
+  (outOfStationHandoffs.confirm*, dailyTasks task-manager path) + regression test; no role
+  template grants it to LMO. No change.
+- #3 staff-name mismatch after SA edit (WEB): FIXED. Edit form (site-visit-detail-page.tsx)
+  now re-derives HOD from the new incharge's reportingTo and clears AVP/GM/SeniorMgr on
+  incharge change; update mutation (convex/marketing/siteVisits.ts) re-seeds the reporting
+  chain (chainSeed) when the incharge/telecaller/bdo seed changes instead of falling back to
+  the stale stored chain. STAGED.
+- #4 payment schedule double-subtraction (MOBILE): ALREADY FIXED (verified, test passes).
+- #5 CEF uploads (MOBILE): ALREADY FIXED both surfaces (verified).
+- #6 Not Interested not visible / Awaiting (WEB): ALREADY HANDLED — outcome shows in
+  Completed tab + detail; getOutcomeLabel already title-cases ("Not Interested"); awaiting
+  clears via status=completed; regression test passes. No change.
+- #7 Same Area SV Field Staff (WEB): ALREADY FIXED (commit b6154719, cFieldStaffId →
+  createClientPlaceVisit.assignedStaffId). No change.
+- Validation: web tsc clean on all 4 edited files (only pre-existing repo-wide implicit-any
+  baseline remains, none in my hunks). App unchanged this step. WEB fixes STAGED on max,
+  NOT deployed (never-deploy rule). AGENT_LOG updated.
+
+## Session 159 (main-chat) — picker: definitively kill sheet flash via window alpha
+- Recurring flash: collapse-to-zero-height + view alpha still let ONE frame of the white
+  sheet composite before onShowListener ran (the listener always races the first frame).
+- Definitive fix: set the whole sheet WINDOW invisible from frame 0 in onCreateDialog —
+  window.attributes.alpha = 0f (applied before the window is ever shown). The centre picker
+  is a separate window, so it stays fully visible on top. onShowListener now always lays the
+  sheet out full-screen (no more collapse hack). revealSheet() fades the WINDOW opacity 0→1
+  (ValueAnimator, 200ms) only once an outcome is chosen / forced. No frame can leak the white
+  page regardless of timing.
+- No logic/flow/backend change — presentation only. sheetContainerView now vestigial (kept).
+- Validation: :app:assembleDebug BUILD SUCCESSFUL (only pre-existing deprecation warn).
+  App-only; APK built. NOT pushed. AGENT_LOG updated (standing rule).
+
+## Session 160 (main-chat) — attendance route map: rider marker → red location pin
+- The scooter marker in the screenshot is the attendance route-PLAYBACK marker
+  (ic_travel_marker, the only scooter/bike marker in the app), in AttendanceReviewBottomSheet.
+- Changed it to the standard red location drop pin: playbackVehicleIcon now
+  BitmapDescriptorFactory.defaultMarker(HUE_RED); both the inline and full-map playback
+  markers are now upright pins — anchor (0.5, 1.0) at the tip, flat/rotation removed so the
+  pin always points down (was flat+rotated-to-heading like a vehicle). Position still updates
+  along the route. Removed the now-unused `heading` var (bearing() still used by the small
+  ic_route_arrow direction markers, left untouched). TripNav destination + attendance stop
+  markers were already red — unchanged.
+- Validation: :app:assembleDebug BUILD SUCCESSFUL. App-only; APK built. NOT pushed.
+  AGENT_LOG updated (standing rule).
+
+## Session 161 (main-chat) — outcome/booking forms: pin the action button to the bottom
+- The Save/Next button scrolled with the form (floated mid-screen on short forms like
+  Postpone, scrolled away on long ones like Booking). Restructured to a fixed footer.
+- dialog_cp_visit_complete.xml (all CP outcome forms — Booking/Site Visit/Postpone/Not
+  Interested + standalone booking via forStandaloneBooking): wrapped the root NestedScrollView
+  in a vertical LinearLayout; scroll is now height=0/weight=1; moved btnCpSubmit + cpLockedFooter
+  (Reject/Confirm) + tvCpError OUT of the scroll into a pinned footer (outcomeFooter, elevation
+  12dp, error now above the button). All ids preserved.
+- fragment_booking_create.xml (standalone New Booking): scroll was already weighted; moved
+  btnBookingSaveDraft + btnBookingSubmit into a pinned white footer at the bottom.
+- No logic/id/flow change — layout only; findViewById targets unchanged.
+- Validation: :app:assembleDebug BUILD SUCCESSFUL. App-only; APK built. NOT pushed.
+  AGENT_LOG updated (standing rule).
+
+## Session 162 (main-chat) — CP address: City→District (match Booking) + pincode enrich
+- Audit finding: the CP "City" field already holds the India Post District value (pincode
+  enrichment + paste-parser map District→that field, Name→locality, State→state); it was just
+  mislabeled "City" while the Booking form labels the same value "District".
+- WEB (staged): components/unified-address-fields.tsx — relabeled the shared field "City"→
+  "District" (placeholder too). Underlying key stays `city` so geocoding/pin (value.city) are
+  untouched; no schema change. Affects both CP edit dialog + CP create form.
+- APP (push): bottom_sheet_create_cp_visit.xml label "City *"→"District *" (hint e.g. Chennai);
+  CreateCpVisitBottomSheet.kt toast "City is required"→"District is required"; ADDED India-Post
+  pincode enrichment (was missing) — on 6-digit pincode, PincodeLookup fills District(etCity),
+  State, and locality(etAddressLine2) blank-only, matching the Booking form + web. Kept the
+  internal compiled visitAddress "City:" label unchanged (internal plumbing; TripNav area parser
+  already handles both) to avoid format/parser regression. Pin unaffected (geocode uses field value).
+- Validation: :app:assembleDebug BUILD SUCCESSFUL; web tsc clean on the edited file.
+- Next: push per standing rules (app→origin merge = both remotes; web→max). Never deploy Convex.
+
+## Session 163 (main-chat) — FIX: location tracking dead after APK update (all users)
+- Symptom: after "APP UPDATED", location updates stop for a long gap (only resume when the
+  user reopens the app). Web timeline shows the hole.
+- Root cause: BootReceiver handled MY_PACKAGE_REPLACED but did the restart on a DETACHED
+  coroutine with no goAsync() — after onReceive returns, the freshly-updated COLD process is
+  killed before the async bootstrap + GeoTrackService.start() run, so the FGS never (re)starts.
+  Also risked missing the broadcast's short FGS-background-start exemption window. The 15-min
+  TrackingCheckWorker can't cover it: a WorkManager worker is background and CANNOT start a
+  location-type FGS on Android 12+ (no exemption) — only BOOT_COMPLETED/MY_PACKAGE_REPLACED
+  receivers have that exemption.
+- Fix (BootReceiver): if the persisted session says we were tracking (shouldTrackNow &&
+  activeTrackingSessionId), call GeoTrackService.start() SYNCHRONOUSLY inside onReceive (uses
+  the exemption window, before process death). Then goAsync() keeps the process alive while
+  GeoTrackBootstrapSync.sync() reconciles (stops the service if the server says the shift/visit
+  ended — tracking stays clock-in→clock-out bounded). pending.finish() on completion.
+- Validation: :app:assembleDebug BUILD SUCCESSFUL. App-only; APK built. NOT pushed yet.
+  AGENT_LOG updated (standing rule).
+
+## Session 164 (main-chat) — CP creation + remaining forms: pin action buttons to footer
+- CP creation form (bottom_sheet_create_cp_visit.xml): Cancel/Create-visit were inside the
+  scroll. Made the sheet full-height (onShowListener: MATCH_PARENT + peekHeight full) and
+  moved the button row into a pinned footer.
+- "Same for all forms": audited every form sheet's submit-button position. MOST already had
+  fixed footers (collection create/payment, create vehicle, loan, salary advance) or are
+  short/no-scroll (daily log, driver, issue, allocate vehicle, edit attendance). Only stragglers
+  fixed: bottom_sheet_apply_leave, bottom_sheet_apply_permission (both: sheet→full-height +
+  footer moved out), and dialog_admin_fleet_complete_offline (already full-height in code; footer
+  moved out). sheet_create_fine was a false positive (its ScrollView is a separate overlay, button
+  not in a main form scroll) — left as-is.
+- No logic/id change — layout + sheet-sizing only; findViewById targets preserved.
+- Validation: :app:assembleDebug BUILD SUCCESSFUL. App-only; APK built. NOT pushed.
+  AGENT_LOG updated (standing rule).
+
+## Session 165 (main-chat) — booking edit sheet: web-parity DROPDOWNS (phase 1)
+- Full web booking-form spec obtained (subagent): 3 tabs, ~10 dropdowns, ~12 conditional flows,
+  ~20 calcs, ~30 validations. Documented for follow-up phases.
+- Root issue user flagged (Title = text): BookingDetailBottomSheet (the programmatic edit/detail
+  sheet, the screenshot) rendered EVERY field as a plain EditText — no dropdowns.
+- Phase 1 (this session): added dropdown support to that sheet. FieldSpec gained `options`; a new
+  Opt object holds the exact web option lists; renderFields now renders an options field as a
+  tap-to-pick pill (non-editable EditText + chevron) that opens SearchableSelectionDialog and
+  writes the pick back into `inputs` (save path unchanged). Gated to edit-mode + editable + non-
+  Approval tab. Converted 13 fields to dropdowns with exact web options: Title, Nationality,
+  Profession, Department, Booking Type, Property Type, Client Source, Is-Against-SV (Yes/No),
+  Advance Booking Payment mode, Payment Mode, Payment Plan, Reference Relation 1 & 2, Document
+  Prepared In. Also marked mobile/pincode/ref-mobile numeric.
+- DEFERRED: customerPaymentCategory dropdown (stored as A/B/C code vs full label — needs a
+  label↔code map to avoid save-format mismatch) and ALL conditional flows + calculations +
+  validation (large phase; the CREATE forms — CP-outcome flow + standalone — already carry the
+  BookingCalc engine + most flows, so the edit sheet is the main gap).
+- Validation: :app:assembleDebug BUILD SUCCESSFUL. App-only; APK built. NOT pushed.
+  AGENT_LOG updated (standing rule).
+
+## Session 166 (main-chat) — booking edit sheet: flows + calc + validation (phases 2-4)
+- Phase 2 (conditional flow + cross-tab integrity): added draftValues map + seedDraftFromBooking
+  (seeds every field across all 3 tabs on load) + snapshotInputs (before each re-render) + value()
+  now falls back to draft. This (a) fixes a pre-existing bug where saving from one tab null-ed out
+  the other tabs' fields (only the active tab lives in `inputs`), (b) preserves edits across tab
+  switches, and (c) enables reactive re-render. clientFields converted to buildList; Department now
+  shows ONLY when Profession=Salaried (cur()), and picking Profession (flowTriggerKeys) snapshots +
+  re-renders so Department appears/disappears live. customerPaymentCategory confirmed NOT in
+  UpdateBookingRequest → genuinely display-only in this sheet (kept non-editable).
+- Phase 3 (calc): saveChanges balance was agreedAmount − advance (dropped all charges). Now uses
+  BookingCalc.grossTotalPayable (+ registration/GST/document/patta/other) then payableChain.balanceAmount.
+- Phase 4 (validation): added web-parity gates (each fires only if the field has a value, so partial
+  draft edits aren't blocked): mobile/alt/whatsapp/ref-mobile = 10 digits, pincode 6, Aadhaar 12,
+  PAN 10; Special Consideration ≤ Booking Cost; Advance ≤ total payable; Allotment ≤ customer balance
+  after advance.
+- Scope note: the edit sheet's UpdateBookingRequest is a subset of the web form (no loan/exchange/GST
+  toggles/mode sub-fields), so it can't be 100% web-parity without extending that API — the CREATE
+  flows (CP-outcome + standalone) carry the full BookingCalc + flows.
+- Validation: :app:assembleDebug BUILD SUCCESSFUL. App-only; APK built. NOT pushed.
+  AGENT_LOG updated (standing rule).
+
+## Session 167 (main-chat) — booking CREATE forms audit fixes
+- Audited both create forms vs web spec. Fixed:
+- CP F1 [BREAK]: "Discount Approved By" was free-text sending the typed NAME; web expects a staff
+  _id. Wired rowChargeDiscountApprovedBy as a staff picker (bookingStaffDiscount), field made
+  non-editable, payload now discountApprovedBy = bookingStaffDiscount?.id.
+- CP F2 + Standalone #10: Nationality "Foreign" → "Foreign National" (both forms).
+- Standalone #1 [BREAK]: EXCHANGE/CONVERSION/INTERNAL EXCHANGE were offered but unimplemented
+  (no sub-blocks, no payload, wrong money) → removed from the picker (NEW only); those go via web.
+- Standalone #2 [BREAK]: 3rd/4th payment rows were visibility=gone (dates already wired) → revealed
+  so multi-installment / cat-A-confirmed schedules can be entered.
+- Standalone #5: now sends freePayment = (plan==Flexi) and sourceType="walk_in".
+- Standalone #8 [VALID]: added SC reason + SC validity required when SC>0; SV mobile 10-digit;
+  source mobile 10-digit (if present); advance ≥ project minimum; advance ≤ total; loan ≤ total;
+  confirmed self-cash schedule must total EXACTLY outstanding.
+- #9 (draft full-gate): NOT a bug — web runs the same gate for draft (per web spec §6). Left as-is.
+- REMAINING minor: #7 Special-plan gating (needs dynamic option list on project change);
+  min-allotment lower-bound (cat A) in both. Deferred.
+- Validation: :app:assembleDebug BUILD SUCCESSFUL throughout. NOT pushed.
+
+## Session 168 (main-chat) — FIX: logout doesn't free session → can't log in on another device
+- Symptom: after logging out on mobile, web staff-login still shows the mobile session active and
+  re-login on another device is refused (single-device block stays engaged). "Same for web."
+- ROOT CAUSE (mobile): /api/auth/logout (convex/http.ts) did the EXTERNAL Modern Dialer logout
+  `await fetch(...)` BEFORE running the session-deactivation mutation. For dialer-mapped agents
+  (exactly the staff who have the single-device block), a slow/unreachable dialer call delayed the
+  handler; the app's 4s client timeout then fired and the session-deactivating mutation effectively
+  never landed → session stayed active → block engaged. Both old and new `logout` mutations
+  deactivate mobile sessions, so once the mutation runs the block releases — the problem was ORDER.
+- FIX (web, STAGED on max — never deploy): reordered the handler to run
+  ctx.runMutation(authFunctions.logout) FIRST (frees the session + releases the block immediately),
+  THEN best-effort dialer logout bounded by a 3s AbortController timeout (can't hang the response,
+  failures ignored). tsc clean.
+- FIX (app, push): LogoutBottomSheet now retries api.logout up to 2× with an 8s timeout each until
+  the server confirms success, before clearing local — so a slow logout hop still lands and frees
+  the server session even on the current (un-deployed) prod handler.
+- Web logout uses the authFunctions.logout mutation directly (use-auth-controller.ts) — already
+  frees immediately, no dialer-first hang. No change needed there.
+- NOTE: the backend reorder must be DEPLOYED to prod (api-mfpl) to fully fix it; the app retry is a
+  belt-and-suspenders that helps on the current prod handler too.
+- Validation: :app:assembleDebug BUILD SUCCESSFUL; web tsc clean on http.ts. NOT pushed/deployed.
+## Session 169 (main-chat) - external Travel Desk web -> Android parity audit
+- Started a full parity audit between the external Travel Desk web portal and the existing
+  Android external-agency module. Scope includes authentication/session isolation, agency staff
+  permissions, drivers, vehicles, allocation, trip state transitions, evidence capture, billing,
+  completed-trip edits, WhatsApp links, settings, and backend request/response contracts.
+- Preserving Session 168's unpushed per-device logout fix while auditing; no product files changed
+  in this step. Current unrelated `.idea/deploymentTargetSelector.xml` remains untouched.
+- Validation/push pending until the parity matrix and implementation gaps are resolved.
+- Implemented the first parity tranche across the Android external-agency module: persisted
+  per-staff billing permission, agency-staff billing controls/badges, a permission-gated Billing
+  trip tab, external final/cancellation billing requests, server driver-link open/copy/resend
+  actions, and Travel Desk-specific logout so an agency logout only deactivates that device/session.
+- Extended Travel Desk models/API contracts for billing, evidence, status updates, driver access
+  links, and cancellation billing. External trips now remain in Billing until the agency finalizes
+  their own charges/evidence; internal completion remains isolated from that path.
+- Fixed the shared trip sheet caller in Home after adding driver-link callbacks and simplified the
+  completed-state predicate to keep external billing and internal completion semantics separate.
+- Validation currently in progress; initial build found only the now-fixed callback signature
+  mismatch. `.idea/deploymentTargetSelector.xml` remains untouched and will not be committed.
+- Added a reachable external-agency trip-status workflow to the Android management sheet. Agency
+  operators can report client-unavailable, cancel a trip, or choose a future postponement date and
+  optional reason; the app submits the same `/api/travel-desk/trips/status-update` contract used by
+  Travel Desk web and refreshes the tab/state after success. Internal MMS/Home trips do not expose
+  this agency-only action.
+- Validation checkpoint: `:app:assembleDebug :app:testDebugUnitTest` succeeded after the initial
+  parity tranche (48 tasks, 11 executed). A second compile is required after the status UI addition.
+- Second validation passed: `:app:assembleDebug :app:testDebugUnitTest` completed successfully in
+  41s after the status workflow. Full `:app:lintDebug` remains blocked by the repo's existing lint
+  backlog (94 errors / 6917 warnings; first error is the unrelated location permission call in
+  `ClockInAreaFragment.kt:626`). The only lint error reported in a touched file was corrected by
+  changing the staff icon tint to `app:tint`; touched files otherwise had warnings only.
+- Final validation after the lint-local correction: `:app:assembleDebug` succeeded in 8s.
+- Git: staged only 17 product files under `app/`; explicitly excluded this local-only log and the
+  unrelated `.idea/deploymentTargetSelector.xml`. `git diff --cached --check` and a staged secret
+  scan were clean. Committed as `f27d2332` (`feat(travel-desk): bring agency workflows to Android`)
+  and pushed branch `merge` successfully to both configured Mconnect remotes.
+- Cross-repo check: Travel Desk (`aizen`) and MMS web (`max`) worktrees were clean, so no unrelated
+  commit was manufactured there. The app consumes their existing deployed Travel Desk contracts;
+  no Convex deployment was attempted.
+
+## Session 170 (main-chat) - CP geofence distance audit
+- Inspected the Android CP navigation/arrival flow and the MMS Convex arrival-OTP enforcement.
+- Authoritative server behavior: `convex/hr/fieldVisitOtp.ts` defaults CP arrival verification to
+  `DEFAULT_GEOFENCE_RADIUS_M = 300`; a per-visit `geofenceRadiusMeters` can override it, but no code
+  currently writes that field, so existing CP visits effectively use 300 m.
+- Found a UI mismatch: Android `TripNavigationFragment.REACHING_RADIUS_METERS` and returned
+  `reachingRadiusMeters` list metadata currently use 500 m. This can enable/show arrival at 500 m,
+  but the server still refuses OTP until the staff is within 300 m. No files changed in this audit;
+  normalization should be handled as a separate requested fix.
+
+## Session 171 (main-chat) - CP/SV Others terminal outcome
+- Started tracing the shared CP/SV completion sheet and the standalone SV overview outcome actions
+  to add an `Others` option. Required behavior: open a required remarks input, submit through the
+  existing backend completion path, and close the CP/SV only after confirmed success.
+- Confirmed both existing backend contracts already accept the canonical `other` outcome for CP
+  (`clientPlaceVisits.setOutcome`) and SV (`siteVisits.setOutcome`), so no schema or API expansion
+  is required.
+- Added a reusable required-remarks bottom sheet using the existing remarks layout. The shared CP/SV
+  completion flow now exposes `Others`, requires non-empty remarks, submits `outcome=other` through
+  the existing terminal persistence path, and only emits completion/dismisses after backend success.
+- Added the same `Others` action to the standalone SV overview and included it in every counselling,
+  locked, saving, retry, and completed-state button gate. `Postpone SV` and `Cancel visit` remain
+  separate workflows and were not changed.
+- Hardened the failure path for the compact remarks flow: a rejected/network-failed save reports
+  the server error and closes only the invisible modal UI; it does not emit a completion result or
+  close the CP/SV record, so the staff can retry without a blocked screen.
+- Validation passed twice after the final failure-path correction:
+  `./gradlew.bat :app:assembleDebug :app:testDebugUnitTest` completed successfully (48 tasks; final
+  run 10 executed / 38 up-to-date). `git diff --check` is clean apart from line-ending warnings.
+- Changes are local and uncommitted/unpushed. The unrelated
+  `.idea/deploymentTargetSelector.xml` remains untouched.
+
+## Session 172 (main-chat) - named active SV call actions
+- Inspected the SV overview contact actions. The client action reads its number correctly, while
+  the driver action only reads `proposedSiteVisit.driverPhone`; pure-SV detail envelopes can expose
+  driver contact at the root, causing an assigned driver's call action to remain disabled.
+- Added nullable root `driverName` / `driverPhone` fields to the enriched visit model and retained
+  the nested snapshot as first priority. The overview now resolves either backend response shape.
+- Added named call labels (`Call <client name>` / `Call <driver name>`) and refreshes their enabled
+  state after enriched data arrives. Assigned drivers with a root or nested phone now render as an
+  active call action; genuinely missing numbers remain disabled rather than opening a broken dialer.
+- Validation passed: `./gradlew.bat :app:assembleDebug :app:testDebugUnitTest` completed successfully
+  in 37s (48 tasks, 20 executed / 28 up-to-date). Changes remain local and unpushed; the unrelated
+  `.idea/deploymentTargetSelector.xml` remains untouched.
+
+## Session 173 (main-chat) - web display parity for Others outcomes
+- Audited the clean MMS web `max` worktree for CP/SV list, detail, calendar, and export rendering of
+  the app's canonical `outcome="other"` payload. Backend contracts already retain app remarks in
+  `notes`; no Convex schema or mutation change is required.
+- Found presentation gaps: CP list used singular `Other` and CP detail did not identify the outcome;
+  SV generic title-casing produced singular `Other`, and its remarks were detached from the outcome
+  summary.
+- Updated the MMS web presentation in `features/marketing/pages/cp-visits-list-page.tsx`,
+  `cp-visit-detail-page.tsx`, `site-visits-list-page.tsx`, and `site-visit-detail-page.tsx`:
+  list/filter/export labels now consistently show `Others`; CP detail identifies the terminal outcome
+  in both its header and a dedicated Outcome section; CP and SV detail pages show saved `notes` as
+  `Remarks` within the `Others` outcome summary and suppress the duplicate generic Notes block.
+- Preserved all existing read/write authorization and outcome behavior. CP detail remains read-only,
+  and SV mutation/IAM gates were not changed. These web changes are local and uncommitted/unpushed.
+- Validation: `git diff --check` is clean apart from line-ending warnings. Targeted ESLint reached all
+  four edited files; it reported only the existing `no-explicit-any`/unused-disable debt in
+  `site-visit-detail-page.tsx` (none in the new outcome blocks). Repository-wide `tsc --noEmit` remains
+  blocked by the project's large pre-existing type-error baseline. The Next dev server started and is
+  ready at `http://localhost:3100`; no new server runtime error was logged. In-app browser inspection
+  was unavailable because its URL security policy blocked the localhost page, so authenticated visual
+  data verification remains a deployment/manual follow-up.
+
+## Session 174 (main-chat) - assigned GM mobile SV confirmation 500
+- Traced the LMO-fixed SV handoff from `outOfStationHandoffs` into the selected GM's `dailyTasks`
+  record and the Android Task Manager Complete action. The handoff/task assignment was correct, but
+  `dailyTasks.updateStatus` applied a second global `marketing.siteVisits.confirm` IAM check after
+  already verifying the assigned GM, causing a valid mobile confirmation to fail through HTTP 500
+  when the GM designation template did not carry that separate grant.
+- Updated MMS Convex authorization so the handoff's authoritative `managerStaffId` can confirm that
+  assigned handoff from either the mobile daily-task path or the direct handoff confirm mutation.
+  Super-admin/explicit-permission access is preserved, while LMO and unrelated staff remain blocked.
+  The web handoff Confirm control now uses the same exact manager ownership rule instead of relying on
+  inconsistent designation text.
+- Updated `/api/dailyTasks/updateStatus` to return 403 for forbidden attempts and 400 for rejected
+  business input rather than exposing those expected failures as generic HTTP 500 responses. Android
+  `TaskManagerFragment` now parses the backend JSON `error` body, so any future validation problem is
+  shown to the GM as the real actionable reason instead of only `HTTP 4xx/5xx`.
+- Added a Convex regression test that creates an LMO handoff, assigns a GM with no standalone confirm
+  permission, completes it through `api.dailyTasks.updateStatus`, and verifies the handoff closes and
+  a confirmed scheduled SV is created with the selected GM as confirmer.
+- Validation passed: targeted Vitest (`convex/outOfStationHandoffs.test.ts` and
+  `convex/siteVisitManagementIssues.test.ts`) completed 10/10 tests; focused ESLint passed for the
+  three changed Convex/test files; Android `:app:assembleDebug :app:testDebugUnitTest` completed
+  successfully (48 tasks). A first mistyped Vitest invocation started the repository-wide suite and
+  exposed unrelated existing failures, so it was stopped and replaced by the successful targeted run.
+  The full lead-detail page still has its pre-existing lint backlog; no new diagnostic points at this
+  ownership change. `git diff --check` is clean apart from line-ending warnings.
+- Changes are local and uncommitted/unpushed. Convex must be deployed with the MMS web release before
+  the production mobile endpoint receives this server-side fix. Existing unrelated Android changes
+  and `.idea/deploymentTargetSelector.xml` remain untouched.
+
+## Session 175 (main-chat) - Aadi prize vehicle spelling
+- Traced the screenshot label to MMS contest award data rather than the Android vehicle catalog. The
+  current production-derived output still contains the legacy value `Maruto Victorius Lxi`, while the
+  seed used the incomplete `Maruti Victoris LXi` wording.
+- Updated the canonical MMS seed prize to `Maruti Suzuki Victoris LXI` and added a shared contest-read
+  normalization in `convex/salesContests.ts`. Existing persisted awards with either legacy spelling
+  now render with the approved name in leaderboard cards, rank results, and award management data
+  without requiring each record to be manually edited.
+- Added a regression test using the exact persisted typo and verified the leaderboard returns the
+  approved label. Targeted Vitest passed all 3 `salesContests.test.ts` tests. ESLint passed for the
+  changed contest runtime/test files; including the seed file exposed its pre-existing `prefer-const`
+  diagnostic at line 553, unrelated to the one-line prize-label correction. Final targeted
+  `git diff --check` passed apart from line-ending warnings.
+- Changes are local and uncommitted/unpushed. No Android source was changed for this correction.
+
+## Session 176 (main-chat) - compact gram-gold prize labels
+- Updated the MMS Aadi contest prize presentation to show gram-gold rewards in the requested compact
+  format: `( 2GM ) ( 1GM )`. Vehicle and other prizes retain their existing numbered rank labels.
+- Added backend normalization for legacy persisted values such as `2gm gold coin` and `1gm Gold`, so
+  existing contest award records render as `2GM` / `1GM` without manual database edits. Updated the
+  canonical seed values for 1GM, 2GM, and 4GM rewards.
+- Applied the shared formatter to leaderboard award badges, winner badges, and the Awards table, and
+  added regression coverage for legacy gold-label variants.
+- Validation passed: targeted `salesContests.test.ts` completed 4/4 tests, targeted ESLint passed for
+  the contest backend/test/page, and `git diff --check` passed apart from line-ending warnings.
+- Changes are local and uncommitted/unpushed. No Android source was changed in this turn.
+
+## Session 177 (main-chat) - 4GM gold reward correction
+- Corrected the Aadi TeleSale Head reward to display exactly `( 4GM ) GOLD` while preserving the
+  requested `( 2GM ) ( 1GM )` formatting for the LMO reward pair.
+- Extended MMS contest normalization to repair the persisted typo `4gm Cold` (and equivalent 4GM
+  gold variants) to canonical `4GM GOLD`, and updated the seed accordingly. The shared prize formatter
+  now applies the exact presentation in leaderboard badges, winner badges, and the Awards table.
+- Expanded the existing gold-label regression test to cover `4gm Cold -> 4GM GOLD`.
+- Validation passed: targeted `salesContests.test.ts` completed 4/4 tests, targeted ESLint passed,
+  and `git diff --check` passed apart from line-ending warnings.
+- Changes are local and uncommitted/unpushed. No Android source was changed in this turn.
+
+## Session 178 (main-chat) - festive poster prize-label parity
+- Traced the remaining screenshot mistakes to `components/festival-poster-dialog.tsx`, which had four
+  independent raw prize renderers for the marquee, category qualifier, winner row, and Excel export.
+  The normal contest workspace formatter from the previous turns therefore did not protect every
+  poster presentation path.
+- Added shared frontend prize helpers in `lib/contest-prize-label.ts` and applied them to both the
+  contest workspace and festive poster. Legacy `Maruto Victorius Lxi` now displays as
+  `Maruti Suzuki Victoris LXI`; `Maruti Baleno Delta` is standardized to
+  `Maruti Suzuki Baleno Delta`; and gram-gold rewards retain `( 2GM ) ( 1GM )` / `( 4GM ) GOLD`
+  consistently in the poster, winner rows, Awards table, and Excel section labels.
+- Extended backend normalization and the canonical seed for Baleno, so persisted and newly seeded
+  contest records agree with the frontend. Added a focused frontend utility test covering vehicle,
+  gram-gold, typo, and non-gold rank behavior.
+- Validation passed: targeted Vitest completed 7/7 tests across the backend and shared frontend
+  formatter; targeted ESLint passed for all changed runtime/test files. The poster retains its
+  pre-existing effect-rule error and two `<img>` warnings; rerunning with only that unrelated effect
+  rule disabled found no new errors. `git diff --check` passed apart from line-ending warnings.
+- Changes are local and uncommitted/unpushed. MMS web and Convex deployment are required before the
+  live festive poster reflects these corrections. No Android source was changed in this turn.
+
+## Session 179 (main-chat) - publish all pending project changes
+- User requested that all pending changes be pushed. Audited all three repositories: MMS web/backend
+  has the accumulated GM handoff, Others outcome, and contest-label changes on `max`; Mconnect has
+  the accumulated Android CP/SV outcome, contact, and task-error changes on `merge`; standalone
+  Travel Desk `aizen` is clean with nothing new to publish.
+- Confirmed that local-only `AGENT_LOG.md` and unrelated Android Studio
+  `.idea/deploymentTargetSelector.xml` must remain unstaged and unpushed. GitHub CLI is not installed,
+  but it is not required for direct authenticated Git pushes to the existing current branches.
+- Final validation completed. MMS targeted Vitest passed 17/17 tests. Focused changed-module lint is
+  clean; a broad inclusion of the large existing `convex/http.ts` file reproduced its longstanding
+  547 `no-explicit-any` errors and 12 warnings, unrelated to this turn's one-line response-status
+  change. Android `:app:assembleDebug :app:testDebugUnitTest` passed (48 tasks). Diff checks passed
+  apart from line-ending warnings.
+- Committed and pushed MMS `max` to `origin/max` as
+  `b5a78233fde9037a0f2e8253136de4c57d32b05e` (`fix(marketing): align SV confirmations and contest
+  outcomes`). Local HEAD and `origin/max` match.
+- Committed and pushed Mconnect `merge` as
+  `d806663440c25ce1a4b5fe1743b751bc880c9f6e` (`fix(marketing): complete CP and SV mobile outcomes`).
+  The configured `origin` push targets published the same commit to both `manjugroupsdev/Mconnect`
+  and `D-A-R-X/Mconnect`; local HEAD and `origin/merge` match.
+- Travel Desk `aizen` remained clean and already matched `origin/aizen`, so no empty commit was made.
+  Only local-only `AGENT_LOG.md` and unrelated `.idea/deploymentTargetSelector.xml` remain modified in
+  Mconnect. Convex changes are pushed but still require the approved Convex deployment to become live.
+
+## Session 180 (main-chat) - SV scheduled tab ignored external fleet progress
+- Investigated the Ramya mismatch between MMS Fleet and the Site Visits pipeline. Confirmed that the
+  external Travel Desk flow records `travelDeskStartedAt`, `travelDeskOnSiteAt`,
+  `travelDeskPickedFromSiteAt`, and `travelDeskEndedAt` while intentionally leaving the persisted SV
+  `status` as `scheduled`; Fleet derives its Ongoing state from those timestamps, but SV list,
+  calendar, export, and stats filters were still comparing only the stale persisted status.
+- Updated MMS Convex site-visit reads to derive the effective pipeline status from Travel Desk
+  milestones. Existing dropped trips now leave Scheduled and appear under Returning home as
+  `dropped`; counselling remains visible as counselling until the return trip begins. The persisted
+  status and Fleet billing/outcome completion rules remain unchanged.
+- Applied the same effective-status filtering to paginated rows, calendar rows, export candidates,
+  date-filtered stats, and the Site Incharge outcome-pending queue. Status-filtered pagination now
+  classifies candidates before slicing, preventing stale Travel Desk rows from producing misleading
+  or underfilled pages. Added regression coverage for a legacy raw-`scheduled` trip with a complete
+  Travel Desk timeline.
+- Validation passed: targeted Vitest completed 15/15 tests across SV history visibility and cab
+  lifecycle override coverage; focused ESLint passed with only the file's 11 pre-existing
+  `no-explicit-any` diagnostics explicitly disabled for the verification run; `git diff --check`
+  passed apart from line-ending warnings. The MMS changes are local and uncommitted/unpushed and
+  require Convex deployment before the production Ramya row moves out of Scheduled. No Android or
+  standalone Travel Desk source was changed; local-only Android log/IDE changes remain untouched.
+
+## Session 181 (main-chat) - separate SV outcome state from fleet proof/billing
+- Clarified the required lifecycle after the initial Ramya fix: transport progress must remove an SV
+  from Scheduled, but missing external-fleet KM/images/billing must not be treated as the SV outcome.
+  A picked-up trip is Enroute; once it reaches the site (including return/drop timestamps), the SV is
+  held Onsite until the Site Incharge records an outcome. After outcome recording, the same stored
+  return/drop milestones can move it to Returning home.
+- Updated the MMS effective SV status derivation and enriched rows with `outcomePending`. Added a
+  visible `Pending Outcome` badge to list and calendar rows and renamed the empty Outcome action from
+  `Pending` to `Pending Outcome`. The Site Incharge outcome queue now accepts effective Onsite rows.
+  Expanded the regression to verify Picked-up/Enroute and Onsite pending tags before outcome, then
+  Dropped/Returning-home behavior after outcome.
+- Validation passed: targeted Vitest completed 15/15 tests across SV history visibility and cab
+  lifecycle override coverage; focused backend/test/page ESLint passed with the backend file's known
+  `no-explicit-any` debt disabled; `git diff --check` passed apart from line-ending warnings. Changes
+  remain local and uncommitted/unpushed and require Convex plus MMS web deployment before Ramya's
+  production row reflects the corrected Onsite/Pending Outcome state.
+
+## Session 182 (main-chat) - publish corrected SV lifecycle
+- User requested all changes be pushed. Audited MMS, Mconnect, and standalone Travel Desk. MMS has
+  only the three intended SV backend/test/list-page files; Travel Desk is clean; Mconnect has only
+  local-only `AGENT_LOG.md` plus the unrelated Android Studio deployment-target file, neither of
+  which will be staged.
+- Fetched `origin/max` and found the remote 32 commits ahead. Rebasing with autostash fast-forwarded
+  MMS from `b5a78233` to upstream `c04388f8` and reapplied the SV changes cleanly without conflicts.
+  Post-upstream validation passed: targeted Vitest completed 15/15 SV tests; focused backend/test/UI
+  ESLint passed with only the backend file's known `no-explicit-any` debt disabled; and diff checks
+  passed.
+- Committed the three MMS files as `6eadf38aefd6f3c223a62896bf384697b814ec17`
+  (`fix(site-visits): align fleet progress with outcome state`) and pushed `max` to `origin/max`.
+  Verified local HEAD and remote `origin/max` match exactly and the MMS worktree is clean. Standalone
+  Travel Desk remains clean. Mconnect retains only local-only `AGENT_LOG.md` and the unrelated IDE
+  deployment-target file; neither was committed or pushed. Convex deployment is still required for
+  the production SV lifecycle behavior to change.
+
+## Session 183 (main-chat) - investigate SV Confirmed By attribution
+- Began tracing the management export report where Direct SV rows frequently show the same staff in
+  `LMO` and `Confirmed By`. Confirmed this is not an Excel-only formatting issue: direct SV creation
+  currently auto-confirms the visit and stores the logged-in creator (commonly the LMO) in
+  `confirmedByStaffId`, while CP-origin and out-of-station routes use separate CP/GM confirmation.
+- Found an additional reporting problem in the MMS list/export/WhatsApp views: `Confirmed By` falls
+  back from the actual confirmer to the pending confirmation assignee and then the SV creator. This
+  can falsely attribute legacy records even when no staff member actually performed confirmation.
+- Confirmed the direct-SV workflow copy explicitly documents automatic confirmation; LMOs do not
+  have or use a separate self-confirm action for these rows. Added a shared MMS confirmation
+  attribution helper so direct/legacy automatic confirmations display `Auto-confirmed` and
+  `System`, while CP/GM routes display only the actual `confirmedByStaffId` staff member.
+- Replaced the incorrect creator/assigned-verifier fallbacks in the SV table, Excel export, and
+  WhatsApp summary. A missing CP/GM approval stamp now remains `—` instead of falsely naming the LMO,
+  BDO, or pending verifier. Updated `docs/sv-flow.md` with the reporting rule; no schema, mutation,
+  approval permission, Android, or Travel Desk behavior was changed.
+- Added five focused unit cases covering direct auto-confirmation, CP confirmation, GM confirmation,
+  missing approval attribution, and pending CP separation. Validation passed: Vitest 5/5, focused
+  ESLint, TypeScript `tsc --noEmit`, and `git diff --check` (line-ending warnings only). MMS changes
+  are local and uncommitted/unpushed; production requires the MMS web deployment after publication.
+- User clarified that GM approval is mandatory even for DSV. Re-audited the creation flow and found
+  the root workflow defect: `direct_sv` was explicitly allowed to bypass the handoff and was inserted
+  immediately as Scheduled, so the previous attribution-only correction was insufficient.
+- Changed new DSV creation across the main Site Visits form, External Leads outcome form, and legacy
+  dialer form to create a GM approval handoff instead of a `siteVisits` row. Extended the handoff
+  schema/task/dialog to support `direct_sv`; GM confirmation now materializes the Scheduled DSV while
+  preserving its route and stamps `confirmationRequiredBy: gm` plus the actual GM confirmer.
+- Added a backend guard that rejects every direct `siteVisits.create` attempt, preventing omitted or
+  older frontend paths from bypassing approval. Existing historical DSVs are not rewritten; their
+  reporting remains `Auto-confirmed / System`, while all newly fixed DSVs stay in Fixed/Pending GM
+  and cannot reach Scheduled or Fleet before approval.
+- Expanded the Convex regression to prove direct creation is rejected, no SV exists before approval,
+  and assigned-GM task completion creates the Scheduled DSV with the correct GM attribution. Focused
+  Vitest passed 11/11 across handoff and attribution coverage; TypeScript and focused ESLint passed.
+  Broader related SV validation passed 21/21 tests across GM handoffs, CP conversion, lifecycle
+  visibility, management outcomes, and attribution. The test harness emitted its known asynchronous
+  IRIS scheduled-function transaction warning while all assertions passed. Final diff review and
+  `git diff --check` passed (line-ending warnings only), and the workflow documentation was aligned.
+  All MMS changes remain local and uncommitted/unpushed; Convex and web deployment are both required
+  before the approval gate applies in production.
+
+## Session 184 (main-chat) - bind DSV approval to the assigned GM
+- Closed the remaining DSV approval ownership gap. Pending DSV handoffs now display
+  `Pending approval by <GM name>` in both the Fixed list and resolution dialog, so staff can see the
+  exact approver instead of a generic pending state.
+- Restricted approval at both backend entry points to the handoff's current `managerStaffId`. Admin,
+  broad IAM permission, another GM, and the originally assigned GM after reassignment can no longer
+  approve that GM's DSV. The frontend also exposes Confirm only to that exact assigned GM.
+- When the GM is changed before approval, saving the handoff transfers the unfinished approval task
+  to the new GM and creates an `SV approval assigned` notification; the old GM immediately loses
+  approval access. An attempted one-click confirm with an unsaved replacement GM is rejected and
+  asks the editor to save the GM change first.
+- When the GM is changed after approval, the already-created SV retains its approval and does not
+  create another pending handoff or approval request. Updated `docs/sv-flow.md` to document these
+  pre-approval and post-approval rules.
+- Validation passed: focused Vitest completed 17/17 tests covering the DSV gate, exact-GM ownership,
+  task reassignment, notification delivery, old-GM rejection, replacement-GM approval, post-approval
+  GM edits, attribution, and dialog behavior. Focused ESLint and `git diff --check` passed (line-ending
+  warnings only). Full TypeScript validation remains blocked by unrelated existing repository errors
+  outside this change. MMS changes remain local and uncommitted/unpushed; Convex and web deployment
+  are required before the rule applies in production. No Android or Travel Desk source was changed.
+
+## Session 185 (main-chat) - restrict SV role pickers and preserve LMO/BDO identities
+- Added a shared Sales & Marketing department matcher and applied it to every inspected MMS web SV
+  assignment surface: Create SV, GM handoff approval, CP-to-SV conversion, legacy dialer, lead-detail
+  fixing, external-lead fixing, and SV edit/reassign. LMO, BDO, Site Incharge, field staff, AVP, GM,
+  and Senior Manager now list only active Sales & Marketing staff; HOD intentionally retains all
+  active staff as requested.
+- Corrected SV enrichment and presentation so LMO and BDO are independent role values. The backend
+  now exposes an explicit `lmoStaff`, while detail, list, search, Excel export, and WhatsApp summary
+  prefer that LMO value and read BDO only from `bdoStaff`. This removes the previous detail-page bug
+  where the BDO label borrowed the telecaller/LMO record.
+- Strengthened the GM handoff regression with different people for LMO and BDO and verified approval
+  preserves both IDs. Added 11 department-normalization tests. Focused Vitest passed 28/28 across
+  department filtering, handoff ownership, direct-SV approval, management outcomes, confirmation
+  labels, and the resolution dialog. `git diff --check` passed apart from line-ending notices; focused
+  ESLint passed with existing warnings. Full repository TypeScript remains blocked by the known broad
+  baseline errors. Changes are local and uncommitted/unpushed; MMS web and Convex deployment are
+  required before production reflects them. No Android or Travel Desk source was changed.
+
+## Session 186 (main-chat) - publish pending MMS SV workflow changes
+- Inspected both repositories before publishing. The MMS web repository was on `max` and exactly
+  synchronized with `origin/max`; the Android repository contained only this local agent log plus an
+  unrelated `.idea/deploymentTargetSelector.xml` modification, so neither Android file was staged.
+- Staged the complete pending 19-file MMS web/Convex SV change set, including mandatory assigned-GM
+  approval for DSV, approval attribution, exact approver ownership/reassignment, Sales & Marketing
+  role filtering with the HOD exception, explicit LMO/BDO role display, regression tests, and updated
+  SV flow documentation. `git diff --cached --check` passed with line-ending notices only.
+- Created commit `18c85416afd52c4f0f8ca2fd95f71cda53abd22a`
+  (`fix(site-visits): enforce GM approval and staff roles`) and pushed it successfully to
+  `origin/max`. Post-push verification confirmed local `HEAD` and `origin/max` both resolve to that
+  commit and the MMS working tree has no remaining source changes. The earlier focused validation
+  remains 28/28 passing tests. Production behavior still requires the normal MMS web and Convex
+  deployment pipeline; this turn did not deploy services.
+
+## Session 187 (main-chat) - restrict CP Others outcome by category
+- Audited the Android CP completion routes and found the shared outcome picker appended `Others`
+  unconditionally, while Gift Distribution and Old Client bypassed that picker through dedicated
+  completion actions. Added a reusable canonical `cpType` policy allowing `other` only for
+  `booking_cp`, `gift_distribution`, and `old_client`.
+- Passed the saved CP type through Home, Trip Navigation, CP Visits pending-reopen, and Completed
+  Visit detail-reopen paths. The shared picker now hides `Others` for Collection, Follow-up,
+  SV-cum-CP, Direct CP, unknown, and legacy untyped CP rows. Pure SV retains its separate existing
+  `Others` outcome as previously required.
+- Added a compact normal-action-versus-`Others` chooser to the dedicated Gift Distribution and Old
+  Client flows. Choosing `Others` requires remarks, records `outcome=other`, marks the client met,
+  preserves the available arrival proof, and finalizes only after backend success. Their original
+  gift-photo and old-client-remarks completion paths remain unchanged when selected.
+- Added `CpOutcomePolicyTest` covering approved, disallowed, blank, and null CP types. The first
+  Gradle attempt was blocked only because this shell lacked `JAVA_HOME`; reran with Android Studio's
+  bundled JBR. Focused unit test plus `:app:assembleDebug` completed successfully (48 tasks), with
+  existing deprecation warnings only. `git diff --check` passed with line-ending notices. Changes
+  remain local and uncommitted/unpushed; unrelated `.idea/deploymentTargetSelector.xml` remains
+  untouched.
+
+## Session 188 (main-chat) - close legacy SV-cum-CP Others links and enable eligible web flow
+- Traced the reported database mismatch to MMS Convex: `sv_cum_cp` creation pre-creates a linked
+  Site Visit with pending CP confirmation, but the historical `other` outcome completed only the CP
+  and left that linked SV scheduled/pending. No app-only change could repair those persisted rows.
+- Added an internal, paginated, re-runnable repair mutation in
+  `convex/marketing/clientPlaceVisits.ts`. It scans completed `sv_cum_cp` CP rows whose outcome is
+  `other` and cancels only an untouched linked SV that is still confirmation-pending and
+  nonterminal. It clears the pending confirmation state, carries the CP remarks into a machine-
+  readable closure marker, and cancels related Site Visit daily tasks. Already confirmed,
+  progressed, completed, postponed, or independently cancelled SVs are preserved.
+- Enforced the current policy at the backend boundary: new `other` CP outcomes are accepted only for
+  `booking_cp`, `gift_distribution`, and `old_client`, and nonblank remarks are mandatory. New
+  SV-cum-CP, Collection, Follow-up, Direct, unknown, and legacy-untyped CP submissions cannot bypass
+  the Android visibility rule through an older client or direct API request.
+- Restored a narrowly scoped MMS web action on eligible CP detail pages. Booking CP, Gift
+  Distribution CP, and Old Client CP display an `Others` button that opens a required-remarks dialog
+  and completes through the existing audited backend action. Other CP types do not render it, while
+  historical `other` remarks continue to display in the read-only Outcome section.
+- Expanded `convex/siteVisitCumCpLink.test.ts` to cover disallowed new SV-cum-CP Others, allowed
+  Booking CP Others with mandatory remarks, one linked-SV invariant, historical repair, and
+  preservation of confirmed SVs. Focused Vitest passed 11/11 across linked-SV and completion-proof
+  suites; focused frontend/test ESLint and `git diff --check` passed. The test harness still emits
+  its known asynchronous push-notification transaction warning while returning success. Full repo
+  TypeScript and whole-backend ESLint remain blocked by broad pre-existing errors, with no new
+  error reported in the changed backend implementation.
+- MMS changes are local and uncommitted/unpushed. Production needs the normal MMS/Convex deployment,
+  followed once by
+  `npx convex run marketing/clientPlaceVisits:repairOtherOutcomePendingSiteVisits '{"cursor":null}'`
+  against the deployed environment. Mconnect source was not changed in this turn; Session 187's
+  Android changes remain local, and the unrelated IDE deployment-target file remains untouched.
+
+## Session 189 (main-chat) - publish CP Others policy and legacy repair
+- User requested all pending changes be pushed. Audited Mconnect, MMS web, and Travel Desk: Travel
+  Desk was clean; Mconnect contained the intended seven Android CP policy/UI/test files plus the
+  local-only agent log and unrelated IDE deployment target; MMS contained only the intended three
+  web/Convex/test files. Both active branches were exactly synchronized with their remotes before
+  committing.
+- Revalidated the fetched tips. Mconnect's focused `CpOutcomePolicyTest` plus
+  `:app:assembleDebug` passed (48 tasks). MMS focused Vitest passed 11/11 linked-SV and completion-
+  proof tests; focused frontend/test ESLint and `git diff --check` passed. The known non-failing
+  `convex-test` scheduled push-notification transaction warning remained in stderr.
+- Committed the Android changes as `845c0db3` (`fix(marketing): restrict CP others outcomes`) and
+  pushed branch `merge` successfully to both configured Mconnect push destinations
+  (`manjugroupsdev/Mconnect` and `D-A-R-X/Mconnect`). Committed MMS web/Convex changes as
+  `cdab6e70` (`fix(cp-visits): close legacy others outcomes`) and pushed branch `max` successfully to
+  `manjugroupsdev/manjusitedevelopment`.
+- `AGENT_LOG.md` and `.idea/deploymentTargetSelector.xml` remain local and were not staged or pushed.
+  Travel Desk remains unchanged. Production still requires the normal MMS/Convex deployment and the
+  one-time production repair command:
+  `npx convex run marketing/clientPlaceVisits:repairOtherOutcomePendingSiteVisits '{"cursor":null}' --prod`.
+
+## Session 190 (main-chat) - pull latest MMS max
+- User requested `pull max`. Inspected `C:\Users\surya\Projects\manjusitedevelopment`: the MMS
+  worktree was clean on branch `max`, with no local divergence and 26 commits behind `origin/max`.
+- Ran `git pull --ff-only origin max`, fast-forwarding from `27efd336` to
+  `979e2d0bcb8ff30fd443c473f3ca180f1a16110a` (merge of PR #860). The update changed 22 upstream
+  files with no conflicts and created no local merge commit.
+- Verified local `HEAD` exactly matches `origin/max` at `979e2d0b` and the MMS worktree remains
+  clean. No Mconnect or Travel Desk source was changed; this local agent log remains uncommitted.
+
+## Session 169 (main-chat) — FIX: SV cancel crashes (undefined refs in siteVisits.ts)
+- Report: travel-desk "Cancel site visit" → "Uncaught ReferenceError: resolveAuditStaffId is not
+  defined at cancelSiteVisitCore (convex/marketing/siteVisits.ts:5173)". SV cancellation broken.
+- Fix 1: resolveAuditStaffId was never defined (leftover/typo). Replaced with the real resolver —
+  cancelledByStaffId = fallbackStaffId ?? (sessionToken ? getStaffFromSessionToken(...)?._id : null).
+  The actor-less external travel-desk flow resolves to null (no staff attribution), as intended.
+- Fix 2 (found via tsc): deriveCoordsFromMapsLink used at siteVisits.ts:653 but NOT imported
+  (defined in ./lib/locationFromMapsLink, imported in clientPlaceVisits.ts). Same class of runtime
+  ReferenceError. Added the import.
+- Validation: tsc clean on siteVisits.ts (no TS2304/undefined-name; only repo-wide TS7006 baseline).
+  Pushed to max (27efd336). MUST be DEPLOYED to prod for the live crash to clear.
+
+## Catch-up — responses that were missing an AGENT_LOG entry
+- (web pull) Pulled origin/max into the web repo (fast-forward 8e54f657→aca8f6f6, 12 commits: post-sale
+  outstanding rollup, staff pagination, attendance exports, mobile-logout-only-mobile-sessions).
+  git-pull only; never-deploy still in force. No app change.
+- (push) Session 162 — committed District/CP-address + SV rejection tab + SV staff-chain + CP-completion
+  proof fixes: app→both remotes on merge (df085f2a), web→max (e6dc87cc).
+- (push) Session 168 "push all changes" — app→both remotes on merge (b0342576: geotrack resume,
+  fixed footers, booking parity, reliable logout); web logout reorder→max (b7b63a54).
+- (push) Session 169 — SV-cancel crash fix→max (27efd336).
+- REMINDER TO SELF (standing rule): append a concise AGENT_LOG entry on EVERY response — fixes,
+  audits, pulls, pushes, status updates, and questions alike. AGENT_LOG.md stays local (never committed/pushed).
+
+## Session 170 (main-chat) — WEB Fleet page: filter layout + "This week" crash (investigating)
+- Report (mg.theairix.com/marketing/fleet): (1) search + date filters should sit to the RIGHT of the
+  Assigned/In-progress/Complete/Cancelled tabs and never shift; (2) clicking "This week" crashes the
+  tab and redirects to Dashboard. Locating the Fleet page component + the This-week handler.
+
+## Session 170 (cont) — WEB Fleet page: fixed "This week" redirect + filter layout + H-scroll
+- "This week" crash/redirect ROOT CAUSE: useFleetShellController.setQuery({range}) didn't write the
+  `tab` param; on a URL without an explicit ?tab, the redirect useEffect (invalid tab → visibleTabs[0]
+  = dashboard) then bounced to Dashboard. Fix: setQuery now always writes sp.set("tab", next.tab ??
+  activeTab) (+ activeTab dep) so a range change preserves the active tab. Backend rangeValidator
+  already accepts "week" — not a validation crash.
+- Layout: assigned-tab.tsx filter row used flex-wrap + justify-between → filters wrapped below the
+  tabs. Removed flex-wrap (outer: overflow-x-auto; filter group: shrink-0) so search + Today/This week
+  + date range stay to the RIGHT of the tabs and don't move.
+- H-scrollbar (mid-turn ask): the nowrap row overflowed → visible horizontal scrollbar. Shrunk widths:
+  search w-52→w-36, date inputs w-32→w-[112px] each, so the row fits and the scrollbar disappears.
+- PRE-EXISTING (not mine): tsc TS2339 at assigned-tab.tsx:230/235 — AssignedFleetVisit lacks
+  clientName/mobileNumber/clientPhone (search-filter type mismatch). Non-crashing (search just won't
+  match those fields). Flagged, not fixed (needs the correct field names on the visit type).
+- Validation: tsc clean on my two edited files (className/deps-only changes add no type errors).
+  NOT pushed. AGENT_LOG updated (standing rule).
+
+## Session 170 (cont2) — Fleet "This week shows no data": diagnosed (working) + likely Complete-tab gap
+- Traced client→backend: AssignedTab passes range="week", fromDate/toDate=undefined; backend
+  resolveAssignedDateWindow → Monday–Sunday window; listAssigned returns rows. The screenshot's
+  "In progress: 1" count IS this-week data → the week filter works. User was on the Complete
+  sub-tab, which is legitimately 0 (no trips completed in-window); the 1 trip is in-progress.
+- LIKELY REAL GAP (unconfirmed): Complete sub-tab windows by scheduledDate (fleet.ts listAssigned,
+  ~L525-604) not completion date, so a trip completed THIS WEEK but scheduled earlier won't appear
+  under Complete+This week. Fix would window Complete by travelDeskEndedAt. NOT changed yet —
+  asked the user to confirm the scenario before an untested backend edit to the working query.
+- Also noted: two divergent week helpers exist — resolveDateWindow (today+6) vs
+  resolveAssignedDateWindow (Mon–Sun). listAssigned uses Mon–Sun.
+- No code change this step. AGENT_LOG updated (standing rule).
+
+## Session 171 (main-chat) — CP pin-drop reverse-geocode uses Nominatim (wrong pincode) — fix to Google
+- Report: Drop-a-pin at 13.04446,80.21209 (should be pincode 600083) fills District/pincode from a
+  Nominatim (OSM) reverse-geocode response (postcode 600026, "CMWSSB Division 132", "Zone 10
+  Kodambakkam"). Wrong. Want the fields filled from the Google geocode of the dropped pin.
+- Investigating the reverse-geocode route + PinDropDialog/applyPickedLocation in unified-address-fields.tsx.
+
+## Session 171 (cont) — FIX: CP pin-drop reverse-geocode now uses Google (accurate pincode)
+- Root cause: app/api/map/reverse-geocode/route.ts used ONLY OSM Nominatim → wrong Indian
+  pincodes (600026 vs the correct 600083). The client (PinDropDialog.reverseGeocode) tries the
+  browser Google Geocoder first but it's REQUEST_DENIED (browser Maps JS key not authorized for
+  the Geocoding service) → apiAvailability.geocoder flips false → every pin drop falls back to
+  this Nominatim route.
+- Fix: the route now calls Google Geocoding server-side first (GOOGLE_MAPS_SERVER_KEY, which IS in
+  the web .env/.env.local and authorized), maps Google's address_components into the SAME loose
+  Nominatim JSON shape the client's reverseGeocodeViaNominatim already parses (display_name +
+  address.{house_number, road, neighbourhood, suburb, city, state, state_district, postcode}), so
+  NO client change. Falls back to Nominatim on no-key / non-OK / timeout (no regression).
+- Result: dropped-pin District/pincode/street now come from Google (600083 correct). Client
+  browser-key authorization for Geocoding would also help but isn't required (server route covers it).
+- Validation: tsc clean on the route. NOT pushed/deployed. Web change → needs a web deploy; user
+  should restart their local dev server to see it locally. AGENT_LOG updated (standing rule).
+
+## Session 172 (main-chat) — CP "client seen = No" → "Others outcome is available only for …" error
+- Report: Trip Details, selecting client-seen = No shows "Uncaught Error: Others outcome is
+  available only for …". The not-seen path sends outcome="other"; backend setOutcome rejects it.
+- Root cause: setOutcome (convex/marketing/clientPlaceVisits.ts:3313) gated outcome="other" to
+  CP_TYPES_WITH_OTHER_OUTCOME = {booking_cp, gift_distribution, old_client}. But the app's
+  client-not-seen path (TripNavigationFragment.kt:2775) closes a plain Follow-up/Direct CP with
+  terminalOutcome="other" + notes="Client not seen" → rejected for those cpTypes.
+- Fix (web, staged — needs prod deploy): allow outcome="other" when visit.clientMet===false
+  (any cpType), keeping the cpType gate only for the manual "Others" selection (client met).
+  markClientMet(false) runs before setOutcome, so visit.clientMet is already false; notes is
+  non-empty ("Client not seen") so the remarks check still passes. No app change required.
+
+## Session 173 (main-chat) — CP visit client name not resolved (web shows blank, app shows wrong name)
+- Report: CP visit 9941234046 shows LEAD Name blank on web (title/place name = the mobile number),
+  but the client PRAKASH exists in Clients with mobile 9941234046. Mobile app shows an unrelated name.
+- Investigating how clientPlaceVisits resolves the client display name on web + app.
+
+- Root cause: clientPlaceVisits stores only FKs (leadId/clientId), no denormalized name.
+  Shared enrichVisit (web get + app getForMobileId) + listMobileCompact (app list) resolved the
+  client ONLY via visit.clientId and NEVER matched the clients table by mobile. So web LEAD Name =
+  lead.contactName (blank) → "—"; app card = client.clientName from a null/stale clientId → wrong
+  name. The real client (PRAKASH, clients.by_mobileNumberNormalized) was never consulted.
+- Fix (web, staged — needs prod deploy): added reconcileDisplayClient(ctx, lead, client) —
+  matches clients by phoneLast10 of the visit's mobile; prefers it over a null/mismatched clientId,
+  never blanks a correct link. Wired into enrichVisit + listMobileCompact client projection.
+  Web detail page (cp-visit-detail-page.tsx): LEAD Name + header now fall back to client.clientName.
+  App needs NO change (HomeViewModel already reads client.clientName first). tsc clean.
+- Note: web CP-visits LIST page still labels rows from its own projection; reported surfaces
+  (web detail + app trip card) are fixed. Effective only after a Convex prod deploy.
+
+## Session 174 (main-chat) — Remove "Others" outcome for Old Client CP
+- Request: for Old Client CP the "Others" option is redundant (both old_client_visited and Others
+  prompt for remarks), so remove it from Old Client CP.
+- Dropped "old_client" from CP_TYPES_WITH_OTHER_OUTCOME in 3 places:
+  - web convex/marketing/clientPlaceVisits.ts (setOutcome gate) + error text now "Booking CP and
+    Gift Distribution CP".
+  - web features/marketing/pages/cp-visit-detail-page.tsx (detail-page Others button gate).
+  - app CpOutcomePolicy.kt cpTypeSupportsOtherOutcome() (covers TripNavigationFragment Yes-path
+    menu + CompleteCpVisitBottomSheet, both go through this one helper).
+- Now only Booking CP + Gift Distribution CP offer Others. Test (booking_cp) unaffected. tsc clean.
+- Web parts staged (need prod deploy); app part needs a fresh APK.
+
+## Session 175 (main-chat) — App CP-create form parity with web + HTTP 500 on create
+- Report: mobile CP Creation form doesn't match web CP create form (fields/rules/dropdowns/
+  conditional flow); and creating a CP on mobile throws HTTP 500 (toast + inline under Address L1).
+- Plan: (1) trace the mobile CP-create HTTP route → find the 500 root cause; (2) audit web CP
+  create form spec vs app CreateCpVisitBottomSheet and align fields/validation/flow.
+
+- Findings: web calls createFromMobile DIRECTLY with all args; mobile goes via HTTP route
+  /api/marketing/clientPlaceVisits/create which DROPPED projectId & lmoStaffId → mobile CPs were
+  project-less. The "HTTP 500" toast = createCpVisitRows business errors (assertStaffNotBusy /
+  assertNoDuplicateCpVisitSlot / "Collection CP requires booking" / invalid assignedStaffId) which
+  the route returns as 500 {error}; the app's catch showed e.message (bare "HTTP 500") not the body.
+  Inline "HTTP 500" under Address L1 = opportunistic /api/address/parse (OpenAI splitter) failing.
+- Fixes:
+  - web convex/http.ts create route: forward projectId + lmoStaffId to createFromMobile (parity).
+  - app CreateCpVisitBottomSheet: added serverErrorMessage(e) to surface the real 500 body in the
+    create catch; softened the address-parse failure text (no raw "HTTP 500").
+  - app: added LMO / Channel Partner / BDO picker (required, parity with web) — new etLmo layout
+    field, selectedLmo state, pickLmo/showLmoPicker + isEligibleLmo (mirrors cpVisitLmo.ts:
+    active Telesales LMO / Channel Partner / Sales&Marketing BDO), validation gate, sends lmoStaffId;
+    CreateCpVisitRequest gained lmoStaffId. Sourced from /api/hr/staff (listPicker returns
+    designation/department/status) so the filter populates.
+- Compile checks (web tsc + app compileDebugKotlin) running. Web route + LMO forward staged
+  (need prod deploy); app changes need a fresh APK.
+
+## Session 176 (main-chat) — CP create: phone-field icon, and name not fetching
+- Report: Client Phone Number field has no icon + box looks different from others; name not
+  fetching after entering the number.
+- Icon: ic_phone_outline.xml used a white stroke (#FFFFFF, transparent fill) → invisible on the
+  white input box. Switched the phone field to @drawable/ic_cp_phone (the colored CP icon family
+  the other fields use) — fixes the missing icon + the visual mismatch.
+- Name not fetching: autofill only read telecallerLeads.contactName. For numbers that exist as a
+  client (existing buyer) with no lead — or a lead whose contactName is blank (same class as the
+  earlier PRAKASH bug) — the name never filled. Added a clients-master fallback: after the lead
+  autofill, call api/clients/search-by-phone (searchClientByPhone → ClientProfile) and blank-fill
+  name + address + pin. All app-side; no backend change; needs a fresh APK.
+
+## Session 177 (main-chat) — Client arrival OTP not received (SMS + WhatsApp) — investigation
+- Report: some clients not receiving the arrival OTP on EITHER SMS or WhatsApp.
+- Tracing the OTP send pipeline (generate → SMS provider → WhatsApp) for edge cases:
+  phone normalization/country code, provider fallback, silent failures, rate limits, templates.
+
+- Root cause (both channels fail for SOME clients): messy stored contact phones. SMS
+  (bhashSms) stripped a leading 91 only when the result was exactly 10 digits and NEVER stripped a
+  leading 0; WhatsApp (normalizeIndianWhatsAppNumber) returned null for anything not 10 / 0+10 /
+  91+10. So an 11-digit non-0, 13-digit +91 typo, extension, or two-numbers-in-one-field failed
+  BOTH → client got nothing.
+- Fix (web convex/lib/otpDelivery.ts, staged — needs prod deploy): added toIndianMobile10() —
+  collapse any format to the subscriber's last 10 digits (drops 0/91/+91), require 6-9 prefix;
+  SMS gets the clean 10-digit, WhatsApp gets 91+10. Falls back to legacy behavior when not a
+  recognizable Indian mobile (no regression). Centralized so login OTP benefits too.
+- Secondary risks flagged (NOT code-fixable here, affect ALL not some): SMS DLT template text says
+  "signup on AIVIDA" (verify the registered transactional template under sender MNJUGR matches, else
+  operator silently drops); bhashSms falls back to hardcoded default user/pass "123456" if
+  BHASH_* env vars are unset on prod; clients on DND won't get promotional-classified SMS.
+
+## Session 178 (main-chat) — Mobile Site Visit shows PROJECT name as client name
+- Report: SV detail on mobile shows Client = "GS - TMZ 4.0 Phase II" (the project) instead of
+  the real client "Ravikumar" (web shows Ravikumar correctly). Phone correct (8610034400).
+- Tracing app SV detail client-name resolution + the SV mobile endpoint field it reads.
+
+- Root cause: getForMobileId case 3 (pure-SV synthesis, clientPlaceVisits.ts:2199) set client=null
+  and clientPlace.name=project.name. The app's SV client-name chain fell back to clientPlace.name →
+  showed the PROJECT ("GS - TMZ 4.0 Phase II") as the client. Web uses siteVisits.get which resolves
+  client via sv.clientId ?? clientFromPlace ?? clientByLeadPhone → shows "Ravikumar".
+- Fix (web, staged — needs prod deploy): getForMobileId case 3 now resolves the client
+  (sv.clientId, else reconcileDisplayClient by lead mobile) and projects it into the envelope
+  instead of null. Fix (app, needs APK): SiteVisitOverviewFragment.bindEnriched client-name chain
+  no longer falls back to clientPlace.name (project name for pure SVs) — client/lead only, else "—".
+  Also corrects the header/Visitors/Call-Client label (all derive from the same displayName).
+
+## Session 179 (main-chat) — Add full-width "Call client" button to CP Trip Details
+- Added a full-width "Call Client" button on the CP trip screen (fragment_trip_navigation.xml),
+  placed ABOVE the Client Address card (between tripInfoCard and clientAddressCard; address card's
+  top constraint re-pointed to it). Styled to match the SV overview call button (bg_completed_
+  section_card, blue phone icon + "Call Client" #0B61CA).
+- Wired in TripNavigationFragment: binds btnCallClient, dials clientMobile via ACTION_DIAL
+  (no CALL_PHONE permission); hidden (GONE) when the trip has no 10-digit mobile so the layout
+  collapses cleanly. clientMobile already supplied by HomeFragment.openTripNavigationForVisit
+  (visit.leadPhone). App-only; needs a fresh APK.
+
+## Session 180 (main-chat) — CP for new client must require name + create a clients row (like SV)
+- Report: a CP was created for a number with NO name and the client never landed in the clients DB.
+  Want: when the entered number isn't an existing client, name+number become required and the CP
+  details are stored as a new client — same logic SV uses for a new client. Web + mobile.
+- Investigating upsertClientByMobile (does CP create a client + with what name) and the SV
+  new-client creation path to mirror.
+
+- Root cause: client name was optional on the CP form; upsertClientByMobile defaults clientName to
+  the PHONE number when none is given (clients.ts:355) → CP created a nameless (phone-named) client.
+- Fix (name required for a NEW client + always store a named client):
+  - web convex/marketing/clientPlaceVisits.ts createFromMobile (staged): guard — reject a brand-new
+    client (no existing clients-by-mobile row) with no name (typed or lead contactName); and pass the
+    lead's contactName as the upsert clientName fallback so lead-linked CPs store a named client.
+  - web cp-visits-list-page.tsx: require effective name (lead contactName || typed) before submit;
+    Client name field now shows whenever the effective name is blank (covers no-lead AND
+    lead-with-blank-name) and is marked required (*).
+  - app CreateCpVisitBottomSheet: Client Name now required at submit (autofills from client/lead
+    lookup for existing numbers); layout label "Client Name *".
+- Backend staged (needs prod deploy); app needs a fresh APK.
+
+## Session 181 (main-chat) — Pushed all changes
+- App (Mconnect) → origin `merge` (both remotes: manjugroupsdev + D-A-R-X). Commit fc7a4ee2.
+  8 source files (excluded .idea + AGENT_LOG). Call-client button, CP-create parity/500-reveal/LMO
+  picker/phone-icon/name-autofill/required-name, Old Client "other" removal, SV client-name fix.
+- Web (manjusitedevelopment) → origin `max`. Commit dfe59bba. 8 files. CP+SV client resolution,
+  required CP client name, OTP phone normalization, create-route projectId/lmoStaffId, reverse-geocode,
+  fleet fixes. STILL NEEDS PROD CONVEX DEPLOY to take effect (never-deploy gate).
+
+## Session 182 (main-chat) — Many users can't complete CP: "Move within 500 m to complete"
+- Report: CP completion blocked by a 500m geofence; toast shows huge distances (79.3km, 42.1km).
+  Screenshot 1: pin near AP border for a Chennai 600126 address → stored CP coords are wrong/far.
+- Investigating the CP completion geofence gate in TripNavigationFragment (reference point,
+  radius, what happens when coords are bad).
+
+- Clarified by user: NOT the client pin — the staff HAS reached the CP, but the app's CURRENT
+  location shows a wrong (stale) point → geofence reads "79km away" and blocks completion.
+- Root cause: fetchCurrentLocation() used getCurrentLocation(PRIORITY) with no max-age → could
+  return a cached fused location from where the trip STARTED; and the geofence + OTP paths fell back
+  to the even-staler `currentLocation` field when the fetch returned null.
+- Fix (app, needs APK): fetchCurrentLocation now uses CurrentLocationRequest with
+  maxUpdateAge=10s + duration=20s + HIGH_ACCURACY (rejects the stale cache; GeoTrackService keeps a
+  fresh fix ready during the trip). checkReachingAndAskClientSeen + requestArrivalOtpThenOpenCamera
+  no longer fall back to the cached currentLocation — a fresh fix is required, else "couldn't get a
+  fresh GPS fix, retry" instead of a wrong-distance block. SV overview doesn't use this gate (no
+  change). No server change — a fresh accurate fix passes the existing 300m/500m gates at the client.
+
+## Session 183 (main-chat) — Pushed CP completion GPS fix
+- App (Mconnect) → origin `merge` (both remotes). Commit 6e898edd. TripNavigationFragment.kt only.
+  Fresh-GPS-fix fix for CP completion geofence (no more stale-location "79km away" block).
+- No web changes this round (web already pushed at dfe59bba; still awaiting prod Convex deploy).
+
+## Session 184 (main-chat) — SV outcome buttons stay disabled at DROPPED (after QR)
+- Report: after the client QR / DROPPED stage, the Outcome options (Converted/Not Interested/
+  Follow up) must be OPEN (enabled) until an outcome is given; currently they look disabled.
+- Investigating SiteVisitOverviewFragment outcome-enable logic vs SV status.
+
+- Root cause: outcomeStatusEligible was derived ONLY from effStatus (sv.status). For CAB visits the
+  fleet return leg advances the stepper to DROPPED via travelDesk* timestamps while sv.status lags
+  at an earlier value not in the eligible set → outcome buttons greyed even at DROPPED.
+- Fix (app, needs APK): SiteVisitOverviewFragment.bindEnriched — outcomeStatusEligible now also true
+  when the client has reached the site per fleet timestamps (travelDeskOnSiteAt / PickedFromSite /
+  Ended). Opens the outcome after the client QR (on-site) and stays open through DROPPED until an
+  outcome is recorded (isOutcomeLocked still closes it once given). Own-vehicle unchanged.
+
+## Session 185 (main-chat) — Everyone sees all projects in mobile pickers + completed at bottom (CP)
+- Request: enable "view all projects" for everyone in mobile; CP picker shows all ongoing first,
+  completed at the bottom.
+- Chose the SAFE mechanism (NOT the global projects.viewAll grant, which would expose project DATA
+  across all features): web convex/http.ts /api/marketing/projects now returns api.projects.list
+  (ALL projects) to everyone — same set the web CP picker uses — instead of the per-staff
+  linked/scoped list. Lightweight name/scope/status only; global permission untouched.
+- app ProjectFilters.ongoingThenCompleted() (ongoing first, completed at bottom); CreateCpVisit
+  picker uses it. Other mobile pickers keep ongoingOnly (now unscoped → all ongoing).
+- Web route staged (needs prod deploy); app needs APK.
+
+## Session 186 (main-chat) — Staff single-device login block persists after logout
+- Report: after logout, staff still can't log in on another phone — web staff login shows
+  "already logged in on another device". Session isn't clearing / block doesn't self-heal.
+- Investigating getActiveSessionBlockForDeviceType (lib/authSessionLimit.ts), logout mutation
+  (deactivateMobileSessionsForStaff), and how the block is enforced at login.
+
+- Decision (user): single-device login = NEW LOGIN TAKES OVER (not block).
+- Fix (web, staged — needs prod deploy): added takeOverActiveSessionsForDeviceType() in
+  lib/authSessionLimit.ts — on a fresh OTP/password login (ownership already proven), sign out any
+  existing active session of that device type for mapped (dialer) agents instead of blocking; marks
+  old session loggedOutByLabel="Signed in on another device". Wired into authFunctions.ts (OTP
+  login) + passwordAuth.ts (password login), replacing getActiveSessionBlockForDeviceType. Eliminates
+  the stuck block after a failed/absent logout (lost/uninstalled/crashed phone). Non-mapped staff
+  unchanged (multi-device). getActiveSessionBlockForDeviceType now unused (kept for reference).
+- NOTE: this + the earlier logout-reorder fix are staged on max; both need the prod Convex deploy.
+
+## Session 187 (main-chat) — Dialer enabled but call not forwarding via Aster cloud
+- Report: newly-pulled dialer feature is enabled but calls don't forward through Aster cloud.
+- Investigating the dialer→Aster call-origination path (DialerFragment, ModernDialer*,
+  WebViewBridge, ApiService Aster endpoints) to find the break.
+
+## Session 188 (main-chat) — Dialer must use modern-dialer, not Doocti — build missing config route
+- Root cause: the app's modern-dialer gate needs GET /api/mobile/dialer/config to return
+  configured:true + token + extension. That route was ABSENT from the web backend, so
+  getMobileDialerConfig 404'd → config null → the app fell back to Doocti on every call.
+- Fix (web convex/http.ts, staged — needs prod deploy): added GET /api/mobile/dialer/config
+  (+ OPTIONS). Reads the staff's active asterAgentMapping (getByStaffId) and returns the exact
+  MobileDialerConfigResponse shape the app expects — configured:true with mapping.token
+  (modernDialerEmbedToken) + mapping.extension (modernDialerExtension), apiUrl from
+  telecaller.modernDialerApiUrl setting. So the app takes the modern (WebRTC) path.
+- Requires: the staff's asterAgentMapping must carry a valid modernDialerEmbedToken + extension
+  (populated by admin/POST). If empty, still configured:false → Doocti. Token must be valid for
+  dialer.theairix.com or the softphone won't register (external). Coordinate with teammate so this
+  route isn't duplicated.
+
+## Session 189 (main-chat) — Pushed all changes (app + web)
+- App (Mconnect) → origin merge (both remotes): bf0b7e18 (SV outcome-open + CP picker ordering +
+  merged teammate dialer feature).
+- Web (manjusitedevelopment) → origin max: b9b544a3 (modern-dialer config route + single-device
+  takeover + all-projects mobile picker). Push initially rejected; pulled origin max (merged
+  teammate's tests/legal-docx POC + their otpDelivery WhatsApp messageId validation — auto-merged
+  with my toIndianMobile10 normalization, no conflicts), merge commit e1ba07e7, then pushed.
+- NOTE (dialer): pushed at user's explicit instruction as "necessary but not verified" — the config
+  route is required + type-clean, but end-to-end call success still depends on the staff's
+  asterAgentMapping having a valid modernDialerEmbedToken+extension and the external
+  dialer.theairix.com softphone registering with Aster. All web changes STILL need the prod deploy.
+
+## Session 190 (main-chat) — Modern dialer: shows calling but no audio, call not forwarding
+- Config route deployed → app now on modern-dialer path (not Doocti). But call shows "calling",
+  destination never rings, no audio. Classic WebRTC-in-detached-WebView failure.
+- Investigating whether ModernDialerWebViewBridge's WebView is ever attached to a window
+  (WebRTC media needs an attached WebView) + the service/controller architecture.
+
+- Confirmed: ModernDialerWebViewBridge creates the softphone WebView with applicationContext and
+  NEVER attaches it to a window (no addView anywhere; service also uses applicationContext). Android
+  WebRTC (mic + audio) requires an attached WebView → detached = no media, no audio, originate never
+  completes → destination never rings.
+- Fix (app, needs APK + device test): attachToActivityWindow() adds the WebView (1x1, alpha 0) to
+  the foreground Activity's decorView on every ensureLoaded, re-attaching if the Activity changed.
+  Fixes OUTBOUND calls placed while the dialer screen is open. No-op from the background service
+  (no Activity) — incoming/background calls still need the WebView hosted in an overlay-window
+  foreground service (SYSTEM_ALERT_WINDOW). May also need: wait for a "registered" event before
+  sending call (timing), and a valid embed token (external dialer.theairix.com/Aster). Compiles.
+
+## Session 191 (main-chat) — Adapt working web-dialer logic into app + add ringback tone
+- Request: inherit the WORKING web dialer's embed/postMessage logic into the app WebView bridge
+  (web dialer forwards calls + audio works); add a ringback ring sound while forwarding/ringing.
+- Locating the web dialer embed component (iframe to dialer.theairix.com + postMessage protocol)
+  to mirror its exact handshake/command/event contract in ModernDialerWebViewBridge.
+
+- Found (vs working web modern-dialer-provider.tsx): the web QUEUES the outbound call and only sends
+  sendDialer("call") once ready && phoneState==="registered" (waits for Aster registration). The app
+  sent "call" on page-load, before registration → softphone dropped it → stuck Connecting, no ring.
+- Fix (app, needs APK): ModernDialerWebViewBridge now gates command flush on pageLoaded &&
+  phoneRegistered — tracks phoneRegistered from the dialer's ready/phone:registered/phone:state
+  events (mirrors web phoneState), queues call until registered. onPageFinished no longer flushes.
+  AndroidBridge hops to main thread. Plus the earlier WebView window-attach (matches web's attached
+  1px iframe with allow="microphone; autoplay").
+- Ringback (app): DialerFragment plays ToneGenerator TONE_SUP_RINGTONE on call:ringing-out (agent
+  hears it forwarding/ringing), stops on picked-up/answered/ended/error/hangup/reset/destroy.
+
+## Session 192 (main-chat) — SV outcome open on web but still disabled on app at DROPPED
+- Report: web "Site incharge outcome" (Convert to Booking/Followup/Not Interested) is OPEN at
+  DROPPED; app outcome buttons still greyed. Session 184 fix (fleetReachedSite) may be insufficient
+  or isOutcomeLocked is wrongly locking. Inherit the web's exact enable condition.
+
+## Session 193 (main-chat) — Remove "Others" outcome option from SV overview
+- Request: SV outcome should not offer "Others" (web SV has only Convert to Booking / Followup /
+  Not Interested). Hiding btnOutcomeOther in the SV overview layout.
+
+## Session 194 (main-chat) — SV outcome STILL locked on new APK at DROPPED
+- New APK confirmed (Others button gone). Outcome buttons still greyed → isOutcomeLocked is true,
+  not eligibility. Hypothesis: CP-linked SV — getForMobileId case 2 leaks the linked CP's outcome
+  into visit.outcome, so isOutcomeAlreadyRecorded locks the SV outcome. Web uses siteVisits.get
+  (SV's own null outcome) so it's fine.
+
+- Root cause CONFIRMED: CP-linked SV — getForMobileId case 2 leaks the linked CP's outcome into the
+  top-level envelope. isOutcomeAlreadyRecorded read visit.outcome (the CP's, always set) → locked.
+- Fix (app-only, no deploy): backend already returns proposedSiteVisit: sv (full SV row) — added
+  outcome/convertedBookingId/cancelledAt to the app ProposedSiteVisit model (parsed from existing
+  JSON), and isOutcomeAlreadyRecorded now uses the SV's OWN fields (proposedSiteVisit) when present,
+  never the leaked CP values. SV outcome now unlocks at DROPPED. Needs fresh APK.
+
+## Session 195 (main-chat) — Make Call Client/Driver buttons filled blue + white text (SV + CP)
+- Request: SV overview Call Client/Call Driver + CP trip Call Client button → active blue bg,
+  white text + white icon (currently outlined card bg with blue #0B61CA text).
+
+## Session 196 (main-chat) — Offline attendance (capture real time, queue, sync) + app offline caching
+- Request: whole-app offline access via cache; CRITICAL: attendance clock-in must work offline,
+  capturing the REAL punch time on-device and syncing when network returns (staff getting marked
+  late due to network lag). Implement local cache without regressions.
+- Investigating: current punch flow + timestamp handling (app + backend), existing offline infra
+  (GeoTrack Room store-and-forward, LocalCache) to mirror the pattern for attendance.
+
+- Scope: user chose "Offline attendance queue". Implemented Phase 1:
+  - web (staged, needs deploy): staffAttendance.punchIn/punchOut accept clientPunchTime (ISO),
+    validated (recent, <=2min future, <=24h old) via resolveClientPunchTime; used as punch time +
+    date key. http.ts forwards body.clientPunchTime.
+  - app: PunchRequest.clientPunchTime; HomeViewModel.punch captures isoNow() at tap, sends it; on
+    network failure enqueues PendingPunchEntity (Room, GeoTrackDatabase v4->v5 + migration) with real
+    tap time + photo copied to filesDir/punch_queue, shows "Punched ... offline — will sync".
+    PunchSyncWorker (WorkManager, CONNECTED constraint) drains queue: upload photo -> punch API with
+    clientPunchTime -> delete row (drop on business-rejection to avoid loops, retry on network).
+    Enqueued on punch-success + loadHomeData. Online path unchanged except added timestamp.
+
+### Session 107 (cont.) - Back-nav lag fixed app-wide (view retention)
+
+- Complaint: "some back buttons take too long." Audit finding: the back arrows
+  are ALL already async (navigateUp() migration complete). Real cause: all 4 tabs
+  share one fragmentContainer (add/hide/show), and detail nav used
+  replace(fragmentContainer, X) — replace() removes EVERY fragment in the
+  container (active tab + 3 hidden tabs), so popping back recreated all of them
+  (Home re-inflates every visit card in a loop = the freeze).
+- Fix: new FragmentManager.pushDetail(next, allowStateLoss) + Fragment.pushDetail
+  in ui/common/NavigateUp.kt — pushes with setReorderingAllowed(true) + hide(current
+  container fragment) + add() + addToBackStack, so views underneath are retained
+  and pop reveals them instantly (no re-inflation, no reload). Mirrors the existing
+  tab hide/show pattern → no new lifecycle model. Built-in double-tap dedupe
+  (replaces commitOnce at these sites).
+- Converted EVERY back-stack detail push (55 sites / ~27 files) from
+  replace(fragmentContainer,X).addToBackStack to pushDetail (agent did 51; I did the
+  4 setReorderingAllowed(true) ones in HomeFragment + AgencyDriverTripsFragment).
+  All-or-nothing: a stray replace() would tear down the retained stack. Only 2
+  replace(fragmentContainer) remain = root swaps (MainActivity 534/549, no
+  addToBackStack, savedInstanceState-gated) — correct.
+- Build: :app:compileDebugKotlin BUILD SUCCESSFUL (needed one-off
+  -Pkotlin.daemon.jvmargs=-Xmx3072m; the daemon OOMs at the default heap on this
+  machine — NOT a code issue).
+- Behavior note to sanity-check on device: covered screens now stay RESUMED while
+  hidden (same as tabs always have). Leaf camera/map screens (SelfieCamera,
+  TripNavigation, MapViewer) are popped (destroyed) on back = unaffected. The one
+  forward-nav-from-a-camera path is QrScanner→QrHistory: scanner now stays warm
+  behind history (instant back, camera not re-init) instead of being torn down.
+- Compile-verified only (no Android runtime in this session).
+
+## Session 197 (main-chat) — GeoTrack: verify offline buffer zero-loss + accurate flight-mode/location-off tamper detection
+- Report: GeoTrack shows many "HEARTBEAT MISSED" (ambiguous — no-network area vs tampering). Want:
+  (1) offline cache buffers ALL location + tamper pings and syncs later so no heartbeats/paths
+  missed even in no-network areas; (2) detect FLIGHT MODE and LOCATION OFF as distinct tamper
+  signals (accurate) instead of generic heartbeat-missed.
+- Mapping GeoTrackService tamper/heartbeat/buffer/sync + tamper event types (app+backend).
+
+- Note: store-and-forward for location+heartbeats+tamper already existed (buffer + replay w/ original
+  timestamps). Added the MISSING accurate-tamper signals:
+  - app GeoTrackService: heartbeat now carries airplaneMode+locationEnabled (live+buffered);
+    isLocationEnabled() master toggle; emitTamperOnStateChange() reports flight-mode/location-off on
+    change AND catches missed broadcasts each heartbeat tick + initial state at service start;
+    distinct LOCATION_DISABLED/LOCATION_ENABLED. HeartbeatRequest gained airplaneMode/locationEnabled.
+  - web (staged, needs deploy): /api/tracking/heartbeat + geotrack.heartbeat.ping accept+store
+    airplaneMode/locationEnabled; geoHeartbeats schema + tamperEvents union + tamper.ts validator +
+    severity maps gained LOCATION_DISABLED/LOCATION_ENABLED. Store-and-forward untouched.
+
+## Session 198 (main-chat) — Dialer STILL no audio/no call after attach+register-gate+ringback
+- App-side fixes (attach/register-gate/ringback/timeout) didn't resolve it → break is in the
+  softphone↔Aster layer (dialer.theairix.com embed / SIP registration / WebRTC), which is external
+  and untestable from here. Added instrumentation to pinpoint: WebView console→logcat
+  (onConsoleMessage), log every command sent + event received + page load + embed URL, and a
+  fallback flush (send queued call after 6s if registration never confirms, so it's not stuck).
+  Capture: `adb logcat -s ModernDialer` during a call attempt.
+
+## Session 199 (main-chat) — Land Procurement mobile Inspection: land-location map + competitors (add/preview map)
+- Request: mobile inspection should show the land location on a map (web parity, land has lat/lng);
+  and allow ADDING competitors + PREVIEWING competitor locations on a map (web has promoter/project/
+  location/google-map-link/map-view/adjust-pin/extent/approval/stage/amenities).
+- Mapping mobile Land Procurement inspection screens + property/competitor data model/API.
+
+## Session 200 (main-chat) — Land inspection: map view/adjust for land + competitors (user chose tap-to-open)
+- Mobile inspection form already captured land + competitor locations (Google Map Link -> latLong)
+  and add-competitor already worked. Added the missing MAP UI:
+  - "View on map / Adjust pin" button on the land location (btnLandViewMap) + each competitor card
+    (btnCompetitorViewMap). Opens the reusable full-screen MapPinDropBottomSheet centered on the
+    parsed coords (view + search + drop/adjust); dropped pin writes "lat,lng" back to the field.
+  - parseLatLng() handles "lat,lng" and Google Maps URLs (@lat,lng / ?q= / !3d!4d). openLocationMap()
+    helper. No fragile in-form MapView. App-only; needs APK.
+
+## Session 201 (main-chat) — SV cum CP completion: outcome options not shown in dialog
+- Report: completing an SV cum CP should show the SV outcome options (Converted/Not Interested/
+  Follow up...) in a dialog; the options aren't appearing.
+- Tracing the outcome-options build for sv_cum_cp in CompleteCpVisitBottomSheet / TripNavigationFragment.
+
+## Session 201 fix — SV cum CP outcome dialog now shows
+- Root cause: sv_cum_cp opens CompleteCpVisitBottomSheet via newInstance with isSvFixedHint=true
+  (visitCategory=="sv_cum_cp"). The hint synchronously set outcomeChosen=true + locked to Site Visit
+  to avoid flicker. detectAndApplyLockedSvMode's "no SV-fix signal -> normal mode" branch just
+  return@launch'd WITHOUT reverting the hint -> picker suppressed (maybeShowOutcomePicker returns
+  when outcomeChosen). So an sv_cum_cp with no pre-fixed SV stayed locked with NO options.
+- Fix (app, needs APK): normal-mode branch now reverts the hint (outcomeChosen=false, restore
+  tabs) and calls maybeShowOutcomePicker(). Also enabledOutcomeOptions treats sv_cum_cp as SV-style
+  (Booking / Follow up / Not Interested / Others; hides "Site Visit"), matching the expected SV outcome.
+
+## Session 202 (main-chat) — Pushed all my feature work
+- App (Mconnect) -> origin merge (both remotes). Commit d17351f0. 14 files: offline attendance
+  (Room queue + PunchSyncWorker + clientPunchTime), GeoTrack flight-mode/location tamper signals,
+  dialer diagnostics, land-inspection map view/adjust, SV-cum-CP outcome-dialog fix.
+- Web (manjusitedevelopment) -> origin max. Commit f63094c8. 6 files: punch clientPunchTime,
+  heartbeat airplaneMode/locationEnabled + LOCATION_DISABLED tamper.
+- LEFT UNPUSHED (not mine): many pre-existing local changes in the app tree from before this
+  conversation (MainActivity, ui/chat/*, ui/hr/*, Loans/Tasks/Profile/etc.) — real content changes
+  I never touched; flagged to the user rather than blindly pushed. Web still needs prod deploy.
+
+## Session 203 (main-chat) — Dialer: restructure to iframe-host (mirror working web) — connect-timeout confirmed live
+- New APK confirmed (connect-timeout message showed). Register-gate never flushed + timeout fired =>
+  softphone never reported registration/progress. Strongest remaining hypothesis: the app loaded the
+  embed TOP-LEVEL and self-posted; the embed is built to talk to a PARENT window.
+- Fix (app, needs APK): ModernDialerWebViewBridge now loads a HOST page (origin mg.theairix.com via
+  loadDataWithBaseURL) that embeds the dialer in an IFRAME (allow="microphone; autoplay") and relays
+  postMessages both ways (window.__mdSend -> iframe.contentWindow; iframe 'modern-dialer' events ->
+  native) — EXACTLY like web modern-dialer-provider.tsx. evaluateCommand posts via __mdSend; page-load
+  no longer injects the self-post bridge. If this still fails it's definitively the softphone<->Aster
+  registration side (external).
+
+## Session 204 (main-chat) — Dialer audio + config reliability; CP-completion timeout root cause
+- Device logcat (OPPO 7ceb9213) after iframe-host fix: iframe loaded, events flowed, call command reached
+  softphone, but WebRTC failed "Could not start audio source" / "Unable to select communication device".
+  Root: app never set VoIP audio mode.
+  App fix (DialerFragment.kt + AndroidManifest.xml): added MODIFY_AUDIO_SETTINGS perm; startCallAudio()
+  sets AudioManager.MODE_IN_COMMUNICATION + requests audio focus (USAGE_VOICE_COMMUNICATION) on call
+  placement; stopCallAudio() resets on resetCallState/onDestroyView. Rebuilt+installed. Green in-call bar
+  confirmed a call connected on retest.
+- 2nd test hit "Network error: HTTP 404" + station showed a phone number: dialerConfig was NULL at call
+  time (config GET failed under 40-60s backend latency), so app fell back to the DEAD legacy Doocti
+  endpoint (mms.aivida.in/api/doocti-call -> 404). Endpoint itself is healthy (curl: configured=true,
+  ext 1030, valid token). App fix (DialerFragment.kt): fetchDialerConfigWithRetry() (3 tries), onCall
+  now fetches config inline if null before routing, routeCall() shows "couldn't reach dialer service"
+  instead of dialing dead Doocti when config unreachable. Rebuilt+installed.
+- Measured prod api-mfpl latency directly: iam/my-permissions 41.7s, hr/attendance/my 61.1s (trivial
+  queries, cfEdge 6ms, cfOrigin ~27-61s) => WHOLE Convex prod backend degraded; app's 30s OkHttp timeout
+  => "Network error: timeout" everywhere. Needs Convex dashboard/ops (NOT an app bug).
+- CP-completion-SPECIFIC root cause (user clarified screenshot is CP, not dialer): "Swipe to Complete Trip"
+  -> geoApi.requestArrivalOtp -> requestArrivalOtp action -> sendOtpSmsAndWhatsApp (parallel) + optional
+  geocodeAddress. sendBhashSms (bhashSms.ts:61) and sendAirixWhatsAppTemplate (airixWhatsApp.ts:166) and
+  geocode (trackingMaps.ts:297) all did BARE `await fetch` with NO timeout. A hung provider -> action hangs
+  -> app 30s timeout -> CP completion fails. Structural, recurs whenever a gateway stalls.
+  WEB FIX (max branch, convex/): new convex/lib/fetchWithTimeout.ts (AbortController, default 10s);
+  applied to sendBhashSms, sendAirixWhatsAppMessage, and geocodeAddress fetch. tsc: no new errors (only
+  pre-existing app/ baseline). NEEDS CONVEX DEPLOY to take effect (never-deploy rule — flagged to user).
+- Dialer call outcome (device logcat): modern path now fully works — mic granted, AudioFlinger thread
+  ready (audio fix effective), softphone replied. Call rejected with call:error "This agent is already
+  open on another device." (ext 1030 registered elsewhere — web dialer/other session). Not an app bug;
+  user must free the Aster agent seat.
+- "App crashing after making call" = ANR, NOT a crash. OPPO Quality watchdog dumped main thread
+  TIMED_WAITING in runBlocking at GeoTrackService.onDestroy(GeoTrackService.kt:344). Root: onDestroy ran
+  runBlocking(Dispatchers.IO){ syncPoints(); syncEvents() } ON THE MAIN THREAD; ending a call tears down
+  GeoTrackService, the 40-60s backend latency stalled the sync past the ANR window -> system killed app.
+  APP FIX (GeoTrackService.kt): removed the main-thread runBlocking final sync; now unconditionally
+  GeoTrackFlushWorker.enqueue(applicationContext) — the existing durable, network-constrained, off-thread
+  worker drains the SAME point+event buffers with retry/backoff (no data loss). Compiles; APK installed
+  to 7ceb9213. NOT yet pushed to merge.
+- "Old UI still used?" audit: screenshot 1 (Chandra Mouli SV-cum-CP, inline outcome-tab find-client form)
+  vs screenshot 2 (Murali Follow-up, floating "What happened with the client?" OutcomeSelectionDialog).
+  Findings: CompleteCpVisitBottomSheet IS the current sheet used from 7 entry points; OutcomeSelectionDialog
+  (new picker) IS wired; ONLY genuinely-dead old UI = BookingCreateFragment.kt + fragment_booking_create.xml
+  (0 launch sites). Root of "form instead of dialog": sheet skips the chooser when opened with a pre-set
+  STANDARD outcome (cpOutcome = visit.cpVisit?.outcome, via outcomeFromArg -> outcomeChosen=true). A
+  stray/leaked outcome on a still-PENDING row therefore bypassed the picker. User chose "Harden picker".
+  APP FIX (CompleteCpVisitBottomSheet.kt): new flag outcomeArgPreselected (set only for standard outcomes);
+  new visitAlreadyDecided(visit) (status/fieldVisit completed|cancelled|completedAt); in
+  detectAndApplyLockedSvMode normal-mode branch, if outcomeArgPreselected && !visitAlreadyDecided ->
+  outcomeChosen=false + maybeShowOutcomePicker() (mirrors the existing isSvFixedHint revert). Genuine
+  completed re-opens keep their recorded-outcome form; locked pre-fixed SV path untouched; pure-SV/standalone
+  unaffected. Compiles; APK installed to 7ceb9213. NOT pushed. BookingCreateFragment left in place (user
+  did not opt to delete).
+
+## Session 205 (main-chat) — validate + push all
+- Validation: :app:assembleDebug GREEN; :app:testDebugUnitTest initially FAILED on
+  CpOutcomePolicyTest ("others available only for approved CP categories") — STALE test asserted
+  Old_Client supports "Others", but policy was intentionally narrowed to {booking_cp, gift_distribution}
+  (web parity, earlier this session). Updated the test (Old_Client -> assertFalse). Re-run: GREEN.
+- WEB (max): committed OTP fetch-timeout fix (4 files) 5a293a4e, pushed origin/max (0 behind, ff).
+  STILL NEEDS A CONVEX DEPLOY to take effect (never-deploy rule).
+- APP (merge): committed c6cc7def (all app/src: dialer audio+config-retry, GeoTrack onDestroy ANR fix,
+  CP/SV outcome picker hardening, CpOutcomePolicy test fix, + pre-existing in-progress UI work across
+  chat/hr/tasks/library/profile). Pushed to origin/merge which fans out to BOTH manjugroupsdev + D-A-R-X;
+  darx/merge already up-to-date. Excluded .idea/, AGENT_LOG.md, gradle/ (toolchain bumps), .kotlin/ per
+  standing rules.
+- OUTSTANDING (not code-fixable by push): prod api-mfpl backend latency 40-60s on trivial queries =>
+  timeouts app-wide (ops/Convex dashboard). Dialer "agent already open on another device" = free the Aster
+  seat (close web dialer). Device-side verification of picker-hardening + ANR fix still pending (user lacks
+  device now).
+
+## Session 206 (main-chat) — complete-anywhere (no geofence) + Comp Off badge
+- Issue A: web/app showed different coordinates -> "Move within Nm to complete/verify arrival" blocked
+  staff who WERE with the client. Fix = remove the visit-completion geofence (client arrival OTP is the
+  real proof of presence). APP: TripNavigationFragment.checkReachingAndAskClientSeen — dropped the
+  distance > REACHING_RADIUS_METERS block (still captures a fresh fix for the record). WEB (max):
+  convex/hr/fieldVisitOtp.ts requestArrivalOtp — removed the `if (!devBypass && distance > radius) return`
+  block; distance/radius still computed + returned for audit/travel-allowance. verifyArrivalOtp only
+  records distance (no block), untouched. Attendance/home clock-in geofence + travel-allowance rules NOT
+  touched ("others work as before").
+- Issue B: attendance "comp-off" showed Absent on mobile. Root: backend AttendanceApproval includes
+  "comp-off" but the app status mappers didn't -> fell through to punch-derivation -> no clock-in ->
+  Absent. APP: added comp-off cases (label "Comp Off", neutral like Week Off) to AttendanceStatusBadge
+  (My Attendance log + HR dashboard strip) and AttendanceHistoryFragment.applyAttendanceStatus (HR list),
+  and excluded comp-off from the daysPresent count.
+- Validation: :app compileDebugKotlin GREEN, testDebugUnitTest GREEN, assembleDebug GREEN (device not
+  connected -> no adb install this time). web tsc: no fieldVisitOtp errors.
+- Pushed: WEB commit 62c5f64c to origin/max (rebased onto teammate's +24 commits; my earlier
+  fetchWithTimeout preserved, merged cleanly with their airixWhatsApp apiKey additions). APP commit
+  73051f21 to origin/merge -> both manjugroupsdev + D-A-R-X.
+- DEPLOY REQUIRED: the geofence removal in fieldVisitOtp.ts needs a Convex deploy to take effect (app-side
+  gate is live in the new APK, but the server still blocks until deployed). Never-deploy rule -> flagged.
+
+## Session 207 (main-chat) — sv_cum_cp outcome sheet reveal-then-picker glitch
+- Symptom: completing sv_cum_cp flashed the "What happened with the client?" picker, closed it, and
+  auto-opened a CP filling form; staff couldn't pick Follow up / Not Interested.
+- Root cause (CompleteCpVisitBottomSheet): for isSvFixedHint the sheet synchronously set outcomeChosen=true
+  (+ activeOutcome=SITE_VISIT + faded tabs) to dodge a first-paint flicker. The onCreateDialog show-listener
+  then `revealSheet()`-ed a form (outcomeChosen true), while async detectAndApplyLockedSvMode reverted to
+  maybeShowOutcomePicker — two paths racing the same sheet.
+- Fix (onViewCreated): compute isSvFixedHint first; for sv_cum_cp DON'T pre-commit an outcome (removed the
+  synchronous outcomeChosen=true + Site Visit + tab-fade) AND suppress the ARG_CP_OUTCOME preselect. Now
+  outcomeChosen stays false -> show-listener shows the picker over the hidden (alpha 0) sheet (no form
+  paints). detect's applyLockedSvMode (which ALREADY dismisses the picker at line 6733) is the sole path
+  that swaps to the locked SV Reject/Confirm form, and only for a genuine telecaller-fixed SV. Trade-off:
+  a genuine locked SV now shows a brief picker flash before locking (minor; acceptable under normal
+  latency). detect's now-dead hint-revert branch left as a harmless safety net.
+- Validation: compileDebugKotlin + testDebugUnitTest + assembleDebug GREEN. Device NOT connected -> not
+  installed/verified on device. Pushed app commit 6e323c56 to origin/merge (both remotes). Device
+  verification of the picker-stays-put behavior still pending.
+
+### Session 107 (cont.) - Trip Details header under status bar (fixed)
+
+- Bug: back button/title on "Trip Details" sat under the status bar. Cause:
+  edge-to-edge shell keeps fragmentContainer top padding 0 (MainActivity only
+  paints a status-bar colour strip, doesn't offset content), and the trip topBar
+  had just paddingTop=14dp.
+- Fix: new BottomActionInsets.applyStatusBarTop(header) adds statusBars().top on
+  top of the header's XML paddingTop (idempotent). Wired into TripNavigationFragment
+  (topBar) and DriverTripDetailFragment (added detailHeaderBar id in
+  fragment_driver_trip_detail.xml). AgencyDriverTripDetailFragment already did this
+  (untouched).
+- :app:compileDebugKotlin BUILD SUCCESSFUL. Compile-verified only (no runtime).
+  Not committed.
+
+## Session 208 (main-chat) — Out-of-geofence CP completion → GM approval (backend done)
+- SCOPE (after user corrections): OTP MANDATORY (no "Request completion" / no-OTP path). Geofence no longer
+  hard-blocks; an OTP-verified completion that is OUT of the client geofence → status pending_gm_approval.
+  GM approve → completed; GM reject+remark → reopen SAME visit for SAME staff (remark shown on reopen + on
+  eventual completion). Reassigned/pending don't inflate per-client CP count (reopen = same row, so
+  patchCpVisitStatsForChange totalVisits unchanged — no code needed).
+- BLOCKER discovered: web `clientPlaceVisits` Doc/`api` type is at TypeScript's HARD ceiling — even +1
+  status literal cascades ~1500 implicit-any errors (api degrades to any) into features/*.tsx + *.test.ts.
+  Verified deploy scripts (deploy.sh/dev/new) build with NEXT_IGNORE_BUILD_CHECKS=true and convex uses tsgo
+  (convex/ non-test only) → the cascade is COSMETIC for their pipeline; my convex/ files are locally clean.
+  Designed setOutcome to add NO new mutation args (derives out-of-geofence from stored
+  fieldVisit.arrivalDistanceFromPlaceMeters) to minimize api impact regardless.
+- BACKEND DONE (web max, staged; NEEDS CONVEX DEPLOY): schema.ts clientPlaceVisits +pending_gm_approval
+  status + completionApproval nested object (lat/lng/distance/outOfGeofence/gmStaffId/requestedAt/
+  rejectRemark/reassignedFromRejection). clientPlaceVisits.ts: statusValidator +literal; setOutcome
+  body-only branch (out-of-geofence → pending, resolve GM via resolveHandoffManagerStaffId [now exported
+  from outOfStationHandoffs.ts], store approval, notify GM; else completed via extracted
+  applyCpCompletionEffects); approveCpCompletion + rejectCpCompletion mutations (assigned-GM gate);
+  listPendingCpCompletionApprovals query; notifyCpApprovalRequested/Decision helpers. http.ts: GET
+  /api/marketing/cp-visits/pending-approvals + POST approve + POST reject (+ public-paths registered).
+  tsc: NO errors in my convex/ files (verified).
+- APP DONE: CpVisitsFragment status pill — pending_gm_approval → amber "Pending Approval" / "Awaiting GM"
+  (tap=read-only detail). compileDebugKotlin GREEN.
+- REMAINING (not started): app GM approve/reject queue UI + GeoTrackApi endpoints/models + push routing;
+  web approvals surface (approve/reject on web). Nothing pushed. Backend non-functional end-to-end until a
+  GM approve UI exists somewhere + a Convex deploy.
+- USER DECISIONS: GM surface = APP queue (not web); pending tag shows the approver GM NAME to the staff;
+  hold push until GM surface done (now done).
+- APP GM SURFACE DONE: new CpApprovalQueueBottomSheet (lists this GM's pending out-of-geofence completions —
+  client, staff, place + distance, outcome, photo — with Approve / Reject-with-remark). GeoTrackApi:
+  getPendingCpApprovals + approveCpCompletion + rejectCpCompletion + models (CpApprovalItem etc.).
+  MainActivity: cp-approval-needed push (targetTab="approvals") opens the queue. PushTokenManager:
+  cp-approval-needed→CHANNEL_APPROVALS, cp-approval-decision→CHANNEL_VISITS. Staff card: pending_gm_approval
+  → amber "Pending Approval" / "Awaiting: <GM name>" (approvalGmName threaded top-level through
+  listMobileCompact → TodayVisit + rejectRemark/reassignedFromRejection). compileDebugKotlin +
+  testDebugUnitTest + assembleDebug GREEN.
+- TSGO/DEPLOY: convex codegen needs auth (stale env) so tsgo not runnable here, but team continuously grows
+  this schema + deploys → tsgo does NOT hit the tsc api-ceiling; cascade is tsc-only (3 http.ts implicit-any
+  are pre-existing site-visit handlers touched by the tsc cascade, tolerated). My convex/ routes: clean.
+- DEFERRED: web cp-visits page shows pending_gm_approval as an unmapped status label (minor cosmetic).
+- NEEDS CONVEX DEPLOY to function. Confirm `convex deploy` succeeds before relying on it.
+
+## Session 209 (main-chat) — CP visit "on web not on mobile" = super-admin 200-cap
+- Symptom: a CP visit (07 Aug, scheduled, assigned MADHAN RAJ.M) shows on web CP Visits but not on the
+  mobile CP Visits page. Diagnosed: mobile user is SUPER-ADMIN (viewAll) → listMobileCompact returns the
+  200 most-recent company-wide visits (by scheduledDate desc); a 5-day-old visit falls beyond 200 and the
+  client-side search can't reach it. assignedStaffId IS set (web reads assignedStaffId, no fallback), so
+  not an assignment mismatch.
+- FIX (server-side search): listMobileCompact +search arg → uses clientPlaceVisits.searchIndex("search_text")
+  (no staff filter field, so non-viewAll callers are narrowed by assignedStaffId in JS; viewAll sees all
+  matches; date range ignored on search). http.ts /my forwards ?search=. App: getMyMarketingCpVisits +search
+  query param; CpVisitsFragment search box now fires a 350ms-debounced backend reload with the term (instant
+  local filter still applies on top). Reaches ANY client regardless of the recency cap.
+- Validation: :app compileDebugKotlin GREEN; convex/ files (clientPlaceVisits, http) no non-7006 errors.
+  NEEDS CONVEX DEPLOY (server-side search lives on max, not prod) — the app APK alone won't help until
+  the backend deploys.
+
+## Session 210 (main-chat) — production-correctness pass on the CP approval updates
+- Reviewed the staged CP updates for prod; found + fixed real bugs that would misbehave live:
+  1. STRANDING: if resolveHandoffManagerStaffId returns undefined (staff has no reporting-chain GM), an
+     out-of-geofence completion would sit in pending_gm_approval forever with NO approver. FIX (setOutcome):
+     resolve GM BEFORE deciding status; needsApproval = outOfGeofence && !!gmStaffId → fail-open to completed
+     when no GM (OTP already proved presence; distance still recorded).
+  2. PENDING PILL never showed: mobile mapper toCpListVisitOrNull used effectiveStatus = fieldVisit.status
+     ?? cpStatus, and the app calls completeVisit after EVERY outcome, so fieldVisit="completed" masked the
+     CP hold → card read "Completed". FIX: pending_gm_approval (CP status) now wins in effectiveStatus.
+  3. REOPENED (rejected) visit read as "completed" (fieldVisit stayed completed) → staff couldn't redo. FIX
+     (rejectCpCompletion): reset CP to "scheduled" (clear outcome/clientMet) AND reset the fieldVisit
+     (status scheduled; clear startedAt/completedAt/arrivalVerifiedAt/arrivalRequestedAt/
+     arrivalDistanceFromPlaceMeters/arrivalLat/Lng/arrivalPhotoStorageId) so it's a clean in-geofence redo.
+  4. approvalGmName never populated: I'd added it to TodayVisit, but /my deserializes into CpVisitDetail.
+     FIX: added approvalGmName/rejectRemark/reassignedFromRejection to CpVisitDetail + copy them into
+     TodayVisit in the mapper. "Awaiting: <GM name>" now resolves.
+- Verified OK: arrivalDistanceFromPlaceMeters is stored on OTP verify (fieldVisitOtp) before setOutcome
+  reads it (fail-open when place has no coords); searchText maintained on create/assign/setOutcome + a
+  re-runnable backfillSearchText for old rows; schema additions are additive-optional (backward compatible,
+  no migration); status checks elsewhere are targeted (not exhaustive) so pending_gm_approval doesn't break
+  aggregates; per-client count unaffected (reject reopens same row).
+- Validation: :app compileDebugKotlin GREEN (after KSP-cache/OOM env retries with -Xmx4g); convex/ files no
+  non-7006 errors.
+- MINOR/known (not blockers): app shows "Visit completed" toast even for a pending completion (the CP card
+  still reads "Pending Approval"); web cp-visits page shows raw pending_gm_approval label.
+- DEPLOY CHECKLIST: (a) confirm `convex deploy` (tsgo) succeeds; (b) run `npx convex run
+  marketing/clientPlaceVisits:backfillSearchText` so older rows are searchable; (c) ensure staff→GM
+  reportingTo is set where GM approval is expected (else out-of-geofence completions fail-open to completed).
+
+## Session 211 (main-chat) — pin re-drop doesn't update address (app + web)
+- Bug: dropping a pin fills the address the first time, but a SECOND pin drop leaves the old address /
+  pincode / district stale. Root = blank-only / keep-old fill on both surfaces; a deliberate re-drop should
+  REPLACE the address.
+- APP (CreateCpVisitBottomSheet.kt): pin-drop listener filled etAddressLine1 only if blank. FIX: on drop,
+  clear etDoorNo/etStreet/etAddressLine2/etCity/etState/etPincode + reset lastEnrichedPincode + always set
+  etAddressLine1 = new address → the Line1 paste-parse (re-runs, address >25 chars & differs) + pincode
+  enrich repopulate every field from the NEW location.
+- WEB (components/unified-address-fields.tsx applyPickedLocation): was `pin.X || current.X` (kept old when
+  the new geocode field was empty). FIX: when the geocode resolved (pincode||city||state present), REPLACE
+  all address fields with the new pin's components (clearing what it doesn't return); on a failed geocode,
+  keep current + just update coords (never blank a good address on a lookup miss). Shared component, so all
+  pin-drop forms benefit.
+- Validation: :app compileDebugKotlin GREEN; web tsc no non-7006 errors in unified-address-fields.
+
+## Session 212 (main-chat) — out-of-geofence completion warning (app-only)
+- Request: when completing a CP OUTSIDE the client geofence, show a warning "You're not near the client
+  location — want to complete?" with Cancel / Complete, then the normal photo + OTP flow.
+- FIX (TripNavigationFragment.checkReachingAndAskClientSeen): after the fresh GPS fix, compute distance to
+  dest; if > GEOFENCE_APPROVAL_RADIUS_METERS (300.0, matches backend CP_GEOFENCE_DEFAULT_RADIUS_M) show an
+  AlertDialog (Cancel aborts + resets swipe; Complete runs the extracted `proceed` → CpClientSeenBottomSheet
+  → photo/OTP as normal). In-geofence completes with no warning. App-only, no backend/deploy needed.
+- Validation: :app compileDebugKotlin GREEN.
+- FOLLOW-UP: the warning now also captures a REQUIRED remark (reason) shown to the approving GM. WEB:
+  completionApproval +staffRemark; new setCpCompletionRemark mutation (stashes it at warning-confirm time);
+  setOutcome preserves prior.staffRemark into completionApproval; listPendingCpCompletionApprovals returns
+  staffRemark; POST /api/marketing/cp-visits/geofence-remark route (+public-paths). APP: GeoTrackApi
+  setCpGeofenceRemark + CpGeofenceRemarkRequest + CpApprovalItem.staffRemark; warning dialog gained a
+  required EditText (Complete blocked until non-empty; overridden positive button) that calls
+  setCpGeofenceRemark before proceeding; CpApprovalQueueBottomSheet shows "Staff reason: <remark>". Decoupled
+  swipe-time store handles both client-seen Yes/No paths. :app compile GREEN; convex/ no non-7006 errors.
+  Web backend NEEDS CONVEX DEPLOY; app ships with APK.
+
+- 2026-08-12 — CP out-of-geofence UI made design-system compliant. Replaced the bare AlertDialog
+  warning with a styled bottom sheet: new sheet_out_of_geofence_warning.xml (bg_bottom_sheet_white_rounded,
+  drag handle, bg_icon_warning amber circle + ic_location_pin, Inter fonts, bg_outcome_field_pill reason
+  field with required-reason validation, bg_grey_rounded Cancel + bg_home_trip_action_ready Complete) +
+  OutOfGeofenceWarningBottomSheet.kt (onComplete/onCancel; onCancel resets arrivalInProgress; onComplete
+  stores reason via setCpGeofenceRemark then runs normal client-seen→photo→OTP flow). Wired into
+  TripNavigationFragment.checkReachingAndAskClientSeen (removed the programmatic AlertDialog block).
+  CpApprovalQueueBottomSheet restyled to the design system (Inter fonts, bg_bottom_sheet_white_rounded
+  root, bg_grey_rounded handle, pill-styled reject input). :app compile GREEN. build.gradle.kts test-backend
+  switch (api-mfpl→next-spaniel-814) intentionally left UNSTAGED. Web CP backend still NEEDS CONVEX DEPLOY.
+
+- 2026-08-12 — CP out-of-geofence warning changed from bottom sheet to a centered FLOATING dialog per
+  request. OutOfGeofenceWarningBottomSheet now extends DialogFragment (was BottomSheetDialogFragment);
+  onStart floats it centered (transparent window, dimmed scrim, width = screen-2*28dp capped at 400dp).
+  Layout switched to bg_dialog_card (all-corner rounded), dropped the drag handle. Same
+  onComplete/onCancel contract + required-reason validation; TripNavigationFragment wiring unchanged
+  (showOnce is defined on DialogFragment). :app compile GREEN.
+
+- 2026-08-12 — CP distance readout now formats as km (1 decimal) at >=1km, whole metres below, in both the
+  completed-visit detail (tvCvdGpsDistance) and the GM approval queue. Diagnosed why an out-of-geofence
+  completion still showed "Completed" (not pending_gm_approval): the pending/GM-approval flow is 100%
+  backend (setOutcome derives out-of-geofence from fieldVisit.arrivalDistanceFromPlaceMeters > radius and
+  holds for GM approval) and the max Convex changes have NEVER been deployed to the live backend the app
+  hits — so setOutcome has no out-of-geofence branch there and every completion completes directly.
+  Second gate even after deploy: fail-open when resolveHandoffManagerStaffId returns undefined (staff has
+  no reportingTo GM) → completes directly by design. Both explain the symptom. Awaiting user decision on
+  (a) deploying max, (b) fail-open vs fail-closed-with-fallback-approver.
+
+- 2026-08-12 — Decisions from user: admin will run the Convex deploy (I do NOT deploy); out-of-geofence
+  must ALWAYS require approval. Implemented fail-CLOSED on web max (convex/marketing/clientPlaceVisits.ts):
+  needsApproval = outOfGeofence (unconditional), and gmStaffId = reporting/department GM ?? active
+  super-admin fallback (new resolveCpApprovalFallbackApproverStaffId, normalizeRole from ../../lib/iam-model)
+  so an out-of-geofence completion is never auto-completed and never stranded. approvalGmName (shown to
+  staff as "Awaiting: <GM>") derives from completionApproval.gmStaffId, now always set. tsc clean for
+  clientPlaceVisits.ts. Committed+pushed max (f45f8576). REMAINING BLOCKER for it to show live: admin must
+  deploy max Convex to the backend the app hits — until then the live backend has no out-of-geofence branch
+  and every completion completes directly (this is why the user saw "Completed").

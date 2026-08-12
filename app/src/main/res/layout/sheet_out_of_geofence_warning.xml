@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Out-of-geofence completion warning. Shown as a centered floating dialog when
+  the field staff swipes to complete but their fresh GPS fix is well away from
+  the client's saved location. Captures a required reason (shown to the
+  approving GM) and lets them Cancel or Complete; Complete runs the normal
+  photo + OTP flow and the server holds the completion for GM approval.
+-->
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_dialog_card"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="24dp"
+        android:paddingTop="24dp"
+        android:paddingBottom="24dp">
+
+        <!-- Warning icon -->
+        <FrameLayout
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginBottom="14dp"
+            android:background="@drawable/bg_icon_warning">
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_gravity="center"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_location_pin"
+                app:tint="#B54708" />
+        </FrameLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_semibold"
+            android:includeFontPadding="false"
+            android:text="You're not near the client location"
+            android:textColor="#101828"
+            android:textSize="18sp" />
+
+        <TextView
+            android:id="@+id/tvGeofenceMessage"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:fontFamily="@font/inter_regular"
+            android:includeFontPadding="false"
+            android:lineSpacingExtra="2dp"
+            android:text="You appear to be some distance from the client's saved location. Add a reason and Complete — it will need your GM's approval."
+            android:textColor="#667085"
+            android:textSize="13sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:text="Reason for completing here"
+            android:textColor="#344054"
+            android:textSize="13sp" />
+
+        <EditText
+            android:id="@+id/etGeofenceReason"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_outcome_field_pill"
+            android:fontFamily="@font/inter_regular"
+            android:gravity="top|start"
+            android:hint="Why are you completing away from the client?"
+            android:includeFontPadding="false"
+            android:inputType="textMultiLine|textCapSentences"
+            android:minLines="3"
+            android:padding="14dp"
+            android:textColor="#101828"
+            android:textColorHint="#94A3B8"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/tvGeofenceError"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:text="A reason is required"
+            android:textColor="#B42318"
+            android:textSize="12sp"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/btnGeofenceCancel"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_marginEnd="10dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_grey_rounded"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_semibold"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:text="Cancel"
+                android:textColor="#475467"
+                android:textSize="15sp" />
+
+            <TextView
+                android:id="@+id/btnGeofenceComplete"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_home_trip_action_ready"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_semibold"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:text="Complete"
+                android:textColor="#FFFFFF"
+                android:textSize="15sp" />
+        </LinearLayout>
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

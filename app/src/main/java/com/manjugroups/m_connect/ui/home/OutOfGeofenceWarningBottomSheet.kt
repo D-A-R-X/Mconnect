@@ -1,0 +1,91 @@
+package com.manjugroups.m_connect.ui.home
+
+import android.content.DialogInterface
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
+import android.os.Bundle
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.view.WindowManager
+import android.widget.EditText
+import android.widget.TextView
+import androidx.fragment.app.DialogFragment
+import com.manjugroups.m_connect.R
+import kotlin.math.roundToInt
+
+/**
+ * Out-of-geofence completion warning. Shown as a centered FLOATING dialog when
+ * the field staff swipes to complete but their fresh GPS fix is well away from
+ * the client's saved location. Captures a REQUIRED reason (surfaced to the
+ * approving GM) and lets them Cancel or Complete. [onComplete] fires with the
+ * reason; [onCancel] fires on any non-complete dismissal (Cancel, back, tap
+ * outside).
+ */
+class OutOfGeofenceWarningBottomSheet : DialogFragment() {
+
+    var onComplete: ((reason: String) -> Unit)? = null
+    var onCancel: (() -> Unit)? = null
+    private var completed = false
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?,
+    ): View = inflater.inflate(R.layout.sheet_out_of_geofence_warning, container, false)
+
+    override fun onStart() {
+        super.onStart()
+        // Float as a centered card: transparent window so the rounded card
+        // shows, dimmed scrim behind, width capped with side margins.
+        dialog?.window?.let { window ->
+            window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            val margin = (28 * resources.displayMetrics.density).roundToInt()
+            val maxWidth = (400 * resources.displayMetrics.density).roundToInt()
+            val width = (resources.displayMetrics.widthPixels - margin * 2)
+                .coerceAtMost(maxWidth)
+            window.setLayout(width, WindowManager.LayoutParams.WRAP_CONTENT)
+        }
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        val distanceLabel = arguments?.getString(ARG_DISTANCE)?.trim().orEmpty()
+        view.findViewById<TextView>(R.id.tvGeofenceMessage).text =
+            (if (distanceLabel.isNotEmpty()) {
+                "You appear to be $distanceLabel from the client's saved location. "
+            } else {
+                "You appear to be away from the client's saved location. "
+            }) + "Add a reason and Complete — it will need your GM's approval."
+
+        val reason = view.findViewById<EditText>(R.id.etGeofenceReason)
+        val error = view.findViewById<TextView>(R.id.tvGeofenceError)
+
+        view.findViewById<View>(R.id.btnGeofenceCancel).setOnClickListener { dismiss() }
+        view.findViewById<View>(R.id.btnGeofenceComplete).setOnClickListener {
+            val text = reason.text?.toString()?.trim().orEmpty()
+            if (text.isEmpty()) {
+                error.visibility = View.VISIBLE
+                return@setOnClickListener
+            }
+            error.visibility = View.GONE
+            completed = true
+            onComplete?.invoke(text)
+            dismissAllowingStateLoss()
+        }
+    }
+
+    override fun onDismiss(dialog: DialogInterface) {
+        if (!completed) onCancel?.invoke()
+        super.onDismiss(dialog)
+    }
+
+    companion object {
+        private const val ARG_DISTANCE = "distance"
+
+        fun newInstance(distanceLabel: String): OutOfGeofenceWarningBottomSheet =
+            OutOfGeofenceWarningBottomSheet().apply {
+                arguments = Bundle().apply { putString(ARG_DISTANCE, distanceLabel) }
+            }
+    }
+}

@@ -1555,61 +1555,26 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             val distance = haversineMeters(currentLocation!!, dest)
             if (distance > GEOFENCE_APPROVAL_RADIUS_METERS) {
                 swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
-                val ctx = requireContext()
-                val pad = (16 * resources.displayMetrics.density).toInt()
-                val remarkInput = android.widget.EditText(ctx).apply {
-                    hint = "Reason for completing here"
-                    inputType = android.text.InputType.TYPE_CLASS_TEXT or
-                        android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or
-                        android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
-                    setPadding(pad, pad / 2, pad, pad / 2)
-                }
-                val container = android.widget.FrameLayout(ctx).apply {
-                    setPadding(pad + pad / 2, pad / 2, pad + pad / 2, 0)
-                    addView(remarkInput)
-                }
-                val dialog = androidx.appcompat.app.AlertDialog.Builder(ctx)
-                    .setTitle("You're not near the client location")
-                    .setMessage(
-                        "You appear to be ${formatDistance(distance)} from the client's " +
-                            "saved location. Add a reason and Complete — it will need your " +
-                            "GM's approval.",
-                    )
-                    .setView(container)
-                    .setNegativeButton("Cancel") { d, _ ->
-                        arrivalInProgress = false
-                        d.dismiss()
-                    }
-                    // Positive click overridden below so an empty reason doesn't dismiss.
-                    .setPositiveButton("Complete", null)
-                    .setCancelable(false)
-                    .create()
-                dialog.setOnShowListener {
-                    dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE)
-                        .setOnClickListener {
-                            val remark = remarkInput.text?.toString()?.trim().orEmpty()
-                            if (remark.isEmpty()) {
-                                remarkInput.error = "A reason is required"
-                                return@setOnClickListener
+                val sheet = OutOfGeofenceWarningBottomSheet.newInstance(formatDistance(distance))
+                sheet.onCancel = { arrivalInProgress = false }
+                sheet.onComplete = { reason ->
+                    // Stash the reason on the visit so the approving GM sees why
+                    // the staff completed away from the client, then run the
+                    // normal client-seen → photo → OTP flow.
+                    (cpVisitId ?: visitId)?.let { cpId ->
+                        viewLifecycleOwner.lifecycleScope.launch {
+                            runCatching {
+                                geoApi.setCpGeofenceRemark(
+                                    session.bearerToken,
+                                    com.manjugroups.m_connect.network
+                                        .CpGeofenceRemarkRequest(cpId, reason),
+                                )
                             }
-                            dialog.dismiss()
-                            // Stash the reason on the visit so the approving GM
-                            // sees why the staff completed away from the client.
-                            (cpVisitId ?: visitId)?.let { cpId ->
-                                viewLifecycleOwner.lifecycleScope.launch {
-                                    runCatching {
-                                        geoApi.setCpGeofenceRemark(
-                                            session.bearerToken,
-                                            com.manjugroups.m_connect.network
-                                                .CpGeofenceRemarkRequest(cpId, remark),
-                                        )
-                                    }
-                                }
-                            }
-                            proceed()
                         }
+                    }
+                    proceed()
                 }
-                dialog.show()
+                sheet.showOnce(parentFragmentManager, "out_of_geofence_warning")
                 return@launch
             }
             proceed()
