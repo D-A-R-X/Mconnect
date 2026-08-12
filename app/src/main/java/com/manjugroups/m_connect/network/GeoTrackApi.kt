@@ -224,6 +224,13 @@ interface GeoTrackApi {
         @Body body: CpApprovalRejectRequest,
     ): GeoTrackResponse
 
+    // Stashes the staff's out-of-geofence reason on the visit (shown to the GM).
+    @POST("api/marketing/cp-visits/geofence-remark")
+    suspend fun setCpGeofenceRemark(
+        @Header("Authorization") token: String,
+        @Body body: CpGeofenceRemarkRequest,
+    ): GeoTrackResponse
+
     @POST("api/marketing/clientPlaceVisits/convertToSiteVisit")
     suspend fun convertCpVisitToSiteVisit(
         @Header("Authorization") token: String,
@@ -985,6 +992,7 @@ data class SetOutcomeRequest(
 // ── Out-of-geofence CP completion GM approval ──
 data class CpApprovalActionRequest(val id: String)
 data class CpApprovalRejectRequest(val id: String, val remark: String)
+data class CpGeofenceRemarkRequest(val id: String, val remark: String)
 
 data class CpApprovalsResponse(
     val success: Boolean = false,
@@ -1005,6 +1013,7 @@ data class CpApprovalItem(
     val distanceMeters: Double? = null,
     val completionLat: Double? = null,
     val completionLng: Double? = null,
+    val staffRemark: String? = null,
     val photoUrl: String? = null,
     val requestedAt: Double? = null,
     val scheduledDate: String? = null,

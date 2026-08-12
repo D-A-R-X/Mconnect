@@ -170,6 +170,15 @@ class CpApprovalQueueBottomSheet : BottomSheetDialogFragment() {
                 setPadding(0, dp(2), 0, 0)
             })
         }
+        // The staff's reason for completing away from the client location.
+        item.staffRemark?.takeIf { it.isNotBlank() }?.let { remark ->
+            card.addView(TextView(requireContext()).apply {
+                text = "Staff reason: $remark"
+                textSize = 12f
+                setTextColor(Color.parseColor("#101828"))
+                setPadding(0, dp(4), 0, 0)
+            })
+        }
 
         item.photoUrl?.takeIf { it.isNotBlank() }?.let { url ->
             card.addView(ImageView(requireContext()).apply {
