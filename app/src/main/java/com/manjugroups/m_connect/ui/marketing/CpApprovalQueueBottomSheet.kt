@@ -171,7 +171,14 @@ class CpApprovalQueueBottomSheet : BottomSheetDialogFragment() {
             setPadding(0, dp(2), 0, 0)
         })
 
-        val distance = item.distanceMeters?.let { "${it.roundToInt()} m out of geofence" }
+        val distance = item.distanceMeters?.let { m ->
+            val label = if (m >= 1000.0) {
+                String.format(java.util.Locale.US, "%.1f km", m / 1000.0)
+            } else {
+                "${m.roundToInt()} m"
+            }
+            "$label out of geofence"
+        }
         val place = listOfNotNull(item.placeName, distance).joinToString(" · ")
         if (place.isNotBlank()) {
             card.addView(TextView(requireContext()).apply {

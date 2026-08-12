@@ -22,6 +22,7 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.roundToInt
 import com.manjugroups.m_connect.ui.common.showOnce
 
 /**
@@ -575,7 +576,7 @@ class CompletedVisitDetailFragment : Fragment() {
             } else "—"
             root.findViewById<TextView>(R.id.tvCvdGpsCoords).text = coords
             root.findViewById<TextView>(R.id.tvCvdGpsDistance).text =
-                proof.distanceFromPlaceMeters?.let { "${it.toInt()} m" } ?: "—"
+                proof.distanceFromPlaceMeters?.let { formatDistance(it) } ?: "—"
         }
 
         // ---- People card ----
@@ -681,6 +682,14 @@ class CompletedVisitDetailFragment : Fragment() {
             .filter { it.isNotBlank() }
             .joinToString(" ") { it.replaceFirstChar { c -> c.titlecase() } }
             .ifBlank { "Client" }
+
+    /** Distance readout: kilometres (1 decimal) at ≥1 km, whole metres below. */
+    private fun formatDistance(meters: Double): String =
+        if (meters >= 1000.0) {
+            String.format(Locale.US, "%.1f km", meters / 1000.0)
+        } else {
+            "${meters.roundToInt()} m"
+        }
 
     private fun formatDateOnly(scheduledDate: String?): String? {
         if (scheduledDate.isNullOrBlank()) return null

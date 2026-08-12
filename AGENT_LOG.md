@@ -9030,3 +9030,13 @@ not committed, pushed, or deployed.
   Layout switched to bg_dialog_card (all-corner rounded), dropped the drag handle. Same
   onComplete/onCancel contract + required-reason validation; TripNavigationFragment wiring unchanged
   (showOnce is defined on DialogFragment). :app compile GREEN.
+
+- 2026-08-12 — CP distance readout now formats as km (1 decimal) at >=1km, whole metres below, in both the
+  completed-visit detail (tvCvdGpsDistance) and the GM approval queue. Diagnosed why an out-of-geofence
+  completion still showed "Completed" (not pending_gm_approval): the pending/GM-approval flow is 100%
+  backend (setOutcome derives out-of-geofence from fieldVisit.arrivalDistanceFromPlaceMeters > radius and
+  holds for GM approval) and the max Convex changes have NEVER been deployed to the live backend the app
+  hits — so setOutcome has no out-of-geofence branch there and every completion completes directly.
+  Second gate even after deploy: fail-open when resolveHandoffManagerStaffId returns undefined (staff has
+  no reportingTo GM) → completes directly by design. Both explain the symptom. Awaiting user decision on
+  (a) deploying max, (b) fail-open vs fail-closed-with-fallback-approver.
