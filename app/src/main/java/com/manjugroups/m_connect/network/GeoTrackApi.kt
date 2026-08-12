@@ -206,6 +206,31 @@ interface GeoTrackApi {
         @Body body: SetOutcomeRequest
     ): GeoTrackResponse
 
+    // Out-of-geofence CP completion GM approval queue.
+    @GET("api/marketing/cp-visits/pending-approvals")
+    suspend fun getPendingCpApprovals(
+        @Header("Authorization") token: String,
+    ): CpApprovalsResponse
+
+    @POST("api/marketing/cp-visits/approve")
+    suspend fun approveCpCompletion(
+        @Header("Authorization") token: String,
+        @Body body: CpApprovalActionRequest,
+    ): GeoTrackResponse
+
+    @POST("api/marketing/cp-visits/reject")
+    suspend fun rejectCpCompletion(
+        @Header("Authorization") token: String,
+        @Body body: CpApprovalRejectRequest,
+    ): GeoTrackResponse
+
+    // Stashes the staff's out-of-geofence reason on the visit (shown to the GM).
+    @POST("api/marketing/cp-visits/geofence-remark")
+    suspend fun setCpGeofenceRemark(
+        @Header("Authorization") token: String,
+        @Body body: CpGeofenceRemarkRequest,
+    ): GeoTrackResponse
+
     @POST("api/marketing/clientPlaceVisits/convertToSiteVisit")
     suspend fun convertCpVisitToSiteVisit(
         @Header("Authorization") token: String,
@@ -464,6 +489,9 @@ interface GeoTrackApi {
         // Browsable list screens pass a high limit so client-side search can
         // reach a specific client; Home/today merges leave it null (default).
         @Query("limit") limit: Int? = null,
+        // Server-side full-text search — reaches visits beyond the recency cap
+        // (e.g. a super-admin searching for an older client).
+        @Query("search") search: String? = null,
     ): MyMarketingCpVisitsResponse
 
     // ── Timeline (self-view) ──
@@ -959,6 +987,36 @@ data class SetOutcomeRequest(
     // it to the field visit before the completion-proof check so the outcome
     // doesn't fail on a photo that completeVisit links a moment later.
     val arrivalPhotoStorageId: String? = null
+)
+
+// ── Out-of-geofence CP completion GM approval ──
+data class CpApprovalActionRequest(val id: String)
+data class CpApprovalRejectRequest(val id: String, val remark: String)
+data class CpGeofenceRemarkRequest(val id: String, val remark: String)
+
+data class CpApprovalsResponse(
+    val success: Boolean = false,
+    val error: String? = null,
+    val items: List<CpApprovalItem> = emptyList(),
+)
+
+data class CpApprovalItem(
+    val id: String,
+    val outcome: String? = null,
+    val notes: String? = null,
+    val cpType: String? = null,
+    val clientName: String? = null,
+    val staffName: String? = null,
+    val staffId: String? = null,
+    val placeName: String? = null,
+    val placeAddress: String? = null,
+    val distanceMeters: Double? = null,
+    val completionLat: Double? = null,
+    val completionLng: Double? = null,
+    val staffRemark: String? = null,
+    val photoUrl: String? = null,
+    val requestedAt: Double? = null,
+    val scheduledDate: String? = null,
 )
 
 data class ConvertCpVisitToSiteVisitRequest(
@@ -1481,6 +1539,11 @@ data class CpVisitDetail(
     val notes: String? = null,
     val completedAt: Long? = null,
     val cancelledAt: Long? = null,
+    // Out-of-geofence completion approval (top-level in the mobile compact
+    // list shape — this is what /clientPlaceVisits/my deserializes into).
+    val approvalGmName: String? = null,
+    val rejectRemark: String? = null,
+    val reassignedFromRejection: Boolean? = null,
     val expectedAttendeeCount: Int? = null,
     val foodPreferences: String? = null,
     val vehiclePreference: String? = null,
@@ -1791,6 +1854,12 @@ data class TodayVisit(
     val leadName: String? = null,
     val leadPhone: String? = null,
     val cpVisit: CpVisitState? = null,
+    // Out-of-geofence completion approval (top-level in the compact list shape).
+    // approvalGmName is the GM the staff is waiting on; rejectRemark +
+    // reassignedFromRejection surface a bounced-back completion.
+    val approvalGmName: String? = null,
+    val rejectRemark: String? = null,
+    val reassignedFromRejection: Boolean? = null,
     @com.google.gson.annotations.SerializedName(
         value = "scheduledStartTime",
         alternate = ["scheduledStart", "startTime", "meetingStartTime", "scheduledFrom", "fromTime", "startAt", "scheduledTime", "time", "visitTime", "timeFrom", "appointmentTime"]

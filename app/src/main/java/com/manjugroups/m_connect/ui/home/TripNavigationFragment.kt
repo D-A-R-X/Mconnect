@@ -326,6 +326,13 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         view.findViewById<View>(R.id.btnMapExpand)?.setOnClickListener { expandMap() }
         view.findViewById<View>(R.id.btnMapCollapse)?.setOnClickListener { collapseMap() }
 
+        // Edge-to-edge shell: drop the top bar below the status bar so the back
+        // button + title don't sit under the notch / status icons.
+        view.findViewById<View>(R.id.topBar)?.let {
+            com.manjugroups.m_connect.ui.common.BottomActionInsets
+                .applyStatusBarTop(it)
+        }
+
         // Edge-to-edge shell: lift the pinned action row above the gesture nav
         // bar (and the main tab bar when visible) so the swipe button isn't
         // jammed against the bottom edge.
@@ -1529,21 +1536,83 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             val effLat = freshLocation.latitude
             val effLng = freshLocation.longitude
             currentLocation = LatLng(effLat, effLng)
-            val distance = haversineMeters(currentLocation!!, dest)
-            if (distance > REACHING_RADIUS_METERS) {
-                arrivalInProgress = false
+
+            // Continue into the normal completion flow (client-seen → photo →
+            // OTP). Extracted so the out-of-geofence warning below can gate it.
+            val proceed = {
+                arrivalConfirmedForProgress = true
+                applyStatusPill("Reaching")
                 swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
-                Toast.makeText(
-                    requireContext(),
-                    "You are ${formatDistance(distance)} away. Move within ${formatDistance(REACHING_RADIUS_METERS.toDouble())} to complete.",
-                    Toast.LENGTH_LONG
-                ).show()
+                CpClientSeenBottomSheet().showOnce(parentFragmentManager, "cp_client_seen")
+            }
+
+            // Geofence is no longer a HARD block (the arrival OTP is the real
+            // proof of presence, and the old block mis-fired on stale client
+            // coordinates), but when the staff is clearly away from the client's
+            // saved location, warn first: completing from here is allowed but the
+            // server holds it for GM approval. Cancel aborts; Complete runs the
+            // normal photo + OTP flow.
+            val distance = haversineMeters(currentLocation!!, dest)
+            if (distance > GEOFENCE_APPROVAL_RADIUS_METERS) {
+                swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                val ctx = requireContext()
+                val pad = (16 * resources.displayMetrics.density).toInt()
+                val remarkInput = android.widget.EditText(ctx).apply {
+                    hint = "Reason for completing here"
+                    inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                        android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or
+                        android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
+                    setPadding(pad, pad / 2, pad, pad / 2)
+                }
+                val container = android.widget.FrameLayout(ctx).apply {
+                    setPadding(pad + pad / 2, pad / 2, pad + pad / 2, 0)
+                    addView(remarkInput)
+                }
+                val dialog = androidx.appcompat.app.AlertDialog.Builder(ctx)
+                    .setTitle("You're not near the client location")
+                    .setMessage(
+                        "You appear to be ${formatDistance(distance)} from the client's " +
+                            "saved location. Add a reason and Complete — it will need your " +
+                            "GM's approval.",
+                    )
+                    .setView(container)
+                    .setNegativeButton("Cancel") { d, _ ->
+                        arrivalInProgress = false
+                        d.dismiss()
+                    }
+                    // Positive click overridden below so an empty reason doesn't dismiss.
+                    .setPositiveButton("Complete", null)
+                    .setCancelable(false)
+                    .create()
+                dialog.setOnShowListener {
+                    dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE)
+                        .setOnClickListener {
+                            val remark = remarkInput.text?.toString()?.trim().orEmpty()
+                            if (remark.isEmpty()) {
+                                remarkInput.error = "A reason is required"
+                                return@setOnClickListener
+                            }
+                            dialog.dismiss()
+                            // Stash the reason on the visit so the approving GM
+                            // sees why the staff completed away from the client.
+                            (cpVisitId ?: visitId)?.let { cpId ->
+                                viewLifecycleOwner.lifecycleScope.launch {
+                                    runCatching {
+                                        geoApi.setCpGeofenceRemark(
+                                            session.bearerToken,
+                                            com.manjugroups.m_connect.network
+                                                .CpGeofenceRemarkRequest(cpId, remark),
+                                        )
+                                    }
+                                }
+                            }
+                            proceed()
+                        }
+                }
+                dialog.show()
                 return@launch
             }
-            arrivalConfirmedForProgress = true
-            applyStatusPill("Reaching")
-            swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
-            CpClientSeenBottomSheet().showOnce(parentFragmentManager, "cp_client_seen")
+            proceed()
         }
     }
 
@@ -3010,6 +3079,10 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
 
     companion object {
         private const val REACHING_RADIUS_METERS = 500
+        // Client geofence used for the out-of-range completion warning. Matches
+        // the backend default (CP_GEOFENCE_DEFAULT_RADIUS_M) so the warning
+        // fires for the same completions the server holds for GM approval.
+        private const val GEOFENCE_APPROVAL_RADIUS_METERS = 300.0
         private const val ARG_VISIT_ID = "arg_visit_id"
         private const val ARG_PLACE_ID = "arg_place_id"
         private const val ARG_PLACE_NAME = "arg_place_name"

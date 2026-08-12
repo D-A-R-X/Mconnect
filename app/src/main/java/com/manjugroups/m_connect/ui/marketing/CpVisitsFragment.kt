@@ -58,6 +58,11 @@ class CpVisitsFragment : Fragment() {
     private var allVisits: List<TodayVisit> = emptyList()
     private var currentFilter: Filter = Filter.ALL
     private var searchQuery: String = ""
+    // Debounces the server-side search reload so a super-admin can find an
+    // older client that's beyond the recency cap of the default list.
+    private val searchDebounce =
+        android.os.Handler(android.os.Looper.getMainLooper())
+    private var searchRunnable: Runnable? = null
     // Active date-range filter (yyyy-MM-dd). Null = default window.
     private var filterFromDate: String? = null
     private var filterToDate: String? = null
@@ -178,7 +183,14 @@ class CpVisitsFragment : Fragment() {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 searchQuery = s?.toString()?.trim().orEmpty()
+                // Instant filter over what's already loaded…
                 renderList()
+                // …plus a debounced backend search so results BEYOND the loaded
+                // recency window (older clients on a super-admin's list) surface.
+                searchRunnable?.let { searchDebounce.removeCallbacks(it) }
+                val r = Runnable { if (isAdded) loadVisits() }
+                searchRunnable = r
+                searchDebounce.postDelayed(r, 350)
             }
             override fun afterTextChanged(s: Editable?) {}
         })
@@ -355,6 +367,10 @@ class CpVisitsFragment : Fragment() {
                     // Browsable list: pull a wide window so the on-screen
                     // search can reach any client, not just the newest 20.
                     limit = 200,
+                    // When searching, ask the backend to full-text search so a
+                    // client OLDER than the recency window is still found (the
+                    // super-admin "on web but not mobile" case).
+                    search = searchQuery.ifBlank { null },
                 )
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 hasLoadedOnce = true
@@ -412,7 +428,12 @@ class CpVisitsFragment : Fragment() {
     private fun com.manjugroups.m_connect.network.CpVisitDetail.toCpListVisitOrNull(): TodayVisit? {
         val cpId = this.id ?: return null
         val scheduled = this.scheduledDate ?: return null
-        val effectiveStatus = this.fieldVisit?.status?.takeIf { it.isNotBlank() }
+        // The CP-level "pending_gm_approval" hold must win over the fieldVisit
+        // lifecycle: the app calls completeVisit after every outcome, so the
+        // fieldVisit reads "completed" while the CP is actually held. Without
+        // this the card would show "Completed" instead of "Pending Approval".
+        val effectiveStatus = this.status?.takeIf { it == "pending_gm_approval" }
+            ?: this.fieldVisit?.status?.takeIf { it.isNotBlank() }
             ?: this.status?.takeIf { it.isNotBlank() }
             ?: "scheduled"
         val proposedHasFields = this.proposedSiteVisit?.let { p ->
@@ -484,6 +505,9 @@ class CpVisitsFragment : Fragment() {
             clientPlaceId = this.clientPlaceId ?: cpId,
             scheduledDate = scheduled,
             status = effectiveStatus,
+            approvalGmName = this.approvalGmName,
+            rejectRemark = this.rejectRemark,
+            reassignedFromRejection = this.reassignedFromRejection,
             visitCategory = category,
             placeName = displayName,
             placeAddress = this.clientPlace?.address
@@ -695,6 +719,10 @@ class CpVisitsFragment : Fragment() {
         val cancelled = isCancelled(status)
         val completed = isCompleted(status)
         val inProgress = isInProgress(status)
+        // Out-of-geofence completion held for the GM: outcome is recorded but
+        // the visit isn't final until the GM approves (→ completed) or rejects
+        // (→ reopened for this staff).
+        val pendingApproval = status == "pending_gm_approval"
         val needsCpDetails = (visit.tripType == "client_place" || visit.clientPlaceVisitId != null) &&
             status == "arrived" && visit.cpVisit?.outcome.isNullOrBlank()
         // "Outcome pending" — the trip is over (status=completed) but the
@@ -733,6 +761,23 @@ class CpVisitsFragment : Fragment() {
                 actionIcon.visibility = View.VISIBLE
                 actionIcon.imageTintList = null
                 tapMode = TapMode.NONE
+            }
+            pendingApproval -> {
+                // Outcome recorded but out of geofence — waiting on the GM.
+                statusPill.background = ContextCompat.getDrawable(ctx, R.drawable.bg_home_trip_status_progress)
+                statusDot.background = ContextCompat.getDrawable(ctx, R.drawable.bg_home_trip_status_dot)
+                statusText.text = "Pending Approval"
+                statusText.setTextColor(Color.parseColor("#B54708"))
+
+                actionBtn.background = ContextCompat.getDrawable(ctx, R.drawable.bg_cpv_action_completed)
+                // Tell the staff exactly which GM they're waiting on.
+                actionLabel.text = visit.approvalGmName?.trim()?.takeIf { it.isNotEmpty() }
+                    ?.let { "Awaiting: $it" } ?: "Awaiting GM"
+                actionLabel.setTextColor(Color.parseColor("#1F7A3F"))
+                actionIcon.setImageResource(R.drawable.ic_cpv_action_completed)
+                actionIcon.visibility = View.VISIBLE
+                actionIcon.imageTintList = null
+                tapMode = TapMode.COMPLETED_DETAIL
             }
             isOutcomePending -> {
                 // CP visit's trip is complete but the outcome was never

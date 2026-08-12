@@ -1896,6 +1896,12 @@ class MainActivity : AppCompatActivity() {
         val route = WorkflowNotificationRoute.fromIntent(sourceIntent) ?: return
 
         when (route.targetTab) {
+            // GM taps the "CP completion needs approval" push → open the
+            // out-of-geofence approval queue over the current screen.
+            "approvals" -> {
+                com.manjugroups.m_connect.ui.marketing.CpApprovalQueueBottomSheet
+                    .show(supportFragmentManager)
+            }
             WorkflowNotificationRoute.TAB_HR -> {
                 selectTab(TAB_HR)
                 val fragment = when (route.targetScreen) {

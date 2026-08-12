@@ -534,7 +534,8 @@ class AttendanceHistoryFragment : Fragment() {
                 if (r.date == today) return@count false
                 val av = r.approvedAttendance?.lowercase()
                 when (av) {
-                    "absent", "weekoff", "holiday" -> false
+                    "absent", "weekoff", "holiday",
+                    "comp-off", "comp_off", "compoff", "compensatory" -> false
                     "present", "half-day" -> true
                     else -> (r.totalMinutes ?: 0) > 0
                 }
@@ -1732,6 +1733,13 @@ class AttendanceHistoryFragment : Fragment() {
             }
             "holiday" -> {
                 tv.text = "Holiday"
+                tv.setBackgroundResource(R.drawable.bg_chip_inactive)
+                tv.setTextColor(Color.parseColor("#475467"))
+            }
+            "comp-off", "comp_off", "compoff", "compensatory" -> {
+                // Paid comp-off day — render neutrally, not as the "Pending"
+                // fallback (which read as unresolved) or Absent.
+                tv.text = "Comp Off"
                 tv.setBackgroundResource(R.drawable.bg_chip_inactive)
                 tv.setTextColor(Color.parseColor("#475467"))
             }

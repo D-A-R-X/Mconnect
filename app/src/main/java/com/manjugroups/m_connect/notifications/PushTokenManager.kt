@@ -66,11 +66,15 @@ object PushTokenManager {
         "client-place-visit",
         "land-inspection-assigned", "fleet-trip-assigned",
         "marketing-fleet-new-trip-assigner",
-        "marketing-fleet-unassigned-reporting-officer" -> CHANNEL_VISITS
-        // Approvals / requests (leave, permission, WFH, attendance)
+        "marketing-fleet-unassigned-reporting-officer",
+        // Staff-facing decision on their out-of-geofence CP completion.
+        "cp-approval-decision" -> CHANNEL_VISITS
+        // Approvals / requests (leave, permission, WFH, attendance) +
+        // the GM's out-of-geofence CP completion approval ping.
         "leave-request", "leave-decision",
         "permission-request", "permission-decision",
         "wfh-request", "wfh-decision",
+        "cp-approval-needed",
         "attendance-review", "attendance-correction" -> CHANNEL_APPROVALS
         // Loans / advance
         "loan-needs-review", "loan-approval-needed",

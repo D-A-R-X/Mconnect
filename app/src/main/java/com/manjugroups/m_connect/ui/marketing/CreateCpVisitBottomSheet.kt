@@ -339,10 +339,22 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                 pinMapsLink = result.googleMapsLink
                 tvPinLocation.text = result.address.ifBlank { "Location set" }
                 tvPinLocation.visibility = View.VISIBLE
-                // Fill Address Line 1 when empty so the existing paste-to-parse
-                // splits it into the canonical fields; never overwrite what the
-                // user already typed.
-                if (etAddressLine1.text.isNullOrBlank() && result.address.isNotBlank()) {
+                // An explicit pin drop is a DELIBERATE location change — REPLACE
+                // the address, don't just fill blanks. Clear the derived fields
+                // and re-seed Address Line 1 so the paste-to-parse + pincode
+                // enrichment repopulate everything from the NEW location.
+                // (Previously a second pin left the first location's address /
+                // pincode / district stale because every fill was blank-only.)
+                if (result.address.isNotBlank()) {
+                    etDoorNo.setText("")
+                    etStreet.setText("")
+                    etAddressLine2.setText("")
+                    etCity.setText("")
+                    etState.setText("")
+                    etPincode.setText("")
+                    // Let the pincode enrichment re-run even if the new pincode
+                    // happens to repeat a previously enriched one.
+                    lastEnrichedPincode = null
                     etAddressLine1.setText(result.address)
                 }
             }
