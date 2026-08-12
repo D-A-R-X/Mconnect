@@ -482,6 +482,9 @@ interface GeoTrackApi {
         // Browsable list screens pass a high limit so client-side search can
         // reach a specific client; Home/today merges leave it null (default).
         @Query("limit") limit: Int? = null,
+        // Server-side full-text search — reaches visits beyond the recency cap
+        // (e.g. a super-admin searching for an older client).
+        @Query("search") search: String? = null,
     ): MyMarketingCpVisitsResponse
 
     // ── Timeline (self-view) ──

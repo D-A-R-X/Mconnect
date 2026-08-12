@@ -58,6 +58,11 @@ class CpVisitsFragment : Fragment() {
     private var allVisits: List<TodayVisit> = emptyList()
     private var currentFilter: Filter = Filter.ALL
     private var searchQuery: String = ""
+    // Debounces the server-side search reload so a super-admin can find an
+    // older client that's beyond the recency cap of the default list.
+    private val searchDebounce =
+        android.os.Handler(android.os.Looper.getMainLooper())
+    private var searchRunnable: Runnable? = null
     // Active date-range filter (yyyy-MM-dd). Null = default window.
     private var filterFromDate: String? = null
     private var filterToDate: String? = null
@@ -178,7 +183,14 @@ class CpVisitsFragment : Fragment() {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 searchQuery = s?.toString()?.trim().orEmpty()
+                // Instant filter over what's already loaded…
                 renderList()
+                // …plus a debounced backend search so results BEYOND the loaded
+                // recency window (older clients on a super-admin's list) surface.
+                searchRunnable?.let { searchDebounce.removeCallbacks(it) }
+                val r = Runnable { if (isAdded) loadVisits() }
+                searchRunnable = r
+                searchDebounce.postDelayed(r, 350)
             }
             override fun afterTextChanged(s: Editable?) {}
         })
@@ -355,6 +367,10 @@ class CpVisitsFragment : Fragment() {
                     // Browsable list: pull a wide window so the on-screen
                     // search can reach any client, not just the newest 20.
                     limit = 200,
+                    // When searching, ask the backend to full-text search so a
+                    // client OLDER than the recency window is still found (the
+                    // super-admin "on web but not mobile" case).
+                    search = searchQuery.ifBlank { null },
                 )
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 hasLoadedOnce = true
