@@ -1357,32 +1357,61 @@ class MainActivity : AppCompatActivity() {
 
     fun setBottomNavScrollState(visible: Boolean) {
         if (!::tabBarContainer.isInitialized) return
-        // The bottom nav is kept PERSISTENTLY visible on the root tabs — scroll
-        // no longer hides it. Staff repeatedly lost the nav while scrolling long
-        // lists (Today's Trip, HR, Library, Chat), and a nav hidden by scroll
-        // could get stranded (a GONE bar can't be recovered by a scroll-to-top
-        // show). So ignore the scroll-driven HIDE; only ever honour a re-show,
-        // and only when the bar is actually on screen (never force it back over a
-        // detail screen that intentionally hid it via setTabBarVisible(false)).
-        if (!visible) return
-        if (tabBarContainer.visibility != android.view.View.VISIBLE) return
-        if (isBottomNavVisible) return
-        isBottomNavVisible = true
-
-        tabBarContainer.animate()
-            .translationY(0f)
-            .alpha(1f)
-            .setDuration(400)
-            .setInterpolator(android.view.animation.AccelerateDecelerateInterpolator())
-            .start()
-
-        if (::bottomNavFadeOverlay.isInitialized) {
-            bottomNavFadeOverlay.animate()
+        val translationDistance = 150f * resources.displayMetrics.density
+        if (visible) {
+            // SHOW on scroll-to-top. The reported bug was the nav NOT coming back
+            // at the top — the old guard early-returned whenever the bar wasn't
+            // already VISIBLE, so a bar left GONE by a prior screen could never be
+            // recovered by scrolling up. Recover it here: on a root tab (not
+            // locked off) force it back on-screen. Never force it over a detail
+            // screen that intentionally hid it.
+            if (tabBarLockedOff) return
+            if (supportFragmentManager.backStackEntryCount != 0) return
+            if (tabBarContainer.visibility != android.view.View.VISIBLE) {
+                tabBarContainer.visibility = android.view.View.VISIBLE
+                if (::bottomNavFadeOverlay.isInitialized) {
+                    bottomNavFadeOverlay.visibility = android.view.View.VISIBLE
+                }
+            } else if (isBottomNavVisible &&
+                tabBarContainer.translationY == 0f &&
+                tabBarContainer.alpha == 1f
+            ) {
+                return // already fully on-screen
+            }
+            isBottomNavVisible = true
+            tabBarContainer.animate()
                 .translationY(0f)
                 .alpha(1f)
                 .setDuration(400)
                 .setInterpolator(android.view.animation.AccelerateDecelerateInterpolator())
                 .start()
+            if (::bottomNavFadeOverlay.isInitialized) {
+                bottomNavFadeOverlay.animate()
+                    .translationY(0f)
+                    .alpha(1f)
+                    .setDuration(400)
+                    .setInterpolator(android.view.animation.AccelerateDecelerateInterpolator())
+                    .start()
+            }
+        } else {
+            // HIDE on scroll-down — only when the bar is actually on-screen.
+            if (tabBarContainer.visibility != android.view.View.VISIBLE) return
+            if (!isBottomNavVisible) return
+            isBottomNavVisible = false
+            tabBarContainer.animate()
+                .translationY(translationDistance)
+                .alpha(0f)
+                .setDuration(400)
+                .setInterpolator(android.view.animation.AccelerateDecelerateInterpolator())
+                .start()
+            if (::bottomNavFadeOverlay.isInitialized) {
+                bottomNavFadeOverlay.animate()
+                    .translationY(translationDistance)
+                    .alpha(0f)
+                    .setDuration(400)
+                    .setInterpolator(android.view.animation.AccelerateDecelerateInterpolator())
+                    .start()
+            }
         }
     }
 

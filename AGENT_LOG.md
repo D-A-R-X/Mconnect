@@ -9106,3 +9106,12 @@ not committed, pushed, or deployed.
   the bar is on-screen. Also fixed a flag desync: setTabBarVisible(false) now sets isBottomNavVisible=false
   (previously left true, which could early-return a later show and strand the nav). Complements the earlier
   syncChromeToBackStack() recreation fix. :app compile GREEN.
+
+- 2026-08-12 — CORRECTION to the previous nav entry: the feature (hide-on-scroll-down, show-at-top) is
+  WANTED; the real bug was the nav NOT reappearing at the top. Reverted the persistent-nav change and
+  restored setBottomNavScrollState's hide/show, but fixed the show path: the old guard early-returned
+  whenever the bar wasn't already VISIBLE, so a bar left GONE by a prior screen could never be recovered by
+  scroll-to-top. Now the SHOW branch, on a root tab (backStackEntryCount==0, not locked off), promotes a
+  GONE bar back to VISIBLE and animates it in; it also recovers a translated-off bar even if the
+  isBottomNavVisible flag was stale. HIDE only runs when the bar is on-screen. Kept the setTabBarVisible(false)
+  isBottomNavVisible=false desync fix. :app compile GREEN.
