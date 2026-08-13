@@ -9066,3 +9066,14 @@ not committed, pushed, or deployed.
   routes). COUNT: audit confirms pending/approve/reject accounting is exactly-once; no per-client >3 completed
   gate exists to skew. (Pre-existing, unrelated: convertToSiteVisit + rejectAsFinanciallyIneligible omit the
   rollup diff — flagged, not fixed.)
+
+- 2026-08-12 — SV overview stepper now shows INCOMPLETE steps as amber outline instead of blue. New
+  bg_trip_progress_figma_pending drawable (amber ring, soft-amber fill); added a "pending" state to both the
+  cab (9-node) and own-vehicle (5-node) steppers in SiteVisitOverviewFragment.updateStepper. A step is amber
+  when it's the step the visit is AT but not yet completed (in-progress current step) OR a fleet-gap step
+  (consulting reached while REACHED CP / PICKED FROM CP / ON SITE travelDesk* stamps are missing); genuinely
+  completed steps stay filled blue, and the final DONE node stays blue only for an actually-completed visit;
+  future steps stay grey. Added onResume re-fetch (skipping the first resume) so the stepper + outcome gate
+  update immediately when the user returns after a QR scan / fleet advance. Verified the SV list tab bucketing
+  (SiteVisitsFragment effStatus = rawStatus ?? status → Enroute/Onsite/Returning/Completed/Cancelled/Postponed/
+  Rejected) is already correct — no change needed; it just needs fresh data. :app compile GREEN.

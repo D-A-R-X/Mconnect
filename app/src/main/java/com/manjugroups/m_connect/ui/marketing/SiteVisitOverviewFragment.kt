@@ -400,6 +400,22 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         }
     }
 
+    // Re-fetch whenever the sheet returns to the foreground — after the QR
+    // scanner starts counselling, or a fleet leg advances elsewhere — so the
+    // stepper and the outcome gate reflect the live backend status immediately.
+    // The first resume is skipped because onViewCreated already kicked off the
+    // initial load.
+    private var skipFirstResumeReload = true
+
+    override fun onResume() {
+        super.onResume()
+        if (skipFirstResumeReload) {
+            skipFirstResumeReload = false
+            return
+        }
+        visitId?.takeIf { it.isNotBlank() }?.let(::loadEnrichedDetail)
+    }
+
     /**
      * Replaces the old wireStepperTaps() that fired markSiteVisitPickedUp
      * / markSiteVisitArrivedSite / markSiteVisitDropped from mobile.
@@ -678,6 +694,10 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         val context = requireContext()
         val blueColor = Color.parseColor("#004EEB")
         val grayColor = Color.parseColor("#98A2B3")
+        // Amber "still pending" accent for a step the visit has reached but not
+        // actually completed (QR unscanned / fleet leg unmarked / step in
+        // progress) — an honest signal instead of a filled blue node.
+        val amberColor = Color.parseColor("#DC6803")
 
         if (isOwnVehicleSelected) {
             // Translate the shared cab-parity index to the five own-vehicle stages.
@@ -730,6 +750,13 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
                         label?.setTextColor(blueColor)
                         label?.typeface = ResourcesCompat.getFont(context, R.font.inter_bold)
                     }
+                    "pending" -> {
+                        circle?.background = ContextCompat.getDrawable(context, R.drawable.bg_trip_progress_figma_pending)
+                        icon?.setImageResource(ownIconResList[i])
+                        icon?.imageTintList = android.content.res.ColorStateList.valueOf(amberColor)
+                        label?.setTextColor(amberColor)
+                        label?.typeface = ResourcesCompat.getFont(context, R.font.inter_bold)
+                    }
                     else -> {
                         circle?.background = ContextCompat.getDrawable(context, R.drawable.bg_trip_progress_figma_inactive)
                         icon?.setImageResource(ownIconResList[i])
@@ -766,10 +793,13 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
             } else {
                 for (c in ownCircles) (c?.parent as? View)?.visibility = View.VISIBLE
                 for (l in ownStepLines) l?.visibility = View.VISIBLE
+                val ownLastIdx = ownCircles.size - 1
                 for (i in ownCircles.indices) {
                     val state = when {
                         i < ownActiveIndex -> "done"
-                        i == ownActiveIndex -> "active"
+                        // Current step amber while in progress; the final DONE
+                        // node stays blue only for an actually-completed visit.
+                        i == ownActiveIndex -> if (i == ownLastIdx) "done" else "pending"
                         else -> "inactive"
                     }
                     paintOwnNode(i, state, ownDefaultLabels[i])
@@ -871,6 +901,16 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
                         label?.setTextColor(blueColor)
                         label?.typeface = ResourcesCompat.getFont(context, R.font.inter_bold)
                     }
+                    // Reached-but-not-yet-completed: amber outline so staff can
+                    // see the step is still pending (QR not scanned / fleet leg
+                    // not marked) instead of a misleading filled blue node.
+                    "pending" -> {
+                        circle?.background = ContextCompat.getDrawable(context, R.drawable.bg_trip_progress_figma_pending)
+                        icon?.setImageResource(iconResList[i])
+                        icon?.imageTintList = android.content.res.ColorStateList.valueOf(amberColor)
+                        label?.setTextColor(amberColor)
+                        label?.typeface = ResourcesCompat.getFont(context, R.font.inter_bold)
+                    }
                     else -> {
                         circle?.background = ContextCompat.getDrawable(context, R.drawable.bg_trip_progress_figma_inactive)
                         icon?.setImageResource(iconResList[i])
@@ -911,19 +951,24 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
                 // Normal progression — every node/line visible.
                 for (c in circles) (c?.parent as? View)?.visibility = View.VISIBLE
                 for (l in stepLines) l?.visibility = View.VISIBLE
+                val lastIdx = circles.size - 1
                 for (i in circles.indices) {
                     // Consulting-gap: the SV can reach counselling while the fleet
-                    // legs trail — hold Reached CP / Picked from CP / On Site
-                    // inactive until the matching travelDesk* stamp exists.
+                    // legs trail — surface Reached CP / Picked from CP / On Site
+                    // as amber "still pending" (their travelDesk* stamp is missing)
+                    // instead of a misleading blue node.
                     val gap = isConsultingStatus && (
                         (i == 2 && !hasFleetArrived) ||
                         (i == 3 && !hasFleetStart) ||
                         (i == 4 && !hasFleetOnSite)
                     )
                     val state = when {
-                        gap -> "inactive"
+                        gap -> "pending"
                         i < activeIndex -> "done"
-                        i == activeIndex -> "active"
+                        // The step the visit is AT: amber "pending" while it's
+                        // still in progress; only the final DONE node of an
+                        // actually-completed visit stays filled blue.
+                        i == activeIndex -> if (i == lastIdx) "done" else "pending"
                         else -> "inactive"
                     }
                     paintNode(i, state, defaultLabels[i])
