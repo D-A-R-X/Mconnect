@@ -145,6 +145,58 @@
                     android:visibility="gone" />
             </LinearLayout>
 
+            <!-- ── Reassigned-by-GM note ──────────────────────────────────
+                 Shown when this visit was an out-of-geofence completion the GM
+                 rejected: it was reopened for the SAME staff, redone, and now
+                 completed. Surfaces the GM's reject remark so the record shows
+                 why it bounced back even after completion. Hidden by default. -->
+            <LinearLayout
+                android:id="@+id/cvdReassignedCard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/bg_completed_section_card"
+                android:orientation="vertical"
+                android:padding="16dp"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <ImageView
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_location_pin"
+                        app:tint="#B54708" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:fontFamily="@font/inter_semibold"
+                        android:includeFontPadding="false"
+                        android:text="Reassigned by GM"
+                        android:textColor="#B54708"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvCvdReassignedRemark"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:fontFamily="@font/inter_regular"
+                    android:includeFontPadding="false"
+                    android:lineSpacingExtra="2dp"
+                    android:text=""
+                    android:textColor="#475467"
+                    android:textSize="13sp" />
+            </LinearLayout>
+
             <!-- ── Client / Place identity ────────────────────────────── -->
             <LinearLayout
                 android:id="@+id/cvdClientCard"

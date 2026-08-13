@@ -905,6 +905,20 @@ class CpVisitsFragment : Fragment() {
             }
         }
 
+        // Bounced back by the GM: an out-of-geofence completion the GM rejected
+        // is reopened for THIS staff. Surface the GM's remark on the card (in the
+        // ETA line) so they know why it returned and redo it in geofence. Only
+        // while it's live again — a completed/pending/cancelled row keeps its own
+        // ETA text.
+        if (visit.reassignedFromRejection == true &&
+            !completed && !pendingApproval && !cancelled
+        ) {
+            val eta = itemView.findViewById<TextView>(R.id.tvVisitItemEta)
+            val r = visit.rejectRemark?.trim()
+            eta?.text = if (!r.isNullOrEmpty()) "GM sent back: $r" else "Reassigned by GM"
+            eta?.setTextColor(Color.parseColor("#B54708"))
+        }
+
         when (tapMode) {
             TapMode.TRIP -> {
                 val openNav: (View) -> Unit = { openVisit(visit) }

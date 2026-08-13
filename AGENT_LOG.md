@@ -9133,3 +9133,12 @@ not committed, pushed, or deployed.
   y=0 (like Home), so use fullBleed=TRUE in BOTH applyTopBarForTab(TAB_LIBRARY) and AppLibraryFragment.onResume
   — the header draws under the status bar and the strip collapses to height 0, so the #FFFFFF strip can never
   show as a gap. Matches Home/HR (also fullBleed=true, blue headers, no gap). :app compile GREEN.
+
+- 2026-08-12 — Surfaced the GM reject remark on the reassigned CP visit (reject → reopen-for-same-staff flow).
+  Backend was already correct: rejectCpCompletion keeps assignedStaffId, reopens to "scheduled", re-queues the
+  task to the same staff, and preserves completionApproval.rejectRemark + reassignedFromRejection; setOutcome
+  carries both forward into the eventual completed record. Filled the two APP display gaps: (1) the bounced-back
+  (scheduled) CP Visits row now shows "GM sent back: <remark>" in amber on its ETA line (only while live, not
+  completed/pending/cancelled); (2) CompletedVisitDetailFragment now shows a "Reassigned by GM" note card with
+  the remark, driven by CpVisitDetail.rejectRemark/reassignedFromRejection — so the record shows why it bounced
+  even after completion. New layout view cvdReassignedCard/tvCvdReassignedRemark. :app compile GREEN.
