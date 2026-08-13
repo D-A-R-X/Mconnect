@@ -103,6 +103,7 @@ class HomeFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: android.os.Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
+        wireClockInForTripAutoStart()
 
         binding.homeHeader.setup(this, onDesignationChanged = {
             setupRoleAdaptiveView()
@@ -547,20 +548,28 @@ class HomeFragment : Fragment() {
                 binding.edgeQrTooltip.visibility == android.view.View.VISIBLE ||
                 binding.edgeQrTourDimBg.visibility == android.view.View.VISIBLE
             )
-        (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(!edgeQrActive)
-        // Home = full-bleed blue status bar with LIGHT (white) icons. Apply it
-        // now AND re-post it, so a screen we just returned from (e.g. the white
-        // Notifications header) can't win the race and leave a white status-bar
-        // strip with dark icons over the blue header.
-        val applyHomeTopBar = {
-            (activity as? com.manjugroups.m_connect.MainActivity)?.setTopBarAppearance(
-                Color.parseColor("#0B61CA"),
-                false,
-                fullBleed = true,
-            )
+        // Only assert the activity chrome while Home is actually the visible
+        // screen. A hidden Home still resumes when a detail (e.g. the trip
+        // navigation) sits on top of it after an activity recreation — asserting
+        // HOME chrome then would fight the detail and leave the nav/status-bar in
+        // an inconsistent state. When Home is hidden, MainActivity's
+        // back-stack-derived sync owns the chrome.
+        if (!isHidden) {
+            (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(!edgeQrActive)
+            // Home = full-bleed blue status bar with LIGHT (white) icons. Apply
+            // it now AND re-post it, so a screen we just returned from (e.g. the
+            // white Notifications header) can't win the race and leave a white
+            // status-bar strip with dark icons over the blue header.
+            val applyHomeTopBar = {
+                (activity as? com.manjugroups.m_connect.MainActivity)?.setTopBarAppearance(
+                    Color.parseColor("#0B61CA"),
+                    false,
+                    fullBleed = true,
+                )
+            }
+            applyHomeTopBar()
+            _binding?.root?.post { if (isResumed && !isHidden) applyHomeTopBar() }
         }
-        applyHomeTopBar()
-        _binding?.root?.post { if (isResumed) applyHomeTopBar() }
         loadUnreadNotifications()
         // Refresh attendance and visits — covers biometric punches and returning from trips.
         viewModel.loadHomeData(session.bearerToken, requireContext().applicationContext)
@@ -965,7 +974,7 @@ class HomeFragment : Fragment() {
         // Reset the infinite-scroll window whenever the underlying list or tab
         // changes (a new fetch / tab switch) so a fresh view starts at page 1.
         val baseSignature = buildString {
-            append(state.hasOpenSession).append('|').append(selectedTab).append('|')
+            append(state.hasOpenSessionNow).append('|').append(selectedTab).append('|')
             visits.forEach { append(it.id).append(':').append(it.status).append(';') }
         }
         if (baseSignature != lastVisitBaseSignature) {
@@ -989,7 +998,7 @@ class HomeFragment : Fragment() {
         binding.visitListContent.removeAllViews()
 
         visits.take(shown).forEachIndexed { index, visit ->
-            val itemView = createVisitItem(visit, index, displayCount, state.hasOpenSession)
+            val itemView = createVisitItem(visit, index, displayCount, state.hasOpenSessionNow)
             binding.visitListContent.addView(itemView)
         }
     }
@@ -1543,6 +1552,38 @@ class HomeFragment : Fragment() {
             }
         }
 
+        // Client-not-met / GM-bounce notices on the ETA line while the visit is
+        // live. Priority: 3-strike client-unavailable warning → GM reject bounce
+        // → "client not met" auto-reschedule notice.
+        if (!isCompleted && !isFleetOutcomePending) {
+            val rejectRemark = visit.rejectRemark?.trim()
+            val rescheduleCount = visit.rescheduleCount ?: 0
+            when {
+                visit.clientUnavailableWarning == true -> {
+                    eta.text = "⚠ Client unavailable — last 3 visits missed"
+                    eta.setTextColor(android.graphics.Color.parseColor("#B42318"))
+                }
+                visit.reassignedFromRejection == true -> {
+                    eta.text = if (!rejectRemark.isNullOrEmpty()) {
+                        "GM sent back: $rejectRemark"
+                    } else {
+                        "Reassigned by GM"
+                    }
+                    eta.setTextColor(android.graphics.Color.parseColor("#B54708"))
+                }
+                rescheduleCount > 0 -> {
+                    val date = visit.lastNotMetDate?.trim()
+                    val nth = ordinal(rescheduleCount)
+                    eta.text = if (!date.isNullOrEmpty()) {
+                        "Client not met on $date · rescheduled $nth time"
+                    } else {
+                        "Client not met · rescheduled $nth time"
+                    }
+                    eta.setTextColor(android.graphics.Color.parseColor("#B54708"))
+                }
+            }
+        }
+
         if (isExpired) {
             // The slot has passed — the backend rejects any trip action on a
             // stale date, so keep the card inert rather than opening a flow
@@ -1593,7 +1634,7 @@ class HomeFragment : Fragment() {
                 // The card says "Clock In First" — so take them there instead of
                 // opening trip navigation they can't act on yet. Same redirect
                 // CP Visits already uses for this state.
-                val goClockIn: (View) -> Unit = { openClockInForTrip() }
+                val goClockIn: (View) -> Unit = { openClockInForTrip(visit) }
                 itemView.isClickable = true
                 itemView.isFocusable = true
                 itemView.setOnClickListener(goClockIn)
@@ -1640,12 +1681,24 @@ class HomeFragment : Fragment() {
                 actionBtn.isClickable = true
                 actionBtn.setOnClickListener(openOutcome)
             } else {
-                val openNav: (View) -> Unit = { openTripNavigationForVisit(visit) }
+                // Starting a NEW trip requires an open attendance session —
+                // tracking is bounded to clock-in → clock-out, so a clocked-out
+                // staffer must clock in first. The card already reads "Clock In
+                // First" in this state (see !canStartTrip above); make the tap
+                // agree by sending them to clock in instead of silently opening
+                // navigation. An already in-progress trip stays openable so
+                // mid-trip staff aren't locked out of their live journey.
+                val handler: (View) -> Unit =
+                    if (!isInProgress && !canStartTrip) {
+                        { openClockInForTrip(visit) }
+                    } else {
+                        { openTripNavigationForVisit(visit) }
+                    }
                 itemView.isClickable = true
                 itemView.isFocusable = true
-                itemView.setOnClickListener(openNav)
+                itemView.setOnClickListener(handler)
                 actionBtn.isClickable = true
-                actionBtn.setOnClickListener(openNav)
+                actionBtn.setOnClickListener(handler)
             }
         }
 
@@ -1707,6 +1760,21 @@ class HomeFragment : Fragment() {
         avatar.text = name.firstOrNull()?.uppercase() ?: "M"
         nameView.text = name
         roleView.visibility = View.GONE
+    }
+
+    /** "1st", "2nd", "3rd", "4th"… for the "rescheduled Nth time" notice. */
+    private fun ordinal(n: Int): String {
+        val suffix = if (n % 100 in 11..13) {
+            "th"
+        } else {
+            when (n % 10) {
+                1 -> "st"
+                2 -> "nd"
+                3 -> "rd"
+                else -> "th"
+            }
+        }
+        return "$n$suffix"
     }
 
     private fun formatPersonName(rawName: String): String {
@@ -2250,18 +2318,48 @@ class HomeFragment : Fragment() {
     }
 
     /**
-     * Send a driver whose trip is blocked on attendance to the clock-in screen.
-     * Mirrors CpVisitsFragment's handling of the same state.
+     * Send a staffer whose trip is blocked on attendance to the clock-in screen.
+     * The [visit] they intended to start is remembered so that, once the punch
+     * succeeds, [wireClockInForTripAutoStart] opens its trip navigation straight
+     * away — they clocked in purposefully to start this trip.
      */
-    private fun openClockInForTrip() {
+    private fun openClockInForTrip(visit: TodayVisit? = null) {
+        pendingTripVisitAfterClockIn = visit
         android.widget.Toast.makeText(
             requireContext(),
             "Clock in to start your trip",
             android.widget.Toast.LENGTH_SHORT,
         ).show()
         parentFragmentManager.pushDetail(
-            com.manjugroups.m_connect.ui.hr.ClockInAreaFragment(),
+            com.manjugroups.m_connect.ui.hr.ClockInAreaFragment.newInstance(visit?.id),
         )
+    }
+
+    /** The trip a clocked-out staffer tapped, pending a successful clock-in. */
+    private var pendingTripVisitAfterClockIn: TodayVisit? = null
+
+    /**
+     * After a clock-in launched from a trip card succeeds, auto-open that trip's
+     * navigation. Registered once; keyed off a DISTINCT result key so the HR
+     * dashboard's own PUNCH_COMPLETED listener is untouched.
+     */
+    private fun wireClockInForTripAutoStart() {
+        parentFragmentManager.setFragmentResultListener(
+            com.manjugroups.m_connect.ui.hr.SelfieClockInDetailFragment
+                .RESULT_KEY_CLOCK_IN_FOR_TRIP,
+            viewLifecycleOwner,
+        ) { _, bundle ->
+            val targetId = bundle.getString(
+                com.manjugroups.m_connect.ui.hr.SelfieClockInDetailFragment
+                    .KEY_TARGET_VISIT_ID,
+            )
+            val visit = pendingTripVisitAfterClockIn
+            pendingTripVisitAfterClockIn = null
+            // Only continue if the succeeded clock-in matches the pending trip.
+            if (visit != null && !targetId.isNullOrBlank() && visit.id == targetId) {
+                openTripNavigationForVisit(visit)
+            }
+        }
     }
 
     // ── Fleet administrator dispatch queue ──────────────────────────────

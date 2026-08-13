@@ -496,9 +496,7 @@ class MainActivity : AppCompatActivity() {
         // when the back stack drains, re-apply the active tab's chrome so
         // header/tab state never bleeds in from the popped fragment.
         supportFragmentManager.addOnBackStackChangedListener {
-            val onRoot = supportFragmentManager.backStackEntryCount == 0
-            setTabBarVisible(onRoot)
-            if (onRoot) applyTopBarForTab(currentTab)
+            syncChromeToBackStack()
         }
 
         currentTab = normalizeTab(savedInstanceState?.getInt(KEY_CURRENT_TAB, TAB_HOME) ?: TAB_HOME)
@@ -564,7 +562,11 @@ class MainActivity : AppCompatActivity() {
             handleTrackingNotificationIntent(intent)
         } else {
             updateTabUi(currentTab)
-            applyTopBarForTab(currentTab)
+            // Back-stack-aware: after a recreation with a detail fragment
+            // restored on top, chrome must match the detail (tab bar hidden),
+            // not the root tab — otherwise the trip/detail's white status strip
+            // and hidden nav leak onto every tab.
+            syncChromeToBackStack()
         }
 
         lifecycleScope.launch {
@@ -1155,6 +1157,14 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         restoreWindowLayoutAfterResume()
+        // Re-derive chrome from the authoritative back-stack state on every
+        // resume. After an activity recreation (system theme switch, process
+        // death during a GPS/camera-heavy trip) the back-stack listener never
+        // fires, and Home + the restored detail fragment race over the shared
+        // activity chrome — leaving the trip's hidden nav + white top strip
+        // stuck on all tabs. This makes the back-stack state the single source
+        // of truth again.
+        syncChromeToBackStack()
         if (!session.isLoggedIn) return
         // Finish a downloaded flexible update / resume a stalled immediate one.
         // Kept for everyone — it's a Play call, not an MMS one.
@@ -1332,6 +1342,11 @@ class MainActivity : AppCompatActivity() {
                 bottomNavFadeOverlay.alpha = 1f
             }
             isBottomNavVisible = true
+        } else {
+            // Keep the scroll-state flag in sync with the real visibility.
+            // Previously hiding left isBottomNavVisible == true, which could make
+            // a later scroll-to-top show request early-return and strand the nav.
+            isBottomNavVisible = false
         }
         // Re-dispatch insets so fragmentContainer.bottom padding flips between
         // "tab bar absorbs nav-bar" and "fragment owns full bottom inset".
@@ -1342,28 +1357,61 @@ class MainActivity : AppCompatActivity() {
 
     fun setBottomNavScrollState(visible: Boolean) {
         if (!::tabBarContainer.isInitialized) return
-        if (tabBarContainer.visibility != android.view.View.VISIBLE && visible) return
-        if (isBottomNavVisible == visible) return
-        isBottomNavVisible = visible
-
         val translationDistance = 150f * resources.displayMetrics.density
-        val translationY = if (visible) 0f else translationDistance
-        val alpha = if (visible) 1f else 0f
-
-        tabBarContainer.animate()
-            .translationY(translationY)
-            .alpha(alpha)
-            .setDuration(400)
-            .setInterpolator(android.view.animation.AccelerateDecelerateInterpolator())
-            .start()
-
-        if (::bottomNavFadeOverlay.isInitialized) {
-            bottomNavFadeOverlay.animate()
-                .translationY(translationY)
-                .alpha(alpha)
+        if (visible) {
+            // SHOW on scroll-to-top. The reported bug was the nav NOT coming back
+            // at the top — the old guard early-returned whenever the bar wasn't
+            // already VISIBLE, so a bar left GONE by a prior screen could never be
+            // recovered by scrolling up. Recover it here: on a root tab (not
+            // locked off) force it back on-screen. Never force it over a detail
+            // screen that intentionally hid it.
+            if (tabBarLockedOff) return
+            if (supportFragmentManager.backStackEntryCount != 0) return
+            if (tabBarContainer.visibility != android.view.View.VISIBLE) {
+                tabBarContainer.visibility = android.view.View.VISIBLE
+                if (::bottomNavFadeOverlay.isInitialized) {
+                    bottomNavFadeOverlay.visibility = android.view.View.VISIBLE
+                }
+            } else if (isBottomNavVisible &&
+                tabBarContainer.translationY == 0f &&
+                tabBarContainer.alpha == 1f
+            ) {
+                return // already fully on-screen
+            }
+            isBottomNavVisible = true
+            tabBarContainer.animate()
+                .translationY(0f)
+                .alpha(1f)
                 .setDuration(400)
                 .setInterpolator(android.view.animation.AccelerateDecelerateInterpolator())
                 .start()
+            if (::bottomNavFadeOverlay.isInitialized) {
+                bottomNavFadeOverlay.animate()
+                    .translationY(0f)
+                    .alpha(1f)
+                    .setDuration(400)
+                    .setInterpolator(android.view.animation.AccelerateDecelerateInterpolator())
+                    .start()
+            }
+        } else {
+            // HIDE on scroll-down — only when the bar is actually on-screen.
+            if (tabBarContainer.visibility != android.view.View.VISIBLE) return
+            if (!isBottomNavVisible) return
+            isBottomNavVisible = false
+            tabBarContainer.animate()
+                .translationY(translationDistance)
+                .alpha(0f)
+                .setDuration(400)
+                .setInterpolator(android.view.animation.AccelerateDecelerateInterpolator())
+                .start()
+            if (::bottomNavFadeOverlay.isInitialized) {
+                bottomNavFadeOverlay.animate()
+                    .translationY(translationDistance)
+                    .alpha(0f)
+                    .setDuration(400)
+                    .setInterpolator(android.view.animation.AccelerateDecelerateInterpolator())
+                    .start()
+            }
         }
     }
 
@@ -1456,6 +1504,20 @@ class MainActivity : AppCompatActivity() {
         prewarmNeighbours()
     }
 
+    /**
+     * Single source of truth for the activity chrome (bottom tab bar + status
+     * bar strip), derived from the back stack: at the root the active tab owns
+     * the chrome; with a detail fragment on top the nav hides and the detail's
+     * own onResume paints its top bar. Called from the back-stack listener, the
+     * onCreate restore branch, and onResume so a recreation can never strand the
+     * chrome in a popped detail's state.
+     */
+    private fun syncChromeToBackStack() {
+        val onRoot = supportFragmentManager.backStackEntryCount == 0
+        setTabBarVisible(onRoot)
+        if (onRoot) applyTopBarForTab(currentTab)
+    }
+
     private fun applyTopBarForTab(index: Int) {
         when (index) {
             TAB_HOME -> {
@@ -1471,6 +1533,14 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             TAB_LIBRARY -> {
+                // App Library's blue header fills from y=0 (libraryHeaderFrame),
+                // exactly like Home. Use fullBleed=true so the header itself draws
+                // under the status bar and the strip collapses to height 0 —
+                // otherwise the strip (whose background is #FFFFFF and only gets
+                // re-coloured blue when setTopBarAppearance re-runs) can be left
+                // WHITE by a prior white-header screen and show as a top gap on
+                // return, since AppLibraryFragment.onResume doesn't re-fire on
+                // add()+hide()/show().
                 setTopBarAppearance(Color.parseColor("#0B61CA"), false, fullBleed = true)
                 if (::bottomNavFadeOverlay.isInitialized) {
                     bottomNavFadeOverlay.setBackgroundResource(R.drawable.bg_bottom_nav_fade_grey)

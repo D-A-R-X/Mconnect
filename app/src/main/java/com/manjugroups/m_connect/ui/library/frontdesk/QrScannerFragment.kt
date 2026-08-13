@@ -552,17 +552,20 @@ class QrScannerFragment : Fragment() {
             val response = outcome.getOrNull()
             if (response?.success == true) {
                 Toast.makeText(requireContext(), "Counselling started", Toast.LENGTH_SHORT).show()
+                openSiteVisitOutcome(siteVisitId, leadTemperature)
             } else {
-                // Surface the reason, but still open the SV outcome page so the
-                // flow is never dead-ended (e.g. the markOnCounselling route not
-                // yet deployed on the live backend). The overview loads the real
-                // SV status and unlocks the outcome buttons when eligible.
+                // Counselling did NOT start (route missing, not authorised, or an
+                // invalid transition). The SV status never advanced, so opening
+                // the outcome page would strand the user on a greyed, dead-ended
+                // form — exactly the "scanned the QR but the outcome stays locked"
+                // report. Surface the real reason and stay on the scanner so they
+                // can retry or hand off to the Site Incharge instead.
                 val msg = response?.error
                     ?: outcome.exceptionOrNull()?.message
-                    ?: "Couldn't start counselling — opening the outcome page."
+                    ?: "Couldn't start counselling. Try again, or ask the Site Incharge to start it."
                 Toast.makeText(requireContext(), msg, Toast.LENGTH_LONG).show()
+                resumeScanning()
             }
-            openSiteVisitOutcome(siteVisitId, leadTemperature)
         }
     }
 

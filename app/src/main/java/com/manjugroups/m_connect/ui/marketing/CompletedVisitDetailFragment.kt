@@ -438,6 +438,25 @@ class CompletedVisitDetailFragment : Fragment() {
 
     private fun bindEnriched(root: View, visit: CpVisitDetail) {
         cpType = visit.cpType
+
+        // Out-of-geofence completion that the GM rejected was reopened for this
+        // same staff, redone, and completed — surface the GM's reject remark so
+        // the finished record still shows why it bounced back.
+        val reassignedCard = root.findViewById<View>(R.id.cvdReassignedCard)
+        val remark = visit.rejectRemark?.trim()
+        if (visit.reassignedFromRejection == true || !remark.isNullOrEmpty()) {
+            reassignedCard.visibility = View.VISIBLE
+            root.findViewById<TextView>(R.id.tvCvdReassignedRemark).text =
+                if (!remark.isNullOrEmpty()) {
+                    "This visit was completed away from the client and the GM sent it " +
+                        "back for a redo. GM's remark: “$remark”"
+                } else {
+                    "This visit was completed away from the client and the GM sent it " +
+                        "back for a redo before it was completed."
+                }
+        } else {
+            reassignedCard.visibility = View.GONE
+        }
         // Capture SV-via-CP signals for the Record-Outcome reopen path.
         // Mirrors the detection logic in CompleteCpVisitBottomSheet.
         val proposed = visit.proposedSiteVisit

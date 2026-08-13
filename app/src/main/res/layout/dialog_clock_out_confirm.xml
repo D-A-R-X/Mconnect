@@ -149,11 +149,25 @@
             </FrameLayout>
         </LinearLayout>
 
+        <!-- Finality warning: clocking out ends the day here. The only way back
+             in is the Start Trip flow (which clocks you in for that trip). -->
+        <TextView
+            android:id="@+id/tvClockOutFinalityWarning"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:fontFamily="@font/inter_medium"
+            android:gravity="center"
+            android:lineSpacingMultiplier="1.3"
+            android:text="You won’t be able to clock in again today from here. To start a scheduled trip later, use Start Trip on that visit."
+            android:textColor="#B54708"
+            android:textSize="12.5sp" />
+
         <androidx.appcompat.widget.AppCompatButton
             android:id="@+id/btnConfirmClockOut"
             android:layout_width="match_parent"
             android:layout_height="48dp"
-            android:layout_marginTop="20dp"
+            android:layout_marginTop="16dp"
             android:background="@drawable/bg_attendance_btn_primary"
             android:fontFamily="@font/inter_medium"
             android:letterSpacing="0.007"

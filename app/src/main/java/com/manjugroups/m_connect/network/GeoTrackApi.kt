@@ -1544,6 +1544,10 @@ data class CpVisitDetail(
     val approvalGmName: String? = null,
     val rejectRemark: String? = null,
     val reassignedFromRejection: Boolean? = null,
+    // Client-not-met auto-reschedule (see TodayVisit for semantics).
+    val rescheduleCount: Int? = null,
+    val lastNotMetDate: String? = null,
+    val clientUnavailableWarning: Boolean? = null,
     val expectedAttendeeCount: Int? = null,
     val foodPreferences: String? = null,
     val vehiclePreference: String? = null,
@@ -1860,6 +1864,12 @@ data class TodayVisit(
     val approvalGmName: String? = null,
     val rejectRemark: String? = null,
     val reassignedFromRejection: Boolean? = null,
+    // Client-not-met auto-reschedule: how many times this visit has bounced on
+    // "client not met", the last not-met date, and — once the client has been
+    // not-met 3+ times in a row — a warning flag for the card.
+    val rescheduleCount: Int? = null,
+    val lastNotMetDate: String? = null,
+    val clientUnavailableWarning: Boolean? = null,
     @com.google.gson.annotations.SerializedName(
         value = "scheduledStartTime",
         alternate = ["scheduledStart", "startTime", "meetingStartTime", "scheduledFrom", "fromTime", "startAt", "scheduledTime", "time", "visitTime", "timeFrom", "appointmentTime"]

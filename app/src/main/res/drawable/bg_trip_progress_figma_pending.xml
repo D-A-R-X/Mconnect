@@ -1,0 +1,29 @@
+<!--
+  "Pending / incomplete step" indicator. Used for the step the visit is
+  currently AT but has NOT actually completed yet (e.g. reached the site but
+  the client QR scan / counselling hasn't started, or a fleet leg the driver
+  hasn't marked). Renders as an AMBER OUTLINE ring with a white fill so it
+  reads as "still to do" — visually distinct from a filled blue DONE step and
+  from a grey not-yet-reached step.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Outer amber ring at the container's full bounds. -->
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="#FFFFFF" />
+            <stroke
+                android:width="2.5dp"
+                android:color="#DC6803" />
+        </shape>
+    </item>
+    <!-- Inner soft-amber wash inset so the ring stands proud of the fill. -->
+    <item
+        android:bottom="4dp"
+        android:left="4dp"
+        android:right="4dp"
+        android:top="4dp">
+        <shape android:shape="oval">
+            <solid android:color="#FEF0C7" />
+        </shape>
+    </item>
+</layer-list>

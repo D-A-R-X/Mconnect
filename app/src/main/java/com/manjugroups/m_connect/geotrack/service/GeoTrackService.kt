@@ -881,7 +881,6 @@ class GeoTrackService : Service() {
     private fun startHeartbeatLoop() {
         heartbeatJob = serviceScope.launch {
             while (isActive) {
-                delay(HEARTBEAT_INTERVAL_MS)
                 // Self-heal the ongoing permission alert every tick: clears it
                 // the moment the staff grants the last missing permission, and
                 // re-posts it if the OS dropped it (Android 14+ can).
@@ -937,6 +936,12 @@ class GeoTrackService : Service() {
                         )
                     }
                 }
+                // Wait AFTER sending — the first tick now fires at loop start, so
+                // a freshly (re)started service marks the staffer online within
+                // seconds instead of after a full interval. Combined with the
+                // widened server freshness window (8 min vs the 2-min tick), this
+                // stops an active-but-stationary user from flickering offline.
+                delay(HEARTBEAT_INTERVAL_MS)
             }
         }
     }

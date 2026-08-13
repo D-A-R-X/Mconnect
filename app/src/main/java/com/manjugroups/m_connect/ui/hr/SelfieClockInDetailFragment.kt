@@ -263,6 +263,17 @@ class SelfieClockInDetailFragment : Fragment() {
                                     RESULT_KEY_PUNCH_COMPLETED,
                                     bundleOf(KEY_MODE to mode.name),
                                 )
+                                // When this clock-in was launched from a trip
+                                // card, signal Home (on a DISTINCT key so the HR
+                                // dashboard's PUNCH_COMPLETED listener is not
+                                // clobbered) to auto-start that trip.
+                                val targetVisitId = arguments?.getString(ARG_TARGET_VISIT_ID)
+                                if (mode == PunchMode.PUNCH_IN && !targetVisitId.isNullOrBlank()) {
+                                    parentFragmentManager.setFragmentResult(
+                                        RESULT_KEY_CLOCK_IN_FOR_TRIP,
+                                        bundleOf(KEY_TARGET_VISIT_ID to targetVisitId),
+                                    )
+                                }
                                 parentFragmentManager.popBackStack(
                                     null,
                                     FragmentManager.POP_BACK_STACK_INCLUSIVE,
@@ -278,12 +289,17 @@ class SelfieClockInDetailFragment : Fragment() {
     companion object {
         const val RESULT_KEY_PUNCH_COMPLETED = "attendance_punch_completed_result"
         const val KEY_MODE = "mode"
+        // Emitted (in addition to PUNCH_COMPLETED) only when the clock-in was
+        // started from a trip card, so Home can auto-start the intended trip.
+        const val RESULT_KEY_CLOCK_IN_FOR_TRIP = "attendance_clock_in_for_trip_result"
+        const val KEY_TARGET_VISIT_ID = "target_visit_id"
 
         private const val ARG_MODE = "arg_mode"
         private const val ARG_PHOTO_PATH = "arg_photo_path"
         private const val ARG_LATITUDE = "arg_latitude"
         private const val ARG_LONGITUDE = "arg_longitude"
         private const val ARG_ADDRESS = "arg_address"
+        private const val ARG_TARGET_VISIT_ID = "arg_target_visit_id"
 
         fun newInstance(
             mode: String,
@@ -291,6 +307,7 @@ class SelfieClockInDetailFragment : Fragment() {
             latitude: Double,
             longitude: Double,
             address: String?,
+            targetVisitId: String? = null,
         ): SelfieClockInDetailFragment {
             return SelfieClockInDetailFragment().apply {
                 arguments = Bundle().apply {
@@ -299,6 +316,7 @@ class SelfieClockInDetailFragment : Fragment() {
                     putDouble(ARG_LATITUDE, latitude)
                     putDouble(ARG_LONGITUDE, longitude)
                     putString(ARG_ADDRESS, address)
+                    putString(ARG_TARGET_VISIT_ID, targetVisitId)
                 }
             }
         }

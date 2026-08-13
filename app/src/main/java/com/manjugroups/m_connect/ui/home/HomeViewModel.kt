@@ -44,7 +44,14 @@ data class SessionItem(val type: String, val source: String, val time: String)
 sealed interface HomeUiState {
     data object Loading : HomeUiState
     data class Loaded(
+        // Lenient "clocked in at some point today" (source-agnostic; stays true
+        // through a mid-day break). Drives the punch in/out toggle + live ticker.
         val hasOpenSession: Boolean = false,
+        // STRICT "an attendance session is open RIGHT NOW". Gates STARTING a new
+        // trip so a clocked-out staffer must clock in first — a trip started
+        // without an open session wouldn't be tracked (GeoTrack is bounded to
+        // the open-session window).
+        val hasOpenSessionNow: Boolean = false,
         val completedMinutes: Int = 0,
         val openSessionStartMillis: Long = 0L,
         val firstPunchInMillis: Long = 0L,
@@ -130,6 +137,7 @@ class HomeViewModel : ViewModel() {
                 val att = attendance?.attendance
                 val sessions = mutableListOf<SessionItem>()
                 var hasOpen = false
+                var openNow = false
                 var completedMin = 0
                 var openSessionStartMillis = 0L
                 var firstPunchInMillis = 0L
@@ -137,9 +145,12 @@ class HomeViewModel : ViewModel() {
 
                 if (att != null) {
                     val firstPunchIn = daySessions?.firstPunchIn ?: att.firstPunchIn
+                    // Raw "open session right now" — kept separately from the
+                    // lenient day gate so trip-start can require a live session.
+                    openNow = att.hasOpenSession == true || daySessions?.hasOpenSession == true
                     hasOpen = AttendanceTrackingGate.isClockedInForToday(
                         firstPunchIn = firstPunchIn,
-                        hasOpenSession = att.hasOpenSession == true || daySessions?.hasOpenSession == true,
+                        hasOpenSession = openNow,
                     )
                     totalMin = att.totalMinutes ?: 0
                     firstPunchInMillis = firstPunchIn?.let { parseMillis(it) } ?: 0L
@@ -173,6 +184,7 @@ class HomeViewModel : ViewModel() {
                 // ones land.
                 val loaded = (cachedState ?: HomeUiState.Loaded()).copy(
                     hasOpenSession = hasOpen,
+                    hasOpenSessionNow = openNow,
                     completedMinutes = completedMin,
                     openSessionStartMillis = openSessionStartMillis,
                     firstPunchInMillis = firstPunchInMillis,
@@ -757,7 +769,7 @@ class HomeViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val current = cachedState
-                if (current?.hasOpenSession != true) {
+                if (current?.hasOpenSessionNow != true) {
                     _punchEvent.emit(PunchEvent.Error("Please clock in before starting a trip."))
                     return@launch
                 }
@@ -821,7 +833,7 @@ class HomeViewModel : ViewModel() {
     fun startTripToPlace(context: Context, bearerToken: String, placeId: String, placeName: String, lat: Double?, lng: Double?) {
         viewModelScope.launch {
             try {
-                if (cachedState?.hasOpenSession != true) {
+                if (cachedState?.hasOpenSessionNow != true) {
                     _punchEvent.emit(PunchEvent.Error("Please clock in before starting a trip."))
                     return@launch
                 }
