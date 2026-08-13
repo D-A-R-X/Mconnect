@@ -9097,3 +9097,12 @@ not committed, pushed, or deployed.
   MainActivity.syncChromeToBackStack() (derives chrome from backStackEntryCount) called from the back-stack
   listener, the onCreate restore branch, and onResume; guarded HomeFragment.onResume chrome asserts behind
   !isHidden. :app compile GREEN.
+
+- 2026-08-12 — Bottom nav "still gone" on Home: the cause was the scroll-driven auto-hide
+  (setBottomNavScrollState) used app-wide (Home/HR/Library/Chat/Fleet) — the nav faded out as the staffer
+  scrolled their trips and could get stranded (a GONE bar can't be recovered by a scroll-to-top show;
+  setBottomNavScrollState(true) early-returns when visibility != VISIBLE). Made the nav PERSISTENT on root
+  tabs: setBottomNavScrollState now ignores the hide (visible=false → no-op) and only honours a re-show when
+  the bar is on-screen. Also fixed a flag desync: setTabBarVisible(false) now sets isBottomNavVisible=false
+  (previously left true, which could early-return a later show and strand the nav). Complements the earlier
+  syncChromeToBackStack() recreation fix. :app compile GREEN.

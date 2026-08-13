@@ -1342,6 +1342,11 @@ class MainActivity : AppCompatActivity() {
                 bottomNavFadeOverlay.alpha = 1f
             }
             isBottomNavVisible = true
+        } else {
+            // Keep the scroll-state flag in sync with the real visibility.
+            // Previously hiding left isBottomNavVisible == true, which could make
+            // a later scroll-to-top show request early-return and strand the nav.
+            isBottomNavVisible = false
         }
         // Re-dispatch insets so fragmentContainer.bottom padding flips between
         // "tab bar absorbs nav-bar" and "fragment owns full bottom inset".
@@ -1352,25 +1357,29 @@ class MainActivity : AppCompatActivity() {
 
     fun setBottomNavScrollState(visible: Boolean) {
         if (!::tabBarContainer.isInitialized) return
-        if (tabBarContainer.visibility != android.view.View.VISIBLE && visible) return
-        if (isBottomNavVisible == visible) return
-        isBottomNavVisible = visible
-
-        val translationDistance = 150f * resources.displayMetrics.density
-        val translationY = if (visible) 0f else translationDistance
-        val alpha = if (visible) 1f else 0f
+        // The bottom nav is kept PERSISTENTLY visible on the root tabs — scroll
+        // no longer hides it. Staff repeatedly lost the nav while scrolling long
+        // lists (Today's Trip, HR, Library, Chat), and a nav hidden by scroll
+        // could get stranded (a GONE bar can't be recovered by a scroll-to-top
+        // show). So ignore the scroll-driven HIDE; only ever honour a re-show,
+        // and only when the bar is actually on screen (never force it back over a
+        // detail screen that intentionally hid it via setTabBarVisible(false)).
+        if (!visible) return
+        if (tabBarContainer.visibility != android.view.View.VISIBLE) return
+        if (isBottomNavVisible) return
+        isBottomNavVisible = true
 
         tabBarContainer.animate()
-            .translationY(translationY)
-            .alpha(alpha)
+            .translationY(0f)
+            .alpha(1f)
             .setDuration(400)
             .setInterpolator(android.view.animation.AccelerateDecelerateInterpolator())
             .start()
 
         if (::bottomNavFadeOverlay.isInitialized) {
             bottomNavFadeOverlay.animate()
-                .translationY(translationY)
-                .alpha(alpha)
+                .translationY(0f)
+                .alpha(1f)
                 .setDuration(400)
                 .setInterpolator(android.view.animation.AccelerateDecelerateInterpolator())
                 .start()
