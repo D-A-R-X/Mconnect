@@ -9123,3 +9123,13 @@ not committed, pushed, or deployed.
   (add()+hide()/show() keeps it resumed), and my syncChromeToBackStack authoritatively applied the wrong
   fullBleed=true on back. Fixed by aligning applyTopBarForTab(TAB_LIBRARY) → fullBleed=false. Verified the other
   tabs already match their fragments: HOME/HR fullBleed=true, CHAT (else) fullBleed=false white. :app compile GREEN.
+
+- 2026-08-12 — Top white gap on App Library ROOT-CAUSED to activity_main.xml: statusBarBackground is a View
+  with hardcoded android:background="#FFFFFF". On a fullBleed=false tab the strip has height=inset and shows
+  whatever color setTopBarAppearance last set; a white-header screen (Chat / white detail) leaves it WHITE,
+  and App Library (fullBleed=false) only re-colours it blue if setTopBarAppearance re-runs — but its
+  onResume doesn't re-fire on add()+hide()/show(). Prior fix (applyTopBarForTab LIBRARY -> fullBleed=false)
+  relied on that re-colour and was fragile. Correct fix: App Library's blue libraryHeaderFrame fills from
+  y=0 (like Home), so use fullBleed=TRUE in BOTH applyTopBarForTab(TAB_LIBRARY) and AppLibraryFragment.onResume
+  — the header draws under the status bar and the strip collapses to height 0, so the #FFFFFF strip can never
+  show as a gap. Matches Home/HR (also fullBleed=true, blue headers, no gap). :app compile GREEN.
