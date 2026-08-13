@@ -9404,3 +9404,85 @@ not committed, pushed, or deployed.
   (high-risk on GeoTrackService; noted as the deeper Doze-proof fix if needed). :app compile GREEN; web
   tsc clean. Web widening needs a Convex deploy. NOTE: left a stray unstaged clientPlaceVisits.ts change
   (someone's follow_up-CP WIP) untouched.
+
+- Field-ops audit agent bailed (0 edits, confused it was waiting); re-tasked fresh. Projects/Tasks + PostSales agents still running.
+- FrontDesk analysis (orphan child): QR history is LOCAL SharedPrefs in Android, NOT an endpoint -> iOS parity = local history store, not network. Re-tasked field-ops agent will apply fixes.
+- Orphan analysis specs in (Telecaller, Land). Land is BIG (5-tab inspection form+competitors+queries+accept/reschedule state machine), not "thin" - expect substantial iOS Land work. Field-ops relaunched w/ correct FoundationChat path (a11d1dac). Awaiting Projects/Tasks + PostSales + Field-ops real deliverables.
+
+### Session 107 (cont.) - FC audit wave 2: Projects/Tasks done
+- Projects/Tasks: DailyLog/DPR + Issues already at parity. Expenses: fixed paid:true->false
+  (was showing Paid vs Pending). Tasks: added dailyTasks/updateStatus endpoint + handoff
+  Complete/Cancel actions + tappable cards + TaskWebLinkSheet + wired Delayed status selector.
+  Files: TasksConvexAPIService, TasksListView, TaskUpdateSheet, ProjectExpensesView.
+  DEFERRED: native per-source TaskNavRouter (cross-file, needs dest view sigs); task-manager
+  base scoping (iOS superset, left); DPR picker source (getMyProjects vs marketing).
+  VERIFY: dailyTasks/updateStatus route on prod; /api/materials shape; web origin mg.theairix.com.
+- Still awaiting: PostSales (a204c4), Field-ops relaunched (a11d1dac). Then batch 2 (HR + Auth/
+  Dashboard/Notif).
+
+### Session 107 (cont.) - FC audit wave 2: PostSales done
+- PostSales/Collections/LoanDesk: services/models already complete; all fixes in PostSalesViews.swift.
+  LoanDesk role->action mapping was WRONG (Sales had Assign; Legal Mgr ungated) -> rewrote to
+  correct 3-role gated workflow; Sales doc-submit was UNREACHABLE -> fixed; added View-Documents
+  preview + rejection-remarks box + name-based role detection. Collections: correctCollection had
+  no UI -> added Edit-Amount + Edited tag; fixed Self-Finance tab bucketing (blank category hidden).
+  Accounts verification already parity. Removed dead loan-desk calendar button.
+  DEFERRED: date-range filters, camera capture + per-slot retry + draft resume, mandatory txn ref,
+  IAM gate (postSales.loanDesk.manage in AppLibraryView - cover in batch 2). VERIFY: statusLabel
+  exact strings "Docs Pending"/"App Received"/"Approved"/"Rejected"; LabeledContent iOS16+.
+- Batch 1 remaining: Field-ops (a11d1dac). Then batch 2: HR suite + Auth/Dashboard/Notif + AppLibrary IAM gates.
+
+### Session 107 (cont.) - FC audit wave 2: Field-ops done; batch 2 launched
+- Field-ops done (real bugs caught): Telecaller ConvexLead decoded a FABRICATED shape (name/
+  phone/status) vs real contactName/mobileNumber/followUpStatus -> every lead blank; rewrote to
+  real contract + defensive decode + statuses + 200 page + meta. Front Desk already at parity
+  (local history store confirmed). Land: reschedule sent wrong keys {id,scheduledDate} vs
+  {propertyId,requestedDate} -> always failed (FIXED); edit form never loaded saved report (no
+  getInspection) -> all tabs blank (FIXED: added getInspection+hydration+resilient decoders+yes/no
+  unions+phases). Files: ConvexTelecallerModels, MyLeadsView, ConvexLandModels, LandConvexAPIService,
+  LandViews. DEFERRED: Modern-Dialer WebRTC (no iOS softphone), minor land competitor fields.
+- Batch 1 audit COMPLETE (Projects/Tasks, PostSales, Field-ops). Batch 2 running: HR suite
+  (leaves/perms/staff/fines/loans; half-day leave check) + Auth/Session/IAM/Profile/Dashboard/
+  Notifications/AppLibrary-gates (IAM designation special-cases = high value). Then consolidate.
+
+### Session 107 (cont.) - FC audit wave 2: Auth/Dashboard/Notif done
+- Fixed: Fleet "My Trips" tile was INVISIBLE in App Library (destination wired but never listed)
+  -> added Fleet section gated canViewFleetMyTrips; FrontDesk QR gate too narrow -> added
+  marketing.siteVisits.* keys; Dashboard decode missing prev* trend baselines -> added; Dashboard
+  had HARDCODED fake trend % ("↗12% vs last week") -> real deltas via bindTrend-equivalent; added
+  IAM gates canViewFleetMyTrips + canCompleteOfflineFleet + prefix driver-designation helper.
+  Files: StackSession, AppLibraryView, ConvexDashboardModels, HomeView(dashboard only).
+- Verified matching: OTP/emp-id/change-pw/validate/logout; 401->SessionInvalidationBus->expire;
+  hasPermission; notifications list/unread/mark-read; chat+HR push routes; most AppLibrary gates.
+- I fixed directly: AppNotification._id now accepts id fallback (was required -> whole notif list
+  decode would throw and vanish; ConvexStorageModels.swift).
+- FLAGGED for follow-up (not yet done): `approvals` push route has no iOS handler (wire to the new
+  CpApprovalQueueView + PushNavigationRoute); push-register payload thin (add provider:"apns"/
+  deviceId in ChatAPIService); fleet driver-designation exact-vs-prefix (regression-guarded, leave);
+  external-fleet routing breadth; dashboard extended HR tiles never populate (design divergence).
+- Awaiting HR suite (ac00694) = last audit agent. Then consolidate master checklist + git stat.
+
+### Session 107 (cont.) - FC audit wave 2 COMPLETE (all modules)
+- HR suite done (last audit agent). CRITICAL: permission model decoded fake durationMinutes vs
+  real `hours` -> every permission showed "--" (FIXED); half-day leave mapped casual vs unpaid ->
+  wrong balance drained + "0 Days" render (FIXED). Comp-off/fines/staff already parity. FLAGGED
+  (Marketing service scope): loan approval e-signature (Android requires eSignatureId - may block
+  iOS loan approval, VERIFY), loan workflow tracker, dedicated repayments endpoint; reporting-
+  officer fields; staff-update path /api/staff/me/update vs /api/hr/staff/update (no caller).
+- FULL EFFORT COMPLETE. Final surface: 44 files modified + 3 new swift (+2 md docs), ~2717 ins.
+  Both waves: logic sync (CP/SV, Marketing, arrival/approval, Fleet, punch, chat, GeoTrack) +
+  module audit (Projects/Tasks, PostSales, Field-ops, HR, Auth/Dashboard/Notif).
+- ~13 REAL functional bugs caught by audit (blank leads, "--" permissions, wrong leave balance,
+  land reschedule always-failed, land blank form, loandesk role mapping, invisible fleet tile,
+  fake dashboard %, notifications-vanish, expense paid flag, etc). Tally + all VERIFY items +
+  remaining follow-ups consolidated in FoundationChat/PARITY_BUILD_CHECKLIST.md.
+- NEXT: safeer builds on Mac (first-build error pass), returns errors, I fix. Then device QA
+  (GeoTrack) + small follow-ups (loan e-sign, approvals push route, push payload). Nothing
+  committed/pushed (FC pushes only on "push FC").
+
+- 2026-08-12 (main-chat) — Pushed fork-chat (fc) working-tree changes on user request: CpOutcomePolicy.kt
+  (app) + convex/marketing/clientPlaceVisits.ts (web) both add "follow_up" to the CP_TYPES_WITH_OTHER_OUTCOME
+  allow-set so a Follow-up CP can close via the free-text "other" outcome (early fragment of the follow-up-CP
+  feature). DELIBERATELY EXCLUDED app/build.gradle.kts — it is again the test-backend switch
+  (api-mfpl→next-spaniel-814), a production landmine, left unstaged. Also left .idea/gradle local noise
+  unstaged. Workbase = 3 repos (Mconnect, manjusitedevelopment, travel-desk); travel-desk clean/nothing to push.
