@@ -9159,3 +9159,248 @@ not committed, pushed, or deployed.
   CpVisitsFragment + HomeFragment ETA line now shows (priority) "⚠ Client unavailable — last 3 visits
   missed" / "GM sent back: <remark>" / "Client not met on <date> · rescheduled Nth time" while the visit is
   live. Added ordinal() helper to both. :app compile GREEN. CRON needs a Convex deploy to run.
+
+### Session 107 (cont.) - Add "Others" outcome to Follow-up CP
+
+- Request: follow-up CP outcome sheet ("What happened with the client?") needs an
+  "Others" option (currently only Booking / Site Visit / Postponed(→Follow up) /
+  Not Interested).
+- Root: "Others" is gated by an allow-set on BOTH sides:
+  - App: ui/marketing/CpOutcomePolicy.kt CP_TYPES_WITH_OTHER_OUTCOME
+  - Backend: convex/marketing/clientPlaceVisits.ts:2576 CP_TYPES_WITH_OTHER_OUTCOME
+    (setOutcome throws "Others outcome is available only for..." otherwise, ~4104)
+  Both were {booking_cp, gift_distribution}. Added "follow_up" to BOTH + updated
+  the backend error string/comment to mention Follow-up.
+- OTHER selection reuses the existing path (CompleteCpVisitBottomSheet onSelect
+  key=="OTHER" -> showOtherRemarksSheet -> finalizeTerminalOutcome(OUTCOME_OTHER,
+  remarks)); same as Booking CP, no new wiring.
+- COUPLED DEPLOY: app button + backend acceptance must ship together. Backend is
+  deploy-gated (never-deploy prod) — until deployed, tapping Others on a follow-up
+  CP on prod will be REJECTED with the gate error. Deploy backend with/before the
+  app build.
+- Verified: :app:compileDebugKotlin BUILD SUCCESSFUL; backend edit type-clean (the
+  tsc errors present are all pre-existing, in unrelated files, none in
+  clientPlaceVisits.ts). Nothing committed, nothing deployed.
+
+### Session 107 (cont.) - New project: FoundationChat (FC) cloned + push rule
+
+- Cloned https://github.com/manjugroupsdev/FoundationChat (darx branch) to
+  C:\Users\surya\Projects\FoundationChat — its OWN sibling folder next to Mconnect,
+  NOT inside it. iOS/Swift + convex project. On branch darx (tracks origin/darx).
+- Rule (saved to memory foundation-chat-workflow.md): "push FC"/"push foundation
+  chat" -> git push origin darx ONLY; "pull FC" -> git pull origin darx ONLY; never
+  main/other branches. FC moves ONLY when the user names it — a bare push/pull stays
+  app-only (Mconnect merge), unchanged. User chose this over coupling FC to every
+  bare push.
+
+### Session 107 (cont.) - FoundationChat (iOS) parity project kicked off
+
+- New long-term effort: bring the iOS SwiftUI app (C:\Users\surya\Projects\FoundationChat,
+  darx branch) to backend/logic parity with the Android Mconnect app. Keep iOS UI
+  native; focus on backend logic (iOS is missing a lot). 162 swift files, ~25
+  Convex API services already exist but buggy/partial. CLAUDE.md/AGENTS.md there are
+  STALE (Apple chat-demo template); only ANDROID_IOS_LATEST_UPDATE_GAP.md (2026-07-17,
+  now ~4wk stale) reflects reality.
+- HARD CONSTRAINT: this is Windows, NO Xcode -> I cannot build/run/verify iOS here.
+  Workflow (user-confirmed): I port logic in reviewable slices; safeer/teammate builds
+  on Mac + returns compile/runtime errors; I fix. iOS edits ship UN-compiled from me.
+- User direction: attack BIGGEST LOGIC GAPS first (not bug-fix-first).
+- In progress: 2 Explore agents mapping (a) iOS current-state per module (real vs
+  stub vs buggy), (b) Android backend/logic target spec. Next: synthesize gap map +
+  phased roadmap, propose first module, start porting.
+
+### Session 107 (cont.) - FC parity: gap analysis complete + roadmap written
+
+- Dual-repo audit done (2 Explore agents). KEY REFRAME: iOS service/endpoint layer is
+  ~80% present and on the SAME prod backend (api-mfpl.theairix.com). Real gap = missing
+  business-LOGIC flows + a few incomplete modules, NOT missing endpoints.
+- Biggest logic gaps (ranked): 1) GeoTrack lifecycle correctness (store-and-forward,
+  motion-adaptive, tamper-at-true-time; device-only QA), 2) Punch/attendance flow
+  (offline enqueue+replay, tap-time, dual clocked-in notions, biometric independence),
+  3) CP<->SV outcome + confirmation flip (pending-SV setOutcome vs materialize convert),
+  4) Fleet/TravelDesk admin (missing vehicle update/status + billing/extra-km/etc.),
+  5) cache-first LocalCache, 6) chat forward + offline queue. Crash/debt: GeoTrack
+  Persistence.swift:92 fatalError; AuthStore ~14 notImplemented funcs; ~15 duplicated
+  HTTP helpers across 3 hosts (no shared client).
+- Wrote C:\Users\surya\Projects\FoundationChat\PARITY_ROADMAP.md (durable, replaces
+  stale ANDROID_IOS_LATEST_UPDATE_GAP.md). Phased plan; Phase 1 recommended = Marketing
+  CP/SV outcome + trip/arrival flow (pure logic, verifiable w/o device, DARX crown jewel).
+- Awaiting user pick of first module before porting Swift.
+
+### Session 107 (cont.) - FC Phase 1a: CP/SV outcome flow-diff + port started
+
+- CP<->SV outcome flow-diff done. GOOD: iOS correctly does the pending-SV FLIP
+  (setCpVisitOutcome "interested" when isLockedSvMode && convertedSiteVisitId != nil)
+  vs materialize convert — #805-class stranding NOT present; preserve hasFixedSiteVisitSignal.
+- 5 real divergences found + 1 minor:
+  P0-1 out-of-geofence CP is HARD-BLOCKED on iOS (TripNavigationView ~794 "move within
+    500m") instead of Android's warning+reason->setCpGeofenceRemark->GM approval.
+  P0-2 pure-SV "Postpone" sends outcome:"postponed" which SV validator REJECTS; Android
+    uses follow_up (outcome+telecaller follow-up, not reschedule).
+  P1-3 iOS pre-selects Booking tab; Android selects nothing (avoid accidental bookings).
+  P1-4 iOS never markOnCounselling before setOutcome -> backend 500 from on_site.
+  P1-5 "Others" outcome + cpType allow-set {booking_cp,gift_distribution,follow_up}
+    entirely missing on iOS; cpType not threaded into CompleteCpVisitSheet.
+  P2-6 model gaps: SetSiteVisitOutcomeRequest missing followupDueDate/Time (+ has extra
+    reasons/bookingId to verify); SetCpVisitOutcomeRequest missing arrivalPhotoStorageId.
+- Porting agent running: 6 edits blast-radius order (models -> markOnCounselling +
+  cp-approval/geofence service methods -> CpOutcomePolicy.swift -> SV sheet followUp/other/
+  no-preselect -> CP sheet cpType/other/no-preselect -> geofence warning rewire). Windows/
+  no-Xcode: safeer builds. Awaiting agent change log to review + hand safeer build list.
+
+### Session 107 (cont.) - FC Phase 1a: CP/SV outcome fixes PORTED (iOS, uncompiled)
+
+- All 6 edits done + reviewed. Files (FoundationChat repo, darx, working-tree only, NOT
+  committed/built): M ConvexAppModuleModels.swift, MarketingConvexAPIService.swift,
+  CpVisitsView.swift, SiteVisitsListView.swift, CompleteCpVisitSheet.swift,
+  SiteVisitOutcomeSheet.swift, TripNavigationView.swift; NEW Utilities/CpOutcomePolicy.swift.
+- Fixes: P0-1 geofence hard-block -> warning+reason -> setCpGeofenceRemark -> GM approval
+  (TripNavigationView 816-841); P0-2 SV "postponed"->"follow_up" (+due date); P1-3 no
+  pre-selected outcome tab (both sheets); P1-4 best-effort markSiteVisitOnCounselling before
+  setOutcome; P1-5 "Others" + cpTypeSupportsOtherOutcome({booking_cp,gift_distribution,
+  follow_up}) threaded cpType into CompleteCpVisitSheet; P2-6 model fields followupDueDate/
+  Time + arrivalPhotoStorageId. Added CP GM-approval service methods (pending/approve/reject)
+  for a later queue UI.
+- VERIFIED BY ME: flip logic intact (CompleteCpVisitSheet 1101-1113, hasFixedSiteVisitSignal);
+  geofence rewire correct.
+- SAFEER build/VERIFY list (7): extra reasons/bookingId on SetSiteVisitOutcomeRequest
+  (Android sends neither); followupDueTime sent nil (no UI); CpApprovalItem decode keys
+  unexercised; SetCpVisitOutcomeRequest converted to explicit init; svStyle= isLockedSvMode||
+  sv_cum_cp (no isSiteVisitMode on iOS) + did NOT hide Site Visit tab for svStyle; geofence
+  uses .alert TextField (iOS16+, app is 26+) + empty reason allowed; CompleteCpVisitSheet
+  gained required cpType: param (2 call sites updated).
+- Next sub-slices (Phase 1b): arrival-OTP flow, booking-draft auto-save, collection-payment
+  gate; then GM-approval queue UI; then next module per roadmap.
+
+### Session 107 (cont.) - FC "sync all" mode: batched module ports started
+
+- User: "sync all with ios we can test it finally" -> stop per-slice build gate; port all
+  remaining parity gaps into FC tree for ONE comprehensive Mac build/test (which will be a
+  first-build error-fix cycle, since nothing compiles on Windows).
+- Batching by FILE-DISJOINT modules in parallel; sequencing shared-file work (models,
+  AuthStore) to avoid agent clobbering. Each agent returns change log + VERIFY list; I'll
+  consolidate into ONE master build-and-verify doc for safeer.
+- Running now (parallel, disjoint files): Phase 1b Marketing flows (arrival-OTP, booking-
+  draft, collection-payment) [Trips/Marketing views + Marketing/PostSales services]; Phase 4
+  Fleet/TravelDesk admin (vehicle update/status, billing, extra-km, evidence, complete-
+  offline, resend-whatsapp) [FleetDispatch service/models/views only].
+- Queued next (sequential to avoid model-file collisions): Phase 2 punch/attendance +
+  CP-approval queue UI; Phase 5 cache-first + chat forward/offline; Phase 3 GeoTrack
+  lifecycle (device-only, flagged); cross-cutting hardening (fatalError, AuthStore stubs).
+
+### Session 107 (cont.) - FC Phase 4 (Fleet/TravelDesk) ported
+
+- Done (FleetDispatchAPIService/Models + FleetPortalExperienceView, uncompiled): added
+  updateVehicle(+status field), driver category new/old, agencies list/allot, unassign,
+  resend-whatsapp, finalize-billing, cancellation-billing, extra-km, evidence, status-update,
+  complete-offline. Vehicle edit UI added.
+- VERIFY flags: MMS driver create/update/set-status SWAPPED convexMutate->REST
+  (api/mms-fleet/dispatch/drivers/*) - live-check token acceptance; MMS vehicle create left
+  on Convex (no REST route in Android); billing/status/offline service methods NOT yet wired
+  to buttons (need photo/km/reason UI, build on Mac); settings/staff routes skipped (iOS
+  settings still local @AppStorage).
+- Phase 1b Marketing still running; holding Phase 2 (shares ConvexAppModuleModels) until it lands.
+
+### Session 107 (cont.) - FC Phase 1b done + Batch 2 launched
+
+- Phase 1b (Marketing flows) done: arrival-OTP already at parity (only inline-photo-at-verify
+  nuance deferred - needs GeoTrack files); booking-draft autosave/get/clear + 2s debounce added
+  to CompleteCpVisitSheet; collection gate/union/proof already parity, added collector self-
+  correction (collections/correct). VERIFY: draft updatedAt unit (ms assumed); cross-platform
+  draft blob shape differs (graceful-empty fallback).
+- Batch 2 running (parallel, disjoint files):
+  P2 punch/attendance FLOW: source-agnostic day-gate + strict open-session (null=don't-stop),
+    device tap-time capture, offline punch enqueue+replay (new local store). Owns HR/Home/
+    attendance + AttendanceTrackingGate.
+  P2b: arrival-photo inline at verify (GeoTrackModels/Service + ArrivalOtpSheet + TripNav) +
+    NEW CpApprovalQueueView wired from CpVisitsView (uses already-added approval service methods).
+- Queued: Phase 5 cache-first + chat forward/offline; Phase 3 GeoTrack lifecycle (device-only);
+  cross-cutting (fatalError, AuthStore stubs). Then consolidate ONE master build-verify doc.
+
+### Session 107 (cont.) - FC Phase 2b done + chat-forward launched
+
+- Phase 2b done: arrival photo now sent inline at OTP verify (GeoTrackModels/Service+
+  ArrivalOtpSheet+TripNav; dual-send kept as idempotent, flagged); NEW CpApprovalQueueView
+  (approve/reject out-of-geofence CP completions) wired into CpVisitsView toolbar. VERIFY:
+  CpApprovalItem camelCase JSON keys; photoUrl assumed resolved URL; no client perm gate
+  (server-scoped feed); dual-send idempotency.
+- Running parallel now: Phase 2 punch/attendance (still going); chat forward + private-file
+  share (AuthStore chat stubs) + offline-send assessment [ChatAPIService/ConvexChatModels/
+  Views/Chat/AuthStore chat-only].
+- Queued: Phase 5 cache-first (waits on Phase 2 Home views); Phase 3 GeoTrack lifecycle
+  (device-only); cross-cutting fatalError + AuthStore Posts/location stubs triage. Then
+  consolidate master build-verify doc for safeer.
+
+### Session 107 (cont.) - FC Phase 2 done + Phase 3 (GeoTrack) launched
+
+- Phase 2 punch/attendance DONE: hasOpenSessionNow()->Bool? (nil=retain, never stop tracking);
+  trip-start gate uses strict, status uses lenient; device tap-time clientPunchTime (ISO local
+  offset); NEW PendingPunchStore.swift (Core Data, offline enqueue+replay, flush on Home open,
+  delete-on-server-reject/keep-on-network-fail). VERIFY: clientPunchTime field/unit; 2nd
+  NSPersistentContainer loads; offline selfie uploaded at flush; dup replayed punch rejected
+  server-side. Cross-file TODO folded into Phase 3: bootstrap gate must use hasOpenSessionNow.
+- Running parallel: Phase 3 GeoTrack lifecycle (fatalError fix, bootstrap null-gate, store-and-
+  forward/tamper-detectedAt/motion-adaptive/heartbeat diff; device-QA flagged) + chat forward/
+  private-file/offline (still going).
+- Remaining after: cache-first (low prio perf); AuthStore Posts/location stub triage (waits for
+  chat agent to free AuthStore). Then MASTER build-verify doc + git diff summary for safeer.
+
+### Session 107 (cont.) - FC chat done; cache-first deferred
+
+- Chat forward/private-file done: ADDED channel forward targets (conversation forward already
+  existed); private-file share DEFERRED with evidence (no Android feature, no api-mfpl route,
+  legacy sample leftover - correctly left notImplemented); offline send queue ALREADY durable
+  (SwiftData outbox) - untouched. VERIFY: channel forward attachment payload; picker shows
+  my+public channels (Android=member-only).
+- Pattern confirmed: iOS more complete than audit implied (arrival-OTP, collection gate,
+  offline chat queue all already parity).
+- DECISION: defer cache-first LocalCache (perf polish, not a logic gap; network-only fine for
+  first test build; avoids broad dashboard/home/chat edits). Note as remaining optional item.
+- Phase 3 GeoTrack still running (last porting agent). Then: AuthStore Posts/location stub
+  triage (document as dead) + MASTER build-verify doc + git diff --stat for safeer.
+
+### Session 107 (cont.) - FC parity SYNC COMPLETE (uncompiled) + master checklist
+
+- Phase 3 GeoTrack done: fixed fatalError->recovery ladder, bootstrap null-gate (retain on
+  nil), batch drain 25x200 + 30d age-purge, tamper detectedAt replay. Device-QA flagged (not
+  ported, conservative): clock-out background cadence, motion-adaptive GPS, heartbeat buffer/
+  fields.
+- ALL parity porting complete. Change surface (FoundationChat darx working tree, UNCOMPILED,
+  NOT committed): 24 modified + 3 new swift (PendingPunchStore, CpOutcomePolicy,
+  CpApprovalQueueView), ~1466 insertions. Covered: CP/SV outcome (P0-P2), Marketing flows
+  (booking draft, collection correct), arrival-photo inline, GM CP-approval UI, Fleet/
+  TravelDesk admin, punch/attendance offline+dual-gate+biometric, chat channel forward,
+  GeoTrack hardening.
+- Wrote C:\Users\surya\Projects\FoundationChat\PARITY_BUILD_CHECKLIST.md = single consolidated
+  build+verify doc for safeer (per-module VERIFY, device-QA, deferred list). + PARITY_ROADMAP.md.
+- DEFERRED by design: cache-first LocalCache; Fleet billing/status/offline UIs + settings/staff
+  server-backing; GeoTrack motion-adaptive + heartbeat replay; AuthStore Posts/location/private-
+  file stubs (dead, no Android feature/route).
+- NEXT: safeer builds on Mac (first-build error pass expected), returns errors, I fix. Nothing
+  pushed (FC pushes only when user says "push FC").
+
+### Session 107 (cont.) - FC audit wave 2 (all remaining modules) started
+
+- User: "ensure all modules perfect (ui ux backend logic) as like android; audit+fix gaps."
+  Second wave: audit+FIX the modules only inventoried at service level, now diffed for logic
+  AND functional UI/UX completeness (fields/actions/flows/states/pickers), native iOS UI kept.
+- Flagged to user: this stacks more uncompiled code on the ~1466-line sync; recommended safeer
+  do a first build soon so the error-fix pass isn't one giant pile (user's call, proceeding).
+- Batch 1 running (disjoint): Projects/Tasks/DailyLog/DPR/Issues/Expenses; Field-ops
+  Telecaller/FrontDesk(+QR history)/Land; PostSales/Collections/LoanDesk/AccountVerification.
+- Batch 2 queued: HR suite (leaves/perms/staff/fines/loans); Auth/Session/IAM/Profile +
+  Dashboard/Notifications. Then consolidate into PARITY_BUILD_CHECKLIST.md.
+
+- 2026-08-12 — Fixed "active mobile user sometimes not online in geotracking tab" (evidence-backed).
+  ROOT CAUSE: web liveStatus online badge used a 5-min freshness window (convex/geotrack/location.ts:1040)
+  but the app heartbeat is a fixed 2-min coroutine delay() (GeoTrackService HEARTBEAT_INTERVAL_MS, NOT an
+  exact alarm) — only ~1 tick of slack, so a single OEM-throttled/Doze-stretched tick flipped an
+  active-but-stationary user offline. The 5-min badge was also stricter than the server's own 15-min
+  "offline" (monitoring.ts). Secondary: replayed/backdated heartbeats intentionally don't bump lastSeen, so
+  a device flushing buffered data doesn't restore online until the next LIVE tick. FIX: (web) widened
+  FRESH_MS 5m→8m (tolerates ~3 delayed ticks, still < 15m hard-offline); (app) moved delay() to the END of
+  the heartbeat loop so the first tick fires immediately at (re)start — online within seconds instead of a
+  full interval, faster recovery after the OS recreates the service. Did NOT do the AlarmManager rewrite
+  (high-risk on GeoTrackService; noted as the deeper Doze-proof fix if needed). :app compile GREEN; web
+  tsc clean. Web widening needs a Convex deploy. NOTE: left a stray unstaged clientPlaceVisits.ts change
+  (someone's follow_up-CP WIP) untouched.
