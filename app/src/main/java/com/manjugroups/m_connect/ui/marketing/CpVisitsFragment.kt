@@ -703,6 +703,21 @@ class CpVisitsFragment : Fragment() {
         return itemView
     }
 
+    /** "1st", "2nd", "3rd", "4th"… for the "rescheduled Nth time" notice. */
+    private fun ordinal(n: Int): String {
+        val suffix = if (n % 100 in 11..13) {
+            "th"
+        } else {
+            when (n % 10) {
+                1 -> "st"
+                2 -> "nd"
+                3 -> "rd"
+                else -> "th"
+            }
+        }
+        return "$n$suffix"
+    }
+
     private fun applyStatusAndAction(
         visit: TodayVisit,
         statusPill: LinearLayout,
@@ -905,18 +920,40 @@ class CpVisitsFragment : Fragment() {
             }
         }
 
-        // Bounced back by the GM: an out-of-geofence completion the GM rejected
-        // is reopened for THIS staff. Surface the GM's remark on the card (in the
-        // ETA line) so they know why it returned and redo it in geofence. Only
-        // while it's live again — a completed/pending/cancelled row keeps its own
-        // ETA text.
-        if (visit.reassignedFromRejection == true &&
-            !completed && !pendingApproval && !cancelled
-        ) {
+        // Bounce-back / repeat-visit notices on the ETA line, only while the
+        // visit is live (a completed/pending/cancelled row keeps its own text).
+        // Priority: 3-strike client-unavailable warning → GM reject bounce →
+        // "client not met" auto-reschedule notice.
+        if (!completed && !pendingApproval && !cancelled) {
             val eta = itemView.findViewById<TextView>(R.id.tvVisitItemEta)
-            val r = visit.rejectRemark?.trim()
-            eta?.text = if (!r.isNullOrEmpty()) "GM sent back: $r" else "Reassigned by GM"
-            eta?.setTextColor(Color.parseColor("#B54708"))
+            val rejectRemark = visit.rejectRemark?.trim()
+            val rescheduleCount = visit.rescheduleCount ?: 0
+            when {
+                visit.clientUnavailableWarning == true -> {
+                    eta?.text = "⚠ Client unavailable — last 3 visits missed"
+                    eta?.setTextColor(Color.parseColor("#B42318"))
+                }
+                visit.reassignedFromRejection == true -> {
+                    eta?.text = if (!rejectRemark.isNullOrEmpty()) {
+                        "GM sent back: $rejectRemark"
+                    } else {
+                        "Reassigned by GM"
+                    }
+                    eta?.setTextColor(Color.parseColor("#B54708"))
+                }
+                rescheduleCount > 0 -> {
+                    // Auto-rescheduled after a "client not met" — tell them the
+                    // last miss date and how many times it's bounced.
+                    val date = visit.lastNotMetDate?.trim()
+                    val nth = ordinal(rescheduleCount)
+                    eta?.text = if (!date.isNullOrEmpty()) {
+                        "Client not met on $date · rescheduled $nth time"
+                    } else {
+                        "Client not met · rescheduled $nth time"
+                    }
+                    eta?.setTextColor(Color.parseColor("#B54708"))
+                }
+            }
         }
 
         when (tapMode) {

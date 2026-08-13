@@ -1552,6 +1552,38 @@ class HomeFragment : Fragment() {
             }
         }
 
+        // Client-not-met / GM-bounce notices on the ETA line while the visit is
+        // live. Priority: 3-strike client-unavailable warning → GM reject bounce
+        // → "client not met" auto-reschedule notice.
+        if (!isCompleted && !isFleetOutcomePending) {
+            val rejectRemark = visit.rejectRemark?.trim()
+            val rescheduleCount = visit.rescheduleCount ?: 0
+            when {
+                visit.clientUnavailableWarning == true -> {
+                    eta.text = "⚠ Client unavailable — last 3 visits missed"
+                    eta.setTextColor(android.graphics.Color.parseColor("#B42318"))
+                }
+                visit.reassignedFromRejection == true -> {
+                    eta.text = if (!rejectRemark.isNullOrEmpty()) {
+                        "GM sent back: $rejectRemark"
+                    } else {
+                        "Reassigned by GM"
+                    }
+                    eta.setTextColor(android.graphics.Color.parseColor("#B54708"))
+                }
+                rescheduleCount > 0 -> {
+                    val date = visit.lastNotMetDate?.trim()
+                    val nth = ordinal(rescheduleCount)
+                    eta.text = if (!date.isNullOrEmpty()) {
+                        "Client not met on $date · rescheduled $nth time"
+                    } else {
+                        "Client not met · rescheduled $nth time"
+                    }
+                    eta.setTextColor(android.graphics.Color.parseColor("#B54708"))
+                }
+            }
+        }
+
         if (isExpired) {
             // The slot has passed — the backend rejects any trip action on a
             // stale date, so keep the card inert rather than opening a flow
@@ -1728,6 +1760,21 @@ class HomeFragment : Fragment() {
         avatar.text = name.firstOrNull()?.uppercase() ?: "M"
         nameView.text = name
         roleView.visibility = View.GONE
+    }
+
+    /** "1st", "2nd", "3rd", "4th"… for the "rescheduled Nth time" notice. */
+    private fun ordinal(n: Int): String {
+        val suffix = if (n % 100 in 11..13) {
+            "th"
+        } else {
+            when (n % 10) {
+                1 -> "st"
+                2 -> "nd"
+                3 -> "rd"
+                else -> "th"
+            }
+        }
+        return "$n$suffix"
     }
 
     private fun formatPersonName(rawName: String): String {

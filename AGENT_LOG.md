@@ -9142,3 +9142,20 @@ not committed, pushed, or deployed.
   completed/pending/cancelled); (2) CompletedVisitDetailFragment now shows a "Reassigned by GM" note card with
   the remark, driven by CpVisitDetail.rejectRemark/reassignedFromRejection — so the record shows why it bounced
   even after completion. New layout view cvdReassignedCard/tvCvdReassignedRemark. :app compile GREEN.
+
+- 2026-08-12 — Built the client-not-met 48h auto-reschedule + 3-strike warning (cross-repo).
+  WEB (max): schema — clientPlaceVisits.notMetReschedule{rescheduleCount,lastNotMetAt,lastNotMetDate,
+  reactivatedAt} (grouped optional) + clients.consecutiveNotMetCount. applyCpCompletionEffects bumps the
+  client's consecutive count on a not-met close (clientMet===false) / resets to 0 on a met completion, and
+  stamps notMetReschedule.lastNotMetAt/Date. New hourly cron reactivateNotMetVisits (crons.ts) reopens each
+  completed+clientMet=false visit 48h after its not-met close to the SAME staff (rejectCpCompletion recipe:
+  status→scheduled, clear outcome/clientMet, reset fieldVisit arrival proof, reassignDailyTasksForSource,
+  scheduledDate=today IST, rescheduleCount+1, reactivatedAt=lastNotMetAt for idempotency) + notifies staff.
+  listMobileCompact + enrichVisit now expose rescheduleCount/lastNotMetDate/clientUnavailableWarning
+  (>=3) at top level; enrichVisit ALSO now flattens approvalGmName/rejectRemark/reassignedFromRejection
+  (previously the completed-detail reassigned card had no data). tsc: only the pre-existing stale-codegen
+  crons error (queueHistoricalVisitCoordinateRepair, unrelated); resolves on convex deploy.
+  APP (merge): TodayVisit + CpVisitDetail gained rescheduleCount/lastNotMetDate/clientUnavailableWarning.
+  CpVisitsFragment + HomeFragment ETA line now shows (priority) "⚠ Client unavailable — last 3 visits
+  missed" / "GM sent back: <remark>" / "Client not met on <date> · rescheduled Nth time" while the visit is
+  live. Added ordinal() helper to both. :app compile GREEN. CRON needs a Convex deploy to run.
