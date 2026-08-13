@@ -74,7 +74,8 @@ in more than one place; do not create a visually similar one-off control.
 
 ## READ FIRST: Three-Repository Project Map
 
-This product is split across **three separate Git repositories**. They share
+This product is split across **four separate Git repositories** (Mconnect
+Android, MMS web/Convex backend, Travel Desk web, and FoundationChat iOS). They share
 Fleet and Travel Desk workflows, but they are not interchangeable. Before
 editing, confirm the target repository, read its `AGENTS.md`, inspect its dirty
 worktree, and preserve changes made by other agents/users.
@@ -155,6 +156,24 @@ worktree, and preserve changes made by other agents/users.
 - The shared database schema or authoritative business rules.
 - MMS internal Fleet screens.
 - Android screens.
+
+### 4. FoundationChat - iOS App (SwiftUI)
+
+| Detail | Value |
+|--------|-------|
+| Local path | `C:\Users\surya\Projects\FoundationChat` |
+| GitHub | `https://github.com/manjugroupsdev/FoundationChat.git` |
+| Current working branch (2026-08-13) | `darx` |
+| Technology | iOS / SwiftUI, Convex REST over api-mfpl |
+| Build | Xcode (macOS only — NOT buildable on the Windows workbase) |
+
+**Owns:**
+- The iOS/SwiftUI counterpart of the Mconnect Android app — parity build of the
+  same internal-staff features (HR, GeoTrack, Marketing CP/SV, Tasks, Library).
+
+**Note:** cannot be compiled on this Windows machine (no Xcode); changes here are
+pushed on request without a local build check. Backend/API contract is owned by
+MMS, same as the Android app.
 
 ### Source-of-Truth Matrix
 
@@ -9486,3 +9505,11 @@ not committed, pushed, or deployed.
   feature). DELIBERATELY EXCLUDED app/build.gradle.kts — it is again the test-backend switch
   (api-mfpl→next-spaniel-814), a production landmine, left unstaged. Also left .idea/gradle local noise
   unstaged. Workbase = 3 repos (Mconnect, manjusitedevelopment, travel-desk); travel-desk clean/nothing to push.
+
+- 2026-08-13 (main-chat) — Pushed the 4th workbase repo: FoundationChat (iOS/SwiftUI parity of the Android
+  app), branch `darx` → github.com/manjugroupsdev/FoundationChat (bd9f5c5..3943839). 44 modified + 5 new
+  Swift/doc files (Convex models + API services, GeoTrack services/persistence/attendance gate, HR/marketing/
+  tasks/library views, new iOS CpApprovalQueueView/CpOutcomePolicy/PendingPunchStore + PARITY docs). No
+  hardcoded secrets, no test-backend switch (only a prod api-mfpl comment). NOT build-verified (no Xcode on
+  Windows). Set the repo's missing git identity to manjugroupsdev <developer@manjugroups.in>. Documented
+  FoundationChat as repo #4 in this log's header. Workbase is now FOUR repos.
