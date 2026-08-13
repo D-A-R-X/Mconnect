@@ -9115,3 +9115,11 @@ not committed, pushed, or deployed.
   GONE bar back to VISIBLE and animates it in; it also recovers a translated-off bar even if the
   isBottomNavVisible flag was stale. HIDE only runs when the bar is on-screen. Kept the setTabBarVisible(false)
   isBottomNavVisible=false desync fix. :app compile GREEN.
+
+- 2026-08-12 — Top gap after tab-in-and-back: root-caused to a tab/fragment MISMATCH. AppLibraryFragment.onResume
+  wants fullBleed=false (painted blue status strip; its header doesn't draw under the status bar), but
+  MainActivity.applyTopBarForTab(TAB_LIBRARY) asserted fullBleed=true → white window bg showed above the blue
+  header as a top gap. The fragment corrects it in onResume, but onResume does NOT re-fire on return-from-detail
+  (add()+hide()/show() keeps it resumed), and my syncChromeToBackStack authoritatively applied the wrong
+  fullBleed=true on back. Fixed by aligning applyTopBarForTab(TAB_LIBRARY) → fullBleed=false. Verified the other
+  tabs already match their fragments: HOME/HR fullBleed=true, CHAT (else) fullBleed=false white. :app compile GREEN.

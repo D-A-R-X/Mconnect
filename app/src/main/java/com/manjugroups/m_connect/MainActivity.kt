@@ -1533,7 +1533,13 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             TAB_LIBRARY -> {
-                setTopBarAppearance(Color.parseColor("#0B61CA"), false, fullBleed = true)
+                // App Library's header does NOT draw under the status bar, so it
+                // needs a painted blue strip (fullBleed=false) — matching
+                // AppLibraryFragment.onResume. Using fullBleed=true here left the
+                // white window background showing above the header as a top gap
+                // on return-from-detail (the fragment's onResume, which corrects
+                // it, doesn't re-fire on add()+hide()/show()).
+                setTopBarAppearance(Color.parseColor("#0B61CA"), false, fullBleed = false)
                 if (::bottomNavFadeOverlay.isInitialized) {
                     bottomNavFadeOverlay.setBackgroundResource(R.drawable.bg_bottom_nav_fade_grey)
                 }
