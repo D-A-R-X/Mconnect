@@ -496,9 +496,7 @@ class MainActivity : AppCompatActivity() {
         // when the back stack drains, re-apply the active tab's chrome so
         // header/tab state never bleeds in from the popped fragment.
         supportFragmentManager.addOnBackStackChangedListener {
-            val onRoot = supportFragmentManager.backStackEntryCount == 0
-            setTabBarVisible(onRoot)
-            if (onRoot) applyTopBarForTab(currentTab)
+            syncChromeToBackStack()
         }
 
         currentTab = normalizeTab(savedInstanceState?.getInt(KEY_CURRENT_TAB, TAB_HOME) ?: TAB_HOME)
@@ -564,7 +562,11 @@ class MainActivity : AppCompatActivity() {
             handleTrackingNotificationIntent(intent)
         } else {
             updateTabUi(currentTab)
-            applyTopBarForTab(currentTab)
+            // Back-stack-aware: after a recreation with a detail fragment
+            // restored on top, chrome must match the detail (tab bar hidden),
+            // not the root tab — otherwise the trip/detail's white status strip
+            // and hidden nav leak onto every tab.
+            syncChromeToBackStack()
         }
 
         lifecycleScope.launch {
@@ -1155,6 +1157,14 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         restoreWindowLayoutAfterResume()
+        // Re-derive chrome from the authoritative back-stack state on every
+        // resume. After an activity recreation (system theme switch, process
+        // death during a GPS/camera-heavy trip) the back-stack listener never
+        // fires, and Home + the restored detail fragment race over the shared
+        // activity chrome — leaving the trip's hidden nav + white top strip
+        // stuck on all tabs. This makes the back-stack state the single source
+        // of truth again.
+        syncChromeToBackStack()
         if (!session.isLoggedIn) return
         // Finish a downloaded flexible update / resume a stalled immediate one.
         // Kept for everyone — it's a Play call, not an MMS one.
@@ -1454,6 +1464,20 @@ class MainActivity : AppCompatActivity() {
 
         transaction.commit()
         prewarmNeighbours()
+    }
+
+    /**
+     * Single source of truth for the activity chrome (bottom tab bar + status
+     * bar strip), derived from the back stack: at the root the active tab owns
+     * the chrome; with a detail fragment on top the nav hides and the detail's
+     * own onResume paints its top bar. Called from the back-stack listener, the
+     * onCreate restore branch, and onResume so a recreation can never strand the
+     * chrome in a popped detail's state.
+     */
+    private fun syncChromeToBackStack() {
+        val onRoot = supportFragmentManager.backStackEntryCount == 0
+        setTabBarVisible(onRoot)
+        if (onRoot) applyTopBarForTab(currentTab)
     }
 
     private fun applyTopBarForTab(index: Int) {

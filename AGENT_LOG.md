@@ -9077,3 +9077,23 @@ not committed, pushed, or deployed.
   update immediately when the user returns after a QR scan / fleet advance. Verified the SV list tab bucketing
   (SiteVisitsFragment effStatus = rawStatus ?? status → Enroute/Onsite/Returning/Completed/Cancelled/Postponed/
   Rejected) is already correct — no change needed; it just needs fresh data. :app compile GREEN.
+
+- 2026-08-12 — Fixed two Home/trip/attendance bugs (evidence-backed trace).
+  BUG A (trip startable while clocked out): trip-start gate used the LENIENT source-agnostic
+  isClockedInForToday (stays true all day after ANY punch incl. biometric), so a mobile-clocked-out staffer
+  could start an untracked trip. Added a strict HomeUiState.hasOpenSessionNow (raw att/day hasOpenSession),
+  wired it into createVisitItem canStartTrip + the render signature + HomeViewModel.startVisit/startTripToPlace
+  guards. The field-staff trip-card tap also ignored canStartTrip → now routes to clock-in.
+  A2 (clock-out is FINAL by design): added a finality warning to dialog_clock_out_confirm.xml ("you won't be
+  able to clock in again today from here; use Start Trip on that visit"). All clock-outs funnel through
+  HrDashboard's ClockOutConfirmBottomSheet, so it's covered.
+  A3 (re-entry via trip): openClockInForTrip(visit) now remembers the visit + passes targetVisitId through
+  ClockInAreaFragment.newInstance → SelfieClockInDetailFragment; on PUNCH_IN success it emits a DISTINCT
+  RESULT_KEY_CLOCK_IN_FOR_TRIP (so HrDashboard's PUNCH_COMPLETED listener is untouched); HomeFragment listener
+  auto-opens that trip's navigation. So clocked-out → Start Trip → clock in → trip starts immediately.
+  BUG B (bottom nav gone + white top strip on all tabs after a trip): activity recreation while the trip
+  fragment was on the back stack left the trip's chrome (hidden nav + white status strip) stuck because the
+  back-stack listener only fires on CHANGES and Home+trip raced over shared chrome on restore. Added
+  MainActivity.syncChromeToBackStack() (derives chrome from backStackEntryCount) called from the back-stack
+  listener, the onCreate restore branch, and onResume; guarded HomeFragment.onResume chrome asserts behind
+  !isHidden. :app compile GREEN.

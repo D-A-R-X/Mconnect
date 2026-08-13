@@ -604,6 +604,9 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
                 latitude = latitude,
                 longitude = longitude,
                 address = address,
+                // Carry the trip that triggered this clock-in so Home can
+                // auto-start it once the punch succeeds.
+                targetVisitId = arguments?.getString(ARG_TARGET_VISIT_ID),
             ),
         )
     }
@@ -784,5 +787,22 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
             Math.sin(dLng / 2) * Math.sin(dLng / 2)
         val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
         return r * c
+    }
+
+    companion object {
+        private const val ARG_TARGET_VISIT_ID = "arg_target_visit_id"
+
+        /**
+         * @param targetVisitId when set, a successful PUNCH_IN emits
+         * [SelfieClockInDetailFragment.RESULT_KEY_CLOCK_IN_FOR_TRIP] so Home can
+         * auto-start that trip — used when the staffer taps "Start Trip" while
+         * clocked out and is routed here to clock in first.
+         */
+        fun newInstance(targetVisitId: String? = null): ClockInAreaFragment =
+            ClockInAreaFragment().apply {
+                arguments = Bundle().apply {
+                    putString(ARG_TARGET_VISIT_ID, targetVisitId)
+                }
+            }
     }
 }
