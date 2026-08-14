@@ -9765,3 +9765,17 @@ not committed, pushed, or deployed.
   MAX_PATH_GAP_M only affects the drawn polyline) and backend geoTrips/sessionRoute likewise — both were only
   limited by the dropped points, so no web/backend change needed; they'll reflect the kept points. Accuracy>50m
   filter (both sides) left as-is (fine outdoors at speed). compileDebugKotlin OK. Pushed merge.
+
+- 2026-08-14 (main-chat) — Cross-platform SYNC audit of this session's changes. Verified each change's
+  platform coverage: Booking follow-up CP + Follow-up-outcome CP (web+android+iOS ✓); GM approve/reject +
+  queue reachability (web renders CpApprovalQueue inline, iOS renders CpApprovalQueueView inline — the Android
+  "always-visible banner" only existed because Android's queue was push-ONLY, not a gap on web/iOS ✓);
+  Collection backend workflow-non-fatal (web backend, benefits all ✓). ANDROID-NATIVE with NO web/iOS
+  equivalent (nothing to sync): top-white-gap, GeoTrack bootstrap-teardown, update-recovery (MY_PACKAGE_REPLACED),
+  drift-filter distance under-count, CP/SV expiry removal (web+iOS already had none). REAL GAP FOUND + FIXED
+  on iOS (darx b69d351): PostSalesConvexAPIService (collection submit) + FleetDispatchAPIService decoded the
+  error body as [String:String], but the backend returns {success:false, error:"..."} (mixed bool+string) so
+  the decode failed and iOS showed "Request failed (500)" — same masking the Android httpErrorMessage fix
+  addressed. Switched both to loose [String:Any] + `error as? String` (matching MarketingConvexAPIService,
+  which was already correct). iOS not build-verified (no Xcode). GeoTrackPersistence's [String:String] decode
+  left alone (parses tamper metadata, not an HTTP body).
