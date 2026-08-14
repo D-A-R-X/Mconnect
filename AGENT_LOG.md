@@ -9666,3 +9666,13 @@ not committed, pushed, or deployed.
   so the banner count + visit list refresh; guards double-tap submits. New drawables bg_cpv_approvals_banner /
   bg_cpv_approvals_icon. compileDebugKotlin BUILD SUCCESSFUL. NOTE: if the pending-approvals endpoint isn't
   deployed on prod the banner stays hidden (self-gating) — needs the Convex routes live to light up.
+
+- 2026-08-14 (main-chat) — Removed the "Expired" logic from CP & SV. A prior commit (b4094f27) killed the
+  presentation but left active expiry on the Home cards + dead code on the SV list. Now: HomeFragment no longer
+  buckets a past-slot CP/SV into Completed or paints an inert "Expired/Date passed" card — a late visit stays
+  under Upcoming and actionable (matches CpVisitsFragment, already de-expired). SiteVisitsFragment: dropped
+  Filter.EXPIRED, the no-op isExpiredVisit(), the red "Expired" pill paint, the "No Expired Visits" empty
+  state, and the leftover pillExpired tab (XML + runtime hide) — trailing scroll margin moved onto Postponed.
+  KEPT util/VisitExpiry.kt: still used by AgencyDriverTripsFragment (driver trips are fleet, not CP/SV).
+  Verified web + iOS have NO CP/SV slot-expiry (their "expired" hits are all session/OTP/token, unrelated).
+  compileDebugKotlin BUILD SUCCESSFUL.
