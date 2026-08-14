@@ -9748,3 +9748,20 @@ not committed, pushed, or deployed.
   remaining backend validation (no-outstanding-balance / amount-exceeds / scope) now shows its real message
   instead of "HTTP 500". Other CP types complete via the same setCpVisitOutcome (also surfaced) and lack the
   submitFromMobile call, so they're not hit by this specific workflow-throw.
+
+- 2026-08-14 (main-chat) — GeoTrack UNDER-COUNTING distance (>40km travelled shows as very little) + "tamper
+  must not interrupt tracking". Root cause (Android GeoTrackService point capture): the drift/teleport filter
+  dropped legitimate travel points using the SINGLE-fix instantaneous location.speed — which reads low/zero
+  right after a signal gap (tunnel, dead-zone, GPS reacquisition) or in stop-and-go. Two bad returns: MOVING
+  branch dropped any >500m jump when speed<15 m/s; STATIONARY branch dropped any >100m jump. So a real
+  multi-km highway leg after a gap was thrown away as "GPS teleport"/"drift" → long trips massively
+  under-counted. FIX: judge a jump by IMPLIED speed = distance / time-since-last-fix, rejecting ONLY the
+  physically impossible (>75 m/s = 270 km/h, above any road/rail) and only for jumps >100m; genuine travel
+  (even a km-long post-gap jump) is KEPT. isMoving now also considers implied speed. Removed
+  DRIFT_DISTANCE/SPEED_THRESHOLD. This also resolves the "tamper interrupts tracking" concern: those drift
+  `return`s WERE the interruption; tamper reporting (MOCK_LOCATION/GPS/airplane) only logs an event and never
+  drops the point or stops the service (verified — the stopSelf calls are permission/clock-out/session-invalid
+  only). ALL SIDES checked: web buildSegments sums haversine over ALL consecutive stored points (no gap cap;
+  MAX_PATH_GAP_M only affects the drawn polyline) and backend geoTrips/sessionRoute likewise — both were only
+  limited by the dropped points, so no web/backend change needed; they'll reflect the kept points. Accuracy>50m
+  filter (both sides) left as-is (fine outdoors at speed). compileDebugKotlin OK. Pushed merge.
