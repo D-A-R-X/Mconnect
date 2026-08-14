@@ -9588,3 +9588,13 @@ not committed, pushed, or deployed.
   threads it. iOS (darx, 793a6a2): SetCpVisitOutcomeRequest fields; SpecialCpCompletionSheet gains the amounts
   line, a DatePicker, a Not Collected button, and partial detection. iOS NOT build-verified (no Xcode). Needs
   Convex deploy to spawn live.
+
+- 2026-08-13 (main-chat) — Feature 2 (GM approve/reject) brought to ALL THREE platforms. Backend + Android
+  were done earlier. Added: WEB (max, 9f324d98) — new features/marketing/components/cp-approval-queue.tsx
+  (GM sees client/staff/place/distance/outcome/photo/staff-reason; Approve / Reject-with-remark; reject
+  reopens for same staff; renders nothing when empty), rendered on cp-visits-list-page; plus
+  "pending_gm_approval" status label/style + "Awaiting: <GM>" / "Reassigned by GM — <remark>" on list rows +
+  detail banner. iOS (darx, 86f9367) — CpApprovalQueueView already existed + surfaced (fork chat); added the
+  STAFF-side display: CpVisitDetail gained approvalGmName/rejectRemark/reassignedFromRejection, CpVisitCard
+  shows "Awaiting: <GM>" (pending) and "GM sent back: <remark>" (reassigned). Super-admin fallback + fail-
+  closed already in backend. iOS NOT build-verified. Needs Convex deploy to run live.
