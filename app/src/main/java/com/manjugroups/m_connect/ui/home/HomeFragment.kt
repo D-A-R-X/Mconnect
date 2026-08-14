@@ -560,13 +560,6 @@ class HomeFragment : Fragment() {
             // it now AND re-post it, so a screen we just returned from (e.g. the
             // white Notifications header) can't win the race and leave a white
             // status-bar strip with dark icons over the blue header.
-            val applyHomeTopBar = {
-                (activity as? com.manjugroups.m_connect.MainActivity)?.setTopBarAppearance(
-                    Color.parseColor("#0B61CA"),
-                    false,
-                    fullBleed = true,
-                )
-            }
             applyHomeTopBar()
             _binding?.root?.post { if (isResumed && !isHidden) applyHomeTopBar() }
         }
@@ -596,10 +589,32 @@ class HomeFragment : Fragment() {
         super.onHiddenChanged(hidden)
         if (hidden) {
             _binding?.homeHeader?.stopFloatingAnimation()
-        } else if (_binding != null &&
-            binding.homeStickyColumn.visibility == View.VISIBLE) {
-            binding.homeContent.post { _binding?.homeHeader?.playEntryAnimation() }
+        } else {
+            // Re-showing Home by UNHIDING (pop-back from a pushDetail screen, or a
+            // tab return) does NOT re-run onResume — pushDetail retains this view
+            // via add()+hide(), so the fragment stayed RESUMED while hidden. The
+            // detail's white status-bar strip (dark icons) would otherwise stick
+            // over Home's blue header = the recurring "top white gap". Home is the
+            // single source of truth for its own chrome, so re-assert the blue
+            // full-bleed bar here — immediately AND on the next frame, to beat any
+            // late status-bar write from the outgoing screen's teardown.
+            applyHomeTopBar()
+            _binding?.root?.post { if (isResumed && !isHidden) applyHomeTopBar() }
+            if (_binding != null &&
+                binding.homeStickyColumn.visibility == View.VISIBLE) {
+                binding.homeContent.post { _binding?.homeHeader?.playEntryAnimation() }
+            }
         }
+    }
+
+    /** Home = full-bleed blue status bar with LIGHT (white) icons. Shared by
+     *  onResume and onHiddenChanged so every path back onto Home re-asserts it. */
+    private fun applyHomeTopBar() {
+        (activity as? com.manjugroups.m_connect.MainActivity)?.setTopBarAppearance(
+            Color.parseColor("#0B61CA"),
+            false,
+            fullBleed = true,
+        )
     }
 
 
@@ -892,30 +907,16 @@ class HomeFragment : Fragment() {
         // Home shows today's visits only.
         val unfilteredVisits = state.todayVisits.filter { it.status != "cancelled" }
         val visits = if (session.isDriverMode) {
-            // Same rule as the card badge: a trip never started whose slot has
-            // passed is "expired". It belongs in Completed (badged Expired), NOT
-            // in Upcoming — a lost trip can't still read as pending work.
+            // Expiry removed for CP/SV: a past-slot visit is no longer bucketed
+            // into Completed. Upcoming keeps every not-done visit so a late visit
+            // stays actionable instead of dead-ending as "Expired".
             val doneSet = setOf("completed", "complete", "done", "closed")
-            val inProgressSet = setOf(
-                "in-progress", "in_progress", "ongoing", "started", "active",
-                "arrived", "on_site", "on-site", "picked_from_site",
-            )
-            fun isExpired(v: TodayVisit): Boolean {
-                val s = v.status.lowercase(Locale.getDefault())
-                return s !in doneSet && s !in inProgressSet &&
-                    com.manjugroups.m_connect.util.VisitExpiry.isExpired(
-                        v.scheduledDate, v.scheduledStartTime, isDone = false,
-                        createdAtMillis = v.creationTime?.toLong(),
-                    )
-            }
             when (selectedTab) {
                 "upcoming" -> unfilteredVisits.filter {
-                    val s = it.status.lowercase(Locale.getDefault())
-                    s !in doneSet && !isExpired(it)
+                    it.status.lowercase(Locale.getDefault()) !in doneSet
                 }
                 "completed" -> unfilteredVisits.filter {
-                    val s = it.status.lowercase(Locale.getDefault())
-                    s in doneSet || isExpired(it)
+                    it.status.lowercase(Locale.getDefault()) in doneSet
                 }
                 else -> unfilteredVisits
             }
@@ -1434,13 +1435,6 @@ class HomeFragment : Fragment() {
             "in-progress", "in_progress", "ongoing", "started", "active", "arrived",
             "on_site", "on-site", "on_counselling", "on-counselling", "picked_from_site"
         )
-        // A visit that was never started and whose slot has passed is expired —
-        // the source of the "still shows Start after the date is lost" bug.
-        val isExpired = !isCompleted && !isInProgress &&
-            com.manjugroups.m_connect.util.VisitExpiry.isExpired(
-                visit.scheduledDate, visit.scheduledStartTime, isDone = false,
-                createdAtMillis = visit.creationTime?.toLong(),
-            )
         // Fleet "completed offline" — the admin marked this SV as done without
         // a live trip; the site incharge must record the outcome from mobile.
         val isFleetOutcomePending = visit.completedOffline == true && visit.outcome.isNullOrBlank()
@@ -1520,16 +1514,6 @@ class HomeFragment : Fragment() {
                 actionIcon.visibility = View.GONE
                 eta.text = "Complete"
             }
-            isExpired -> {
-                statusText.text = "Expired"
-                statusPill.background = requireContext().getDrawable(R.drawable.bg_home_trip_status_done)
-                statusText.setTextColor(android.graphics.Color.parseColor("#B42318"))
-                action.text = "Expired"
-                actionBtn.background = requireContext().getDrawable(R.drawable.bg_home_trip_action_disabled)
-                action.setTextColor(android.graphics.Color.parseColor("#B42318"))
-                actionIcon.visibility = View.GONE
-                eta.text = "Date passed"
-            }
             !canStartTrip -> {
                 statusText.text = "Clock in"
                 statusPill.background = requireContext().getDrawable(R.drawable.bg_home_trip_status_done)
@@ -1584,22 +1568,7 @@ class HomeFragment : Fragment() {
             }
         }
 
-        if (isExpired) {
-            // The slot has passed — the backend rejects any trip action on a
-            // stale date, so keep the card inert rather than opening a flow
-            // that dead-ends. A tap just explains why.
-            val explain: (View) -> Unit = {
-                android.widget.Toast.makeText(
-                    requireContext(),
-                    "This visit's scheduled date has passed.",
-                    android.widget.Toast.LENGTH_SHORT,
-                ).show()
-            }
-            itemView.isClickable = true
-            itemView.setOnClickListener(explain)
-            actionBtn.isClickable = true
-            actionBtn.setOnClickListener(explain)
-        } else if (session.isDriverMode) {
+        if (session.isDriverMode) {
             if (session.isInternalFleetDriver && !isCompleted) {
                 // Internal fleet driver: every tap opens the granular fleet
                 // trip flow (Start → Reached → Picked → End), same as the

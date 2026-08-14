@@ -9564,3 +9564,159 @@ not committed, pushed, or deployed.
   to `if isLoading && visibleVisits.isEmpty` so refresh/return keeps trips visible instead of white
   skeleton. Same-root as "slow loading" complaint. VERIFY on Mac; trip-list cache-first = optional
   follow-up (would remove cold-recreate flash for driver/normal users too).
+
+- 2026-08-13 (main-chat) — Completed feature 3 (client-not-met 48h auto-reschedule + 3-strike warning) across
+  ALL THREE platforms. Backend (web max) + Android were done earlier this session. Added this round:
+  • WEB frontend (features/marketing/pages/cp-visits-list-page.tsx + cp-visit-detail-page.tsx): list row shows
+    "⚠ Unavailable — last 3 visits missed" under the client and "Not met on <date> · rescheduled Nth time"
+    under Client-met; detail shows an amber banner. Data already flowed via list/get→enrichVisit; tsc clean.
+  • iOS (FoundationChat darx): CpVisitDetail gained rescheduleCount/lastNotMetDate/clientUnavailableWarning;
+    CpVisitCard shows the same notice line (live visits only). Not build-verified (no Xcode).
+  All powered by the backend fields already on listMobileCompact/enrichVisit + clients.consecutiveNotMetCount.
+  Still needs the Convex deploy for the 48h cron + counters to run live.
+
+- 2026-08-13 (main-chat) — Collection-CP follow-up implemented across ALL THREE platforms.
+  Behaviour: (1) Not collected → staff picks a follow-up date+time → backend spawns a NEW collection_cp for
+  that slot (same staff/client); (2) Partial → app shows Payable/Paid/Pending (from PostSaleCaseSummary), and
+  if amount < pending balance, requires a follow-up → spawns another collection_cp for the pending amount;
+  (3) not_collected now feeds the 3-strike consecutiveNotMetCount (previously RESET it because the flow marks
+  clientMet=true). BACKEND (max, 5d3ea561): setOutcome + action + http.ts accept followUpDate/followUpTime;
+  spawn via createCpVisitRows in the completed branch (best-effort try/catch); counter fix. Reused existing
+  amount persistence (customerCollections) + amounts query (PostSaleCaseSummary) — no new query. ANDROID
+  (merge, 0dd1c572): SetOutcomeRequest fields; CollectionPaymentEntryBottomSheet shows Payable/Paid/Pending +
+  chained date→time picker; Not Collected + partial Submit require the follow-up; TripNavigationFragment
+  threads it. iOS (darx, 793a6a2): SetCpVisitOutcomeRequest fields; SpecialCpCompletionSheet gains the amounts
+  line, a DatePicker, a Not Collected button, and partial detection. iOS NOT build-verified (no Xcode). Needs
+  Convex deploy to spawn live.
+
+- 2026-08-13 (main-chat) — Feature 2 (GM approve/reject) brought to ALL THREE platforms. Backend + Android
+  were done earlier. Added: WEB (max, 9f324d98) — new features/marketing/components/cp-approval-queue.tsx
+  (GM sees client/staff/place/distance/outcome/photo/staff-reason; Approve / Reject-with-remark; reject
+  reopens for same staff; renders nothing when empty), rendered on cp-visits-list-page; plus
+  "pending_gm_approval" status label/style + "Awaiting: <GM>" / "Reassigned by GM — <remark>" on list rows +
+  detail banner. iOS (darx, 86f9367) — CpApprovalQueueView already existed + surfaced (fork chat); added the
+  STAFF-side display: CpVisitDetail gained approvalGmName/rejectRemark/reassignedFromRejection, CpVisitCard
+  shows "Awaiting: <GM>" (pending) and "GM sent back: <remark>" (reassigned). Super-admin fallback + fail-
+  closed already in backend. iOS NOT build-verified. Needs Convex deploy to run live.
+
+- 2026-08-13 (main-chat) — Booking follow-up CP across all 3 platforms. (A) SV/CP→Booking spawns a
+  booking_cp; (B) a postponed Booking CP spawns another booking_cp (or the app's SV option → existing
+  convertToSiteVisit). BACKEND (max, 895942dc): setOutcome gained a `status === "postponed"` spawn branch for
+  booking_cp (postpone never hits the completed branch); new internalMutation spawnBookingCpFromSource
+  (reads the source SV/CP, creates booking_cp) called from the /api/bookings HTTP handler AFTER
+  bookings.create — kept OUT of bookings.create's args because that validator is at TS's ceiling (adding
+  fields breaks its inference; the plotId TS2339 there is pre-existing baseline, verified via stash). ANDROID
+  (merge, be72fa3f): CreateBookingRequest+bookingCpDate/Time (booking form sends the booking date as the
+  booking_cp date — dedicated picker is a fast-follow); finalizeTerminalOutcome threads postpone next-date as
+  followUpDate. iOS (darx, 944bf79): CreateBookingRequest fields + createRequest sets sourceClientPlaceVisitId
+  + bookingCpDate; postpone submit sends followUpDate/Time. iOS NOT build-verified. FAST-FOLLOWS: dedicated
+  booking-CP date/time PICKER on the booking form (Android+iOS default to the booking date today); the
+  postpone "visit another site instead → SV" is the existing convertToSiteVisit, needs a UI affordance.
+  Needs Convex deploy to spawn live.
+
+### Session 119 - Fleet buttons: drop "Mark", use stage names (travel-desk + app)
+
+**Date:** 2026-08-02
+**Session:** fork. travel-desk (aizen) + app (Mconnect/merge). iOS = no-op (see below).
+
+- TRAVEL-DESK (aizen): relabeled all fleet lifecycle action buttons to stage
+  names — Reached CP / Picked from CP / On Site / Picked from Site / Dropped —
+  removing "Mark …" and "Start trip". Files: trips/[id]/page.tsx (detail Mark
+  progress), driver/trips/[token]/page.tsx (driver link + 2 guidance strings →
+  "Tap Reached CP/On Site …"), components/driver-trips-panel.tsx. tsc clean.
+- APP (Mconnect/merge): AdminFleetTripManageSheet.kt is the ONLY app screen with
+  "Mark" buttons (admin trip-advance sheet). Relabeled its 5 stepper buttonTexts
+  to the same stage names (Mark Reached→Reached CP, Start trip→Picked from CP,
+  Mark On Site→On Site, Mark Picked from Site→Picked from Site, End Trip→Dropped);
+  neutralised the two action-name section labels to "Update progress"; updated the
+  doc comment. compileDebugKotlin SUCCESSFUL.
+- iOS (FoundationChat): NO per-stage "Mark" buttons exist — the driver flow is a
+  single compressed "Swipe to Complete Trip" + "Start Trip"; stage names live only
+  in status/stepper DISPLAY labels. Nothing to remove; adding stage buttons would
+  be net-new UI, not a rename. Flagged to user.
+- NOT touched (offered): app's other fleet driver screens (AgencyDriverTripDetail,
+  DriverTripDetail, TripNavigation, AgencyDriverTripActionSheet) use "Start Trip"/
+  "End Trip"/"Reached Site" — no "Mark", so left as-is pending user call on full
+  normalisation.
+- Uncommitted; not pushed.
+
+- 2026-08-14 (main-chat) — Feature 4 "Follow-up CP" across web/android/ios. RULE: a postponed/"Follow up"
+  outcome now spawns the NEXT CP of the SAME type on the staff-chosen date (not just booking_cp).
+  WEB (max, 34239c3d): generalized the setOutcome "postponed" branch to any cpType via createCpVisitRows
+  (booking_cp/collection_cp/sv_cum_cp/other_cp…); NEW internal spawnSvCumCpFromSiteVisit so an SV "Follow up"
+  spawns an sv_cum_cp for the assigned FIELD staff, REPLACING the telecaller call-back (per user sign-off:
+  type=sv_cum_cp, replace-not-add). Scheduled via ctx.scheduler from siteVisits.setOutcome (mutation can't
+  runMutation; also keeps createCpVisitRows OUT of siteVisits.ts to dodge the CP type ceiling). editOutcome
+  correction + admin repair keep the telecaller call-back (no staff-chosen date there). tsc clean on both
+  touched files (55 baseline errors elsewhere, none mine). 3-strike warning rides along free (per-client
+  consecutiveNotMetCount). ANDROID (merge): no functional change — persistPostpone already sends followUpDate
+  for any CP, persistSvFollowUp already sends followupDueDate; only refreshed a stale comment. iOS (darx):
+  CP postpone + SV follow-up already send the dates; added a required follow-up-date guard to the SV outcome
+  sheet so a dateless follow-up can't silently drop the sv_cum_cp. Needs Convex deploy to spawn live.
+
+- 2026-08-14 (main-chat) — FIX: GMs "can't approve the SV/CP by clicking on mobile". Root causes on the
+  Android CP approval flow: (1) the out-of-geofence approval QUEUE was reachable ONLY by tapping the approval
+  push — a GM who missed/dismissed it had no way in; (2) CpApprovalQueueBottomSheet.load() swallowed EVERY
+  error into an empty list, so a route/auth/network failure rendered as "Nothing to approve" (looked broken);
+  (3) a pending_gm_approval card taps to a read-only completed detail (correct for the field staff, dead-end
+  for a GM). Fixes (Mconnect merge): added an always-visible "N approvals waiting" BANNER on the CP Visits
+  screen (fragment_cp_visits.xml + CpVisitsFragment.wireApprovalsBanner/refreshApprovalsBanner) that opens the
+  queue; the endpoint is GM-scoped so it self-hides for non-approvers. Queue now SURFACES load failures with a
+  tap-to-retry instead of silent-empty; emits a FragmentResult (RESULT_KEY) on each approve/reject + on dismiss
+  so the banner count + visit list refresh; guards double-tap submits. New drawables bg_cpv_approvals_banner /
+  bg_cpv_approvals_icon. compileDebugKotlin BUILD SUCCESSFUL. NOTE: if the pending-approvals endpoint isn't
+  deployed on prod the banner stays hidden (self-gating) — needs the Convex routes live to light up.
+
+- 2026-08-14 (main-chat) — Removed the "Expired" logic from CP & SV. A prior commit (b4094f27) killed the
+  presentation but left active expiry on the Home cards + dead code on the SV list. Now: HomeFragment no longer
+  buckets a past-slot CP/SV into Completed or paints an inert "Expired/Date passed" card — a late visit stays
+  under Upcoming and actionable (matches CpVisitsFragment, already de-expired). SiteVisitsFragment: dropped
+  Filter.EXPIRED, the no-op isExpiredVisit(), the red "Expired" pill paint, the "No Expired Visits" empty
+  state, and the leftover pillExpired tab (XML + runtime hide) — trailing scroll margin moved onto Postponed.
+  KEPT util/VisitExpiry.kt: still used by AgencyDriverTripsFragment (driver trips are fleet, not CP/SV).
+  Verified web + iOS have NO CP/SV slot-expiry (their "expired" hits are all session/OTP/token, unrelated).
+  compileDebugKotlin BUILD SUCCESSFUL.
+
+- 2026-08-14 (main-chat) — FIX recurring top white gap (dark status icons on a white strip over Home's blue
+  header). Root cause: pushDetail retains the underlying tab's view via add()+hide(), so the fragment stays
+  RESUMED while hidden — on pop-back onResume never re-fires (only onHiddenChanged), and HomeFragment's
+  onHiddenChanged didn't re-assert its blue full-bleed status bar. onResume's own apply is also gated behind
+  if(!isHidden), so an activity recreation with a detail on top skips it. The blue then hung entirely on
+  MainActivity.syncChromeToBackStack + currentTab being perfectly in sync; any slip (or a detail writing its
+  white bar late during teardown) left the white strip = the gap. Fixes (Mconnect merge): (1) HomeFragment
+  now re-asserts the blue bar in onHiddenChanged(false) — immediate + next-frame — via a shared applyHomeTopBar()
+  (also used by onResume); Home is the source of truth for its own chrome regardless of currentTab. (2)
+  MainActivity.syncChromeToBackStack reposts applyTopBarForTab(currentTab) on the next frame so a just-torn-down
+  detail's late status-bar write can't leave a stale strip on ANY root tab. compileDebugKotlin BUILD SUCCESSFUL.
+  Also: pulled web `max` (44 commits, ff to 958169e5).
+
+- 2026-08-14 (main-chat) — GeoTrack "phone active but offline + missing km" — APP FIX + backend diagnosis.
+  ROOT CAUSE (app, fixed): GeoTrackBootstrapSync.apply() treated a NULL bootstrap (a FAILED/So skipped fetch)
+  the same as "off shift" — every bootstrap?.… read is null, so it set shouldTrack=false, cleared
+  activeTrackingSessionId, and STOPPED the service. On flaky field networks a single failed sync on
+  resume/punch therefore killed a LIVE tracking service: heartbeats (→ online) and point capture (→ km) both
+  died while the phone was active, until the next successful sync. Fix: apply() now returns early (no-op) on a
+  null bootstrap — offline-safe, mirroring enforceClockInGate. A genuine clock-out still stops tracking (real
+  bootstrap shouldTrack=false, and the service self-stops via its own clock-in gate). compileDebugKotlin OK.
+  Pushed Mconnect merge. BACKEND CONTRIBUTORS (need Convex deploy + care, NOT changed — flagged to user):
+  (1) attendance gate reapStaleActiveSessionAndCheck (location.ts / heartbeat.ts) drops every heartbeat/point
+  and patches geoLiveStatus.isOnline=false when the activeSessions row's punchInTime isn't TODAY-IST;
+  (2) IST-midnight rollover flips overnight shifts offline mid-shift (punchIn dated "yesterday");
+  (3) web timeline query returns [] (→ zero km) when no firstPunchIn for the IST date;
+  (4) FRESH_MS=8min vs OEM Doze stretching heartbeats; monitoring cron uses 15min — mismatch;
+  (5) pushBatch drops points with accuracy>50m (indoor/poor GPS → no km). Map source: Explore agent.
+
+- 2026-08-14 (main-chat) — "after each app UPDATE, offline for a long time". Diagnosed the update-recovery
+  path (targetSdk=36). An APK update kills the process + FGS; Android sends MY_PACKAGE_REPLACED to the app,
+  and BootReceiver already restarts GeoTrackService synchronously inside that broadcast's FGS-start exemption
+  (the ONE reliable auto-restart on modern Android — the 15-min TrackingCheckWorker CANNOT start a location
+  FGS from the background; startForegroundSafely() catches the disallowed-start exception and stops). THE
+  KILLER: post-restart, the cold-start bootstrap sync (network often not ready) returned a null bootstrap and
+  apply(null) STOPPED the just-restarted service — so it only came back on the next app-open = "offline for a
+  long time". That teardown is exactly what the earlier apply(null) no-op fix (commit d843a911) removes, so
+  the auto-restart now STICKS. Added belt-and-suspenders: BootReceiver now also enqueues TrackingCheckWorker
+  (KEEP-idempotent) so a device updated-but-not-reopened still has the recurring net (it can't start the FGS
+  from bg but keeps sync/task-notifs warm and resumes tracking on next foreground). compileDebugKotlin OK,
+  pushed merge. ROBUST FOLLOW-UP for the residual edge (bg-location not granted, or MY_PACKAGE_REPLACED start
+  disallowed): a high-priority FCM data push from the monitoring cron (already detects offline at 15min) →
+  app FCM handler restarts the FGS under the push's temporary allowlist. Needs backend push + deploy; flagged.

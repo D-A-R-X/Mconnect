@@ -238,6 +238,70 @@
         </LinearLayout>
     </HorizontalScrollView>
 
+    <!-- GM APPROVALS ENTRY — shown only when the viewer has out-of-geofence CP
+         completions waiting on their approval (endpoint is GM-scoped, so it stays
+         hidden for everyone else). A reliable, always-visible way in that does not
+         depend on the approval push notification. -->
+    <LinearLayout
+        android:id="@+id/cpvApprovalsBanner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/bg_cpv_approvals_banner"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="14dp"
+        android:paddingVertical="12dp"
+        android:visibility="gone">
+
+        <ImageView
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="@drawable/bg_cpv_approvals_icon"
+            android:contentDescription="@null"
+            android:padding="8dp"
+            android:src="@drawable/ic_cpv_action_completed"
+            app:tint="#B54708" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvApprovalsBannerTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_semibold"
+                android:includeFontPadding="false"
+                android:text="Approvals waiting"
+                android:textColor="#7A2E0E"
+                android:textSize="14sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:fontFamily="@font/inter_regular"
+                android:includeFontPadding="false"
+                android:text="Tap to review out-of-geofence completions"
+                android:textColor="#B54708"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <ImageView
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_chevron_right"
+            app:tint="#B54708" />
+    </LinearLayout>
+
     <!-- CONTENT: list / empty / skeleton -->
     <FrameLayout
         android:layout_width="match_parent"

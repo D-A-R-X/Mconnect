@@ -101,7 +101,22 @@ object GeoTrackBootstrapSync {
     ) {
         val appContext = context.applicationContext
         val session = SessionManager(appContext)
-        val activeSessionId = bootstrap?.activeSession?.id
+        // A null bootstrap means the fetch FAILED (or was never attempted) — NOT a
+        // definitive "off shift". The old code fell through and, because every
+        // `bootstrap?.…` read is null, set shouldTrack=false, cleared
+        // activeTrackingSessionId, and STOPPED the service. On a flaky field
+        // network (the norm) a single failed sync on resume/punch therefore killed
+        // a live tracking service: heartbeats and point capture both died while the
+        // phone was active, so the staffer showed OFFLINE with zero travelled km
+        // until the next successful sync. Offline-safe fix: leave the current
+        // tracking state untouched and wait for a real bootstrap. A genuine
+        // clock-out still stops tracking — it arrives as a non-null bootstrap with
+        // shouldTrack=false, and the running service also self-stops via its own
+        // authoritative clock-in gate (enforceClockInGate).
+        if (bootstrap == null) {
+            return
+        }
+        val activeSessionId = bootstrap.activeSession?.id
         val shouldTrack = bootstrap?.shouldTrack == true && !activeSessionId.isNullOrBlank()
 
         session.geoTrackingEnabled =

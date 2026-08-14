@@ -159,12 +159,12 @@ class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
     /**
      * Shows the next progress-action the admin can take for an active trip.
      *
-     * Stage progression:
-     *   Awaiting pickup → "Mark Reached"
-     *   Reached client  → "Start trip" (needs km)
-     *   Picked from CP  → "Mark On Site"
-     *   On site          → "Mark Picked from Site"
-     *   Picked from Site → "End trip" (needs km + toll + beta)
+     * Stage progression (button label = the stage the tap records):
+     *   Awaiting pickup → "Reached CP"
+     *   Reached client  → "Picked from CP" (needs km)
+     *   Picked from CP  → "On Site"
+     *   On site          → "Picked from Site"
+     *   Picked from Site → "Dropped" (needs km + toll + beta)
      *   Dropped          → nothing (completed)
      */
     private fun bindProgressActions(view: View, t: AdminFleetTripsFragment.AdminTrip) {
@@ -216,32 +216,32 @@ class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
                 action = "reached",
                 label = "Update progress",
                 hint = "Mark that the driver has reached the client.",
-                buttonText = "Mark Reached",
+                buttonText = "Reached CP",
             )
             "reached client" -> ProgressAction(
                 action = "start",
-                label = "Start trip",
+                label = "Update progress",
                 hint = "Driver has reached and is picking up from CP.",
-                buttonText = "Start trip",
+                buttonText = "Picked from CP",
                 needsKm = true,
             )
             "picked from cp", "picked up" -> ProgressAction(
                 action = "on_site",
                 label = "Update progress",
                 hint = "Mark that the driver has arrived at the site.",
-                buttonText = "Mark On Site",
+                buttonText = "On Site",
             )
             "on site" -> ProgressAction(
                 action = "picked_from_site",
                 label = "Update progress",
                 hint = "Mark that the passenger has been picked from site.",
-                buttonText = "Mark Picked from Site",
+                buttonText = "Picked from Site",
             )
             "picked from site" -> ProgressAction(
                 action = "end",
-                label = "End trip",
+                label = "Update progress",
                 hint = "Driver is dropping the passenger. Enter final details.",
-                buttonText = "End Trip",
+                buttonText = "Dropped",
                 needsKm = true,
                 needsTollBeta = true,
             )

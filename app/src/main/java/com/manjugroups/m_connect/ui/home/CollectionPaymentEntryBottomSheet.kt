@@ -62,6 +62,11 @@ class CollectionPaymentEntryBottomSheet : BottomSheetDialogFragment() {
         val clientName: String,
         val projectName: String?,
         val plotNo: String?,
+        // Payable (total), paid (approved collected), and pending (balance) —
+        // shown to the staff and used to detect a partial collection so we can
+        // ask for a follow-up when a balance is still due.
+        val totalAmount: Double,
+        val approvedCollectedAmount: Double,
         val balanceAmount: Double,
     )
 
@@ -133,6 +138,8 @@ class CollectionPaymentEntryBottomSheet : BottomSheetDialogFragment() {
         val projects = args.getStringArrayList(ARG_PROJECTS).orEmpty()
         val plots = args.getStringArrayList(ARG_PLOTS).orEmpty()
         val balances = args.getDoubleArray(ARG_BALANCES)?.toList().orEmpty()
+        val totals = args.getDoubleArray(ARG_TOTALS)?.toList().orEmpty()
+        val paids = args.getDoubleArray(ARG_PAID)?.toList().orEmpty()
         bookings = caseIds.indices.map { i ->
             BookingOption(
                 caseId = caseIds.getOrNull(i).orEmpty(),
@@ -140,6 +147,8 @@ class CollectionPaymentEntryBottomSheet : BottomSheetDialogFragment() {
                 clientName = names.getOrNull(i).orEmpty(),
                 projectName = projects.getOrNull(i)?.takeIf { it.isNotBlank() },
                 plotNo = plots.getOrNull(i)?.takeIf { it.isNotBlank() },
+                totalAmount = totals.getOrNull(i) ?: 0.0,
+                approvedCollectedAmount = paids.getOrNull(i) ?: 0.0,
                 balanceAmount = balances.getOrNull(i) ?: 0.0,
             )
         }
@@ -267,17 +276,23 @@ class CollectionPaymentEntryBottomSheet : BottomSheetDialogFragment() {
         // required; no customerCollections row is written.
         btnNotCollected.setOnClickListener {
             val notes = etNotes.text?.toString()?.trim().orEmpty()
-            setFragmentResult(
-                RESULT_KEY,
-                bundleOf(
-                    KEY_SUBMITTED to false,
-                    KEY_NOT_COLLECTED to true,
-                    KEY_NOTES to notes,
-                    KEY_CASE_ID to (selectedBooking?.caseId.orEmpty()),
-                    KEY_CLIENT_NAME to (selectedBooking?.clientName.orEmpty()),
-                ),
-            )
-            dismissAllowingStateLoss()
+            // Nothing collected → the staff picks when to return, and the backend
+            // spawns a fresh collection CP for that slot.
+            promptFollowUp { date, time ->
+                setFragmentResult(
+                    RESULT_KEY,
+                    bundleOf(
+                        KEY_SUBMITTED to false,
+                        KEY_NOT_COLLECTED to true,
+                        KEY_NOTES to notes,
+                        KEY_CASE_ID to (selectedBooking?.caseId.orEmpty()),
+                        KEY_CLIENT_NAME to (selectedBooking?.clientName.orEmpty()),
+                        KEY_FOLLOWUP_DATE to date,
+                        KEY_FOLLOWUP_TIME to time,
+                    ),
+                )
+                dismissAllowingStateLoss()
+            }
         }
 
         btnSubmit.setOnClickListener {
@@ -307,41 +322,58 @@ class CollectionPaymentEntryBottomSheet : BottomSheetDialogFragment() {
             }
             val notes = etNotes.text?.toString()?.trim().orEmpty()
 
-            btnSubmit.isEnabled = false
-            btnCancel.isEnabled = false
-            viewLifecycleOwner.lifecycleScope.launch {
-                try {
-                    val storageId = if (proofUri != null) uploadProofIfAny() else null
-                    if (proofUri != null && storageId == null) {
+            // Upload proof (if any) + return the submit payload. A follow-up slot
+            // is attached only for a PARTIAL collection (a balance still remains).
+            val doSubmit: (String?, String?) -> Unit = { followUpDate, followUpTime ->
+                btnSubmit.isEnabled = false
+                btnCancel.isEnabled = false
+                viewLifecycleOwner.lifecycleScope.launch {
+                    try {
+                        val storageId = if (proofUri != null) uploadProofIfAny() else null
+                        if (proofUri != null && storageId == null) {
+                            btnSubmit.isEnabled = true
+                            btnCancel.isEnabled = true
+                            return@launch
+                        }
+                        setFragmentResult(
+                            RESULT_KEY,
+                            bundleOf(
+                                KEY_SUBMITTED to true,
+                                KEY_CASE_ID to booking.caseId,
+                                KEY_BOOKING_REF to booking.bookingRefNo,
+                                KEY_CLIENT_NAME to booking.clientName,
+                                KEY_AMOUNT to amount,
+                                KEY_PAYMENT_MODE to selectedMode.id,
+                                KEY_PAYMENT_MODE_LABEL to selectedMode.label,
+                                KEY_TRANSACTION_REF to reference,
+                                KEY_BANK_NAME to bankName,
+                                KEY_BRANCH_NAME to branchName,
+                                KEY_INSTRUMENT_DATE to instrumentDate,
+                                KEY_NOTES to notes,
+                                KEY_PROOF_STORAGE_ID to (storageId.orEmpty()),
+                                KEY_PROOF_FILE_NAME to (proofFileName.orEmpty()),
+                                KEY_FOLLOWUP_DATE to followUpDate.orEmpty(),
+                                KEY_FOLLOWUP_TIME to followUpTime.orEmpty(),
+                            ),
+                        )
+                        dismissAllowingStateLoss()
+                    } catch (e: Exception) {
                         btnSubmit.isEnabled = true
                         btnCancel.isEnabled = true
-                        return@launch
+                        toast(e.message ?: "Failed to submit collection")
                     }
-                    setFragmentResult(
-                        RESULT_KEY,
-                        bundleOf(
-                            KEY_SUBMITTED to true,
-                            KEY_CASE_ID to booking.caseId,
-                            KEY_BOOKING_REF to booking.bookingRefNo,
-                            KEY_CLIENT_NAME to booking.clientName,
-                            KEY_AMOUNT to amount,
-                            KEY_PAYMENT_MODE to selectedMode.id,
-                            KEY_PAYMENT_MODE_LABEL to selectedMode.label,
-                            KEY_TRANSACTION_REF to reference,
-                            KEY_BANK_NAME to bankName,
-                            KEY_BRANCH_NAME to branchName,
-                            KEY_INSTRUMENT_DATE to instrumentDate,
-                            KEY_NOTES to notes,
-                            KEY_PROOF_STORAGE_ID to (storageId.orEmpty()),
-                            KEY_PROOF_FILE_NAME to (proofFileName.orEmpty()),
-                        ),
-                    )
-                    dismissAllowingStateLoss()
-                } catch (e: Exception) {
-                    btnSubmit.isEnabled = true
-                    btnCancel.isEnabled = true
-                    toast(e.message ?: "Failed to submit collection")
                 }
+            }
+
+            // Partial collection (amount < the pending balance) → the staff picks
+            // when to return and collect the rest, and the backend spawns another
+            // collection CP for that slot.
+            val pending = booking.balanceAmount - amount
+            if (booking.balanceAmount > 0.005 && pending > 0.005) {
+                toast("Partial — pick when to collect the ₹${"%,.0f".format(pending)} still pending")
+                promptFollowUp { date, time -> doSubmit(date, time) }
+            } else {
+                doSubmit(null, null)
             }
         }
     }
@@ -420,8 +452,42 @@ class CollectionPaymentEntryBottomSheet : BottomSheetDialogFragment() {
 
     private fun formatBookingSubtitle(b: BookingOption): String {
         val location = listOfNotNull(b.projectName, b.plotNo).joinToString(" · ")
-        val balance = "Balance ₹${"%,.0f".format(b.balanceAmount)}"
-        return if (location.isNotBlank()) "$location · $balance" else balance
+        // Payable vs paid vs pending so the staff sees exactly how much is left.
+        val amounts = "Payable ₹${"%,.0f".format(b.totalAmount)} · " +
+            "Paid ₹${"%,.0f".format(b.approvedCollectedAmount)} · " +
+            "Pending ₹${"%,.0f".format(b.balanceAmount)}"
+        return if (location.isNotBlank()) "$location · $amounts" else amounts
+    }
+
+    /**
+     * Chained date → time picker for the collection follow-up. Calls [onPicked]
+     * with (yyyy-MM-dd, HH:mm) once both are chosen; a cancel at either step
+     * aborts without calling back.
+     */
+    private fun promptFollowUp(onPicked: (date: String, time: String) -> Unit) {
+        val now = Calendar.getInstance()
+        DatePickerDialog(
+            requireContext(),
+            { _, year, month, day ->
+                val date = String.format(Locale.US, "%04d-%02d-%02d", year, month + 1, day)
+                android.app.TimePickerDialog(
+                    requireContext(),
+                    { _, hour, minute ->
+                        val time = String.format(Locale.US, "%02d:%02d", hour, minute)
+                        onPicked(date, time)
+                    },
+                    now.get(Calendar.HOUR_OF_DAY),
+                    now.get(Calendar.MINUTE),
+                    false,
+                ).show()
+            },
+            now.get(Calendar.YEAR),
+            now.get(Calendar.MONTH),
+            now.get(Calendar.DAY_OF_MONTH),
+        ).apply {
+            // Follow-up must be in the future — no back-dated collection visits.
+            datePicker.minDate = now.timeInMillis
+        }.show()
     }
 
     override fun onCancel(dialog: android.content.DialogInterface) {
@@ -450,6 +516,10 @@ class CollectionPaymentEntryBottomSheet : BottomSheetDialogFragment() {
         const val KEY_NOTES = "notes"
         const val KEY_PROOF_STORAGE_ID = "proof_storage_id"
         const val KEY_PROOF_FILE_NAME = "proof_file_name"
+        // Collection follow-up slot: staff picks when to return and collect the
+        // pending amount (not collected, or a partial with a balance still due).
+        const val KEY_FOLLOWUP_DATE = "followup_date" // yyyy-MM-dd
+        const val KEY_FOLLOWUP_TIME = "followup_time" // HH:mm
 
         private const val ARG_CASE_IDS = "arg_case_ids"
         private const val ARG_BOOKING_REFS = "arg_booking_refs"
@@ -457,6 +527,8 @@ class CollectionPaymentEntryBottomSheet : BottomSheetDialogFragment() {
         private const val ARG_PROJECTS = "arg_projects"
         private const val ARG_PLOTS = "arg_plots"
         private const val ARG_BALANCES = "arg_balances"
+        private const val ARG_TOTALS = "arg_totals"
+        private const val ARG_PAID = "arg_paid"
 
         private val ALLOWED_MIME_TYPES = setOf(
             "application/pdf",
@@ -478,6 +550,8 @@ class CollectionPaymentEntryBottomSheet : BottomSheetDialogFragment() {
                     ARG_PROJECTS to ArrayList(cases.map { it.projectName.orEmpty() }),
                     ARG_PLOTS to ArrayList(cases.map { it.plotNo.orEmpty() }),
                     ARG_BALANCES to cases.map { it.balanceAmount }.toDoubleArray(),
+                    ARG_TOTALS to cases.map { it.totalAmount }.toDoubleArray(),
+                    ARG_PAID to cases.map { it.approvedCollectedAmount }.toDoubleArray(),
                 )
             }
         }

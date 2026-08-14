@@ -278,22 +278,6 @@
                 android:layout_width="wrap_content"
                 android:layout_height="34dp"
                 android:layout_marginStart="8dp"
-                android:background="@drawable/bg_cpv_filter_pill_inactive"
-                android:clickable="true"
-                android:focusable="true"
-                android:fontFamily="@font/inter_medium"
-                android:gravity="center"
-                android:includeFontPadding="false"
-                android:paddingHorizontal="16dp"
-                android:text="Postponed"
-                android:textColor="#475467"
-                android:textSize="13sp" />
-
-            <TextView
-                android:id="@+id/pillExpired"
-                android:layout_width="wrap_content"
-                android:layout_height="34dp"
-                android:layout_marginStart="8dp"
                 android:layout_marginEnd="16dp"
                 android:background="@drawable/bg_cpv_filter_pill_inactive"
                 android:clickable="true"
@@ -302,7 +286,7 @@
                 android:gravity="center"
                 android:includeFontPadding="false"
                 android:paddingHorizontal="16dp"
-                android:text="Expired"
+                android:text="Postponed"
                 android:textColor="#475467"
                 android:textSize="13sp" />
         </LinearLayout>

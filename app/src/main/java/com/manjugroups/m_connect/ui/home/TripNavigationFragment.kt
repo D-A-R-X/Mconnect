@@ -2262,6 +2262,11 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         val notes = bundle.getString(CollectionPaymentEntryBottomSheet.KEY_NOTES).orEmpty()
         val proofStorageId = bundle.getString(CollectionPaymentEntryBottomSheet.KEY_PROOF_STORAGE_ID).orEmpty()
         val proofFileName = bundle.getString(CollectionPaymentEntryBottomSheet.KEY_PROOF_FILE_NAME).orEmpty()
+        // Present only for a PARTIAL collection — spawns a follow-up collection CP.
+        val followUpDate = bundle.getString(CollectionPaymentEntryBottomSheet.KEY_FOLLOWUP_DATE)
+            ?.takeIf { it.isNotBlank() }
+        val followUpTime = bundle.getString(CollectionPaymentEntryBottomSheet.KEY_FOLLOWUP_TIME)
+            ?.takeIf { it.isNotBlank() }
 
         if (caseId.isBlank() || amount <= 0 || mode.isBlank()) {
             swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
@@ -2328,6 +2333,10 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                         id = cpId,
                         outcome = "collection_done",
                         notes = summary,
+                        // Present only for a partial collection — the backend
+                        // spawns a follow-up collection CP for the pending amount.
+                        followUpDate = followUpDate,
+                        followUpTime = followUpTime,
                     ),
                 )
                 if (!outcomeResp.success) {
@@ -2365,6 +2374,10 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
      *  so the web shows a "Not Collected" badge. */
     private fun completeNotCollectedVisit(cpId: String, bundle: Bundle) {
         val notes = bundle.getString(CollectionPaymentEntryBottomSheet.KEY_NOTES).orEmpty()
+        val followUpDate = bundle.getString(CollectionPaymentEntryBottomSheet.KEY_FOLLOWUP_DATE)
+            ?.takeIf { it.isNotBlank() }
+        val followUpTime = bundle.getString(CollectionPaymentEntryBottomSheet.KEY_FOLLOWUP_TIME)
+            ?.takeIf { it.isNotBlank() }
         val summary =
             if (notes.isNotBlank()) "Not collected — $notes" else "Not collected"
 
@@ -2394,6 +2407,9 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                         id = cpId,
                         outcome = "not_collected",
                         notes = summary,
+                        // The backend spawns the next collection CP for this slot.
+                        followUpDate = followUpDate,
+                        followUpTime = followUpTime,
                     ),
                 )
                 if (!outcomeResp.success) {

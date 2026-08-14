@@ -49,11 +49,11 @@ class SiteVisitsFragment : Fragment() {
     private lateinit var session: SessionManager
     private var rootView: View? = null
 
-    // Mirrors the MMS web /marketing/site-visits pipeline tabs. All + Expired
-    // are app-only extras kept alongside the web's 8 (Fixed → Postponed).
+    // Mirrors the MMS web /marketing/site-visits pipeline tabs (Fixed →
+    // Postponed), plus an app-only "All".
     private enum class Filter {
         ALL, FIXED, SCHEDULED, ENROUTE, ONSITE, RETURNING_HOME,
-        COMPLETED, CANCELLED, POSTPONED, EXPIRED,
+        COMPLETED, CANCELLED, POSTPONED,
     }
 
     private var allVisits: List<TodayVisit> = emptyList()
@@ -228,8 +228,6 @@ class SiteVisitsFragment : Fragment() {
     )
 
     private fun setupFilterPills(root: View) {
-        // Expired feature removed — hide its filter tab.
-        root.findViewById<View>(R.id.pillExpired)?.visibility = View.GONE
         pillsAndFilters(root).forEach { (pill, filter) ->
             pill?.setOnClickListener {
                 if (currentFilter != filter) {
@@ -331,33 +329,24 @@ class SiteVisitsFragment : Fragment() {
     // mfpl deploy it's null everywhere, so these rows sit under Scheduled.
     private fun isFixed(visit: TodayVisit): Boolean {
         val s = effStatus(visit)
-        return isScheduledState(s) && !isExpiredVisit(visit) &&
+        return isScheduledState(s) &&
             visit.confirmationStatus?.lowercase(Locale.US) == "pending"
     }
-
-    // Expired = a still-scheduled visit whose slot has already passed. A
-    // trip that has actually progressed (started/picked up/completed) is
-    // never "expired", even if its scheduled time is in the past.
-    // Expired feature removed: a past-slot scheduled visit is no longer flagged
-    // "Expired" (it just shows under Scheduled). Kept as a no-op so the filter /
-    // pill callers stay intact and this is trivial to re-enable.
-    private fun isExpiredVisit(@Suppress("UNUSED_PARAMETER") visit: TodayVisit): Boolean = false
 
     private fun matchesFilter(visit: TodayVisit, filter: Filter): Boolean {
         val s = effStatus(visit)
         return when (filter) {
             Filter.ALL -> true
             Filter.FIXED -> isFixed(visit)
-            // Scheduled = genuinely upcoming — not expired, not a fixed-pending one.
+            // Scheduled = genuinely upcoming, minus the fixed-pending ones.
             Filter.SCHEDULED ->
-                isScheduledState(s) && !isExpiredVisit(visit) && !isFixed(visit)
+                isScheduledState(s) && !isFixed(visit)
             Filter.ENROUTE -> isEnroute(s)
             Filter.ONSITE -> isOnsite(s)
             Filter.RETURNING_HOME -> isReturningHome(s)
             Filter.COMPLETED -> isCompleted(s)
             Filter.CANCELLED -> isCancelled(s)
             Filter.POSTPONED -> isPostponed(s)
-            Filter.EXPIRED -> isExpiredVisit(visit)
         }
     }
 
@@ -465,7 +454,6 @@ class SiteVisitsFragment : Fragment() {
                 Filter.COMPLETED -> "No Completed Visits"
                 Filter.CANCELLED -> "No Cancelled Visits"
                 Filter.POSTPONED -> "No Postponed Visits"
-                Filter.EXPIRED -> "No Expired Visits"
                 Filter.ALL -> if (searchQuery.isBlank()) "No Site Visits Yet" else "No Matches Found"
             }
             emptySubtitle.text = if (searchQuery.isNotBlank()) {
@@ -631,10 +619,6 @@ class SiteVisitsFragment : Fragment() {
                 val label = if (s == "picked_up") "Picked up" else "Client started"
                 paintPill(label, R.drawable.bg_sv_status_orange, "#B54708", "#B54708")
             }
-            // A still-scheduled visit whose slot has already passed is expired,
-            // not "Scheduled" — that stale "Scheduled/Start" was the bug.
-            isExpiredVisit(visit) ->
-                paintPill("Expired", R.drawable.bg_sv_status_red, "#B42318", "#B42318")
             else ->
                 paintPill("Scheduled", R.drawable.bg_sv_status_orange, "#B54708", "#F79009")
         }
