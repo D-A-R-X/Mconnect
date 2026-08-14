@@ -9705,3 +9705,18 @@ not committed, pushed, or deployed.
   (3) web timeline query returns [] (→ zero km) when no firstPunchIn for the IST date;
   (4) FRESH_MS=8min vs OEM Doze stretching heartbeats; monitoring cron uses 15min — mismatch;
   (5) pushBatch drops points with accuracy>50m (indoor/poor GPS → no km). Map source: Explore agent.
+
+- 2026-08-14 (main-chat) — "after each app UPDATE, offline for a long time". Diagnosed the update-recovery
+  path (targetSdk=36). An APK update kills the process + FGS; Android sends MY_PACKAGE_REPLACED to the app,
+  and BootReceiver already restarts GeoTrackService synchronously inside that broadcast's FGS-start exemption
+  (the ONE reliable auto-restart on modern Android — the 15-min TrackingCheckWorker CANNOT start a location
+  FGS from the background; startForegroundSafely() catches the disallowed-start exception and stops). THE
+  KILLER: post-restart, the cold-start bootstrap sync (network often not ready) returned a null bootstrap and
+  apply(null) STOPPED the just-restarted service — so it only came back on the next app-open = "offline for a
+  long time". That teardown is exactly what the earlier apply(null) no-op fix (commit d843a911) removes, so
+  the auto-restart now STICKS. Added belt-and-suspenders: BootReceiver now also enqueues TrackingCheckWorker
+  (KEEP-idempotent) so a device updated-but-not-reopened still has the recurring net (it can't start the FGS
+  from bg but keeps sync/task-notifs warm and resumes tracking on next foreground). compileDebugKotlin OK,
+  pushed merge. ROBUST FOLLOW-UP for the residual edge (bg-location not granted, or MY_PACKAGE_REPLACED start
+  disallowed): a high-priority FCM data push from the monitoring cron (already detects offline at 15min) →
+  app FCM handler restarts the FGS under the push's temporary allowlist. Needs backend push + deploy; flagged.

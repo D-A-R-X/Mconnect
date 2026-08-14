@@ -7,6 +7,7 @@ import android.util.Log
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.geotrack.GeoTrackEventQueue
 import com.manjugroups.m_connect.geotrack.GeoTrackBootstrapSync
+import com.manjugroups.m_connect.geotrack.TrackingCheckWorker
 import com.manjugroups.m_connect.network.GeoTrackApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -28,6 +29,17 @@ class BootReceiver : BroadcastReceiver() {
         }
         val session = SessionManager(context)
         if (!session.isLoggedIn) return
+
+        // Guarantee the 15-min periodic health-check is scheduled. It's otherwise
+        // only enqueued from MainActivity.onCreate, so a device that installed the
+        // update in the background and hasn't been reopened would have no recurring
+        // recovery net at all. WorkManager persists it across the update; the KEEP
+        // policy makes this idempotent. (On targetSdk 36 the worker can't itself
+        // start a location FGS from the background — that's why the synchronous
+        // restart below, inside this broadcast's FGS-start exemption, is the real
+        // recovery path — but the worker still keeps sync + task notifications warm
+        // and picks up tracking the moment the app is next foregrounded.)
+        runCatching { TrackingCheckWorker.enqueue(context) }
 
         // Restart the foreground service IMMEDIATELY, synchronously, if the last
         // persisted session said we were inside a clock-in tracking window. Two
