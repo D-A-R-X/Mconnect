@@ -4959,6 +4959,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             cpVisitId = cpVisitId.orEmpty(),
             outcomeEnum = OUTCOME_POSTPONED,
             notes = "Next visit: $nextDate — $reason",
+            // For a Booking CP this spawns the next booking_cp on that date.
+            followUpDate = displayDateToApiDate(nextDate),
         )
     }
 
@@ -5112,6 +5114,9 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         cpVisitId: String,
         outcomeEnum: String,
         notes: String,
+        // Postpone's next-visit date (yyyy-MM-dd). For a Booking CP the backend
+        // spawns another booking_cp for this date; ignored for other cpTypes.
+        followUpDate: String? = null,
     ) {
         btnSubmit?.isClickable = false
         btnSubmit?.text = "Saving…"
@@ -5194,6 +5199,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                         postponeReasons = if (outcomeEnum == OUTCOME_POSTPONED)
                             postponedReasonsFromForm() else null,
                         notes = notes,
+                        followUpDate = followUpDate,
                     ),
                 )
                 if (!outcomeResp.success) {
@@ -5699,6 +5705,11 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             clientImageFileName = if (clientImageStorageId != null) clientImageFileName else null,
             bookingDate = bookingDateForApi() ?: SimpleDateFormat("yyyy-MM-dd", Locale.US)
                 .format(Calendar.getInstance().time),
+            // Booking follow-up CP is scheduled for the booking date by default;
+            // the backend spawns a booking_cp for the same staff/client to
+            // service it. (A dedicated date/time picker on the booking form is a
+            // fast-follow.)
+            bookingCpDate = bookingDateForApi(),
             leadId = prefilledLeadId,
             title = textOrNull(tvFormTitle?.text),
             fatherSpouseName = textOrNull(etFormFather?.text),

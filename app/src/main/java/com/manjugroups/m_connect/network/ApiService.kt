@@ -3393,6 +3393,11 @@ data class CreateBookingRequest(
     val sourceType: String? = null,
     val sourceClientPlaceVisitId: String? = null,
     val sourceSiteVisitId: String? = null,
+    // Booking follow-up: the backend spawns a booking_cp for this date/time to
+    // service the booking (a visit to complete docs / collect). The POST
+    // /api/bookings handler forwards these to spawnBookingCpFromSource.
+    val bookingCpDate: String? = null,
+    val bookingCpTime: String? = null,
     // Aadhaar back + CEF form front/back (web parity). The booking mutation +
     // schema accept these; the POST /api/bookings HTTP mapper must forward them.
     val aadhaarBackDocumentStorageId: String? = null,
