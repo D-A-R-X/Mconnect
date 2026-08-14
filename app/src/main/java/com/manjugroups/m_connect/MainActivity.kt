@@ -1515,7 +1515,18 @@ class MainActivity : AppCompatActivity() {
     private fun syncChromeToBackStack() {
         val onRoot = supportFragmentManager.backStackEntryCount == 0
         setTabBarVisible(onRoot)
-        if (onRoot) applyTopBarForTab(currentTab)
+        if (onRoot) {
+            applyTopBarForTab(currentTab)
+            // Re-assert on the next frame: a detail being torn down during the
+            // same pop can write its status-bar appearance AFTER this call,
+            // leaving a stale white strip over a blue tab (the "top white gap").
+            // The reposted apply runs after that teardown and wins.
+            mainRoot.post {
+                if (supportFragmentManager.backStackEntryCount == 0) {
+                    applyTopBarForTab(currentTab)
+                }
+            }
+        }
     }
 
     private fun applyTopBarForTab(index: Int) {

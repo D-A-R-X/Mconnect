@@ -986,7 +986,12 @@ data class SetOutcomeRequest(
     // Gift-distribution handover photo (captured post-OTP). The backend attaches
     // it to the field visit before the completion-proof check so the outcome
     // doesn't fail on a photo that completeVisit links a moment later.
-    val arrivalPhotoStorageId: String? = null
+    val arrivalPhotoStorageId: String? = null,
+    // Collection-CP follow-up slot: when the staff picks a date/time to return
+    // and collect (nothing collected, or a partial with a balance still due),
+    // the backend spawns the next collection_cp for this date/time.
+    val followUpDate: String? = null,
+    val followUpTime: String? = null,
 )
 
 // ── Out-of-geofence CP completion GM approval ──

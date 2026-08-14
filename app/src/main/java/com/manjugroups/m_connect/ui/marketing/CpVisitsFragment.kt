@@ -122,6 +122,7 @@ class CpVisitsFragment : Fragment() {
             R.id.cpvRefresh
         ).setupPullToRefresh { loadVisits() }
 
+        wireApprovalsBanner(view)
         loadVisits()
         attendanceVm.loadTodayAttendance(session.bearerToken)
 
@@ -135,6 +136,51 @@ class CpVisitsFragment : Fragment() {
         (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(false)
         // Refresh clock-in state in case the user clocked in/out from another tab.
         attendanceVm.loadTodayAttendance(session.bearerToken)
+        // A GM may have cleared approvals elsewhere (push → queue); re-check.
+        refreshApprovalsBanner()
+    }
+
+    // ---------- GM approvals entry ----------
+
+    /**
+     * The out-of-geofence CP-completion approval queue is otherwise reachable only
+     * by tapping the approval push. GMs who miss/dismiss that notification had no
+     * way in — hence "can't approve by clicking". This banner is a reliable,
+     * always-visible entry: the endpoint is GM-scoped, so it stays hidden for
+     * anyone who isn't the resolved approver of a pending completion.
+     */
+    private fun wireApprovalsBanner(root: View) {
+        root.findViewById<View>(R.id.cpvApprovalsBanner).setOnClickListener {
+            CpApprovalQueueBottomSheet.show(childFragmentManager)
+        }
+        // The queue emits this after each approve/reject (and on dismiss) so the
+        // banner count and the visit list stay in sync without a manual refresh.
+        childFragmentManager.setFragmentResultListener(
+            CpApprovalQueueBottomSheet.RESULT_KEY, viewLifecycleOwner,
+        ) { _, _ ->
+            if (!isAdded) return@setFragmentResultListener
+            refreshApprovalsBanner()
+            loadVisits()
+        }
+        refreshApprovalsBanner()
+    }
+
+    private fun refreshApprovalsBanner() {
+        val banner = rootView?.findViewById<View>(R.id.cpvApprovalsBanner) ?: return
+        val title = rootView?.findViewById<TextView>(R.id.tvApprovalsBannerTitle)
+        viewLifecycleOwner.lifecycleScope.launch {
+            val count = runCatching {
+                geoApi.getPendingCpApprovals(session.bearerToken).items.size
+            }.getOrDefault(0)
+            if (!isAdded) return@launch
+            if (count > 0) {
+                title?.text =
+                    if (count == 1) "1 approval waiting" else "$count approvals waiting"
+                banner.visibility = View.VISIBLE
+            } else {
+                banner.visibility = View.GONE
+            }
+        }
     }
 
     override fun onPause() {
@@ -360,18 +406,25 @@ class CpVisitsFragment : Fragment() {
                 // Direct CP) on each card. The mapper below converts to
                 // the existing TodayVisit shape so downstream filter /
                 // sort / render code is unchanged.
-                val resp = geoApi.getMyMarketingCpVisits(
-                    session.bearerToken,
-                    fromDate = from,
-                    toDate = to,
-                    // Browsable list: pull a wide window so the on-screen
-                    // search can reach any client, not just the newest 20.
-                    limit = 200,
-                    // When searching, ask the backend to full-text search so a
-                    // client OLDER than the recency window is still found (the
-                    // super-admin "on web but not mobile" case).
-                    search = searchQuery.ifBlank { null },
-                )
+                // Retry ONE transient network failure (a brief signal drop or a
+                // timeout on the heavy 200-row query) before surfacing an error —
+                // this is what showed the intermittent "CP network error" on an
+                // otherwise-reachable backend. Only IOException/timeout is
+                // retried; a parse/business error fails fast.
+                val resp = retryIo(times = 1, initialDelayMs = 500) {
+                    geoApi.getMyMarketingCpVisits(
+                        session.bearerToken,
+                        fromDate = from,
+                        toDate = to,
+                        // Browsable list: pull a wide window so the on-screen
+                        // search can reach any client, not just the newest 20.
+                        limit = 200,
+                        // When searching, ask the backend to full-text search so a
+                        // client OLDER than the recency window is still found (the
+                        // super-admin "on web but not mobile" case).
+                        search = searchQuery.ifBlank { null },
+                    )
+                }
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 hasLoadedOnce = true
                 if (!resp.success) {
@@ -404,12 +457,24 @@ class CpVisitsFragment : Fragment() {
                 renderList()
             } catch (e: Exception) {
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
-                showLoadError("Network error: ${e.message ?: "unknown"}")
-                Toast.makeText(
-                    requireContext(),
-                    "CP network error: ${e.message ?: "unknown"}",
-                    Toast.LENGTH_LONG,
-                ).show()
+                if (allVisits.isNotEmpty()) {
+                    // A transient failure on a refresh must NOT blank a list the
+                    // user already has — keep the last-loaded rows and mention it
+                    // quietly instead of throwing them to the error screen.
+                    renderList()
+                    Toast.makeText(
+                        requireContext(),
+                        "Couldn't refresh — showing your last loaded CP visits.",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                } else {
+                    showLoadError("Network error: ${e.message ?: "unknown"}")
+                    Toast.makeText(
+                        requireContext(),
+                        "CP network error: ${e.message ?: "unknown"}",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
             } finally {
                 root.findViewById<androidx.swiperefreshlayout.widget.SwipeRefreshLayout>(
                     R.id.cpvRefresh
@@ -701,6 +766,31 @@ class CpVisitsFragment : Fragment() {
         params.bottomMargin = (10 * resources.displayMetrics.density).toInt()
         itemView.layoutParams = params
         return itemView
+    }
+
+    /**
+     * Runs [block], retrying up to [times] more times on a transient
+     * IOException (connection drop / socket timeout) with exponential backoff.
+     * Non-IO errors (Gson parse, business failures) are NOT retried — they would
+     * just fail again — so they surface immediately.
+     */
+    private suspend fun <T> retryIo(
+        times: Int,
+        initialDelayMs: Long,
+        block: suspend () -> T,
+    ): T {
+        var attempt = 0
+        var delayMs = initialDelayMs
+        while (true) {
+            try {
+                return block()
+            } catch (e: java.io.IOException) {
+                if (attempt >= times) throw e
+                attempt++
+                kotlinx.coroutines.delay(delayMs)
+                delayMs *= 2
+            }
+        }
     }
 
     /** "1st", "2nd", "3rd", "4th"… for the "rescheduled Nth time" notice. */
