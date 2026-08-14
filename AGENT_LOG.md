@@ -9734,3 +9734,17 @@ not committed, pushed, or deployed.
   why other CP types generally still complete. compileDebugKotlin OK. NEXT: the now-surfaced message pinpoints
   the exact backend cause; if it's a real bug (not a validation) fix at source. The web HTTP route also returns
   500 for validation throws (should be 400) — cosmetic, needs deploy.
+
+- 2026-08-14 (main-chat) — Collection 500 ROOT-CAUSE fix (backend, max 2ed67cc5). Repro from user screenshot:
+  Collection CP, 19m (IN-geofence, so NOT the GM-approval path), consistent 500 on Submit Payment Entry.
+  Ruled out the proof gate (photo+OTP are captured before the payment sheet — TripNav:2130). The submit's
+  first call is submitFromMobile, which inserts the collection THEN calls startCollectionApprovalWorkflow —
+  which THREW when a collection-approval workflow is configured but its first-step approver role has no
+  resolvable staff (incomplete IAM/workflow setup, e.g. a test project). Convex mutations are transactional,
+  so the throw rolled back the insert: the collection was LOST and staff hard-blocked with a 500. Fix: fail
+  soft — console.warn + leave the collection in pending_accounts (default) with no workflow, so Accounts can
+  still approve it and the visit completes; admin fixes approver config later. tsc clean on the touched file.
+  Needs Convex deploy to take effect. Paired with the app-side surfacing fix (merge 73d5f528) so any OTHER
+  remaining backend validation (no-outstanding-balance / amount-exceeds / scope) now shows its real message
+  instead of "HTTP 500". Other CP types complete via the same setCpVisitOutcome (also surfaced) and lack the
+  submitFromMobile call, so they're not hit by this specific workflow-throw.
