@@ -9779,3 +9779,12 @@ not committed, pushed, or deployed.
   addressed. Switched both to loose [String:Any] + `error as? String` (matching MarketingConvexAPIService,
   which was already correct). iOS not build-verified (no Xcode). GeoTrackPersistence's [String:String] decode
   left alone (parses tamper metadata, not an HTTP body).
+
+- 2026-08-14 (main-chat) — SV list showed the SIGNED-IN user as BDO on every row (real BDO differs). Root
+  cause: the mobile SV list never supplied a BDO, so all three clients hardcoded the session user.
+  Fix on ALL sides: WEB (max 08350559) siteVisits mobile mapper resolves the visit's OWN sv.bdoStaffId →
+  returns bdoName next to lmoName. ANDROID (merge): TodayVisit += bdoName; SiteVisitsFragment renders
+  visit.bdoName (was session.userName) → em-dash when absent. iOS (darx): ConvexSiteVisit += bdoName
+  (prop+CodingKey+decode); SiteVisitsListView passes visit.bdoName (was authStore session user). Older rows
+  (pre-mapper-deploy) show "—" rather than the wrong person. Needs Convex deploy for the name to populate.
+  web tsc + android compile clean; iOS not build-verified.

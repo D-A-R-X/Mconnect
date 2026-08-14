@@ -1915,6 +1915,11 @@ data class TodayVisit(
     // visit. Shown on the SV/CP cards. SV rows get it from the backend list
     // query; CP rows are mapped from the CpVisitDetail's telecaller.
     val lmoName: String? = null,
+    // BDO (Business Development Officer) — the field officer ASSIGNED to this
+    // visit (the visit's own bdoStaffId), supplied by the backend SV list. The
+    // card must render THIS, not the signed-in viewer — the old code hardcoded
+    // the session user, so every row wrongly showed the logged-in staffer.
+    val bdoName: String? = null,
     // Convex auto-populates `_creationTime` on every doc; we surface it
     // so Today's Trip can sort newest-first regardless of source (legacy
     // fieldVisits route vs CP-merge path). For CP-merge rows where the
