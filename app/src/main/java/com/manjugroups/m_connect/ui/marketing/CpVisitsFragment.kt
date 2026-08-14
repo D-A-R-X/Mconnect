@@ -122,6 +122,7 @@ class CpVisitsFragment : Fragment() {
             R.id.cpvRefresh
         ).setupPullToRefresh { loadVisits() }
 
+        wireApprovalsBanner(view)
         loadVisits()
         attendanceVm.loadTodayAttendance(session.bearerToken)
 
@@ -135,6 +136,51 @@ class CpVisitsFragment : Fragment() {
         (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(false)
         // Refresh clock-in state in case the user clocked in/out from another tab.
         attendanceVm.loadTodayAttendance(session.bearerToken)
+        // A GM may have cleared approvals elsewhere (push → queue); re-check.
+        refreshApprovalsBanner()
+    }
+
+    // ---------- GM approvals entry ----------
+
+    /**
+     * The out-of-geofence CP-completion approval queue is otherwise reachable only
+     * by tapping the approval push. GMs who miss/dismiss that notification had no
+     * way in — hence "can't approve by clicking". This banner is a reliable,
+     * always-visible entry: the endpoint is GM-scoped, so it stays hidden for
+     * anyone who isn't the resolved approver of a pending completion.
+     */
+    private fun wireApprovalsBanner(root: View) {
+        root.findViewById<View>(R.id.cpvApprovalsBanner).setOnClickListener {
+            CpApprovalQueueBottomSheet.show(childFragmentManager)
+        }
+        // The queue emits this after each approve/reject (and on dismiss) so the
+        // banner count and the visit list stay in sync without a manual refresh.
+        childFragmentManager.setFragmentResultListener(
+            CpApprovalQueueBottomSheet.RESULT_KEY, viewLifecycleOwner,
+        ) { _, _ ->
+            if (!isAdded) return@setFragmentResultListener
+            refreshApprovalsBanner()
+            loadVisits()
+        }
+        refreshApprovalsBanner()
+    }
+
+    private fun refreshApprovalsBanner() {
+        val banner = rootView?.findViewById<View>(R.id.cpvApprovalsBanner) ?: return
+        val title = rootView?.findViewById<TextView>(R.id.tvApprovalsBannerTitle)
+        viewLifecycleOwner.lifecycleScope.launch {
+            val count = runCatching {
+                geoApi.getPendingCpApprovals(session.bearerToken).items.size
+            }.getOrDefault(0)
+            if (!isAdded) return@launch
+            if (count > 0) {
+                title?.text =
+                    if (count == 1) "1 approval waiting" else "$count approvals waiting"
+                banner.visibility = View.VISIBLE
+            } else {
+                banner.visibility = View.GONE
+            }
+        }
     }
 
     override fun onPause() {

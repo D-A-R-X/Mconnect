@@ -48,6 +48,9 @@ class CpApprovalQueueBottomSheet : BottomSheetDialogFragment() {
     private lateinit var progress: ProgressBar
     private lateinit var emptyView: TextView
 
+    // Guards against a double-tap firing two approve/reject calls for one item.
+    private var submitting = false
+
     private fun dp(v: Int): Int =
         (v * resources.displayMetrics.density).roundToInt()
 
@@ -131,17 +134,37 @@ class CpApprovalQueueBottomSheet : BottomSheetDialogFragment() {
         emptyView.visibility = View.GONE
         container.removeAllViews()
         viewLifecycleOwner.lifecycleScope.launch {
-            val items = runCatching {
-                api.getPendingCpApprovals(session.bearerToken).items
-            }.getOrElse { emptyList() }
+            val result = runCatching { api.getPendingCpApprovals(session.bearerToken) }
             if (!isAdded) return@launch
             progress.visibility = View.GONE
-            if (items.isEmpty()) {
-                emptyView.visibility = View.VISIBLE
-                return@launch
+            result.onSuccess { resp ->
+                // A failed response used to be swallowed into an empty list, so a
+                // network/route/auth error looked identical to "nothing pending" —
+                // the GM saw "Nothing to approve" and reasonably concluded approval
+                // was broken. Now a real failure shows a retry instead.
+                if (!resp.success && !resp.error.isNullOrBlank()) {
+                    showMessage("Couldn't load approvals: ${resp.error}", retry = true)
+                    return@onSuccess
+                }
+                if (resp.items.isEmpty()) {
+                    showMessage("Nothing to approve right now.", retry = false)
+                    return@onSuccess
+                }
+                resp.items.forEach { container.addView(buildCard(it)) }
+            }.onFailure {
+                showMessage(
+                    "Couldn't load approvals. Check your connection and tap to retry.",
+                    retry = true,
+                )
             }
-            items.forEach { container.addView(buildCard(it)) }
         }
+    }
+
+    private fun showMessage(msg: String, retry: Boolean) {
+        emptyView.text = msg
+        emptyView.visibility = View.VISIBLE
+        emptyView.isClickable = retry
+        emptyView.setOnClickListener(if (retry) View.OnClickListener { load() } else null)
     }
 
     private fun buildCard(item: CpApprovalItem): View {
@@ -263,6 +286,8 @@ class CpApprovalQueueBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun approve(item: CpApprovalItem) {
+        if (submitting) return
+        submitting = true
         viewLifecycleOwner.lifecycleScope.launch {
             val resp = runCatching {
                 api.approveCpCompletion(
@@ -270,9 +295,11 @@ class CpApprovalQueueBottomSheet : BottomSheetDialogFragment() {
                     CpApprovalActionRequest(id = item.id),
                 )
             }.getOrNull()
-            if (!isAdded) return@launch
+            if (!isAdded) { submitting = false; return@launch }
+            submitting = false
             if (resp?.success == true) {
                 Toast.makeText(requireContext(), "Approved", Toast.LENGTH_SHORT).show()
+                notifyChanged()
                 load()
             } else {
                 Toast.makeText(
@@ -327,6 +354,8 @@ class CpApprovalQueueBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun reject(item: CpApprovalItem, remark: String) {
+        if (submitting) return
+        submitting = true
         viewLifecycleOwner.lifecycleScope.launch {
             val resp = runCatching {
                 api.rejectCpCompletion(
@@ -334,13 +363,15 @@ class CpApprovalQueueBottomSheet : BottomSheetDialogFragment() {
                     CpApprovalRejectRequest(id = item.id, remark = remark),
                 )
             }.getOrNull()
-            if (!isAdded) return@launch
+            if (!isAdded) { submitting = false; return@launch }
+            submitting = false
             if (resp?.success == true) {
                 Toast.makeText(
                     requireContext(),
                     "Rejected & reassigned",
                     Toast.LENGTH_SHORT,
                 ).show()
+                notifyChanged()
                 load()
             } else {
                 Toast.makeText(
@@ -352,6 +383,19 @@ class CpApprovalQueueBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
+    // Tells the host (CpVisitsFragment) an approval changed so it can refresh its
+    // banner count + list. Fired after each action and on dismiss.
+    private fun notifyChanged() {
+        runCatching {
+            parentFragmentManager.setFragmentResult(RESULT_KEY, android.os.Bundle.EMPTY)
+        }
+    }
+
+    override fun onDismiss(dialog: android.content.DialogInterface) {
+        notifyChanged()
+        super.onDismiss(dialog)
+    }
+
     private fun roundedBg(fill: String, stroke: String) =
         android.graphics.drawable.GradientDrawable().apply {
             cornerRadius = dp(12).toFloat()
@@ -360,6 +404,10 @@ class CpApprovalQueueBottomSheet : BottomSheetDialogFragment() {
         }
 
     companion object {
+        // Emitted to the hosting FragmentManager whenever an approval changes or
+        // the sheet is dismissed, so the CP Visits banner + list refresh.
+        const val RESULT_KEY = "cp_approval_changed"
+
         fun show(fm: FragmentManager) {
             if (fm.findFragmentByTag("cp_approval_queue") != null) return
             CpApprovalQueueBottomSheet().show(fm, "cp_approval_queue")

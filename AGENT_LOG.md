@@ -9653,3 +9653,16 @@ not committed, pushed, or deployed.
   for any CP, persistSvFollowUp already sends followupDueDate; only refreshed a stale comment. iOS (darx):
   CP postpone + SV follow-up already send the dates; added a required follow-up-date guard to the SV outcome
   sheet so a dateless follow-up can't silently drop the sv_cum_cp. Needs Convex deploy to spawn live.
+
+- 2026-08-14 (main-chat) — FIX: GMs "can't approve the SV/CP by clicking on mobile". Root causes on the
+  Android CP approval flow: (1) the out-of-geofence approval QUEUE was reachable ONLY by tapping the approval
+  push — a GM who missed/dismissed it had no way in; (2) CpApprovalQueueBottomSheet.load() swallowed EVERY
+  error into an empty list, so a route/auth/network failure rendered as "Nothing to approve" (looked broken);
+  (3) a pending_gm_approval card taps to a read-only completed detail (correct for the field staff, dead-end
+  for a GM). Fixes (Mconnect merge): added an always-visible "N approvals waiting" BANNER on the CP Visits
+  screen (fragment_cp_visits.xml + CpVisitsFragment.wireApprovalsBanner/refreshApprovalsBanner) that opens the
+  queue; the endpoint is GM-scoped so it self-hides for non-approvers. Queue now SURFACES load failures with a
+  tap-to-retry instead of silent-empty; emits a FragmentResult (RESULT_KEY) on each approve/reject + on dismiss
+  so the banner count + visit list refresh; guards double-tap submits. New drawables bg_cpv_approvals_banner /
+  bg_cpv_approvals_icon. compileDebugKotlin BUILD SUCCESSFUL. NOTE: if the pending-approvals endpoint isn't
+  deployed on prod the banner stays hidden (self-gating) — needs the Convex routes live to light up.
