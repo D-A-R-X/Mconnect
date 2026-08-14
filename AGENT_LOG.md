@@ -9788,3 +9788,16 @@ not committed, pushed, or deployed.
   (prop+CodingKey+decode); SiteVisitsListView passes visit.bdoName (was authStore session user). Older rows
   (pre-mapper-deploy) show "—" rather than the wrong person. Needs Convex deploy for the name to populate.
   web tsc + android compile clean; iOS not build-verified.
+
+- 2026-08-14 (main-chat) — DIAGNOSIS: "many SVs without BDO / attendees / Site-incharge". Mapped all 7
+  SV-creation inserts (Explore agent). Verdict = MIX of a code bug + optional-by-design, NOT mainly staff
+  negligence (the main create/dialer/convert forms REQUIRE bdo+incharge via assertRequiredSvStaffAssignments).
+  Gaps: (#3 sv_cum_cp linked SV, clientPlaceVisits.ts:3157) FORGOT to write bdoStaffId → null BDO on every
+  such SV — FIXED (max, added bdoStaffId = telecaller/LMO ?? field staff). (#5 telecaller hot-lead auto-spawn,
+  telecallerFollowups.ts:846) never passes an incharge seed → null incharge. (#2 postpone) inherits the
+  source SV's fields (propagates gaps). (#7 legacy import) BDO/incharge from legacy mappings (may be null),
+  never imports attendees. ATTENDEES: v.optional on EVERY path and never checked by assertRequired — so empty
+  attendee names are optional-by-design, not a bug. resolveSvStaffAssignments auto-fills bdoStaffId from the
+  telecaller but does NOT synthesize an incharge. REMAINING (need product/form decision, flagged to user):
+  default/require incharge on telecaller-auto-spawn + CPs w/o assigned staff; make attendees mandatory if
+  desired. Needs Convex deploy.
