@@ -9513,3 +9513,54 @@ not committed, pushed, or deployed.
   hardcoded secrets, no test-backend switch (only a prod api-mfpl comment). NOT build-verified (no Xcode on
   Windows). Set the repo's missing git identity to manjugroupsdev <developer@manjugroups.in>. Documented
   FoundationChat as repo #4 in this log's header. Workbase is now FOUR repos.
+
+- 2026-08-13 (main-chat) — Fixed intermittent "CP network error" on the Android CP Visits screen.
+  CpVisitsFragment.load() surfaced ANY exception from getMyMarketingCpVisits (heavy 200-row query vs 30s
+  read timeout, or a brief signal drop) as a full-screen "Network error" that BLANKED the list. Two fixes:
+  (1) retryIo(times=1) around the fetch — retries a single transient IOException/socket-timeout with backoff
+  (parse/business errors fail fast, not retried); (2) on final failure, if allVisits already has data, keep
+  the last-loaded list (renderList + soft toast) instead of showLoadError wiping the screen — a refresh blip
+  no longer throws the user to the error state. build.gradle.kts test-backend switch left unstaged. :app
+  compile GREEN.
+
+### Session 107 (cont.) - FC cache-first + offline (LocalCache) - user-requested
+- User: iOS data loading slow + attendance appears live only after long delay; wants Android
+  LocalCache cache-first + offline buffer.
+- Built FoundationChat/Utilities/LocalCache.swift = Swift mirror of Android ui/common/LocalCache
+  (per-key JSON under Application Support/response_cache, {v,t} timestamped, put/get/entry/remove/
+  clearAll, failure-swallowing, backup-excluded).
+- Agent wiring cache-first (stale-while-refresh) + offline-keep: (1) TOP: Home attendance status
+  paints instantly from cache then refresh (do NOT regress punch/dual-gate/PendingPunch logic);
+  (2) dashboard (preserve prev* trend fix); (3) clearAll on logout; (4) best-effort lists (chat,
+  leads, CP/SV, tasks, leaves/perms, collections). Offline: keep cached data on fetch failure,
+  only show empty/error when no cache. Keys namespaced staffId+date/scope.
+- Uncompiled (Windows). Cached types must be Codable (agent adds Encodable where Decodable-only).
+
+### Session 107 (cont.) - FC "white layer blocking view" diagnosed (pre-existing bug)
+- User screenshot (Home Today's Overview) + "white layer blocking view very often". ROOT CAUSE:
+  HomeView.reload() sets isLoading=true on EVERY call (line 1527); reload() runs on .task + every
+  .onAppear (tab return, line 276) + onChange -> the full-screen white loading SKELETON (if
+  isLoading, lines 658/698/785 .redacted) flashes over the dashboard every time = the "white layer".
+  Same root cause as the "slow loading" complaint.
+- Pre-existing (my uncompiled changes not built yet). Cache agent (ae2016206748f76a3) already added
+  paintCachedHomeState() to reload() but still sets isLoading=true unconditionally -> skeleton still
+  covers painted cache.
+- FIX (pending, HomeView being edited by cache agent - will apply when it lands to avoid clobber):
+  gate the skeleton so it only shows on a TRUE COLD load (no cached/loaded data), i.e. don't set
+  isLoading=true (or don't render skeleton) when paintCachedHomeState() found cache or data already
+  present. Then Home always shows real data after first open, never the white flash.
+
+### Session 107 (cont.) - FC cache-first DONE + white-layer FIXED
+- Cache-first wired (LocalCache): Home attendance snapshot (paintCachedHomeState before network),
+  dashboard (paint cached + put on success), clearAll on logout+expireSession, + lists tasks/leads/
+  leaves/permissions (paint-if-empty, keep-on-error offline). Made these Codable: ConvexAttendance*
+  /Leave/Permission/TodayAttendance/Record/Fine, ConvexMobileDashboard, DailyTask, ConvexLead.
+  NOT wired (custom init(from:) -> Encodable-synth risk, needs Mac build): chat list, CP/SV visits,
+  collections. Agent flag: homeOverviewSection (personal attendance card) may be UNREFERENCED in
+  contentArea on this branch - verify on device (screenshot user sees managementDashboardSection).
+- WHITE-LAYER FIX (user bug): root = white loading skeleton flashing on every reload. Dashboard
+  skeleton already gated `isManagementDashboardLoading && managementDashboard==nil` + now cache-
+  painted -> instant, no flash. Trip skeleton (HomeView:658 `if isLoading`) was UNGATED -> I changed
+  to `if isLoading && visibleVisits.isEmpty` so refresh/return keeps trips visible instead of white
+  skeleton. Same-root as "slow loading" complaint. VERIFY on Mac; trip-list cache-first = optional
+  follow-up (would remove cold-recreate flash for driver/normal users too).
