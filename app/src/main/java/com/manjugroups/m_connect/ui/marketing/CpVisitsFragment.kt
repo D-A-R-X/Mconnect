@@ -360,18 +360,25 @@ class CpVisitsFragment : Fragment() {
                 // Direct CP) on each card. The mapper below converts to
                 // the existing TodayVisit shape so downstream filter /
                 // sort / render code is unchanged.
-                val resp = geoApi.getMyMarketingCpVisits(
-                    session.bearerToken,
-                    fromDate = from,
-                    toDate = to,
-                    // Browsable list: pull a wide window so the on-screen
-                    // search can reach any client, not just the newest 20.
-                    limit = 200,
-                    // When searching, ask the backend to full-text search so a
-                    // client OLDER than the recency window is still found (the
-                    // super-admin "on web but not mobile" case).
-                    search = searchQuery.ifBlank { null },
-                )
+                // Retry ONE transient network failure (a brief signal drop or a
+                // timeout on the heavy 200-row query) before surfacing an error —
+                // this is what showed the intermittent "CP network error" on an
+                // otherwise-reachable backend. Only IOException/timeout is
+                // retried; a parse/business error fails fast.
+                val resp = retryIo(times = 1, initialDelayMs = 500) {
+                    geoApi.getMyMarketingCpVisits(
+                        session.bearerToken,
+                        fromDate = from,
+                        toDate = to,
+                        // Browsable list: pull a wide window so the on-screen
+                        // search can reach any client, not just the newest 20.
+                        limit = 200,
+                        // When searching, ask the backend to full-text search so a
+                        // client OLDER than the recency window is still found (the
+                        // super-admin "on web but not mobile" case).
+                        search = searchQuery.ifBlank { null },
+                    )
+                }
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 hasLoadedOnce = true
                 if (!resp.success) {
@@ -404,12 +411,24 @@ class CpVisitsFragment : Fragment() {
                 renderList()
             } catch (e: Exception) {
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
-                showLoadError("Network error: ${e.message ?: "unknown"}")
-                Toast.makeText(
-                    requireContext(),
-                    "CP network error: ${e.message ?: "unknown"}",
-                    Toast.LENGTH_LONG,
-                ).show()
+                if (allVisits.isNotEmpty()) {
+                    // A transient failure on a refresh must NOT blank a list the
+                    // user already has — keep the last-loaded rows and mention it
+                    // quietly instead of throwing them to the error screen.
+                    renderList()
+                    Toast.makeText(
+                        requireContext(),
+                        "Couldn't refresh — showing your last loaded CP visits.",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                } else {
+                    showLoadError("Network error: ${e.message ?: "unknown"}")
+                    Toast.makeText(
+                        requireContext(),
+                        "CP network error: ${e.message ?: "unknown"}",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
             } finally {
                 root.findViewById<androidx.swiperefreshlayout.widget.SwipeRefreshLayout>(
                     R.id.cpvRefresh
@@ -701,6 +720,31 @@ class CpVisitsFragment : Fragment() {
         params.bottomMargin = (10 * resources.displayMetrics.density).toInt()
         itemView.layoutParams = params
         return itemView
+    }
+
+    /**
+     * Runs [block], retrying up to [times] more times on a transient
+     * IOException (connection drop / socket timeout) with exponential backoff.
+     * Non-IO errors (Gson parse, business failures) are NOT retried — they would
+     * just fail again — so they surface immediately.
+     */
+    private suspend fun <T> retryIo(
+        times: Int,
+        initialDelayMs: Long,
+        block: suspend () -> T,
+    ): T {
+        var attempt = 0
+        var delayMs = initialDelayMs
+        while (true) {
+            try {
+                return block()
+            } catch (e: java.io.IOException) {
+                if (attempt >= times) throw e
+                attempt++
+                kotlinx.coroutines.delay(delayMs)
+                delayMs *= 2
+            }
+        }
     }
 
     /** "1st", "2nd", "3rd", "4th"… for the "rescheduled Nth time" notice. */

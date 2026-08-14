@@ -9513,3 +9513,12 @@ not committed, pushed, or deployed.
   hardcoded secrets, no test-backend switch (only a prod api-mfpl comment). NOT build-verified (no Xcode on
   Windows). Set the repo's missing git identity to manjugroupsdev <developer@manjugroups.in>. Documented
   FoundationChat as repo #4 in this log's header. Workbase is now FOUR repos.
+
+- 2026-08-13 (main-chat) — Fixed intermittent "CP network error" on the Android CP Visits screen.
+  CpVisitsFragment.load() surfaced ANY exception from getMyMarketingCpVisits (heavy 200-row query vs 30s
+  read timeout, or a brief signal drop) as a full-screen "Network error" that BLANKED the list. Two fixes:
+  (1) retryIo(times=1) around the fetch — retries a single transient IOException/socket-timeout with backoff
+  (parse/business errors fail fast, not retried); (2) on final failure, if allVisits already has data, keep
+  the last-loaded list (renderList + soft toast) instead of showLoadError wiping the screen — a refresh blip
+  no longer throws the user to the error state. build.gradle.kts test-backend switch left unstaged. :app
+  compile GREEN.
