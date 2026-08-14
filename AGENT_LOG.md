@@ -9801,3 +9801,17 @@ not committed, pushed, or deployed.
   telecaller but does NOT synthesize an incharge. REMAINING (need product/form decision, flagged to user):
   default/require incharge on telecaller-auto-spawn + CPs w/o assigned staff; make attendees mandatory if
   desired. Needs Convex deploy.
+
+- 2026-08-14 (main-chat) — SV missing-fields ENFORCEMENT (a incharge + b attendees required, c backfill),
+  scoped to HUMAN paths so automated ones don't break (create validator + assertRequiredSvStaffAssignments
+  left untouched; AI/IRIS/postpone-clone/import/seed flow through them). WEB (max a64bcb13): cp-visit-detail
+  CP→SV convert now requires incharge + ≥1 named attendee; telecallerFollowups hot-lead auto-spawn defaults
+  inchargeStaffId to lead.assignedToStaffId (it never set one, so assertRequired always threw → spawn silently
+  aborted); NEW backfillSvStaffAssignments mutation (paginated, dry-run default, confirm:BACKFILL_SV_STAFF) —
+  fills null bdo (telecaller/assigned) + null incharge (convertedBy → resolved bdo). ANDROID (merge):
+  CompleteCpVisitBottomSheet CP→SV convert now requires ≥1 named visitor (incharge already required there).
+  iOS (darx): CompleteCpVisitSheet CP→SV convert requires incharge + ≥1 named visitor (locked-SV re-confirm
+  exempt). NOTE/LIMITATION flagged to user: the sv_cum_cp CP-CREATE forms + createFromMobile don't carry
+  attendees at all, and the web dialer SV form collects no attendees — so those paths still can't populate
+  attendees without a new attendee-collection UI (separate feature). web tsc + android compile clean; iOS not
+  build-verified. Needs Convex deploy; run the backfill (dry-run first) for historical rows.

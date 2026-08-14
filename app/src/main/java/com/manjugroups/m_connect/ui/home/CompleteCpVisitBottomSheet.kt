@@ -4813,6 +4813,14 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         if (session.staffId.isNullOrBlank()) {
             return showError("Assign a BDO before fixing this Site Visit")
         }
+        // Attendees are now mandatory — require at least one NAMED visitor so SVs
+        // stop being fixed with an empty attendee list (parity with the web
+        // CP→SV convert). collectVisitors() emits a row per card incl. blank ones,
+        // so check for a real name rather than a non-empty list.
+        val svVisitors = collectVisitors()
+        if (svVisitors.none { !it.name.isNullOrBlank() }) {
+            return showError("Add at least one visitor (name) before fixing this Site Visit")
+        }
 
         btnSubmit?.isClickable = false
         btnSubmit?.text = "Saving…"
@@ -4858,7 +4866,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                         seniorManagerStaffId = svSm?.id,
                         expectedAttendeeCount = etSvVisitorCount?.text?.toString()?.toIntOrNull()
                             ?.takeIf { it > 0 },
-                        attendees = collectVisitors().takeIf { it.isNotEmpty() },
+                        attendees = svVisitors.takeIf { it.isNotEmpty() },
                         pickupAddress = etSvPickupAddress?.text?.toString()?.trim()
                             ?.takeIf { it.isNotEmpty() },
                         pickupLat = svPickupLat,
