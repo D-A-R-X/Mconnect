@@ -9689,3 +9689,19 @@ not committed, pushed, or deployed.
   MainActivity.syncChromeToBackStack reposts applyTopBarForTab(currentTab) on the next frame so a just-torn-down
   detail's late status-bar write can't leave a stale strip on ANY root tab. compileDebugKotlin BUILD SUCCESSFUL.
   Also: pulled web `max` (44 commits, ff to 958169e5).
+
+- 2026-08-14 (main-chat) — GeoTrack "phone active but offline + missing km" — APP FIX + backend diagnosis.
+  ROOT CAUSE (app, fixed): GeoTrackBootstrapSync.apply() treated a NULL bootstrap (a FAILED/So skipped fetch)
+  the same as "off shift" — every bootstrap?.… read is null, so it set shouldTrack=false, cleared
+  activeTrackingSessionId, and STOPPED the service. On flaky field networks a single failed sync on
+  resume/punch therefore killed a LIVE tracking service: heartbeats (→ online) and point capture (→ km) both
+  died while the phone was active, until the next successful sync. Fix: apply() now returns early (no-op) on a
+  null bootstrap — offline-safe, mirroring enforceClockInGate. A genuine clock-out still stops tracking (real
+  bootstrap shouldTrack=false, and the service self-stops via its own clock-in gate). compileDebugKotlin OK.
+  Pushed Mconnect merge. BACKEND CONTRIBUTORS (need Convex deploy + care, NOT changed — flagged to user):
+  (1) attendance gate reapStaleActiveSessionAndCheck (location.ts / heartbeat.ts) drops every heartbeat/point
+  and patches geoLiveStatus.isOnline=false when the activeSessions row's punchInTime isn't TODAY-IST;
+  (2) IST-midnight rollover flips overnight shifts offline mid-shift (punchIn dated "yesterday");
+  (3) web timeline query returns [] (→ zero km) when no firstPunchIn for the IST date;
+  (4) FRESH_MS=8min vs OEM Doze stretching heartbeats; monitoring cron uses 15min — mismatch;
+  (5) pushBatch drops points with accuracy>50m (indoor/poor GPS → no km). Map source: Explore agent.
