@@ -9564,3 +9564,13 @@ not committed, pushed, or deployed.
   to `if isLoading && visibleVisits.isEmpty` so refresh/return keeps trips visible instead of white
   skeleton. Same-root as "slow loading" complaint. VERIFY on Mac; trip-list cache-first = optional
   follow-up (would remove cold-recreate flash for driver/normal users too).
+
+- 2026-08-13 (main-chat) — Completed feature 3 (client-not-met 48h auto-reschedule + 3-strike warning) across
+  ALL THREE platforms. Backend (web max) + Android were done earlier this session. Added this round:
+  • WEB frontend (features/marketing/pages/cp-visits-list-page.tsx + cp-visit-detail-page.tsx): list row shows
+    "⚠ Unavailable — last 3 visits missed" under the client and "Not met on <date> · rescheduled Nth time"
+    under Client-met; detail shows an amber banner. Data already flowed via list/get→enrichVisit; tsc clean.
+  • iOS (FoundationChat darx): CpVisitDetail gained rescheduleCount/lastNotMetDate/clientUnavailableWarning;
+    CpVisitCard shows the same notice line (live visits only). Not build-verified (no Xcode).
+  All powered by the backend fields already on listMobileCompact/enrichVisit + clients.consecutiveNotMetCount.
+  Still needs the Convex deploy for the 48h cron + counters to run live.
