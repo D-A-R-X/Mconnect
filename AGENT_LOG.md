@@ -9676,3 +9676,16 @@ not committed, pushed, or deployed.
   KEPT util/VisitExpiry.kt: still used by AgencyDriverTripsFragment (driver trips are fleet, not CP/SV).
   Verified web + iOS have NO CP/SV slot-expiry (their "expired" hits are all session/OTP/token, unrelated).
   compileDebugKotlin BUILD SUCCESSFUL.
+
+- 2026-08-14 (main-chat) — FIX recurring top white gap (dark status icons on a white strip over Home's blue
+  header). Root cause: pushDetail retains the underlying tab's view via add()+hide(), so the fragment stays
+  RESUMED while hidden — on pop-back onResume never re-fires (only onHiddenChanged), and HomeFragment's
+  onHiddenChanged didn't re-assert its blue full-bleed status bar. onResume's own apply is also gated behind
+  if(!isHidden), so an activity recreation with a detail on top skips it. The blue then hung entirely on
+  MainActivity.syncChromeToBackStack + currentTab being perfectly in sync; any slip (or a detail writing its
+  white bar late during teardown) left the white strip = the gap. Fixes (Mconnect merge): (1) HomeFragment
+  now re-asserts the blue bar in onHiddenChanged(false) — immediate + next-frame — via a shared applyHomeTopBar()
+  (also used by onResume); Home is the source of truth for its own chrome regardless of currentTab. (2)
+  MainActivity.syncChromeToBackStack reposts applyTopBarForTab(currentTab) on the next frame so a just-torn-down
+  detail's late status-bar write can't leave a stale strip on ANY root tab. compileDebugKotlin BUILD SUCCESSFUL.
+  Also: pulled web `max` (44 commits, ff to 958169e5).

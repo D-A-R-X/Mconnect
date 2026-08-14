@@ -560,13 +560,6 @@ class HomeFragment : Fragment() {
             // it now AND re-post it, so a screen we just returned from (e.g. the
             // white Notifications header) can't win the race and leave a white
             // status-bar strip with dark icons over the blue header.
-            val applyHomeTopBar = {
-                (activity as? com.manjugroups.m_connect.MainActivity)?.setTopBarAppearance(
-                    Color.parseColor("#0B61CA"),
-                    false,
-                    fullBleed = true,
-                )
-            }
             applyHomeTopBar()
             _binding?.root?.post { if (isResumed && !isHidden) applyHomeTopBar() }
         }
@@ -596,10 +589,32 @@ class HomeFragment : Fragment() {
         super.onHiddenChanged(hidden)
         if (hidden) {
             _binding?.homeHeader?.stopFloatingAnimation()
-        } else if (_binding != null &&
-            binding.homeStickyColumn.visibility == View.VISIBLE) {
-            binding.homeContent.post { _binding?.homeHeader?.playEntryAnimation() }
+        } else {
+            // Re-showing Home by UNHIDING (pop-back from a pushDetail screen, or a
+            // tab return) does NOT re-run onResume — pushDetail retains this view
+            // via add()+hide(), so the fragment stayed RESUMED while hidden. The
+            // detail's white status-bar strip (dark icons) would otherwise stick
+            // over Home's blue header = the recurring "top white gap". Home is the
+            // single source of truth for its own chrome, so re-assert the blue
+            // full-bleed bar here — immediately AND on the next frame, to beat any
+            // late status-bar write from the outgoing screen's teardown.
+            applyHomeTopBar()
+            _binding?.root?.post { if (isResumed && !isHidden) applyHomeTopBar() }
+            if (_binding != null &&
+                binding.homeStickyColumn.visibility == View.VISIBLE) {
+                binding.homeContent.post { _binding?.homeHeader?.playEntryAnimation() }
+            }
         }
+    }
+
+    /** Home = full-bleed blue status bar with LIGHT (white) icons. Shared by
+     *  onResume and onHiddenChanged so every path back onto Home re-asserts it. */
+    private fun applyHomeTopBar() {
+        (activity as? com.manjugroups.m_connect.MainActivity)?.setTopBarAppearance(
+            Color.parseColor("#0B61CA"),
+            false,
+            fullBleed = true,
+        )
     }
 
 
