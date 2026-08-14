@@ -9598,3 +9598,18 @@ not committed, pushed, or deployed.
   STAFF-side display: CpVisitDetail gained approvalGmName/rejectRemark/reassignedFromRejection, CpVisitCard
   shows "Awaiting: <GM>" (pending) and "GM sent back: <remark>" (reassigned). Super-admin fallback + fail-
   closed already in backend. iOS NOT build-verified. Needs Convex deploy to run live.
+
+- 2026-08-13 (main-chat) — Booking follow-up CP across all 3 platforms. (A) SV/CP→Booking spawns a
+  booking_cp; (B) a postponed Booking CP spawns another booking_cp (or the app's SV option → existing
+  convertToSiteVisit). BACKEND (max, 895942dc): setOutcome gained a `status === "postponed"` spawn branch for
+  booking_cp (postpone never hits the completed branch); new internalMutation spawnBookingCpFromSource
+  (reads the source SV/CP, creates booking_cp) called from the /api/bookings HTTP handler AFTER
+  bookings.create — kept OUT of bookings.create's args because that validator is at TS's ceiling (adding
+  fields breaks its inference; the plotId TS2339 there is pre-existing baseline, verified via stash). ANDROID
+  (merge, be72fa3f): CreateBookingRequest+bookingCpDate/Time (booking form sends the booking date as the
+  booking_cp date — dedicated picker is a fast-follow); finalizeTerminalOutcome threads postpone next-date as
+  followUpDate. iOS (darx, 944bf79): CreateBookingRequest fields + createRequest sets sourceClientPlaceVisitId
+  + bookingCpDate; postpone submit sends followUpDate/Time. iOS NOT build-verified. FAST-FOLLOWS: dedicated
+  booking-CP date/time PICKER on the booking form (Android+iOS default to the booking date today); the
+  postpone "visit another site instead → SV" is the existing convertToSiteVisit, needs a UI affordance.
+  Needs Convex deploy to spawn live.
