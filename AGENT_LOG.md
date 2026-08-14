@@ -9720,3 +9720,98 @@ not committed, pushed, or deployed.
   pushed merge. ROBUST FOLLOW-UP for the residual edge (bg-location not granted, or MY_PACKAGE_REPLACED start
   disallowed): a high-priority FCM data push from the monitoring cron (already detects offline at 15min) →
   app FCM handler restarts the FGS under the push's temporary allowlist. Needs backend push + deploy; flagged.
+
+- 2026-08-14 (main-chat) — Collection CP "Submit Payment Entry" shows HTTP 500. Traced: the 3-call flow
+  (submitCustomerCollection → markClientMet → setCpVisitOutcome) has its catch in TripNavigationFragment
+  showing RAW e.message, which for a Retrofit 500 is "HTTP 500 Internal Server Error" — MASKING the backend's
+  real {error:"..."} body. The backend throws MEANINGFUL reasons: submitFromMobile →
+  assertCollectionWithinOutstanding ("no outstanding balance" / "amount exceeds outstanding") via
+  availableCollectionBalance = max(0, balanceAmount − pendingCollectedAmount), collection-scope reject, or the
+  shared assertRequiredCpCompletionProof (arrival OTP + photo). FIX (app, no deploy): routed all 5
+  collection/CP-outcome catches through the existing httpErrorMessage(e) parser so the actual reason shows.
+  Re "other CP": they complete via the SAME setCpVisitOutcome and now also surface real errors — collection's
+  ONLY extra call is submitCustomerCollection, so the 500 is most likely there (collection-specific), which is
+  why other CP types generally still complete. compileDebugKotlin OK. NEXT: the now-surfaced message pinpoints
+  the exact backend cause; if it's a real bug (not a validation) fix at source. The web HTTP route also returns
+  500 for validation throws (should be 400) — cosmetic, needs deploy.
+
+- 2026-08-14 (main-chat) — Collection 500 ROOT-CAUSE fix (backend, max 2ed67cc5). Repro from user screenshot:
+  Collection CP, 19m (IN-geofence, so NOT the GM-approval path), consistent 500 on Submit Payment Entry.
+  Ruled out the proof gate (photo+OTP are captured before the payment sheet — TripNav:2130). The submit's
+  first call is submitFromMobile, which inserts the collection THEN calls startCollectionApprovalWorkflow —
+  which THREW when a collection-approval workflow is configured but its first-step approver role has no
+  resolvable staff (incomplete IAM/workflow setup, e.g. a test project). Convex mutations are transactional,
+  so the throw rolled back the insert: the collection was LOST and staff hard-blocked with a 500. Fix: fail
+  soft — console.warn + leave the collection in pending_accounts (default) with no workflow, so Accounts can
+  still approve it and the visit completes; admin fixes approver config later. tsc clean on the touched file.
+  Needs Convex deploy to take effect. Paired with the app-side surfacing fix (merge 73d5f528) so any OTHER
+  remaining backend validation (no-outstanding-balance / amount-exceeds / scope) now shows its real message
+  instead of "HTTP 500". Other CP types complete via the same setCpVisitOutcome (also surfaced) and lack the
+  submitFromMobile call, so they're not hit by this specific workflow-throw.
+
+- 2026-08-14 (main-chat) — GeoTrack UNDER-COUNTING distance (>40km travelled shows as very little) + "tamper
+  must not interrupt tracking". Root cause (Android GeoTrackService point capture): the drift/teleport filter
+  dropped legitimate travel points using the SINGLE-fix instantaneous location.speed — which reads low/zero
+  right after a signal gap (tunnel, dead-zone, GPS reacquisition) or in stop-and-go. Two bad returns: MOVING
+  branch dropped any >500m jump when speed<15 m/s; STATIONARY branch dropped any >100m jump. So a real
+  multi-km highway leg after a gap was thrown away as "GPS teleport"/"drift" → long trips massively
+  under-counted. FIX: judge a jump by IMPLIED speed = distance / time-since-last-fix, rejecting ONLY the
+  physically impossible (>75 m/s = 270 km/h, above any road/rail) and only for jumps >100m; genuine travel
+  (even a km-long post-gap jump) is KEPT. isMoving now also considers implied speed. Removed
+  DRIFT_DISTANCE/SPEED_THRESHOLD. This also resolves the "tamper interrupts tracking" concern: those drift
+  `return`s WERE the interruption; tamper reporting (MOCK_LOCATION/GPS/airplane) only logs an event and never
+  drops the point or stops the service (verified — the stopSelf calls are permission/clock-out/session-invalid
+  only). ALL SIDES checked: web buildSegments sums haversine over ALL consecutive stored points (no gap cap;
+  MAX_PATH_GAP_M only affects the drawn polyline) and backend geoTrips/sessionRoute likewise — both were only
+  limited by the dropped points, so no web/backend change needed; they'll reflect the kept points. Accuracy>50m
+  filter (both sides) left as-is (fine outdoors at speed). compileDebugKotlin OK. Pushed merge.
+
+- 2026-08-14 (main-chat) — Cross-platform SYNC audit of this session's changes. Verified each change's
+  platform coverage: Booking follow-up CP + Follow-up-outcome CP (web+android+iOS ✓); GM approve/reject +
+  queue reachability (web renders CpApprovalQueue inline, iOS renders CpApprovalQueueView inline — the Android
+  "always-visible banner" only existed because Android's queue was push-ONLY, not a gap on web/iOS ✓);
+  Collection backend workflow-non-fatal (web backend, benefits all ✓). ANDROID-NATIVE with NO web/iOS
+  equivalent (nothing to sync): top-white-gap, GeoTrack bootstrap-teardown, update-recovery (MY_PACKAGE_REPLACED),
+  drift-filter distance under-count, CP/SV expiry removal (web+iOS already had none). REAL GAP FOUND + FIXED
+  on iOS (darx b69d351): PostSalesConvexAPIService (collection submit) + FleetDispatchAPIService decoded the
+  error body as [String:String], but the backend returns {success:false, error:"..."} (mixed bool+string) so
+  the decode failed and iOS showed "Request failed (500)" — same masking the Android httpErrorMessage fix
+  addressed. Switched both to loose [String:Any] + `error as? String` (matching MarketingConvexAPIService,
+  which was already correct). iOS not build-verified (no Xcode). GeoTrackPersistence's [String:String] decode
+  left alone (parses tamper metadata, not an HTTP body).
+
+- 2026-08-14 (main-chat) — SV list showed the SIGNED-IN user as BDO on every row (real BDO differs). Root
+  cause: the mobile SV list never supplied a BDO, so all three clients hardcoded the session user.
+  Fix on ALL sides: WEB (max 08350559) siteVisits mobile mapper resolves the visit's OWN sv.bdoStaffId →
+  returns bdoName next to lmoName. ANDROID (merge): TodayVisit += bdoName; SiteVisitsFragment renders
+  visit.bdoName (was session.userName) → em-dash when absent. iOS (darx): ConvexSiteVisit += bdoName
+  (prop+CodingKey+decode); SiteVisitsListView passes visit.bdoName (was authStore session user). Older rows
+  (pre-mapper-deploy) show "—" rather than the wrong person. Needs Convex deploy for the name to populate.
+  web tsc + android compile clean; iOS not build-verified.
+
+- 2026-08-14 (main-chat) — DIAGNOSIS: "many SVs without BDO / attendees / Site-incharge". Mapped all 7
+  SV-creation inserts (Explore agent). Verdict = MIX of a code bug + optional-by-design, NOT mainly staff
+  negligence (the main create/dialer/convert forms REQUIRE bdo+incharge via assertRequiredSvStaffAssignments).
+  Gaps: (#3 sv_cum_cp linked SV, clientPlaceVisits.ts:3157) FORGOT to write bdoStaffId → null BDO on every
+  such SV — FIXED (max, added bdoStaffId = telecaller/LMO ?? field staff). (#5 telecaller hot-lead auto-spawn,
+  telecallerFollowups.ts:846) never passes an incharge seed → null incharge. (#2 postpone) inherits the
+  source SV's fields (propagates gaps). (#7 legacy import) BDO/incharge from legacy mappings (may be null),
+  never imports attendees. ATTENDEES: v.optional on EVERY path and never checked by assertRequired — so empty
+  attendee names are optional-by-design, not a bug. resolveSvStaffAssignments auto-fills bdoStaffId from the
+  telecaller but does NOT synthesize an incharge. REMAINING (need product/form decision, flagged to user):
+  default/require incharge on telecaller-auto-spawn + CPs w/o assigned staff; make attendees mandatory if
+  desired. Needs Convex deploy.
+
+- 2026-08-14 (main-chat) — SV missing-fields ENFORCEMENT (a incharge + b attendees required, c backfill),
+  scoped to HUMAN paths so automated ones don't break (create validator + assertRequiredSvStaffAssignments
+  left untouched; AI/IRIS/postpone-clone/import/seed flow through them). WEB (max a64bcb13): cp-visit-detail
+  CP→SV convert now requires incharge + ≥1 named attendee; telecallerFollowups hot-lead auto-spawn defaults
+  inchargeStaffId to lead.assignedToStaffId (it never set one, so assertRequired always threw → spawn silently
+  aborted); NEW backfillSvStaffAssignments mutation (paginated, dry-run default, confirm:BACKFILL_SV_STAFF) —
+  fills null bdo (telecaller/assigned) + null incharge (convertedBy → resolved bdo). ANDROID (merge):
+  CompleteCpVisitBottomSheet CP→SV convert now requires ≥1 named visitor (incharge already required there).
+  iOS (darx): CompleteCpVisitSheet CP→SV convert requires incharge + ≥1 named visitor (locked-SV re-confirm
+  exempt). NOTE/LIMITATION flagged to user: the sv_cum_cp CP-CREATE forms + createFromMobile don't carry
+  attendees at all, and the web dialer SV form collects no attendees — so those paths still can't populate
+  attendees without a new attendee-collection UI (separate feature). web tsc + android compile clean; iOS not
+  build-verified. Needs Convex deploy; run the backfill (dry-run first) for historical rows.

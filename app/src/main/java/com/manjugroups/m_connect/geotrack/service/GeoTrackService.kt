@@ -176,9 +176,19 @@ class GeoTrackService : Service() {
     @Volatile private var lastStoredLng = 0.0
     @Volatile private var lastStoredTimeMs = 0L
     private val STATIONARY_RADIUS_M = 50f       // Skip if within 50m of last stored point
-    private val DRIFT_SPEED_THRESHOLD = 1.0f     // m/s — below this, treat position jumps as drift
-    private val DRIFT_DISTANCE_THRESHOLD = 100f  // If speed <1 m/s but jumped >100m, it's GPS drift
     private val STATIONARY_PING_INTERVAL_MS = 5 * 60 * 1000L // 5 minutes
+    // A position jump is a GPS GLITCH only if the device could not physically
+    // have covered it in the elapsed time — judged by IMPLIED speed
+    // (distance / time-since-last-fix), NOT the single fix's instantaneous
+    // `speed`, which reads low/zero right after a signal gap (tunnel, dead-zone,
+    // reacquisition) or in stop-and-go. The old speed-based teleport/drift
+    // filters threw away legitimate multi-km highway jumps whenever that reading
+    // was low, badly under-counting long trips (the "40 km → very less" bug).
+    // 75 m/s = 270 km/h, above any road/rail travel, so genuine movement is
+    // always kept; only a true glitch exceeds it. Applied only to jumps beyond
+    // MIN_GLITCH_DISTANCE_M so ordinary short hops are never second-guessed.
+    private val MAX_PLAUSIBLE_SPEED_MPS = 75.0
+    private val MIN_GLITCH_DISTANCE_M = 100f
 
     // ── Receivers ──
 
@@ -626,27 +636,30 @@ class GeoTrackService : Service() {
                 location.latitude, location.longitude
             )
             val timeSinceLastStore = now - lastStoredTimeMs
-            val isMoving = location.speed >= 1.5f // > 1.5 m/s = ~5.4 km/h = walking/driving
+            // Implied speed over the gap decides glitch-vs-travel. Reject ONLY a
+            // physically impossible jump (a true GPS glitch); keep every jump the
+            // device could plausibly have made — including a multi-km one after a
+            // signal gap, which the old instantaneous-speed filter wrongly dropped
+            // and which caused long trips to under-count.
+            val dtSeconds = (timeSinceLastStore / 1000.0).coerceAtLeast(0.001)
+            val impliedSpeedMps = distFromLast / dtSeconds
+            if (distFromLast > MIN_GLITCH_DISTANCE_M && impliedSpeedMps > MAX_PLAUSIBLE_SPEED_MPS) {
+                Log.d(TAG, "Implausible jump: dist=${distFromLast}m in ${dtSeconds}s (implied ${impliedSpeedMps} m/s) — skipping")
+                return
+            }
+            // Moving = the fix says so OR the implied speed does (covers a fast
+            // jump whose single-fix speed under-reads after a gap).
+            val isMoving = location.speed >= 1.5f || impliedSpeedMps >= 1.5
 
             if (isMoving) {
                 // MOVING: store every point that's >15m apart (good density for road snapping)
                 // Roads API needs points every ~50-100m for proper snapping
                 // At 30 km/h city driving + 10s interval = ~83m spacing — perfect
                 if (distFromLast < 15f) return
-
-                // Drift check: speed says moving but jumped impossibly far
-                if (distFromLast > 500f && location.speed < 15f) {
-                    Log.d(TAG, "GPS teleport detected: dist=${distFromLast}m at speed=${location.speed} — skipping")
-                    return
-                }
             } else {
-                // STATIONARY: only store once every 5 minutes to avoid building clutter
-                // Drift filter: position jumped >100m but speed is near zero = GPS noise
-                if (distFromLast > DRIFT_DISTANCE_THRESHOLD) {
-                    Log.d(TAG, "GPS drift detected: speed=${location.speed} but dist=${distFromLast}m — skipping")
-                    return
-                }
-                // Within 50m and less than 5 min → skip
+                // Genuinely stationary: throttle to one ping / 5 min and suppress
+                // sub-50m jitter — but a real move is never dropped (that's the
+                // impossible-jump guard above, which honest travel passes).
                 if (distFromLast < STATIONARY_RADIUS_M && timeSinceLastStore < STATIONARY_PING_INTERVAL_MS) {
                     return
                 }

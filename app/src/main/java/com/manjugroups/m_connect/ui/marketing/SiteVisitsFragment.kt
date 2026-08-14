@@ -551,11 +551,12 @@ class SiteVisitsFragment : Fragment() {
         // Time — blank when not set rather than a synthetic "11:00 AM".
         timeView.text = visit.scheduledStartTime?.takeIf { it.isNotBlank() } ?: ""
 
-        // BDO Details — the logged-in staff name is the right value to
-        // show on rows assigned to the viewer; the prior "AKASH.B"
-        // fallback was leftover seed data. Em-dash when the session
-        // hasn't yet hydrated a user name.
-        bdoName.text = session.userName?.uppercase(Locale.US)?.takeIf { it.isNotBlank() } ?: "—"
+        // BDO Details — the visit's OWN assigned BDO (visit.bdoName from the
+        // backend), NOT the signed-in viewer. The old code hardcoded
+        // session.userName, so every row showed the logged-in user as BDO even
+        // when the actual BDO was someone else. Em-dash when the backend has
+        // no BDO on the row (older rows before the mapper supplied it).
+        bdoName.text = visit.bdoName?.uppercase(Locale.US)?.takeIf { it.isNotBlank() } ?: "—"
         bdoRole.text = "BDO"
 
         // Destination details — prefer the project/place name, fall

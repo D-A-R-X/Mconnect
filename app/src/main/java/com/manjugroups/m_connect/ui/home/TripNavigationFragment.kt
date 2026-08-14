@@ -2079,7 +2079,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
                 Toast.makeText(
                     requireContext(),
-                    e.message ?: "Network error",
+                    httpErrorMessage(e) ?: e.message ?: "Network error",
                     Toast.LENGTH_LONG,
                 ).show()
             }
@@ -2175,7 +2175,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
                 Toast.makeText(
                     requireContext(),
-                    e.message ?: "Network error",
+                    httpErrorMessage(e) ?: e.message ?: "Network error",
                     Toast.LENGTH_LONG,
                 ).show()
             }
@@ -2237,7 +2237,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
                 Toast.makeText(
                     requireContext(),
-                    e.message ?: "Network error",
+                    httpErrorMessage(e) ?: e.message ?: "Network error",
                     Toast.LENGTH_LONG,
                 ).show()
             }
@@ -2361,7 +2361,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
                 Toast.makeText(
                     requireContext(),
-                    e.message ?: "Network error",
+                    httpErrorMessage(e) ?: e.message ?: "Network error",
                     Toast.LENGTH_LONG,
                 ).show()
             }
@@ -2434,7 +2434,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
                 Toast.makeText(
                     requireContext(),
-                    e.message ?: "Network error",
+                    httpErrorMessage(e) ?: e.message ?: "Network error",
                     Toast.LENGTH_LONG,
                 ).show()
             }
