@@ -9574,3 +9574,17 @@ not committed, pushed, or deployed.
     CpVisitCard shows the same notice line (live visits only). Not build-verified (no Xcode).
   All powered by the backend fields already on listMobileCompact/enrichVisit + clients.consecutiveNotMetCount.
   Still needs the Convex deploy for the 48h cron + counters to run live.
+
+- 2026-08-13 (main-chat) — Collection-CP follow-up implemented across ALL THREE platforms.
+  Behaviour: (1) Not collected → staff picks a follow-up date+time → backend spawns a NEW collection_cp for
+  that slot (same staff/client); (2) Partial → app shows Payable/Paid/Pending (from PostSaleCaseSummary), and
+  if amount < pending balance, requires a follow-up → spawns another collection_cp for the pending amount;
+  (3) not_collected now feeds the 3-strike consecutiveNotMetCount (previously RESET it because the flow marks
+  clientMet=true). BACKEND (max, 5d3ea561): setOutcome + action + http.ts accept followUpDate/followUpTime;
+  spawn via createCpVisitRows in the completed branch (best-effort try/catch); counter fix. Reused existing
+  amount persistence (customerCollections) + amounts query (PostSaleCaseSummary) — no new query. ANDROID
+  (merge, 0dd1c572): SetOutcomeRequest fields; CollectionPaymentEntryBottomSheet shows Payable/Paid/Pending +
+  chained date→time picker; Not Collected + partial Submit require the follow-up; TripNavigationFragment
+  threads it. iOS (darx, 793a6a2): SetCpVisitOutcomeRequest fields; SpecialCpCompletionSheet gains the amounts
+  line, a DatePicker, a Not Collected button, and partial detection. iOS NOT build-verified (no Xcode). Needs
+  Convex deploy to spawn live.
