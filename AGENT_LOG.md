@@ -9720,3 +9720,17 @@ not committed, pushed, or deployed.
   pushed merge. ROBUST FOLLOW-UP for the residual edge (bg-location not granted, or MY_PACKAGE_REPLACED start
   disallowed): a high-priority FCM data push from the monitoring cron (already detects offline at 15min) →
   app FCM handler restarts the FGS under the push's temporary allowlist. Needs backend push + deploy; flagged.
+
+- 2026-08-14 (main-chat) — Collection CP "Submit Payment Entry" shows HTTP 500. Traced: the 3-call flow
+  (submitCustomerCollection → markClientMet → setCpVisitOutcome) has its catch in TripNavigationFragment
+  showing RAW e.message, which for a Retrofit 500 is "HTTP 500 Internal Server Error" — MASKING the backend's
+  real {error:"..."} body. The backend throws MEANINGFUL reasons: submitFromMobile →
+  assertCollectionWithinOutstanding ("no outstanding balance" / "amount exceeds outstanding") via
+  availableCollectionBalance = max(0, balanceAmount − pendingCollectedAmount), collection-scope reject, or the
+  shared assertRequiredCpCompletionProof (arrival OTP + photo). FIX (app, no deploy): routed all 5
+  collection/CP-outcome catches through the existing httpErrorMessage(e) parser so the actual reason shows.
+  Re "other CP": they complete via the SAME setCpVisitOutcome and now also surface real errors — collection's
+  ONLY extra call is submitCustomerCollection, so the 500 is most likely there (collection-specific), which is
+  why other CP types generally still complete. compileDebugKotlin OK. NEXT: the now-surfaced message pinpoints
+  the exact backend cause; if it's a real bug (not a validation) fix at source. The web HTTP route also returns
+  500 for validation throws (should be 400) — cosmetic, needs deploy.
