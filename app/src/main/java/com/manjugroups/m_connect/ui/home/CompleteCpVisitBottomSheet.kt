@@ -4959,7 +4959,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             cpVisitId = cpVisitId.orEmpty(),
             outcomeEnum = OUTCOME_POSTPONED,
             notes = "Next visit: $nextDate — $reason",
-            // For a Booking CP this spawns the next booking_cp on that date.
+            // "Follow up"/postpone on any CP spawns the next CP of the SAME
+            // type on this date (booking_cp, collection_cp, …), server-side.
             followUpDate = displayDateToApiDate(nextDate),
         )
     }

@@ -9613,3 +9613,43 @@ not committed, pushed, or deployed.
   booking-CP date/time PICKER on the booking form (Android+iOS default to the booking date today); the
   postpone "visit another site instead → SV" is the existing convertToSiteVisit, needs a UI affordance.
   Needs Convex deploy to spawn live.
+
+### Session 119 - Fleet buttons: drop "Mark", use stage names (travel-desk + app)
+
+**Date:** 2026-08-02
+**Session:** fork. travel-desk (aizen) + app (Mconnect/merge). iOS = no-op (see below).
+
+- TRAVEL-DESK (aizen): relabeled all fleet lifecycle action buttons to stage
+  names — Reached CP / Picked from CP / On Site / Picked from Site / Dropped —
+  removing "Mark …" and "Start trip". Files: trips/[id]/page.tsx (detail Mark
+  progress), driver/trips/[token]/page.tsx (driver link + 2 guidance strings →
+  "Tap Reached CP/On Site …"), components/driver-trips-panel.tsx. tsc clean.
+- APP (Mconnect/merge): AdminFleetTripManageSheet.kt is the ONLY app screen with
+  "Mark" buttons (admin trip-advance sheet). Relabeled its 5 stepper buttonTexts
+  to the same stage names (Mark Reached→Reached CP, Start trip→Picked from CP,
+  Mark On Site→On Site, Mark Picked from Site→Picked from Site, End Trip→Dropped);
+  neutralised the two action-name section labels to "Update progress"; updated the
+  doc comment. compileDebugKotlin SUCCESSFUL.
+- iOS (FoundationChat): NO per-stage "Mark" buttons exist — the driver flow is a
+  single compressed "Swipe to Complete Trip" + "Start Trip"; stage names live only
+  in status/stepper DISPLAY labels. Nothing to remove; adding stage buttons would
+  be net-new UI, not a rename. Flagged to user.
+- NOT touched (offered): app's other fleet driver screens (AgencyDriverTripDetail,
+  DriverTripDetail, TripNavigation, AgencyDriverTripActionSheet) use "Start Trip"/
+  "End Trip"/"Reached Site" — no "Mark", so left as-is pending user call on full
+  normalisation.
+- Uncommitted; not pushed.
+
+- 2026-08-14 (main-chat) — Feature 4 "Follow-up CP" across web/android/ios. RULE: a postponed/"Follow up"
+  outcome now spawns the NEXT CP of the SAME type on the staff-chosen date (not just booking_cp).
+  WEB (max, 34239c3d): generalized the setOutcome "postponed" branch to any cpType via createCpVisitRows
+  (booking_cp/collection_cp/sv_cum_cp/other_cp…); NEW internal spawnSvCumCpFromSiteVisit so an SV "Follow up"
+  spawns an sv_cum_cp for the assigned FIELD staff, REPLACING the telecaller call-back (per user sign-off:
+  type=sv_cum_cp, replace-not-add). Scheduled via ctx.scheduler from siteVisits.setOutcome (mutation can't
+  runMutation; also keeps createCpVisitRows OUT of siteVisits.ts to dodge the CP type ceiling). editOutcome
+  correction + admin repair keep the telecaller call-back (no staff-chosen date there). tsc clean on both
+  touched files (55 baseline errors elsewhere, none mine). 3-strike warning rides along free (per-client
+  consecutiveNotMetCount). ANDROID (merge): no functional change — persistPostpone already sends followUpDate
+  for any CP, persistSvFollowUp already sends followupDueDate; only refreshed a stale comment. iOS (darx):
+  CP postpone + SV follow-up already send the dates; added a required follow-up-date guard to the SV outcome
+  sheet so a dateless follow-up can't silently drop the sv_cum_cp. Needs Convex deploy to spawn live.
