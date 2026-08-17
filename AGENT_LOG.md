@@ -9815,3 +9815,13 @@ not committed, pushed, or deployed.
   attendees at all, and the web dialer SV form collects no attendees — so those paths still can't populate
   attendees without a new attendee-collection UI (separate feature). web tsc + android compile clean; iOS not
   build-verified. Needs Convex deploy; run the backfill (dry-run first) for historical rows.
+
+- 2026-08-14 (main-chat) — VP-approved CP epic, INCREMENT 1 (backend foundation). Added cpType categories
+  new_client_cp + other_cp to cpTypeValidator (clientPlaceVisits.ts) + schema clientPlaceVisits.cpType.
+  follow_up KEPT in the union (existing rows + backward compat) but flagged RETIRED from creation pickers
+  (VP: postpone/cancel already spawn same-type follow-ups). tsc: 0 errors in touched files; +12 cosmetic
+  TS7006 implicit-anys in report files that infer over the widened CP union (baseline-style, runtime-safe,
+  build ignores). REMAINING epic increments (sequenced): retire follow_up from create pickers (web+android+ios);
+  New Client CP 5 outcomes incl. Referral (name+phone capture); Other CP create option; SV-cum-CP add
+  Cancel+Postpone; follow-up windows (collection ≤5d, booking postpone ≤7d) on pickers + backend; Booking-CP
+  postpone "offer SV" option. Needs Convex deploy.

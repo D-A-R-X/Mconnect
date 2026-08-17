@@ -23,6 +23,8 @@ fun formatCpVisitTypeLabel(
             "collection_cp" -> return "Collection CP"
             "old_client" -> return "Old Client"
             "gift_distribution" -> return "Gift Distribution"
+            "new_client_cp" -> return "New Client CP"
+            "other_cp" -> return "Other CP"
         }
     }
     return when (visitCategory) {
