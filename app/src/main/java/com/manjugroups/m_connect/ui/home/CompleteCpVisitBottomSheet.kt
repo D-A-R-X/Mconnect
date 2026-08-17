@@ -34,6 +34,7 @@ import com.manjugroups.m_connect.util.EditableTimeFormat
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.BookingExchangeSource
+import com.manjugroups.m_connect.network.CancelCpVisitRequest
 import com.manjugroups.m_connect.util.ongoingOnly
 import com.manjugroups.m_connect.network.BookingPlotPrefillResponse
 import com.manjugroups.m_connect.network.ClientProfile
@@ -126,6 +127,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var outcomeArgPreselected: Boolean = false
     private var otherRemarksShown: Boolean = false
     private var otherOutcomeSaving: Boolean = false
+    private var referralCaptureShown: Boolean = false
+    private var cancelReasonShown: Boolean = false
     // The reusable centre outcome-picker (shown when a type still needs choosing).
     private var outcomePickerDialog: androidx.appcompat.app.AlertDialog? = null
     // The Material bottom-sheet container view (design_bottom_sheet). Hidden
@@ -901,11 +904,14 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             options = options,
             onSelect = { key ->
                 outcomePickerDialog = null
-                if (key == "OTHER") {
-                    showOtherRemarksSheet()
-                } else {
-                    revealSheet()
-                    switchOutcome(outcomeFromKey(key))
+                when (key) {
+                    "OTHER" -> showOtherRemarksSheet()
+                    "REFERRAL" -> showReferralCaptureSheet()
+                    "CANCEL" -> showCancelReasonSheet()
+                    else -> {
+                        revealSheet()
+                        switchOutcome(outcomeFromKey(key))
+                    }
                 }
             },
             // Backed out without choosing — close the sheet. The user can tap
@@ -945,17 +951,41 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         // outcome set (Booking / Follow up / Not Interested / Others) — the same
         // as pure-SV mode — rather than the CP set. Without this it showed the
         // CP options ("Site Visit", "Its Been Postponed") which don't apply.
+        // New-Client CP (auto-spawned when an Aster lead is assigned) has its
+        // own VP-defined outcome set: Online Booking / SV Fixing / Follow-up /
+        // Not Interested / Client Referral. Referral captures the referred
+        // person's name+phone (packed into notes) instead of a generic remark.
+        if (cpType == "new_client_cp") {
+            list.add(opt("BOOKING", "Online Booking", R.drawable.ic_outcome_booking))
+            list.add(opt("SITE_VISIT", "SV Fixing", R.drawable.ic_outcome_site_visit))
+            list.add(opt("POSTPONE", "Follow up", R.drawable.ic_outcome_postpone))
+            list.add(opt("NOT_INTERESTED", "Client Not Interested", R.drawable.ic_outcome_not_interested))
+            list.add(opt("REFERRAL", "Client Referral", R.drawable.ic_outcome_person))
+            return list
+        }
         val svStyle = isSiteVisitMode || cpType == "sv_cum_cp"
+        val isSvCumCp = cpType == "sv_cum_cp"
         list.add(opt("BOOKING", "Converted as Booking", R.drawable.ic_outcome_booking))
         // Site Visit is not a valid outcome for a row that already IS a site
         // visit (pure-SV / sv_cum_cp) — mirror the disabled SV tab by hiding it.
         if (!svStyle) {
             list.add(opt("SITE_VISIT", "Site Visit", R.drawable.ic_outcome_site_visit))
         }
+        // SV-cum-CP labels the reschedule outcome explicitly as "Postpone" (VP);
+        // pure SV keeps "Follow up" (a follow-up call, not a reschedule).
         list.add(opt("POSTPONE",
-            if (svStyle) "Follow up" else "Its Been Postponed",
+            when {
+                isSvCumCp -> "Postpone"
+                svStyle -> "Follow up"
+                else -> "Its Been Postponed"
+            },
             R.drawable.ic_outcome_postpone))
         list.add(opt("NOT_INTERESTED", "Client Not Interested", R.drawable.ic_outcome_not_interested))
+        // SV-cum-CP can also be cancelled outright — client no-show / withdrawal
+        // (VP). Closes the visit, its field visit and the daily task server-side.
+        if (isSvCumCp) {
+            list.add(opt("CANCEL", "Cancel Visit", R.drawable.ic_outcome_close))
+        }
         // Pure SV / sv_cum_cp retain the Others outcome. For other CP visits the
         // free-text close path is intentionally limited to the approved types.
         if (svStyle || cpTypeSupportsOtherOutcome(cpType)) {
@@ -996,6 +1026,105 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             subtitle = "Add remarks to explain why this visit is being closed.",
             hint = "What happened with the client?",
         ).showOnce(childFragmentManager, "other_outcome_remarks")
+    }
+
+    /** New-Client CP "Client Referral" outcome: capture the referred person's
+     *  name + phone, pack them into the visit notes and close the visit with
+     *  outcome="referral". Mirrors [showOtherRemarksSheet]'s terminal flow. */
+    private fun showReferralCaptureSheet() {
+        if (referralCaptureShown || !isAdded) return
+        referralCaptureShown = true
+        childFragmentManager.setFragmentResultListener(
+            com.manjugroups.m_connect.ui.common.ReferralCaptureBottomSheet.RESULT_KEY,
+            this,
+        ) { _, result ->
+            referralCaptureShown = false
+            if (!result.getBoolean(
+                    com.manjugroups.m_connect.ui.common.ReferralCaptureBottomSheet.KEY_SUBMITTED,
+                    false,
+                )
+            ) {
+                dismissAllowingStateLoss()
+                return@setFragmentResultListener
+            }
+            val name = result.getString(
+                com.manjugroups.m_connect.ui.common.ReferralCaptureBottomSheet.KEY_NAME,
+            ).orEmpty().trim()
+            val phone = result.getString(
+                com.manjugroups.m_connect.ui.common.ReferralCaptureBottomSheet.KEY_PHONE,
+            ).orEmpty().trim()
+            val cpVisitId = arguments?.getString(ARG_CP_VISIT_ID).orEmpty()
+            if (!isSiteVisitMode && cpVisitId.isBlank()) {
+                showError("Missing CP visit id")
+                return@setFragmentResultListener
+            }
+            otherOutcomeSaving = true
+            finalizeTerminalOutcome(cpVisitId, OUTCOME_REFERRAL, "Referral: $name · $phone")
+        }
+        com.manjugroups.m_connect.ui.common.ReferralCaptureBottomSheet.newInstance()
+            .showOnce(childFragmentManager, "referral_capture")
+    }
+
+    /** SV-cum-CP "Cancel Visit" outcome: capture a reason, then cancel the CP
+     *  visit server-side (closes the row, its field visit and the daily task).
+     *  Reuses the shared remarks sheet for the reason. */
+    private fun showCancelReasonSheet() {
+        if (cancelReasonShown || !isAdded) return
+        cancelReasonShown = true
+        childFragmentManager.setFragmentResultListener(
+            com.manjugroups.m_connect.ui.common.OutcomeRemarksBottomSheet.RESULT_KEY,
+            this,
+        ) { _, result ->
+            cancelReasonShown = false
+            if (!result.getBoolean(
+                    com.manjugroups.m_connect.ui.common.OutcomeRemarksBottomSheet.KEY_SUBMITTED,
+                    false,
+                )
+            ) {
+                dismissAllowingStateLoss()
+                return@setFragmentResultListener
+            }
+            val reason = result.getString(
+                com.manjugroups.m_connect.ui.common.OutcomeRemarksBottomSheet.KEY_REMARKS,
+            ).orEmpty().trim()
+            val cpVisitId = arguments?.getString(ARG_CP_VISIT_ID).orEmpty()
+            if (cpVisitId.isBlank()) {
+                showError("Missing CP visit id")
+                return@setFragmentResultListener
+            }
+            finalizeCancel(cpVisitId, reason)
+        }
+        com.manjugroups.m_connect.ui.common.OutcomeRemarksBottomSheet.newInstance(
+            title = "Cancel visit",
+            subtitle = "Add a reason for cancelling this visit.",
+            hint = "Why is this visit being cancelled?",
+        ).showOnce(childFragmentManager, "cancel_reason")
+    }
+
+    private fun finalizeCancel(cpVisitId: String, reason: String) {
+        btnSubmit?.isClickable = false
+        btnSubmit?.text = "Cancelling…"
+        otherOutcomeSaving = true
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = geoApi.cancelCpVisit(
+                    session.bearerToken,
+                    CancelCpVisitRequest(id = cpVisitId, reason = reason.ifBlank { null }),
+                )
+                if (!resp.success) {
+                    finishCtaSave(resp.error ?: "Failed to cancel visit")
+                    return@launch
+                }
+                setFragmentResult(
+                    RESULT_KEY,
+                    bundleOf(KEY_CLIENT_MET to false, KEY_OUTCOME to "cancelled"),
+                )
+                dismissAllowingStateLoss()
+            } catch (e: Exception) {
+                val message = extractHttpErrorMessage(e) ?: e.message ?: "Network error"
+                finishCtaSave(message)
+            }
+        }
     }
 
     private fun outcomeFromKey(key: String): Outcome = when (key) {
@@ -1430,8 +1559,35 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         // Next-visit date can't be in the past — a postpone always moves
         // the visit forward.
         view.findViewById<View>(R.id.rowPostNextDate)?.setOnClickListener {
-            pickDate(tvPostNextDate, minDateMillis = System.currentTimeMillis())
+            pickDate(
+                tvPostNextDate,
+                minDateMillis = System.currentTimeMillis(),
+                maxDateMillis = followUpWindowMaxMillis(),
+            )
         }
+        // Booking CP: offer a site visit as an alternative to postponing (VP).
+        // Reuses the existing Site Visit outcome (convertToSiteVisit).
+        view.findViewById<com.google.android.material.button.MaterialButton>(
+            R.id.btnPostponeOfferSv,
+        )?.apply {
+            visibility = if (cpType == "booking_cp") View.VISIBLE else View.GONE
+            setOnClickListener { switchOutcome(Outcome.SITE_VISIT) }
+        }
+    }
+
+    /** VP follow-up window cap for the postpone / next-visit date: a collection
+     *  follow-up may land within 5 days and a booking-CP postpone within 7.
+     *  Anchored at today; other cpTypes are uncapped (null). Mirrors the
+     *  setOutcome server-side check so the picker can't offer an invalid date. */
+    private fun followUpWindowMaxMillis(): Long? {
+        val days = when (cpType) {
+            "collection_cp" -> 5
+            "booking_cp" -> 7
+            else -> return null
+        }
+        return Calendar.getInstance().apply {
+            add(Calendar.DAY_OF_YEAR, days)
+        }.timeInMillis
     }
 
     private fun bindNotInterestedFields(view: View) {
@@ -7115,6 +7271,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         private const val OUTCOME_FOLLOW_UP = "follow_up"
         private const val OUTCOME_NOT_INTERESTED = "not_interested"
         private const val OUTCOME_OTHER = "other"
+        // New-Client CP "Client Referral" terminal outcome. Notes carry the
+        // referred person's name + phone ("Referral: <name> · <phone>").
+        // Convex outcomeValidator was extended to accept this value.
+        private const val OUTCOME_REFERRAL = "referral"
         // SV-cum-CP rejection (distinct from not_interested). Set by
         // the RejectReasonBottomSheet sub-flow with the captured reason
         // shipped as notes; Convex outcomeValidator was extended to

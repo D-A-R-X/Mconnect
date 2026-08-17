@@ -487,6 +487,11 @@ class CollectionPaymentEntryBottomSheet : BottomSheetDialogFragment() {
         ).apply {
             // Follow-up must be in the future — no back-dated collection visits.
             datePicker.minDate = now.timeInMillis
+            // VP: a collection follow-up must land within 5 days. Mirrors the
+            // setOutcome server-side cap so the picker can't offer a later date.
+            datePicker.maxDate = (now.clone() as Calendar).apply {
+                add(Calendar.DAY_OF_YEAR, 5)
+            }.timeInMillis
         }.show()
     }
 

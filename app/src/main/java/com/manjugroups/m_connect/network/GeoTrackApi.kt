@@ -206,6 +206,14 @@ interface GeoTrackApi {
         @Body body: SetOutcomeRequest
     ): GeoTrackResponse
 
+    // Cancel an assigned CP visit (SV-cum-CP client no-show / withdrawal). The
+    // backend closes the row, its spawned field visit and the daily task.
+    @POST("api/marketing/clientPlaceVisits/cancel")
+    suspend fun cancelCpVisit(
+        @Header("Authorization") token: String,
+        @Body body: CancelCpVisitRequest
+    ): GeoTrackResponse
+
     // Out-of-geofence CP completion GM approval queue.
     @GET("api/marketing/cp-visits/pending-approvals")
     suspend fun getPendingCpApprovals(
@@ -944,6 +952,11 @@ data class MarkClientMetRequest(
     val id: String,
     val clientMet: Boolean,
     val clientNoShowReason: String? = null
+)
+
+data class CancelCpVisitRequest(
+    val id: String,
+    val reason: String? = null
 )
 
 data class CreateCpVisitRequest(

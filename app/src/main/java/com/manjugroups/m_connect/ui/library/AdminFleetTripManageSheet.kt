@@ -33,6 +33,7 @@ class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
     private var onCopyDriverLink: (() -> Unit)? = null
     private var onResendDriverWhatsapp: (() -> Unit)? = null
     private var onUpdateTripStatus: (() -> Unit)? = null
+    private var onClaimExtraKm: (() -> Unit)? = null
     private var onProgressAction: ((action: String, km: Double?, toll: Double?, beta: Double?) -> Unit)? = null
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
@@ -133,7 +134,45 @@ class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
                         dismissAllowingStateLoss()
                     }
                 }
-                view.findViewById<android.widget.Button>(R.id.btnManageRemove).visibility = View.GONE
+                // On a COMPLETED external-agency trip, reuse the otherwise-hidden
+                // Remove slot to claim / resubmit extra km (or show the current
+                // claim status). Mirrors the travel-desk web "Claim extra km".
+                view.findViewById<android.widget.Button>(R.id.btnManageRemove).apply {
+                    if (completed && t.external && onClaimExtraKm != null) {
+                        visibility = View.VISIBLE
+                        when (t.extraKmStatus?.lowercase()) {
+                            "pending" -> {
+                                text = "Extra km: pending review"
+                                isEnabled = false
+                                setOnClickListener(null)
+                            }
+                            "approved" -> {
+                                text = "Extra km approved" +
+                                    (t.extraKmAmount?.let { " · ₹${it.toInt()}" } ?: "")
+                                isEnabled = false
+                                setOnClickListener(null)
+                            }
+                            "rejected" -> {
+                                text = "Resubmit extra km"
+                                isEnabled = true
+                                setOnClickListener {
+                                    onClaimExtraKm?.invoke()
+                                    dismissAllowingStateLoss()
+                                }
+                            }
+                            else -> {
+                                text = "Claim extra km"
+                                isEnabled = true
+                                setOnClickListener {
+                                    onClaimExtraKm?.invoke()
+                                    dismissAllowingStateLoss()
+                                }
+                            }
+                        }
+                    } else {
+                        visibility = View.GONE
+                    }
+                }
             }
         } else {
             actions.visibility = View.VISIBLE
@@ -400,6 +439,7 @@ class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
             onCopyDriverLink: (() -> Unit)?,
             onResendDriverWhatsapp: (() -> Unit)?,
             onUpdateTripStatus: (() -> Unit)?,
+            onClaimExtraKm: (() -> Unit)? = null,
             onProgressAction: (action: String, km: Double?, toll: Double?, beta: Double?) -> Unit,
         ): AdminFleetTripManageSheet = AdminFleetTripManageSheet().apply {
             this.trip = trip
@@ -410,6 +450,7 @@ class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
             this.onCopyDriverLink = onCopyDriverLink
             this.onResendDriverWhatsapp = onResendDriverWhatsapp
             this.onUpdateTripStatus = onUpdateTripStatus
+            this.onClaimExtraKm = onClaimExtraKm
             this.onProgressAction = onProgressAction
         }
     }

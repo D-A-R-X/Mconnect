@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Referral capture popup for the New-Client CP flow. Lands after the
+  staff has captured photo + arrival OTP and picked the "Client
+  Referral" outcome — the Submit button closes the trip with
+  outcome="referral" and the typed name + phone as notes
+  ("Referral: <name> · <phone>"). Same styling palette as the other
+  CP bottom sheets so it feels like a native part of the trip flow.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_auth_sheet"
+    android:orientation="vertical">
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:maxHeight="440dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="20dp"
+            android:paddingTop="16dp"
+            android:paddingBottom="16dp">
+
+            <!-- Drag handle -->
+            <View
+                android:layout_width="40dp"
+                android:layout_height="4dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginBottom="14dp"
+                android:background="@drawable/bg_chat_sheet_handle" />
+
+            <TextView
+                android:id="@+id/tvReferralTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_bold"
+                android:text="Client Referral"
+                android:textColor="#101828"
+                android:textSize="20sp" />
+
+            <TextView
+                android:id="@+id/tvReferralSubtitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="Capture who the client referred so a telecaller can follow up."
+                android:textColor="#667085"
+                android:textSize="13sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="Referral name *"
+                android:textColor="#344054"
+                android:textSize="13sp" />
+
+            <EditText
+                android:id="@+id/etReferralName"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_cp_creation_input_box"
+                android:fontFamily="@font/inter_medium"
+                android:hint="Full name of the referred person"
+                android:inputType="textPersonName|textCapWords"
+                android:maxLines="1"
+                android:paddingHorizontal="14dp"
+                android:paddingVertical="14dp"
+                android:textColor="#101828"
+                android:textColorHint="#9CA3AF"
+                android:textSize="14sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="Referral phone *"
+                android:textColor="#344054"
+                android:textSize="13sp" />
+
+            <EditText
+                android:id="@+id/etReferralPhone"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_cp_creation_input_box"
+                android:fontFamily="@font/inter_medium"
+                android:hint="10-digit mobile number"
+                android:inputType="phone"
+                android:maxLength="15"
+                android:maxLines="1"
+                android:paddingHorizontal="14dp"
+                android:paddingVertical="14dp"
+                android:textColor="#101828"
+                android:textColorHint="#9CA3AF"
+                android:textSize="14sp" />
+
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#E4E7EC" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingHorizontal="20dp"
+        android:paddingVertical="14dp">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnCancelReferral"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="54dp"
+            android:layout_marginEnd="8dp"
+            android:layout_weight="1"
+            android:fontFamily="@font/inter_bold"
+            android:text="Cancel"
+            android:textAllCaps="false"
+            android:textColor="#475467"
+            android:textSize="15sp"
+            app:cornerRadius="27dp"
+            app:strokeColor="#D0D5DD" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSubmitReferral"
+            android:layout_width="0dp"
+            android:layout_height="54dp"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:backgroundTint="#1BCA0B"
+            android:fontFamily="@font/inter_bold"
+            android:text="Submit"
+            android:textAllCaps="false"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            app:cornerRadius="27dp"
+            app:elevation="0dp" />
+    </LinearLayout>
+</LinearLayout>
