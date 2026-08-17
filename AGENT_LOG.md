@@ -9825,3 +9825,300 @@ not committed, pushed, or deployed.
   New Client CP 5 outcomes incl. Referral (name+phone capture); Other CP create option; SV-cum-CP add
   Cancel+Postpone; follow-up windows (collection ≤5d, booking postpone ≤7d) on pickers + backend; Booking-CP
   postpone "offer SV" option. Needs Convex deploy.
+
+- 2026-08-17 (main-chat) — VP CP epic INCREMENT 3 (create pickers) + INCREMENT 4 backend. INCR 3: retired
+  Follow-up + added Other CP in the web create picker (manjusite cp-visits-list-page.tsx, commit 70d20a69)
+  and iOS (FoundationChat CpVisitsView.swift, darx 24ef49e) — Android was done in incr 2. All three platforms
+  now: no Follow-up create option, Other CP present, New Client CP is auto-only. INCR 4 backend (manjusite,
+  committed—see max): (a) added v.literal("referral") to outcomeValidator in clientPlaceVisits.ts — a
+  client-met terminal outcome; referral name+phone ride the free-text `notes` ("Referral: <name> · <phone>")
+  to avoid the CP-doc type ceiling; setOutcome stores it via the generic completed path (applyCpCompletionEffects
+  gates SV/booking effects on other outcomes, so referral is side-effect-free). (b) new internalMutation
+  spawnNewClientCpFromAster (idempotent: one new_client_cp per lead via by_leadId; best-effort try/catch;
+  requires an assigned staff; createCpVisitRows cpType="new_client_cp", origin="telecaller", scheduledDate=today).
+  (c) hooked leadAssignment.assignAsterLead — new optional arg spawnNewClientCp + maybeSpawnNewClientCp closure
+  called in directAssign (extension/email paths) and the round-robin success branch. (d) asterCalls.ingestCall
+  new-lead branch passes spawnNewClientCp:true (existing-lead reuse branch untouched → returning callers don't
+  spawn). DECISION (user-confirmed): New Client CP = physical field CP, auto-spawned only once the Aster lead is
+  ASSIGNED (not on the raw webhook). REMAINING incr 4: app + iOS outcome set for new_client_cp (Online Booking /
+  SV Fixing / Follow-up / Not Interested / Referral) + Referral name+phone capture sheet. Then incr 5-7. Needs
+  Convex deploy; not build-verified (no tsc run this turn — edits type-safe by inspection).
+
+- 2026-08-17 (main-chat) — VP CP epic INCREMENT 4 app+iOS (New Client CP outcome UI). ANDROID (merge 2561cc99,
+  compileDebugKotlin GREEN): CompleteCpVisitBottomSheet.enabledOutcomeOptions gained a new_client_cp branch —
+  Online Booking / SV Fixing / Follow-up / Not Interested / Client Referral (first 4 reuse BOOKING/SITE_VISIT/
+  POSTPONE/NOT_INTERESTED relabelled). New ReferralCaptureBottomSheet.kt + sheet_referral_capture.xml (name +
+  phone, validated) → finalizeTerminalOutcome(cpVisitId, "referral", "Referral: <name> · <phone>"). Picker
+  onSelect routes REFERRAL → showReferralCaptureSheet; OUTCOME_REFERRAL="referral" const. iOS (darx 7dea608,
+  NOT build-verified): CpVisitOutcome enum +case referral; every switch made exhaustive; visibleOutcomes returns
+  the 5 for new_client_cp and excludes .referral elsewhere; displayTitle relabels; referralSection (name+phone)
+  + submit validation; sends outcome="referral" via the terminal setCpVisitOutcome path with the same notes
+  format; .referral filtered out of lockedOutcomeTabs. INCREMENT 4 COMPLETE across backend+android+ios. NOTE
+  surfaced to user: auto-spawn fires once per brand-new Aster caller on assignment — may want a throttle/campaign
+  filter if inbound volume is high. NEXT: incr 5 (follow-up windows: collection ≤5d, booking postpone ≤7d on
+  pickers + backend), incr 6 (SV-cum-CP add Cancel+Postpone), incr 7 (Booking-CP postpone "offer SV"). Needs Convex deploy.
+
+- 2026-08-17 (main-chat) — VP CP epic INCREMENT 5 (follow-up window caps) COMPLETE. BACKEND (max 486d4e98):
+  setOutcome rejects a followUpDate outside [today, today+N] — collection_cp N=5, booking_cp N=7, others
+  uncapped; computed in IST to avoid a late-evening "past" false-reject. ANDROID (merge a53a2058, compile GREEN):
+  postpone/next-visit picker capped via followUpWindowMaxMillis() (collection 5d / booking 7d / else null);
+  CollectionPaymentEntryBottomSheet follow-up picker capped to 5d. iOS (darx 9e48b5c, NOT build-verified):
+  postpone DatePicker uses postponeDateRange (collection 5d / booking 7d / else ~5y). NEXT: incr 6 (SV-cum-CP
+  add Cancel + Postpone outcomes — app+ios), incr 7 (Booking-CP postpone "offer SV instead" — app+ios). Needs Convex deploy.
+
+- 2026-08-17 (main-chat) — VP CP epic INCREMENTS 6 & 7 (Android done; iOS in review). USER-CONFIRMED scope:
+  incr6 = SV-cum-CP add Cancel + relabel "Follow up"→"Postpone"; incr7 = surface "offer SV" INSIDE the Booking-CP
+  postpone step (not just the existing top-level Site Visit outcome). KEY FINDING: backend already has both
+  primitives — mutation `cancel` (id, reason) exposed at HTTP POST /api/marketing/clientPlaceVisits/cancel
+  (http.ts:13097), and convertToSiteVisit. So 6 & 7 are pure app+iOS, NO Convex change. ANDROID (merge 0311896a,
+  compile GREEN): GeoTrackApi.cancelCpVisit + CancelCpVisitRequest; CompleteCpVisitBottomSheet enabledOutcomeOptions
+  relabels POSTPONE→"Postpone" for sv_cum_cp and adds a "Cancel Visit" option (isSvCumCp) → showCancelReasonSheet
+  (shared remarks sheet) → finalizeCancel → cancelCpVisit; outcome_body_postpone.xml gained a booking_cp-only
+  "Offer a site visit instead" MaterialButton (needed xmlns:app added) wired in bindPostponeFields →
+  switchOutcome(Outcome.SITE_VISIT). iOS parity (.cancel outcome + cancelCpVisit service + offer-SV button;
+  postpone already titled "Postpone" on iOS) delegated to an agent, diff under review before commit to darx.
+
+### Session 107 (cont.) - FC App Library white-strip-above-banner fixed
+- User: white space above App Library blue banner (status-bar strip white), wants it blue matching
+  header. Root: ZStack backmost was Color(.systemGroupedBackground).ignoresSafeArea() (all edges) ->
+  grey painted the top safe area; appHeaderTopFill/headerHero blue fills weren't reliably covering
+  the status-bar strip (NavigationStack + hidden toolbar).
+- Fix (AppLibraryView.swift ~30): backmost now Color(hex:0x0B61CA).ignoresSafeArea(edges:.top) (blue
+  fills status-bar strip = exact header top color) + grey background changed to
+  .ignoresSafeArea(edges:.bottom) so it no longer repaints the top safe area. Guarantees blue
+  status-bar strip regardless of the header-fill safe-area behavior.
+- Uncompiled (Windows); darx now BUILDS on Mac (safeer, head 9c5bd20). Verify on device.
+  HomeView uses same pattern - if it shows the same white strip, apply the same 2-line fix there.
+
+- 2026-08-17 (main-chat) — VP CP epic INCREMENTS 6 & 7 iOS parity COMMITTED → EPIC COMPLETE (3–7). iOS (darx
+  4b51c9c, NOT build-verified): MarketingConvexAPIService.cancelCpVisit (mirrors setCpVisitOutcome, POSTs the
+  existing clientPlaceVisits/cancel route); CompleteCpVisitSheet adds UI-only CpVisitOutcome.cancel
+  ("__cancel__", sv_cum_cp only) — submit() branches to cancelCpVisit and returns before markClientMet/setOutcome;
+  every enum switch made exhaustive; .cancel excluded from default + locked lists; cancelSection reason field.
+  Incr7: postponeSection shows an "Offer a site visit instead" button for booking_cp → selectedOutcome=.siteVisit.
+  NOTE: an unrelated pre-existing uncommitted change to AppLibraryView.swift (status-bar white-gap fix) was left
+  UNSTAGED — only the two intended files were committed. FULL EPIC STATUS: incr1 backend cats (5fc6e9a1), incr2
+  android picker (9865c2bc), incr3 web+ios pickers (70d20a69/24ef49e), incr4 backend+android+ios New Client CP +
+  Referral (82dee4f8/2561cc99/7dea608), incr5 follow-up windows (486d4e98/a53a2058/9e48b5c), incr6+7 cancel +
+  offer-SV (0311896a/4b51c9c). ALL Android compiled GREEN; iOS NOT build-verified (teammate builds on Mac).
+  PENDING: Convex deploy (admin) for backend commits 5fc6e9a1/82dee4f8/486d4e98; iOS Xcode compile pass.
+
+- 2026-08-17 (main-chat) — WhatsApp client-location → SV/CP trip auto-update. User asked if manager's "location
+  from WhatsApp auto-updates SV trip" endpoint exists. AUDIT VERDICT (Explore across ~250 branches): the
+  CONSUMER did NOT exist — inbound handler (convex/whatsappInbound.ts ingestPlatformEvent, token-guarded action,
+  NOT an http.route) only saved a "Shared a location" chat record + notified; it dropped lat/lng and never
+  touched SV/CP. Manager set up the AIRIX side (visit_location_consent template + platform forwarding); the
+  Convex consumer was missing. BUILT it (max 55b9de67, convex tsc clean on file): extended the strict message
+  validator with optional location{latitude,longitude,name,address}; added applySharedVisitLocation — reads
+  message.location + correlation, writes siteVisitId→siteVisits pickupLat/Lng/GoogleMapsLink/Address and
+  clientPlaceVisitId|cpVisitId→clientPlaceVisits visitLat/Lng/googleMapsLink/visitAddress (CP has NO top-level
+  pickup* — those live in nested proposedSiteVisit; visit* is the correct target — caught by tsc). Best-effort,
+  skips completed/cancelled. App/web already read these fields → no client change. GAP flagged to user: the
+  OUTBOUND visit_location_consent send (starts the flow) is NOT wired in our backend (sendAirixWhatsAppTemplate
+  helper exists but no trigger) — must fire from Airix/manually until an auto-send is built. Needs Convex deploy.
+
+- 2026-08-17 (main-chat) — WhatsApp location OUTBOUND auto-send wired (closes the flow). User: "wire the
+  auto-send on SV schedule." Built in convex/whatsappTemplates.ts (max 119c6f05, convex tsc clean on file):
+  added "visit_location_consent" to templateNameValidator; siteVisitLocationConsentPayload internalQuery
+  (resolves lead/client number + params [name,"Site Visit",visitRef=siteVisitTicketCode]; metadata
+  {siteVisitId,leadId,visitRef,visitType:"site_visit",useCase:"visit_location_consent"} — Airix echoes as
+  inbound correlation; nulls out for unreachable number or non-live status); sendSiteVisitLocationConsentForVisit
+  internalAction (uses shared sendTemplate; generic body-param path handles the 3 text params). TRIGGER: scheduled
+  (runAfter 0) from sendSiteVisitConfirmationForVisit so it fires on every SV-schedule path that notifies the
+  client, decoupled (consent failure can't block confirmation), idempotency-keyed visit-location-consent:<svId>:<recipient>.
+  END-TO-END now: SV scheduled → consent template → client shares pin → inbound webhook (55b9de67) → siteVisits
+  pickup* auto-updated. GATES: Airix must APPROVE the visit_location_consent template; needs Convex deploy. Only
+  SVs wired (per user); CP consent-send not auto-triggered (inbound consumer already handles CP if correlation carries a cp id).
+
+- 2026-08-17 (main-chat) — VERIFICATION PASS ("ensure all changes work without flaws") + OTP resend fix. Ran
+  full Android assembleDebug (GREEN), full convex tsc, and 3 adversarial review agents (WhatsApp backend / CP
+  epic backend / iOS). FOUND + FIXED: (1) CRITICAL schema — clientPlaceVisits.outcome union in schema.ts was
+  MISSING "referral" (only setOutcome arg had it) → a referral write would 500 at runtime; added it (also
+  cleared ~10 cascade type errors). (max 74508168) (2) CRITICAL WhatsApp — applySharedVisitLocation ran AFTER
+  the lead/LMO routing gate in processEvent → pin silently dropped for walk-in/client-only SVs; moved it to run
+  FIRST, keyed only on correlation. (max 7fb6f460) (3) CP orphan — spawnNewClientCpFromAster→createCpVisitRows
+  inserted an empty clientPlaces row then threw on missing address; caught throw still COMMITS the orphan
+  (poisons future CP creates). Added a resolvable-address guard before the call. (4) CP date — follow-up window
+  cap parsed raw date; DD-MM-YYYY NaN-rejected → blocked the WHOLE setOutcome. Now normalizeIsoDate first.
+  (5) referral now gated to new_client_cp. (6) WhatsApp validator location→v.optional(v.any()) (extra provider
+  fields url/live_period can't reject the event); isClosed also skips no_show/postponed; consent payload mirrors
+  confirmation gate. iOS review: CLEAN (all switches exhaustive, helpers/signatures verified). OTP (merge
+  5dba0476, compile GREEN): ArrivalOtpBottomSheet resend cooldown existed (Apr) but only toggled isClickable +
+  changed label — button looked active so staff mashed it & burned OTP tries. Now setResendEnabled() disables
+  isEnabled+isClickable+dims (alpha .45); performResend has resendInFlight re-entry guard. BY-DESIGN (not fixed,
+  reported): pin overwrite is intentional (client pin authoritative), best-effort no-retry, cap hard-block behind
+  constrained pickers, address-less spawn skips silently. All backend fixes need Convex deploy.
+
+### Session 120 - Fleet: date-filter default, external-agency OTP, driver double-book, web/mobile sync
+
+**Date:** 2026-08-02
+**Session:** fork. web (max) frontend+convex. Reported on 4 fleet issues.
+
+- (1) FLEET DATE FILTER (web/max, features/fleet/use-fleet-assigned-controller.ts):
+  Complete/Cancelled subtabs showed empty on load because the range presets
+  (today/this-week) are FORWARD-looking while completed trips are in the PAST.
+  Fix: those two subtabs now default to a backward 30-day window (explicit
+  from/to still win; active subtabs keep the caller's range). Frontend-only →
+  live on mfpl immediately. Applies to internal+external (shared query).
+- (2) EXTERNAL-AGENCY OTP → INTERNAL TM (convex/max, travelDeskAuth.ts sendOtp):
+  agency-admin login OTP was deliberately routed to the internal MMS Transport
+  Manager (commit 233b44f0), so the external agency never got their own code.
+  Fix: deliver the OTP to the entered phone (the agency's own registered
+  contact); message now "OTP sent to your phone". _getTransportManager now
+  unused (left defined). STAGED for mfpl deploy.
+- (3) SAME DRIVER MULTIPLE SAME-DAY TRIPS: ALREADY FIXED in code — commit
+  e436b958 exempts external agencies from assertDriverAvailableOnDate
+  (travelDeskTrips.ts:1014-1026); internal fleet keeps one-driver/day by design.
+  User still hits it → mfpl DEPLOY SKEW (fix on max, not live). No new code.
+- (4) WEB↔MOBILE SYNC: app has TravelDeskApi.kt hitting the SAME /api/travel-desk/*
+  endpoints as the web (near-complete coverage incl. cancellation-billing,
+  status-update, finalize-billing). Not a data-source split. Minor missing app
+  routes: drivers/delete, profile/avatar, consulting-start-backfill, trips/link,
+  vehicles/agencies. Remaining "not in sync" is likely display/field-mapping or
+  refresh — needs the SPECIFIC symptom from the user to fix safely (asked).
+- Deploy note: (2) staged, (3) staged; (1) is frontend-live. mfpl deploy needed
+  for the backend ones.
+
+### Session 121 - Fleet date inputs: calendar wouldn't open
+
+**Date:** 2026-08-02
+**Session:** fork. web (max) frontend only.
+
+- FLEET DATE PICKER (features/fleet/tabs/assigned-tab.tsx): the from/to
+  `type="date"` inputs didn't open the calendar because desktop browsers only
+  open the picker via the tiny built-in icon (clipped by the w-[112px] width /
+  shadcn styling), not by clicking the field. Fix: onClick + onFocus now call
+  `e.currentTarget.showPicker?.()` (try/catch guarded) so tapping anywhere in
+  the field opens the native calendar. Frontend-only → live on mfpl. Web-only
+  (no android/iOS equivalent of this dispatcher page).
+
+- 2026-08-17 (main-chat) — NEW FEATURE: single-mobile-device binding (lock a staff account to one device,
+  admin-resettable). User spec said "MAC id" — flagged that a real MAC is NOT obtainable on modern Android/iOS;
+  using ANDROID_ID (Android) / identifierForVendor (iOS) as the stable device id. Portal in screenshot
+  (mg.theairix.com) IS the manjusite web app (components/staff/security-tab.tsx). USER DECISIONS: grace for old
+  builds (enforce only when app sends deviceId), LIVE telemetry via heartbeat, build all 4 surfaces.
+  BACKEND+WEB (max 7d1a221c, +fix 18515038, convex tsc clean): new staffDeviceBindings table (staffId/deviceId/
+  platform/deviceModel/batteryPct/ip/boundAt/lastSeenAt, idx by_staffId+by_deviceId); verifyOtp staff branch —
+  enforceMobileDeviceBinding runs BEFORE takeover: deviceType="mobile"+deviceId → bind first / allow match /
+  BLOCK mismatch ("locked to another device") + audit; web/PC never bound (deviceType resolved from UA via
+  isNativeAppUserAgent — okhttp/cfnetwork = mobile, browser = web); verifyOtp+http /api/auth/verify-otp accept
+  deviceId/devicePlatform/deviceModel/batteryPct, ip from auditContext; heartbeat ping refreshes battery+lastSeen
+  live (keyed by staffId — heartbeat uses trackingDeviceId not ANDROID_ID, and login-lock guarantees heartbeat
+  is from the bound device); new IAM perm staff.resetDeviceBinding (Staff Management group); getDeviceBindingStatus
+  + resetDeviceBinding gated by it; new components/staff/device-binding-card.tsx "Bound Mobile Device" card
+  (model/id/battery/ip/bound/last-seen + Reset w/ confirm), rendered independent of password perm. ANDROID (merge
+  3726f40b, compile GREEN): VerifyOtpRequest +deviceId/devicePlatform/deviceModel/batteryPct (Gson omits nulls);
+  new LoginDeviceInfo.capture() (ANDROID_ID + Build model + battery, null if unusable); OtpActivity passes it
+  (skip agency drivers); lock error surfaces via existing parseErrorMessage→tvOtpError. iOS (darx cd6c890, NOT
+  build-verified): AuthAPIService.verifyOTP adds the 4 fields via a new post(url:jsonBody:) overload (old
+  [String:String] post delegates to it → sendOTP/employee-login unchanged); LoginDeviceInfo.capture() =
+  identifierForVendor + utsname machine model + battery; lock 401 surfaces via authStore.errorMessage. FEATURE
+  COMPLETE across backend+web+android+ios. GATES: web api types resolve on next codegen/deploy; needs Convex
+  deploy; iOS not build-verified. EDGE: factory-reset/new-phone changes deviceId → locked out until admin reset
+  (intended). Only 1 binding per staff.
+
+- 2026-08-17 (main-chat) — Device-binding PRE-PRODUCTION AUDIT ("works for all devices/models/versions") +
+  fixes. Ran 3 adversarial agents (Android compat / iOS compat / backend bypass) + closed a bypass I found
+  directly. FIXES: (a) BYPASS — loginWithEmployeeId (Employee-ID+password login, used by BOTH apps'
+  EmployeePasswordLoginActivity / AuthStore.loginWithEmployeeId) minted a session with NO device check →
+  enforced it there too + wired device fields on both apps (max cfc12541, merge d90312ad, darx fa8f51b). (b) C1
+  CRITICAL — enforcement was gated on client-controlled deviceType==="mobile" (spoofable UA / direct mutation
+  call); re-gated on deviceId PRESENCE (web sends none → exempt, apps always send → enforced, unspoofable)
+  in both login mutations. (c) C3 — resetDeviceBinding now calls deactivateMobileSessionsForStaff so a
+  lost/stolen phone's 30-day token is actually severed on reset; web copy updated. (max 9722a11c). AUDIT
+  RESULTS: Android compat PASS (minSdk24, all APIs safe, Gson omits nulls, no ANR, no perms); iOS compat PASS
+  (target 18.6, keychain rotation benign, all guarded) — caveat TARGETED_DEVICE_FAMILY=1 (iPhone-only, existing
+  config, iPad runs scaled). ACCEPTED/NOTED (not fixed): C2 grace path is a permanent bypass for a modified
+  build that omits deviceId (user chose grace for old builds — recommend a sunset to REQUIRE deviceId once fleet
+  updated); C4 ping mutation is public+staffId-arg so telemetry (battery/lastSeen only, NOT deviceId) is
+  spoofable via direct call — low, pre-existing; DEV_OTP_BYPASS env must be UNSET in prod. Needs Convex deploy.
+
+- 2026-08-17 (main-chat) — iOS PARITY SYNC ("sync whatever present in android"). Fresh parity audit: ~90% done,
+  ~10% left (chat polish, telecaller call stack, front-desk QR history, fleet-admin edges, profile appearance/
+  language). WAVE 1 (darx): chat emoji reaction picker — the ONLY real chat gap (message-info/contact-info/offline
+  queue were already at parity; system camera covers photo+video) — new EmojiReactionPickerView + reaction-menu
+  "+" button (250860a). Telecaller OUTBOUND softphone ported (7932e79): new ModernDialerBridge.swift (WKWebView
+  1:1 port of Android ModernDialerWebViewBridge — hidden 1x1 webview, host HTML origin-spoofed mg.theairix.com +
+  dialer iframe, MconnectDialerBridge msg handler, command queue, AVAudioSession, ringback, 40s timeout);
+  getMobileDialerConfig (GET /api/mobile/dialer/config); DialerView routes configured→ModernDialer /
+  unreachable→error / else→Doocti (Android routeCall parity, Doocti preserved). NEEDS ON-DEVICE TESTING
+  (WebRTC/mic/audio, softphone registration, event field names, config JSON). SCOPING VERDICT: telecaller
+  INCOMING calls = NOT a code port — needs CallKit + PushKit + APNs-VoIP + backend push + voip bg mode
+  (Apple infra, deferred). WAVE 2 in progress (agent): QR history + profile appearance/language + fleet-admin
+  gap-check. iOS all inspection-verified only (no Xcode).
+
+- 2026-08-17 (main-chat) — iOS PARITY SYNC WAVE 2 done. Profile Appearance(theme)/Language screens (darx
+  73e2724) — new AppearanceSettingsView/LanguageSettingsView in ProfileView + FoundationChatApp drives
+  preferredColorScheme (default Light, opt-in; CAVEAT: app was hardcoded .light so Dark may show untested
+  styling). Front-desk QR history = ALREADY PRESENT on iOS (FrontDeskQRHistoryView, no work). Fleet-admin
+  gap-check: mostly present (FleetPortalExperienceView). Ported MMS allot-to-external-agency (darx 37da95b) —
+  new FleetAllotAgencySheet + gated button, reuses already-wired listAgencies/allotAgency. DEFERRED fleet
+  (need service/model changes or cross-service driver routes + storage upload; flagged for dedicated pass):
+  trip manage-sheet stage progression, In-Progress/Billing tabs + finalize/cancellation billing, resend-driver-
+  WhatsApp, update-trip-status, own-vehicle offline + odometer photos, staff canBill, vehicle make/model.
+  NET PARITY now ~95%. Remaining ~5% is the HARD part that is NOT a clean Android port: (1) telecaller INCOMING
+  calls = CallKit+PushKit+APNs-VoIP+backend (Apple infra); (2) fleet billing/manage-sheet = service-contract +
+  storage-upload plumbing; (3) minor: chat AVFoundation custom camera (system camera covers it), canBill,
+  vehicle fields. ALL session iOS work is inspection-verified only — needs a Mac/Xcode build pass before merge.
+
+### Session 122 - Fleet app↔web parity AUDIT (corrected earlier optimistic claim)
+
+**Date:** 2026-08-02  **Session:** fork. Investigation only, no code.
+
+- User challenged the "near parity" claim. Deeper audit: TravelDeskApi.kt (app
+  external-agency client) DEFINES all endpoints, but wiring check
+  (grep `.method(` across app/src) shows two methods DEFINED-BUT-NEVER-CALLED
+  anywhere in the app:
+    - submitExtraKmClaim  → 0 calls  (web "Claim extra km / Resubmit extra km")
+    - submitEvidence      → 0 calls  (web pending-verification proof upload)
+  So the app is MISSING extra-km-claim and evidence-submission for external
+  agency. Everything else is wired: allocate/unallocate, finalizeBilling,
+  finalizeCancellationBilling, updateTripStatus, completeOfflineAgency, driver
+  lifecycle, vehicles/drivers/staff CRUD, settings, resendDriverWhatsapp.
+- Nuance: some "AgencyDriver*" app screens actually call INTERNAL mms-fleet
+  endpoints (geoApi.markMmsFleetDriver…), so internal+external flows are
+  intermixed. Web-centric features (View summary, Export billing CSV/print) have
+  no direct app equivalent (mobile doesn't export CSV).
+- iOS (FoundationChat) NOT yet audited — likely similar/more gaps (parity build).
+- TODO/offered: wire submitExtraKmClaim + submitEvidence into app fleet UI (+iOS).
+
+### Session 123 - OTP→internal-admin: found + fixed the SECOND path (main login)
+
+**Date:** 2026-08-02  **Session:** fork. web (max) convex.
+
+- User: OTP STILL goes to internal admin. Root cause: there were TWO OTP-send
+  paths with the Transport-Manager redirect. Session 120 fixed only
+  travelDeskAuth.sendOtp (travel-desk PORTAL login). The app's external-agency
+  ADMIN logs in via the MAIN app login → authFunctions.sendOtp, which ALSO
+  redirected the agency OTP to the internal MMS Transport Manager
+  (authFunctions.ts:374-388). MISSED it. Now removed there too — agency admins
+  get the OTP on their own entered phone (defaults kept). convex tsc: no new
+  authFunctions errors (72 pre-existing pull-baseline unrelated).
+- BOTH OTP fixes are BACKEND (convex) → STAGED, NOT live on mfpl. The live OTP
+  keeps going to the TM until the team deploys convex to mfpl (currently blocked
+  by the 72 pull-introduced type errors). This is why the user still sees the
+  old behavior.
+- _getTransportManager now unused (both callers removed); left defined (harmless).
+
+### Session 124 - Fixed per-agency rate: MMS-fixed wins, else agency's own
+
+**Date:** 2026-08-02  **Session:** fork. web (max) convex + fleet frontend.
+
+- Problem: MMS Fleet→Agencies rate and the agency's portal rate BOTH wrote to
+  travelDeskAgencySettings.kmRate (one field, last-writer-wins) — so an external
+  agency could overwrite MMS's rate. User: MMS-fixed rate must WIN, else agency's.
+- Fix (chosen: Fleet→Agencies = fixed; backward-compatible, no migration):
+  * schema: travelDeskAgencySettings gains mmsKmRate/mmsPackageAmount (optional).
+  * marketing/travelAgencies.ts upsertAgencyRates → writes mms* (agency's own
+    kmRate/packageAmount preserved). list → returns mms* as row.kmRate (undefined
+    when unset) + agencyKmRate/agencyPackageAmount for context.
+  * travelDeskTrips.allocate: kmRate = args ?? mmsKmRate ?? kmRate ?? DEFAULT
+    (same for package). extra-km: mmsKmRate ?? kmRate ?? DEFAULT. finalizeBilling
+    inherits via visit.travelDeskKmRate (set at allocate) → no change needed.
+  * frontend: FleetAgencyRow +agencyKmRate/agencyPackageAmount; agencies-tab
+    shows "Fixed (MMS)" vs "Agency's own"; form labels → "Fixed per km rate …
+    Leave blank to use the agency's own rate".
+- Resolved BACKEND-side (stored on the trip), so web+app+iOS all inherit it — no
+  client code. External-agency only. convex tsc: 0 new errors (baseline now 2 —
+  the 72 pull errors were cleared by the team's later commits, HEAD 74508168).
+- STAGED for mfpl deploy.
