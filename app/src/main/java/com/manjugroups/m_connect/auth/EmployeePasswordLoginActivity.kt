@@ -92,12 +92,19 @@ class EmployeePasswordLoginActivity : AppCompatActivity() {
 
     private fun login(employeeId: String, password: String) {
         setLoading(true)
+        // Bind this login to the device, same as the OTP path, so the password
+        // login can't sidestep the single-device lock.
+        val deviceInfo = LoginDeviceInfo.capture(applicationContext)
         lifecycleScope.launch {
             runCatching {
                 api.loginWithEmployeeId(
                     com.manjugroups.m_connect.network.EmployeePasswordLoginRequest(
                         employeeId = employeeId,
-                        password = password
+                        password = password,
+                        deviceId = deviceInfo?.deviceId,
+                        devicePlatform = deviceInfo?.platform,
+                        deviceModel = deviceInfo?.model,
+                        batteryPct = deviceInfo?.batteryPct,
                     )
                 )
             }.onSuccess { response ->
