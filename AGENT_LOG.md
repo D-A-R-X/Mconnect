@@ -10122,3 +10122,44 @@ not committed, pushed, or deployed.
   client code. External-agency only. convex tsc: 0 new errors (baseline now 2 —
   the 72 pull errors were cleared by the team's later commits, HEAD 74508168).
 - STAGED for mfpl deploy.
+
+### Session 125 - Wire extra-km claim into app (external agency completed trips)
+
+**Date:** 2026-08-02  **Session:** fork. app (Mconnect/merge).
+
+- Parity gap #1 (extra-km claim) wired: AdminFleetTripManageSheet gains
+  onClaimExtraKm; on a COMPLETED external-agency trip it reuses the hidden
+  Remove-button slot to show status-aware labels — "Claim extra km" / "Resubmit
+  extra km" / "Extra km: pending review" / "Extra km approved · ₹X" (from the
+  already-parsed trip.extraKm*). AdminFleetTripsFragment.openExtraKmClaim() shows
+  a km-input dialog (prefills a rejected claim + shows the review note) →
+  api.submitExtraKmClaim(ExtraKmClaimRequest) → refresh. Import added.
+  compileDebugKotlin SUCCESSFUL.
+- NOTE: uses the ALREADY-DEPLOYED /api/travel-desk/trips/extra-km route → works
+  on a fresh APK with NO convex deploy.
+- Evidence (parity gap #2): the app ALREADY uploads start/end proof (photos+km)
+  via the "Edit details"/complete-offline → finalizeBilling path. The dedicated
+  proof-only submitEvidence isn't wired; functional capability exists. Flagged
+  to user whether a separate lightweight evidence flow is needed.
+- iOS mirror (extra-km) pending — FoundationChat FleetViews; not buildable here.
+
+### Session 126 - Fleet: hide billing from non-billing external staff + Clear date filter
+
+**Date:** 2026-08-02  **Session:** fork. travel-desk (aizen) + web (max) frontend.
+
+- (#12) BILLING GATING (travel-desk web, security): staff without billing access
+  (canDoTravelDeskBilling false) no longer see amounts/billing UI. trips/page.tsx:
+  gated extra-km amount, View summary (shows "Completed" badge instead), Export
+  billing, Claim/Resubmit extra km, Km·₹/Package·₹ rate line, Complete-billing /
+  Bill-cancellation link. trips/[id]/page.tsx: added canBill; gated the
+  Cancellation-billing card, the reached>=6 agency-billing block, and the Details
+  "Rate". tsc clean. Frontend → live on redeploy.
+- (#11) CLEAR date filter (web/max, assigned-tab.tsx): a "Clear" link appears when
+  a custom from/to is set, resetting to the range preset.
+- (#9) AWAITING future SVs: investigated — the awaiting query is passed NO date
+  filter, so it already returns ALL scheduled awaiting rows (incl. FUTURE); the
+  tab's single-date picker defaults to "All dates". So future planned SVs already
+  show. Optional follow-up: a from/to RANGE on awaiting (currently single date).
+- (#10) EXCEL export of filtered SVs: NOT built. Web has an established pattern
+  (handleExportExcel + lib/*-export.ts workbook builders, e.g. site-visits-list
+  -page.tsx:903) to reuse for the fleet — offered.
