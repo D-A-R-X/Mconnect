@@ -172,7 +172,11 @@ class OtpActivity : AppCompatActivity() {
 
     private fun verifyOtp() {
         binding.tvOtpError.visibility = View.GONE
-        viewModel.verifyOtp(phone, getOtp(), agencyDriver)
+        // Attach device identity + telemetry so the backend can bind this staff
+        // account to this one device (agency-driver logins skip binding).
+        val deviceInfo =
+            if (agencyDriver) null else LoginDeviceInfo.capture(applicationContext)
+        viewModel.verifyOtp(phone, getOtp(), agencyDriver, deviceInfo)
     }
 
     private fun collectState() {
