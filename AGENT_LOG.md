@@ -10163,3 +10163,18 @@ not committed, pushed, or deployed.
 - (#10) EXCEL export of filtered SVs: NOT built. Web has an established pattern
   (handleExportExcel + lib/*-export.ts workbook builders, e.g. site-visits-list
   -page.tsx:903) to reuse for the fleet — offered.
+
+### Session 127 - Fleet Excel export (#10) + pushes
+
+**Date:** 2026-08-02  **Session:** fork.
+
+- (#10) EXCEL EXPORT (web/max): new lib/fleet-trips-export.ts (exceljs, house
+  style: title/subtitle/headers) exports the currently-filtered fleet trips
+  (subtab + date window). AssignedTab gains an "Export Excel" button
+  (Download/Loader2, isExporting, toast) wired to filteredGroups. Columns: date,
+  time, project, client(+phone), vehicle, driver(+phone), pickup, status, fleet,
+  agency, run km, extra km(+status), trip total. Web tsc verifying.
+- (#9) AWAITING future SVs: confirmed already works (no date filter passed → all
+  dates incl. future). Left single-date picker as-is (range = optional follow-up).
+- PUSHED: app extra-km (merge, both remotes, 0013e6d0); travel-desk billing
+  gating (aizen, 816001b). Web (clear + excel export) pending tsc, then push.
