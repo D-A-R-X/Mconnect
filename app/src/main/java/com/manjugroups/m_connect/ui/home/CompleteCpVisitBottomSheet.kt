@@ -1482,8 +1482,27 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         // Next-visit date can't be in the past — a postpone always moves
         // the visit forward.
         view.findViewById<View>(R.id.rowPostNextDate)?.setOnClickListener {
-            pickDate(tvPostNextDate, minDateMillis = System.currentTimeMillis())
+            pickDate(
+                tvPostNextDate,
+                minDateMillis = System.currentTimeMillis(),
+                maxDateMillis = followUpWindowMaxMillis(),
+            )
         }
+    }
+
+    /** VP follow-up window cap for the postpone / next-visit date: a collection
+     *  follow-up may land within 5 days and a booking-CP postpone within 7.
+     *  Anchored at today; other cpTypes are uncapped (null). Mirrors the
+     *  setOutcome server-side check so the picker can't offer an invalid date. */
+    private fun followUpWindowMaxMillis(): Long? {
+        val days = when (cpType) {
+            "collection_cp" -> 5
+            "booking_cp" -> 7
+            else -> return null
+        }
+        return Calendar.getInstance().apply {
+            add(Calendar.DAY_OF_YEAR, days)
+        }.timeInMillis
     }
 
     private fun bindNotInterestedFields(view: View) {
