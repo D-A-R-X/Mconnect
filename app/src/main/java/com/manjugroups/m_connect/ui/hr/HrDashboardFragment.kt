@@ -1091,36 +1091,10 @@ class HrDashboardFragment : Fragment() {
                 rangeView.text = buildPunchRange(record)
             }
 
-            // Remark / Time Correction affordance — shown on every PAST day
-            // card (punched or not). Today (index 0) is excluded: the day is
-            // still running, so a remark/correction would be premature. A
-            // no-punch "Absent" past day has no backend id; the backend seeds
-            // an attendance row keyed by {staffId, date} when the request is
-            // raised, so only a date is required here. A just-submitted day
-            // swaps the pencil for the "Remark Submitted" badge until reload.
-            val editBtn = card.findViewById<android.widget.ImageView>(R.id.btnHistoryItemEdit)
-            val remarkBadge = card.findViewById<View>(R.id.badgeRemarkSubmitted)
-            val canRemark = index > 0 && !record.date.isNullOrBlank()
-            val alreadySubmitted =
-                record.date?.let { submittedRemarkDates.contains(it) } == true
-            when {
-                !canRemark -> {
-                    editBtn.visibility = View.GONE
-                    remarkBadge.visibility = View.GONE
-                }
-                alreadySubmitted -> {
-                    editBtn.visibility = View.GONE
-                    remarkBadge.visibility = View.VISIBLE
-                }
-                else -> {
-                    remarkBadge.visibility = View.GONE
-                    editBtn.visibility = View.VISIBLE
-                    editBtn.setOnClickListener {
-                        EditAttendanceBottomSheet.newInstance(record)
-                            .showOnce(parentFragmentManager, "edit_attendance")
-                    }
-                }
-            }
+            // Attendance remark + time-correction feature removed: no edit icon
+            // and no "remark submitted" badge on the dashboard day cards.
+            card.findViewById<android.widget.ImageView>(R.id.btnHistoryItemEdit).visibility = View.GONE
+            card.findViewById<View>(R.id.badgeRemarkSubmitted).visibility = View.GONE
 
             // Present / Absent pill on every past-day card. Today's row
             // (index 0) is skipped — the day is still running so a verdict

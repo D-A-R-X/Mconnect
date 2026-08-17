@@ -873,24 +873,10 @@ class AttendanceHistoryFragment : Fragment() {
                     .showOnce(parentFragmentManager, "attendance_punch_log")
             }
 
-            // Withdraw button is replaced by Edit button
-            val editBtn = card.findViewById<ImageView>(R.id.btnHistoryItemEdit)
-            val badgeRemarkSubmitted = card.findViewById<View>(R.id.badgeRemarkSubmitted)
-            val isSubmitted = record.date?.let { date ->
-                submittedRemarkDates.contains(date)
-            } == true
-
-            if (isSubmitted) {
-                badgeRemarkSubmitted.visibility = View.VISIBLE
-                editBtn.visibility = View.GONE
-            } else {
-                badgeRemarkSubmitted.visibility = View.GONE
-                editBtn.visibility = View.VISIBLE
-                editBtn.setOnClickListener {
-                    EditAttendanceBottomSheet.newInstance(record)
-                        .showOnce(parentFragmentManager, "edit_attendance")
-                }
-            }
+            // Attendance remark + time-correction feature removed: no edit icon
+            // and no "remark submitted" badge on history cards.
+            card.findViewById<ImageView>(R.id.btnHistoryItemEdit).visibility = View.GONE
+            card.findViewById<View>(R.id.badgeRemarkSubmitted).visibility = View.GONE
 
             // Fines banner
             val llFinesBanner = card.findViewById<View>(R.id.llFinesBanner)
