@@ -126,6 +126,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var outcomeArgPreselected: Boolean = false
     private var otherRemarksShown: Boolean = false
     private var otherOutcomeSaving: Boolean = false
+    private var referralCaptureShown: Boolean = false
     // The reusable centre outcome-picker (shown when a type still needs choosing).
     private var outcomePickerDialog: androidx.appcompat.app.AlertDialog? = null
     // The Material bottom-sheet container view (design_bottom_sheet). Hidden
@@ -901,11 +902,13 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             options = options,
             onSelect = { key ->
                 outcomePickerDialog = null
-                if (key == "OTHER") {
-                    showOtherRemarksSheet()
-                } else {
-                    revealSheet()
-                    switchOutcome(outcomeFromKey(key))
+                when (key) {
+                    "OTHER" -> showOtherRemarksSheet()
+                    "REFERRAL" -> showReferralCaptureSheet()
+                    else -> {
+                        revealSheet()
+                        switchOutcome(outcomeFromKey(key))
+                    }
                 }
             },
             // Backed out without choosing — close the sheet. The user can tap
@@ -945,6 +948,18 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         // outcome set (Booking / Follow up / Not Interested / Others) — the same
         // as pure-SV mode — rather than the CP set. Without this it showed the
         // CP options ("Site Visit", "Its Been Postponed") which don't apply.
+        // New-Client CP (auto-spawned when an Aster lead is assigned) has its
+        // own VP-defined outcome set: Online Booking / SV Fixing / Follow-up /
+        // Not Interested / Client Referral. Referral captures the referred
+        // person's name+phone (packed into notes) instead of a generic remark.
+        if (cpType == "new_client_cp") {
+            list.add(opt("BOOKING", "Online Booking", R.drawable.ic_outcome_booking))
+            list.add(opt("SITE_VISIT", "SV Fixing", R.drawable.ic_outcome_site_visit))
+            list.add(opt("POSTPONE", "Follow up", R.drawable.ic_outcome_postpone))
+            list.add(opt("NOT_INTERESTED", "Client Not Interested", R.drawable.ic_outcome_not_interested))
+            list.add(opt("REFERRAL", "Client Referral", R.drawable.ic_outcome_person))
+            return list
+        }
         val svStyle = isSiteVisitMode || cpType == "sv_cum_cp"
         list.add(opt("BOOKING", "Converted as Booking", R.drawable.ic_outcome_booking))
         // Site Visit is not a valid outcome for a row that already IS a site
@@ -996,6 +1011,43 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             subtitle = "Add remarks to explain why this visit is being closed.",
             hint = "What happened with the client?",
         ).showOnce(childFragmentManager, "other_outcome_remarks")
+    }
+
+    /** New-Client CP "Client Referral" outcome: capture the referred person's
+     *  name + phone, pack them into the visit notes and close the visit with
+     *  outcome="referral". Mirrors [showOtherRemarksSheet]'s terminal flow. */
+    private fun showReferralCaptureSheet() {
+        if (referralCaptureShown || !isAdded) return
+        referralCaptureShown = true
+        childFragmentManager.setFragmentResultListener(
+            com.manjugroups.m_connect.ui.common.ReferralCaptureBottomSheet.RESULT_KEY,
+            this,
+        ) { _, result ->
+            referralCaptureShown = false
+            if (!result.getBoolean(
+                    com.manjugroups.m_connect.ui.common.ReferralCaptureBottomSheet.KEY_SUBMITTED,
+                    false,
+                )
+            ) {
+                dismissAllowingStateLoss()
+                return@setFragmentResultListener
+            }
+            val name = result.getString(
+                com.manjugroups.m_connect.ui.common.ReferralCaptureBottomSheet.KEY_NAME,
+            ).orEmpty().trim()
+            val phone = result.getString(
+                com.manjugroups.m_connect.ui.common.ReferralCaptureBottomSheet.KEY_PHONE,
+            ).orEmpty().trim()
+            val cpVisitId = arguments?.getString(ARG_CP_VISIT_ID).orEmpty()
+            if (!isSiteVisitMode && cpVisitId.isBlank()) {
+                showError("Missing CP visit id")
+                return@setFragmentResultListener
+            }
+            otherOutcomeSaving = true
+            finalizeTerminalOutcome(cpVisitId, OUTCOME_REFERRAL, "Referral: $name · $phone")
+        }
+        com.manjugroups.m_connect.ui.common.ReferralCaptureBottomSheet.newInstance()
+            .showOnce(childFragmentManager, "referral_capture")
     }
 
     private fun outcomeFromKey(key: String): Outcome = when (key) {
@@ -7115,6 +7167,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         private const val OUTCOME_FOLLOW_UP = "follow_up"
         private const val OUTCOME_NOT_INTERESTED = "not_interested"
         private const val OUTCOME_OTHER = "other"
+        // New-Client CP "Client Referral" terminal outcome. Notes carry the
+        // referred person's name + phone ("Referral: <name> · <phone>").
+        // Convex outcomeValidator was extended to accept this value.
+        private const val OUTCOME_REFERRAL = "referral"
         // SV-cum-CP rejection (distinct from not_interested). Set by
         // the RejectReasonBottomSheet sub-flow with the captured reason
         // shipped as notes; Convex outcomeValidator was extended to
