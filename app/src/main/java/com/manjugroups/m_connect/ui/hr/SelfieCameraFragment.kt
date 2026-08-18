@@ -95,23 +95,15 @@ class SelfieCameraFragment : Fragment(), OnMapReadyCallback {
                 out
             }
 
+            // Best-effort location — a null fix (offline / indoors) must NOT
+            // block the clock-in; the punch still records and queues offline.
             val location = latestLocation ?: getCurrentLocationOrNull()
-            if (location == null) {
-                setProcessing(false)
-                Toast.makeText(
-                    requireContext(),
-                    "Unable to fetch GPS location. Please try again in open sky.",
-                    Toast.LENGTH_SHORT,
-                ).show()
-                return@launch
-            }
-
-            val address = resolveAddress(location)
+            val address = location?.let { resolveAddress(it) }
             setProcessing(false)
             navigateToSelfieDetail(
                 photoPath = photoFile.absolutePath,
-                latitude = location.latitude,
-                longitude = location.longitude,
+                latitude = location?.latitude,
+                longitude = location?.longitude,
                 address = address,
             )
         }
@@ -244,8 +236,8 @@ class SelfieCameraFragment : Fragment(), OnMapReadyCallback {
 
     private fun navigateToSelfieDetail(
         photoPath: String,
-        latitude: Double,
-        longitude: Double,
+        latitude: Double?,
+        longitude: Double?,
         address: String?,
     ) {
         if (!isAdded || parentFragmentManager.isStateSaved) return
@@ -273,9 +265,14 @@ class SelfieCameraFragment : Fragment(), OnMapReadyCallback {
     private suspend fun getCurrentLocationOrNull(): Location? {
         return try {
             val client = LocationServices.getFusedLocationProviderClient(requireContext())
-            val token = CancellationTokenSource().token
-            client.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, token).await()
-                ?: client.lastLocation.await()
+            // TIME-BOX the fresh fix — a high-accuracy fix can hang indefinitely
+            // offline / indoors, blocking clock-in. Fall back to last known, then
+            // null (null is allowed; the punch still records + queues offline).
+            val fresh = kotlinx.coroutines.withTimeoutOrNull(6000L) {
+                val token = CancellationTokenSource().token
+                client.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, token).await()
+            }
+            fresh ?: runCatching { client.lastLocation.await() }.getOrNull()
         } catch (_: SecurityException) {
             null
         } catch (_: Exception) {

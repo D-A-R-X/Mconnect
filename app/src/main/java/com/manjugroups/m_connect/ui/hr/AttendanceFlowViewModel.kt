@@ -270,12 +270,10 @@ class AttendanceFlowViewModel(
             }
             return
         }
-        if (latitude == null || longitude == null) {
-            viewModelScope.launch {
-                _events.emit(AttendanceFlowEvent.Error(mode, "Valid GPS location is required."))
-            }
-            return
-        }
+        // A missing GPS fix must NOT block the punch: offline / indoors the
+        // device often can't resolve a location, and that's exactly when staff
+        // still need to clock in. The punch records (and queues offline) with
+        // whatever location we have — the backend accepts an optional location.
 
         // Capture the REAL tap time up front (before the selfie upload / API
         // call). Sent as clientPunchTime so attendance records when the staff

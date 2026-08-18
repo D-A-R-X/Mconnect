@@ -165,25 +165,17 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
         binding.layoutPunchLoading.visibility = View.VISIBLE
 
         viewLifecycleOwner.lifecycleScope.launch {
+            // Best-effort location — a null fix (offline / indoors) must NOT
+            // block the clock-in; the punch still records and queues offline.
             val location = fetchLocationOrNull()
-            if (location == null) {
-                binding.layoutPunchLoading.visibility = View.GONE
-                isLaunchingCamera = false
-                Toast.makeText(
-                    requireContext(),
-                    "Unable to fetch GPS location. Please try again in open sky.",
-                    Toast.LENGTH_SHORT,
-                ).show()
-                return@launch
-            }
-            val address = resolveAddress(location)
+            val address = location?.let { resolveAddress(it) }
             isLaunchingCamera = false
             binding.layoutPunchLoading.visibility = View.GONE
             navigateToPunchDetail(
                 mode = mode,
                 photoPath = imageFile.absolutePath,
-                latitude = location.latitude,
-                longitude = location.longitude,
+                latitude = location?.latitude,
+                longitude = location?.longitude,
                 address = address,
             )
         }
@@ -239,19 +231,15 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
             // user isn't dead-ended by the GPS toast after taking a selfie.
             binding.layoutPunchLoading.visibility = View.VISIBLE
             viewLifecycleOwner.lifecycleScope.launch {
-                val fix = fetchLocationOrNull()
+                // Warm up a location fix, but a null (offline / indoors) must NOT
+                // stop the clock-in — begin the capture anyway. Location is
+                // re-fetched after the selfie and a null location is allowed
+                // downstream (the punch records + queues offline).
+                fetchLocationOrNull()
                 if (_binding == null) return@launch
                 binding.layoutPunchLoading.visibility = View.GONE
-                if (fix == null) {
-                    Toast.makeText(
-                        requireContext(),
-                        "Unable to fetch GPS location. Please try again in open sky.",
-                        Toast.LENGTH_SHORT,
-                    ).show()
-                } else {
-                    updateAreaBanner()
-                    beginPunchCapture(PunchMode.PUNCH_IN)
-                }
+                updateAreaBanner()
+                beginPunchCapture(PunchMode.PUNCH_IN)
             }
         }
 
@@ -592,8 +580,8 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
     private fun navigateToPunchDetail(
         mode: PunchMode,
         photoPath: String,
-        latitude: Double,
-        longitude: Double,
+        latitude: Double?,
+        longitude: Double?,
         address: String?,
     ) {
         if (!isAdded || parentFragmentManager.isStateSaved) return
