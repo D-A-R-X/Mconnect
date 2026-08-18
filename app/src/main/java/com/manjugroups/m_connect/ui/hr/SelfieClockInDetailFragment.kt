@@ -304,8 +304,11 @@ class SelfieClockInDetailFragment : Fragment() {
         fun newInstance(
             mode: String,
             photoPath: String,
-            latitude: Double,
-            longitude: Double,
+            // Nullable: offline / indoors a GPS fix may be unavailable. A punch
+            // must still be allowed (recorded + queued) — the backend accepts an
+            // optional location. Only stored when actually present.
+            latitude: Double?,
+            longitude: Double?,
             address: String?,
             targetVisitId: String? = null,
         ): SelfieClockInDetailFragment {
@@ -313,8 +316,8 @@ class SelfieClockInDetailFragment : Fragment() {
                 arguments = Bundle().apply {
                     putString(ARG_MODE, mode)
                     putString(ARG_PHOTO_PATH, photoPath)
-                    putDouble(ARG_LATITUDE, latitude)
-                    putDouble(ARG_LONGITUDE, longitude)
+                    if (latitude != null) putDouble(ARG_LATITUDE, latitude)
+                    if (longitude != null) putDouble(ARG_LONGITUDE, longitude)
                     putString(ARG_ADDRESS, address)
                     putString(ARG_TARGET_VISIT_ID, targetVisitId)
                 }

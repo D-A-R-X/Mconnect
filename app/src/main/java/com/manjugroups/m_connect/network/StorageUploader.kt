@@ -26,7 +26,14 @@ import java.net.SocketTimeoutException
  */
 object StorageUploader {
 
-    data class Result(val storageId: String?, val errorMessage: String?) {
+    data class Result(
+        val storageId: String?,
+        val errorMessage: String?,
+        // True when the upload failed because the device couldn't reach the
+        // server (timeout / no connection) rather than a server rejection
+        // (4xx/5xx). Lets callers queue the work offline instead of failing.
+        val isNetworkError: Boolean = false,
+    ) {
         val isSuccess: Boolean get() = !storageId.isNullOrBlank()
     }
 
@@ -54,6 +61,10 @@ object StorageUploader {
         val ownsTemp = uploadFile !== file
 
         var lastError: String? = null
+        // Tracks whether the most recent failure was a connectivity failure
+        // (timeout / no network) vs a server rejection, so the caller can queue
+        // the punch offline instead of losing it.
+        var lastWasNetwork = false
         try {
             repeat(attempts) { attempt ->
                 try {
@@ -64,6 +75,7 @@ object StorageUploader {
                     val id = response.storageId
                     if (!id.isNullOrBlank()) return Result(id, null)
                     lastError = response.error ?: "Server did not return a file ID."
+                    lastWasNetwork = false
                 } catch (e: HttpException) {
                     if (e.code() in 400..499) {
                         val message = when (e.code()) {
@@ -74,16 +86,20 @@ object StorageUploader {
                         return Result(null, message)
                     }
                     lastError = "Server error (HTTP ${e.code()})."
+                    lastWasNetwork = false
                 } catch (e: SocketTimeoutException) {
                     lastError = "Connection timed out."
+                    lastWasNetwork = true
                 } catch (e: IOException) {
                     lastError = "Network error. Check your connection."
+                    lastWasNetwork = true
                 } catch (e: Exception) {
                     lastError = e.message ?: "Unexpected error."
+                    lastWasNetwork = false
                 }
                 if (attempt < attempts - 1) delay(1500L * (attempt + 1))
             }
-            return Result(null, lastError)
+            return Result(null, lastError, isNetworkError = lastWasNetwork)
         } finally {
             // Clean up only the compressed temp we created, never the caller's file.
             if (ownsTemp) runCatching { uploadFile.delete() }
