@@ -4977,6 +4977,14 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         if (svVisitors.none { !it.name.isNullOrBlank() }) {
             return showError("Add at least one visitor (name) before fixing this Site Visit")
         }
+        // The SV inherits the CP's client identity — block the conversion when
+        // there's no client name (it renders as "—" everywhere). The backend
+        // enforces this too; this is the immediate, in-form feedback.
+        val svClientName = cachedLeadDisplayName?.trim().orEmpty()
+            .ifEmpty { cpClientName?.trim().orEmpty() }
+        if (svClientName.isEmpty()) {
+            return showError("This client has no name. Add the client's name before fixing a Site Visit.")
+        }
 
         btnSubmit?.isClickable = false
         btnSubmit?.text = "Saving…"
