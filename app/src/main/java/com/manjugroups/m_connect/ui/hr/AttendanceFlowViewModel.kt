@@ -7,6 +7,8 @@ import android.graphics.Matrix
 import android.media.ExifInterface
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.manjugroups.m_connect.attendance.OfflinePunchQueue
+import com.manjugroups.m_connect.attendance.PunchSyncWorker
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.geotrack.AttendanceTrackingGate
 import com.manjugroups.m_connect.geotrack.GeoTrackBootstrapSync
@@ -275,6 +277,12 @@ class AttendanceFlowViewModel(
             return
         }
 
+        // Capture the REAL tap time up front (before the selfie upload / API
+        // call). Sent as clientPunchTime so attendance records when the staff
+        // actually punched — not the later server-receive/sync time — and it's
+        // the timestamp a queued offline punch replays with.
+        val punchIso = OfflinePunchQueue.nowIso()
+
         // We used to emit Success optimistically before the API call to make
         // the UI feel instant. That's wrong for punch: when the server rejects
         // (e.g. HTTP 500 "No active punch-in found for today"), the user
@@ -307,6 +315,15 @@ class AttendanceFlowViewModel(
                 val upload = StorageUploader.upload(api, token, compressed)
                 val storageId = upload.storageId
                 if (storageId.isNullOrBlank()) {
+                    // The selfie upload couldn't reach the server → we're offline.
+                    // Queue the punch with the LOCAL selfie (uploaded on flush)
+                    // so it's never lost. Only for a genuine network failure — a
+                    // server rejection (e.g. photo too large) still fails loudly.
+                    if (upload.isNetworkError && context != null &&
+                        queueOfflinePunch(mode, punchIso, latitude, longitude, selfieFile, address, context)
+                    ) {
+                        return@launch
+                    }
                     rollbackOptimistic(previousState)
                     _events.emit(
                         AttendanceFlowEvent.SubmissionFailed(
@@ -327,6 +344,7 @@ class AttendanceFlowViewModel(
                     deviceId = deviceId,
                     source = "mobile",
                     remarks = remarks?.takeIf { it.isNotBlank() },
+                    clientPunchTime = punchIso,
                 )
 
                 val response = if (mode == PunchMode.PUNCH_IN) {
@@ -407,8 +425,24 @@ class AttendanceFlowViewModel(
                 )
                 loadTodayAttendance(token)
             } catch (e: Exception) {
+                // Distinguish a genuine NETWORK failure (no server response) from
+                // a server REJECTION (5xx with a JSON body). extractHttpErrorMessage
+                // returns the server's message on an HttpException and null when
+                // the request never reached the server (offline / timeout).
+                val serverMessage = extractHttpErrorMessage(e)
+                // No server response body → genuine network failure → queue the
+                // punch offline (real tap time + local selfie) so it's never
+                // lost. A server rejection (serverMessage != null) is a real
+                // business error and must NOT be queued.
+                if (serverMessage == null && context != null &&
+                    queueOfflinePunch(mode, punchIso, latitude, longitude, selfieFile, address, context)
+                ) {
+                    return@launch
+                }
+                // Server rejection, or the offline queue itself failed — restore
+                // the prior state and surface the error.
                 rollbackOptimistic(previousState)
-                val message = extractHttpErrorMessage(e) ?: e.message
+                val message = serverMessage ?: e.message
                     ?: "Network error while submitting punch."
                 _events.emit(AttendanceFlowEvent.SubmissionFailed(mode, message))
                 // If the server says there's no active punch-in for today, the
@@ -420,6 +454,46 @@ class AttendanceFlowViewModel(
                 }
             }
         }
+    }
+
+    /**
+     * Queue a punch that couldn't reach the server (offline) with its real tap
+     * time + local selfie, kick the sync worker, and report an offline-success.
+     * Keeps the optimistic clocked-in/out state — the punch WILL land on sync.
+     * Returns true when queued. Shared by both failure points (selfie-upload
+     * failure and punch-call failure) so they behave identically.
+     */
+    private suspend fun queueOfflinePunch(
+        mode: PunchMode,
+        punchIso: String,
+        latitude: Double?,
+        longitude: Double?,
+        selfieFile: File?,
+        address: String?,
+        context: Context,
+    ): Boolean {
+        val queued = OfflinePunchQueue.enqueue(
+            context = context,
+            isPunchIn = mode == PunchMode.PUNCH_IN,
+            punchIso = punchIso,
+            latitude = latitude,
+            longitude = longitude,
+            photoFile = selfieFile,
+            address = address,
+        )
+        if (!queued) return false
+        PunchSyncWorker.enqueue(context)
+        _uiState.update { it.copy(isSubmitting = false) }
+        _events.emit(
+            AttendanceFlowEvent.Success(
+                mode,
+                if (mode == PunchMode.PUNCH_IN)
+                    "Punched in offline — will sync when online"
+                else
+                    "Punched out offline — will sync when online",
+            ),
+        )
+        return true
     }
 
     /**
