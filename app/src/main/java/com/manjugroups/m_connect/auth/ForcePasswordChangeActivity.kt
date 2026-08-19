@@ -144,6 +144,10 @@ class ForcePasswordChangeActivity : AppCompatActivity() {
                 )
             }.onSuccess { response ->
                 if (!response.success) {
+                    if (isDeadSessionMessage(response.error)) {
+                        redirectToLoginSessionExpired()
+                        return@onSuccess
+                    }
                     showError(response.error ?: "Failed to change password")
                     setLoading(false)
                     return@onSuccess
@@ -151,18 +155,58 @@ class ForcePasswordChangeActivity : AppCompatActivity() {
                 session.mustChangePassword = false
                 requestNotificationAccessThenContinue()
             }.onFailure {
+                // The stored token can be DEAD by the time this screen submits —
+                // an admin "Reset Device" or password reset deactivates the
+                // mobile session server-side while the app still holds
+                // isLoggedIn + mustChangePassword. This screen blocks back
+                // navigation, so without this branch the user is permanently
+                // stuck on a "Not authenticated" error they can't act on. Clear
+                // the dead session and return to login; after re-login the
+                // backend still reports mustChangePassword, so they land back
+                // here with a token that works.
+                val httpCode = (it as? retrofit2.HttpException)?.code()
+                val message = extractHttpErrorMessage(it)
+                if (httpCode == 401 || isDeadSessionMessage(message) || isDeadSessionMessage(it.message)) {
+                    redirectToLoginSessionExpired()
+                    return@onFailure
+                }
                 // The backend returns HTTP 400 with a {error:"…"} body when it
                 // rejects the new password (e.g. fails the strength policy on an
                 // older app build with no client-side check). Surface that real
                 // reason instead of a bare "HTTP 400".
                 showError(
-                    extractHttpErrorMessage(it)
+                    message
                         ?: it.message?.takeIf { m -> !m.startsWith("HTTP ") }
                         ?: "Couldn't update password. Please try again.",
                 )
                 setLoading(false)
             }
         }
+    }
+
+    /** True when the server message means the stored session token is no longer
+     *  valid ("Not authenticated" from requireSession, or the friendlier
+     *  "Session expired…" the backend now throws). */
+    private fun isDeadSessionMessage(message: String?): Boolean {
+        if (message.isNullOrBlank()) return false
+        return message.contains("Not authenticated", ignoreCase = true) ||
+            message.contains("Session expired", ignoreCase = true)
+    }
+
+    /** Wipe the dead session (and per-user disk cache) and restart at login
+     *  with a message the user can actually act on. */
+    private fun redirectToLoginSessionExpired() {
+        runCatching { com.manjugroups.m_connect.ui.common.LocalCache.clearAll(this) }
+        session.clearSession()
+        android.widget.Toast.makeText(
+            this,
+            "Session expired. Please sign in again.",
+            android.widget.Toast.LENGTH_LONG,
+        ).show()
+        startActivity(Intent(this, LoginActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        })
+        finish()
     }
 
     /**
