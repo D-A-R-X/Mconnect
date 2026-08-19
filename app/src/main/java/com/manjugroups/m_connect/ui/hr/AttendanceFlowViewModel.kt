@@ -244,30 +244,11 @@ class AttendanceFlowViewModel(
         }
         if (pending.isEmpty()) return base
         val todayPrefix = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-        val todays = pending.filter { it.clientPunchTime.substringBefore('T') == todayPrefix }
-        if (todays.isEmpty()) return base
-
-        val firstPendingIn = todays.filter { it.isPunchIn }
-            .minByOrNull { it.clientPunchTime }
-            ?.clientPunchTime
-        val latest = todays.maxByOrNull { parseMillisOrZero(it.clientPunchTime) } ?: return base
-        val latestMs = parseMillisOrZero(latest.clientPunchTime)
-        val baseLastMs = maxOf(
-            base.firstPunchInIso?.let { parseMillisOrZero(it) } ?: 0L,
-            base.lastPunchOutIso?.let { parseMillisOrZero(it) } ?: 0L,
-        )
-        val queuedIsNewer = latestMs >= baseLastMs
-
-        return base.copy(
-            hasLoaded = true,
-            hasClockedInToday = base.hasClockedInToday || todays.any { it.isPunchIn },
-            isClockedIn = if (queuedIsNewer) latest.isPunchIn else base.isClockedIn,
-            clockedOutOnMobile = if (queuedIsNewer) !latest.isPunchIn else base.clockedOutOnMobile,
-            firstPunchInIso = base.firstPunchInIso?.takeIf { it.isNotBlank() } ?: firstPendingIn,
-        )
+        val todays = pending
+            .filter { it.clientPunchTime.substringBefore('T') == todayPrefix }
+            .map { PendingPunchLite(it.isPunchIn, it.clientPunchTime) }
+        return mergePendingPunch(base, todays)
     }
-
-    private fun parseMillisOrZero(iso: String): Long = parseMillis(iso) ?: 0L
 
     /**
      * Fetches the current calendar month's daily attendance and returns
@@ -692,7 +673,45 @@ class AttendanceFlowViewModel(
         GeoTrackBootstrapSync.apply(context, bootstrap, allowPromptConsent = attendanceActive)
     }
 
+    /** Minimal projection of a queued offline punch used by the pure overlay
+     *  logic below — just the two fields that decide today's status. */
+    internal data class PendingPunchLite(val isPunchIn: Boolean, val clientPunchTime: String)
+
     companion object {
+        /**
+         * OR today's queued-but-unsynced punches into [base]. Pure so it can be
+         * unit-tested without Room/Context. The server hasn't seen a queued
+         * punch, so without this an offline clock-in would still read as
+         * not-clocked-in / absent. Only STRENGTHENS the timeline: the queued
+         * event wins only when it is newer than anything the server already
+         * knows ([base]'s first-in / last-out); otherwise the server state
+         * stands. Any queued punch-in makes the day count as clocked-in.
+         */
+        internal fun mergePendingPunch(
+            base: AttendanceFlowState,
+            todays: List<PendingPunchLite>,
+        ): AttendanceFlowState {
+            if (todays.isEmpty()) return base
+            val firstPendingIn = todays.filter { it.isPunchIn }
+                .minByOrNull { it.clientPunchTime }
+                ?.clientPunchTime
+            val latest = todays.maxByOrNull { parseMillis(it.clientPunchTime) ?: 0L }
+                ?: return base
+            val latestMs = parseMillis(latest.clientPunchTime) ?: 0L
+            val baseLastMs = maxOf(
+                base.firstPunchInIso?.let { parseMillis(it) } ?: 0L,
+                base.lastPunchOutIso?.let { parseMillis(it) } ?: 0L,
+            )
+            val queuedIsNewer = latestMs >= baseLastMs
+            return base.copy(
+                hasLoaded = true,
+                hasClockedInToday = base.hasClockedInToday || todays.any { it.isPunchIn },
+                isClockedIn = if (queuedIsNewer) latest.isPunchIn else base.isClockedIn,
+                clockedOutOnMobile = if (queuedIsNewer) !latest.isPunchIn else base.clockedOutOnMobile,
+                firstPunchInIso = base.firstPunchInIso?.takeIf { it.isNotBlank() } ?: firstPendingIn,
+            )
+        }
+
         internal fun formatMinutesForToday(totalMinutes: Int): String {
             val hours = totalMinutes / 60
             val minutes = totalMinutes % 60
