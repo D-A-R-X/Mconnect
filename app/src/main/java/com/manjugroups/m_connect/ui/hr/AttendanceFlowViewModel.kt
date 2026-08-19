@@ -12,6 +12,8 @@ import com.manjugroups.m_connect.attendance.PunchSyncWorker
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.geotrack.AttendanceTrackingGate
 import com.manjugroups.m_connect.geotrack.GeoTrackBootstrapSync
+import com.manjugroups.m_connect.geotrack.data.GeoTrackDatabase
+import com.manjugroups.m_connect.ui.common.LocalCache
 import com.manjugroups.m_connect.geotrack.service.GeoTrackService
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.GeoTrackApi
@@ -111,8 +113,20 @@ class AttendanceFlowViewModel(
     private val _events = MutableSharedFlow<AttendanceFlowEvent>(extraBufferCapacity = 1)
     val events: SharedFlow<AttendanceFlowEvent> = _events
 
-    fun loadTodayAttendance(token: String) {
+    fun loadTodayAttendance(token: String, context: Context? = null) {
+        val appCtx = context?.applicationContext
         viewModelScope.launch {
+            // Cache-first: on the very first load of a cold start, paint the
+            // last-known-good status from disk immediately so an OFFLINE launch
+            // shows the real clocked-in / present state instead of the empty
+            // default (which read as "not clocked in" and, downstream, "absent").
+            if (appCtx != null && !_uiState.value.hasLoaded) {
+                val cached = readCachedTodayState(appCtx)
+                val seeded = overlayPendingPunch(appCtx, cached ?: _uiState.value)
+                if (cached != null || seeded.hasClockedInToday) {
+                    _uiState.value = seeded.copy(isLoading = true)
+                }
+            }
             _uiState.update { it.copy(isLoading = true) }
             try {
                 val todayResp = api.getMyAttendanceToday(token)
@@ -150,7 +164,7 @@ class AttendanceFlowViewModel(
                 // Pay period = current calendar month sum
                 val (periodLabel, periodMinutes) = loadCurrentMonthSummary(token)
 
-                _uiState.value = AttendanceFlowState(
+                val fresh = AttendanceFlowState(
                     isLoading = false,
                     isSubmitting = false,
                     hasLoaded = true,
@@ -168,11 +182,92 @@ class AttendanceFlowViewModel(
                     payPeriodMinutes = periodMinutes,
                     payPeriodHours = formatMinutesForToday(periodMinutes),
                 )
+                // Persist the authoritative server snapshot so the next cold
+                // start can paint it while offline. Cache the server truth (not
+                // the pending overlay) — once the queue flushes the server row
+                // becomes canonical and re-overlaying stays correct.
+                appCtx?.let { writeCachedTodayState(it, fresh) }
+                // A punch may still be sitting in the offline queue (not yet
+                // synced) — the server won't know about it, so OR it into the
+                // displayed state or today would wrongly read as not-clocked-in.
+                _uiState.value = appCtx?.let { overlayPendingPunch(it, fresh) } ?: fresh
             } catch (_: Exception) {
-                _uiState.update { it.copy(isLoading = false) }
+                // Offline / fetch failed: do NOT collapse to the empty default
+                // (which reads as not-clocked-in → "absent"). Keep the cached
+                // last-known status and overlay any queued offline punch.
+                val base = (appCtx?.let { readCachedTodayState(it) } ?: _uiState.value)
+                val withPending = appCtx?.let { overlayPendingPunch(it, base) } ?: base
+                _uiState.value = withPending.copy(isLoading = false)
             }
         }
     }
+
+    /** Cache key for today's attendance snapshot, namespaced by staff + date so
+     *  a stale "clocked in" from yesterday can never leak into a fresh day. */
+    private fun todayCacheKey(appCtx: Context): String? {
+        val staffId = SessionManager(appCtx).staffId?.takeIf { it.isNotBlank() } ?: return null
+        val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+        return "attn_today:$staffId:$today"
+    }
+
+    private fun readCachedTodayState(appCtx: Context): AttendanceFlowState? {
+        val key = todayCacheKey(appCtx) ?: return null
+        return LocalCache.get<AttendanceFlowState>(appCtx, key)
+            ?.copy(isLoading = false, isSubmitting = false)
+    }
+
+    private fun writeCachedTodayState(appCtx: Context, state: AttendanceFlowState) {
+        val key = todayCacheKey(appCtx) ?: return
+        LocalCache.put(
+            appCtx,
+            key,
+            state.copy(isLoading = false, isSubmitting = false),
+            System.currentTimeMillis(),
+        )
+    }
+
+    /**
+     * OR any queued-but-unsynced offline punch for TODAY into [base]. The server
+     * hasn't seen a queued punch, so without this an offline clock-in would show
+     * as not-clocked-in / absent until the sync worker flushes. Only strengthens
+     * the timeline: if the latest queued event today is newer than anything the
+     * server knows, it wins; otherwise the server state stands.
+     */
+    private suspend fun overlayPendingPunch(
+        appCtx: Context,
+        base: AttendanceFlowState,
+    ): AttendanceFlowState {
+        val pending = withContext(Dispatchers.IO) {
+            runCatching {
+                GeoTrackDatabase.getInstance(appCtx).pendingPunchDao().listAll()
+            }.getOrDefault(emptyList())
+        }
+        if (pending.isEmpty()) return base
+        val todayPrefix = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+        val todays = pending.filter { it.clientPunchTime.substringBefore('T') == todayPrefix }
+        if (todays.isEmpty()) return base
+
+        val firstPendingIn = todays.filter { it.isPunchIn }
+            .minByOrNull { it.clientPunchTime }
+            ?.clientPunchTime
+        val latest = todays.maxByOrNull { parseMillisOrZero(it.clientPunchTime) } ?: return base
+        val latestMs = parseMillisOrZero(latest.clientPunchTime)
+        val baseLastMs = maxOf(
+            base.firstPunchInIso?.let { parseMillisOrZero(it) } ?: 0L,
+            base.lastPunchOutIso?.let { parseMillisOrZero(it) } ?: 0L,
+        )
+        val queuedIsNewer = latestMs >= baseLastMs
+
+        return base.copy(
+            hasLoaded = true,
+            hasClockedInToday = base.hasClockedInToday || todays.any { it.isPunchIn },
+            isClockedIn = if (queuedIsNewer) latest.isPunchIn else base.isClockedIn,
+            clockedOutOnMobile = if (queuedIsNewer) !latest.isPunchIn else base.clockedOutOnMobile,
+            firstPunchInIso = base.firstPunchInIso?.takeIf { it.isNotBlank() } ?: firstPendingIn,
+        )
+    }
+
+    private fun parseMillisOrZero(iso: String): Long = parseMillis(iso) ?: 0L
 
     /**
      * Fetches the current calendar month's daily attendance and returns
@@ -421,7 +516,7 @@ class AttendanceFlowViewModel(
                         if (mode == PunchMode.PUNCH_IN) "Punched in successfully." else "Punched out successfully.",
                     ),
                 )
-                loadTodayAttendance(token)
+                loadTodayAttendance(token, context)
             } catch (e: Exception) {
                 // Distinguish a genuine NETWORK failure (no server response) from
                 // a server REJECTION (5xx with a JSON body). extractHttpErrorMessage
@@ -448,7 +543,7 @@ class AttendanceFlowViewModel(
                 // overnight, or never opened). Pull the truth from the server
                 // so the dashboard button flips back to "Clock In".
                 if (message.contains("No active punch-in", ignoreCase = true)) {
-                    loadTodayAttendance(token)
+                    loadTodayAttendance(token, context)
                 }
             }
         }
