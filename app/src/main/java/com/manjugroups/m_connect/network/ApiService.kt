@@ -1286,9 +1286,28 @@ interface ApiService {
 // Auth models
 data class SendOtpRequest(val phone: String)
 data class SendOtpResponse(val success: Boolean, val message: String?)
-data class VerifyOtpRequest(val phone: String, val otp: String)
+data class VerifyOtpRequest(
+    val phone: String,
+    val otp: String,
+    // Single-mobile-device binding telemetry. Null on the agency-driver /
+    // fallback paths and on older flows; Gson omits nulls so the backend treats
+    // them as absent (grace — no lockout). deviceId = Settings.Secure.ANDROID_ID.
+    val deviceId: String? = null,
+    val devicePlatform: String? = null,
+    val deviceModel: String? = null,
+    val batteryPct: Double? = null,
+)
 data class VerifyOtpResponse(val success: Boolean, val token: String?, val user: UserInfo?, val error: String?)
-data class EmployeePasswordLoginRequest(val employeeId: String, val password: String)
+data class EmployeePasswordLoginRequest(
+    val employeeId: String,
+    val password: String,
+    // Device-binding telemetry — the password login is locked to the same
+    // device as the OTP login. Gson omits nulls (grace when unavailable).
+    val deviceId: String? = null,
+    val devicePlatform: String? = null,
+    val deviceModel: String? = null,
+    val batteryPct: Double? = null,
+)
 data class EmployeePasswordLoginResponse(
     val success: Boolean,
     val token: String? = null,

@@ -8,6 +8,7 @@
   which is a multi-reason checklist.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     style="@style/OutcomeBodyCard"
     android:id="@+id/bodyPostpone"
     android:layout_width="match_parent"
@@ -99,4 +100,25 @@
             android:textColorHint="#94A3B8"
             android:textSize="13sp" />
     </LinearLayout>
+
+    <!-- Booking CP only: instead of postponing, offer the client a site visit.
+         Switches this sheet to the Site Visit outcome (convertToSiteVisit).
+         Kept hidden by default and revealed in code for cpType=booking_cp. -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnPostponeOfferSv"
+        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:fontFamily="@font/inter_bold"
+        android:text="Offer a site visit instead"
+        android:textAllCaps="false"
+        android:textColor="#2DAE12"
+        android:textSize="14sp"
+        android:visibility="gone"
+        app:cornerRadius="14dp"
+        app:icon="@drawable/ic_outcome_site_visit"
+        app:iconGravity="textStart"
+        app:iconTint="#2DAE12"
+        app:strokeColor="#2DAE12" />
 </LinearLayout>

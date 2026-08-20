@@ -116,7 +116,12 @@ class AuthViewModel : ViewModel() {
     private fun isNotRegistered(message: String?): Boolean =
         message?.contains("not registered", ignoreCase = true) == true
 
-    fun verifyOtp(phone: String, otp: String, agencyDriver: Boolean = false) {
+    fun verifyOtp(
+        phone: String,
+        otp: String,
+        agencyDriver: Boolean = false,
+        deviceInfo: LoginDeviceInfo? = null,
+    ) {
         _uiState.value = AuthUiState.Loading
         if (AuthBypass.matches(phone, otp)) {
             _uiState.value = AuthUiState.Verified(AuthBypass.syntheticVerifyResponse(phone))
@@ -131,7 +136,16 @@ class AuthViewModel : ViewModel() {
                 return@launch
             }
             try {
-                val response = api.verifyOtp(VerifyOtpRequest(phone, otp))
+                val response = api.verifyOtp(
+                    VerifyOtpRequest(
+                        phone = phone,
+                        otp = otp,
+                        deviceId = deviceInfo?.deviceId,
+                        devicePlatform = deviceInfo?.platform,
+                        deviceModel = deviceInfo?.model,
+                        batteryPct = deviceInfo?.batteryPct,
+                    ),
+                )
                 if (response.success && response.token != null) {
                     _uiState.value = AuthUiState.Verified(response)
                 } else {

@@ -17,6 +17,7 @@ import com.manjugroups.m_connect.databinding.ItemAdminFleetTripBinding
 import com.manjugroups.m_connect.network.AllocateTripRequest
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.CompleteOfflineTripRequest
+import com.manjugroups.m_connect.network.ExtraKmClaimRequest
 import com.manjugroups.m_connect.network.FinalizeTravelDeskBillingRequest
 import com.manjugroups.m_connect.network.FinalizeTravelDeskCancellationRequest
 import com.manjugroups.m_connect.network.GeoTrackApi
@@ -424,6 +425,9 @@ class AdminFleetTripsFragment : Fragment() {
             onUpdateTripStatus = if (!useMmsFleet) {
                 { openTripStatusDialog(trip) }
             } else null,
+            onClaimExtraKm = if (!useMmsFleet && trip.external) {
+                { openExtraKmClaim(trip) }
+            } else null,
             onProgressAction = { action, km, toll, beta ->
                 submitProgressAction(trip, action, km, toll, beta)
             },
@@ -737,6 +741,61 @@ class AdminFleetTripsFragment : Fragment() {
                         Toast.makeText(
                             requireContext(),
                             response?.error ?: "Could not save cancellation billing.",
+                            Toast.LENGTH_LONG,
+                        ).show()
+                    }
+                }
+            }
+            .show()
+    }
+
+    /** Claim (or resubmit) extra kilometres on a completed external-agency trip.
+     *  Mirrors the travel-desk web "Claim extra km"; the claim is reviewed by a
+     *  Transport Manager (status shows on the trip afterward). */
+    private fun openExtraKmClaim(trip: AdminTrip) {
+        val rejected = trip.extraKmStatus?.equals("rejected", ignoreCase = true) == true
+        val input = android.widget.EditText(requireContext()).apply {
+            hint = "Extra kilometres"
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER or
+                android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
+            setPadding(32, 16, 32, 16)
+            if (rejected) trip.extraKm?.let { setText(it.toString()) }
+        }
+        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setTitle(if (rejected) "Resubmit extra km" else "Claim extra km")
+            .setMessage(
+                "Enter the extra kilometres for ${trip.clientName}." +
+                    (trip.extraKmReviewReason?.takeIf { it.isNotBlank() }
+                        ?.let { "\n\nPrevious review note: $it" } ?: ""),
+            )
+            .setView(input)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Submit") { _, _ ->
+                val extraKm = input.text.toString().trim().toDoubleOrNull()
+                if (extraKm == null || extraKm <= 0) {
+                    Toast.makeText(requireContext(), "Enter extra kilometres greater than zero.", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                val token = session.bearerToken
+                if (token.isBlank()) {
+                    Toast.makeText(requireContext(), "Session expired — sign in again.", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                viewLifecycleOwner.lifecycleScope.launch {
+                    val response = runCatching {
+                        api.submitExtraKmClaim(
+                            token,
+                            ExtraKmClaimRequest(siteVisitId = trip.id, extraKm = extraKm),
+                        )
+                    }.getOrNull()
+                    if (_binding == null) return@launch
+                    if (response?.success == true) {
+                        Toast.makeText(requireContext(), "Extra km submitted for review.", Toast.LENGTH_SHORT).show()
+                        refresh()
+                    } else {
+                        Toast.makeText(
+                            requireContext(),
+                            response?.error ?: "Could not submit extra km.",
                             Toast.LENGTH_LONG,
                         ).show()
                     }

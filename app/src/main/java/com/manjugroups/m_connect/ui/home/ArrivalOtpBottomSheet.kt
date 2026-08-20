@@ -48,6 +48,7 @@ class ArrivalOtpBottomSheet : BottomSheetDialogFragment() {
     private var subtitleText: TextView? = null
     private var countdownTimer: CountDownTimer? = null
     private var resendTimer: CountDownTimer? = null
+    private var resendInFlight: Boolean = false
 
     private var visitId: String = ""
     private var lat: Double? = null
@@ -207,11 +208,16 @@ class ArrivalOtpBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun performResend() {
+        // Re-entry guard: ignore taps while a resend is already in flight or the
+        // cooldown is active. Without this, several taps landing in the same
+        // frame each fired a request and burned the server's OTP-request tries.
+        if (resendInFlight || resendBtn?.isEnabled == false) return
         if (lat == null || lng == null) {
             showError("Location unavailable; cannot resend")
             return
         }
-        resendBtn?.isClickable = false
+        resendInFlight = true
+        setResendEnabled(false)
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val resp = geoApi.requestArrivalOtp(
@@ -229,12 +235,16 @@ class ArrivalOtpBottomSheet : BottomSheetDialogFragment() {
                     startExpiryCountdown(resp.otpExpiresInSeconds ?: 600)
                     startResendCooldown(resp.resendCooldownSeconds ?: 60)
                 } else {
-                    resendBtn?.isClickable = true
+                    // Genuine failure (e.g. rate-limit) — re-enable so the staff
+                    // can retry, but they can't have double-sent in the meantime.
+                    setResendEnabled(true)
                     showError(resp.error ?: "Failed to resend OTP")
                 }
             } catch (e: Exception) {
-                resendBtn?.isClickable = true
+                setResendEnabled(true)
                 showError("Network error: ${e.message ?: "unknown"}")
+            } finally {
+                resendInFlight = false
             }
         }
     }
@@ -253,7 +263,11 @@ class ArrivalOtpBottomSheet : BottomSheetDialogFragment() {
 
     private fun startResendCooldown(seconds: Int) {
         resendTimer?.cancel()
-        resendBtn?.isClickable = false
+        // Fully disable — not just isClickable. isEnabled greys the button so it
+        // clearly reads as unavailable, and (with the alpha) staff stop mashing
+        // it; isClickable alone left it looking active, which is why taps kept
+        // landing and burning OTP-request tries.
+        setResendEnabled(false)
         val total = seconds.coerceAtLeast(0)
         resendTimer = object : CountDownTimer(total * 1000L + 100L, 1000L) {
             override fun onTick(msLeft: Long) {
@@ -262,9 +276,20 @@ class ArrivalOtpBottomSheet : BottomSheetDialogFragment() {
             }
             override fun onFinish() {
                 resendBtn?.text = "Haven't received the verification code? Resend it."
-                resendBtn?.isClickable = true
+                setResendEnabled(true)
             }
         }.start()
+    }
+
+    /** Single source of truth for the resend affordance's enabled state:
+     *  toggles isEnabled + isClickable together and dims the button while
+     *  disabled so it visibly reads as unavailable. */
+    private fun setResendEnabled(enabled: Boolean) {
+        resendBtn?.apply {
+            isEnabled = enabled
+            isClickable = enabled
+            alpha = if (enabled) 1f else 0.45f
+        }
     }
 
     private fun showError(message: String) {

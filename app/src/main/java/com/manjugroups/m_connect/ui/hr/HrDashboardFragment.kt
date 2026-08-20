@@ -192,23 +192,19 @@ class HrDashboardFragment : Fragment() {
         }
 
         viewLifecycleOwner.lifecycleScope.launch {
+            // Best-effort location. Offline / indoors it may be null — that must
+            // NOT block the clock-in (the friend-reported bug: "can't clock in
+            // with no internet"). Proceed with whatever we have; the punch still
+            // records and, if there's no network, queues offline. The backend
+            // accepts an optional location.
             val location = fetchLocationOrNull()
-            if (location == null) {
-                isLaunchingCamera = false
-                Toast.makeText(
-                    requireContext(),
-                    "Unable to fetch GPS location. Please try again in open sky.",
-                    Toast.LENGTH_SHORT,
-                ).show()
-                return@launch
-            }
-            val address = resolveAddress(location)
+            val address = location?.let { resolveAddress(it) }
             isLaunchingCamera = false
             navigateToPunchDetail(
                 mode = mode,
                 photoPath = imageFile.absolutePath,
-                latitude = location.latitude,
-                longitude = location.longitude,
+                latitude = location?.latitude,
+                longitude = location?.longitude,
                 address = address,
             )
         }
@@ -1180,9 +1176,16 @@ class HrDashboardFragment : Fragment() {
     private suspend fun fetchLocationOrNull(): Location? {
         return try {
             val client = LocationServices.getFusedLocationProviderClient(requireContext())
-            val token = CancellationTokenSource().token
-            client.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, token).await()
-                ?: client.lastLocation.await()
+            // TIME-BOX the fresh fix. A high-accuracy fix can hang indefinitely
+            // offline / indoors — exactly when staff still need to clock in — so
+            // never block the punch on it. Fall back to the last known location,
+            // then null (a null location is allowed downstream; the punch still
+            // records + queues offline).
+            val fresh = kotlinx.coroutines.withTimeoutOrNull(6000L) {
+                val token = CancellationTokenSource().token
+                client.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, token).await()
+            }
+            fresh ?: runCatching { client.lastLocation.await() }.getOrNull()
         } catch (_: Exception) {
             null
         }
@@ -1447,8 +1450,8 @@ class HrDashboardFragment : Fragment() {
     private fun navigateToPunchDetail(
         mode: PunchMode,
         photoPath: String,
-        latitude: Double,
-        longitude: Double,
+        latitude: Double?,
+        longitude: Double?,
         address: String?,
     ) {
         if (!isAdded || parentFragmentManager.isStateSaved) return
