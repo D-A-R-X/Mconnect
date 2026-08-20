@@ -41,6 +41,8 @@ import com.manjugroups.m_connect.databinding.FragmentHrDashboardBinding
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.AttendanceRecord
 import com.manjugroups.m_connect.network.HomeFenceData
+import com.manjugroups.m_connect.ui.common.LocalCache
+import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -354,7 +356,7 @@ class HrDashboardFragment : Fragment() {
 
         collectState()
         collectEvents()
-        flowViewModel.loadTodayAttendance(session.bearerToken)
+        flowViewModel.loadTodayAttendance(session.bearerToken, requireContext())
         loadRecentHistoryCards()
 
         // Pull-to-refresh: same two loads as the initial open. There's no
@@ -362,7 +364,7 @@ class HrDashboardFragment : Fragment() {
         // short delay — feels instant on cached data and honest on slow
         // networks.
         binding.hrRefresh.setupPullToRefresh {
-            flowViewModel.loadTodayAttendance(session.bearerToken)
+            flowViewModel.loadTodayAttendance(session.bearerToken, requireContext())
             loadRecentHistoryCards()
             binding.hrRefresh.postDelayed({ _binding?.hrRefresh?.dismissRefresh() }, 800)
         }
@@ -499,7 +501,7 @@ class HrDashboardFragment : Fragment() {
         super.onResume()
         (activity as? MainActivity)?.setTabBarVisible(true)
         (activity as? MainActivity)?.setTopBarAppearance(Color.parseColor("#0B61CA"), false, fullBleed = true)
-        flowViewModel.loadTodayAttendance(session.bearerToken)
+        flowViewModel.loadTodayAttendance(session.bearerToken, requireContext())
         loadRecentHistoryCards()
         // Refresh the geofence policy each time the dashboard becomes
         // visible (so an HR-side radius change picks up without restart),
@@ -785,7 +787,7 @@ class HrDashboardFragment : Fragment() {
         midnightRefreshJob = viewLifecycleOwner.lifecycleScope.launch {
             delay(delayMs)
             if (_binding == null) return@launch
-            flowViewModel.loadTodayAttendance(session.bearerToken)
+            flowViewModel.loadTodayAttendance(session.bearerToken, requireContext())
         }
     }
 
@@ -928,6 +930,17 @@ class HrDashboardFragment : Fragment() {
             // off days as "Week Off". Best-effort — failure leaves the set
             // unchanged and gap days fall back to the punch-derived verdict.
             refreshWeekoffWeekdays()
+            val ctx = context?.applicationContext
+            val cacheKey = monthHistoryCacheKey()
+            // Cache-first paint: show the last-known month immediately so an
+            // OFFLINE open doesn't flash a wall of synthesized "Absent" days
+            // (the reported bug — an empty list makes every past day Absent).
+            if (ctx != null && cacheKey != null && recentHistoryRecords.isEmpty()) {
+                val cached: List<AttendanceRecord>? = LocalCache.get(
+                    ctx, cacheKey, object : TypeToken<List<AttendanceRecord>>() {}.type,
+                )
+                if (!cached.isNullOrEmpty()) bindRecentHistoryCards(cached)
+            }
             try {
                 // Show the full current calendar month, not just the trailing 31 days.
                 val cal = Calendar.getInstance()
@@ -945,17 +958,33 @@ class HrDashboardFragment : Fragment() {
                     toDate = toDate,
                 )
                 if (!response.success) {
-                    bindRecentHistoryCards(emptyList())
+                    // Server unreachable/refused → keep whatever cached month we
+                    // already painted rather than collapsing to all-Absent.
+                    if (recentHistoryRecords.isEmpty()) bindRecentHistoryCards(emptyList())
                 } else {
                     bindRecentHistoryCards(response.records)
+                    // Persist a non-empty authoritative month for offline paints.
+                    if (response.records.isNotEmpty() && ctx != null && cacheKey != null) {
+                        LocalCache.put(ctx, cacheKey, response.records, System.currentTimeMillis())
+                    }
                 }
             } catch (_: Exception) {
-                bindRecentHistoryCards(emptyList())
+                // Offline: keep the cached month we painted above. Only fall back
+                // to the empty gap-fill when there is genuinely nothing cached.
+                if (recentHistoryRecords.isEmpty()) bindRecentHistoryCards(emptyList())
             } finally {
                 isHistoryLoading = false
                 updateAttendanceLoadingUi()
             }
         }
+    }
+
+    /** Cache key for the current month's attendance records, namespaced by staff
+     *  + month so it never crosses users or months. */
+    private fun monthHistoryCacheKey(): String? {
+        val staffId = session.staffId?.takeIf { it.isNotBlank() } ?: return null
+        val month = SimpleDateFormat("yyyy-MM", Locale.US).format(Date())
+        return "attn_month:$staffId:$month"
     }
 
     /**
@@ -1410,7 +1439,7 @@ class HrDashboardFragment : Fragment() {
             while (isActive && _binding != null) {
                 delay(20_000L)
                 if (_binding == null) break
-                flowViewModel.loadTodayAttendance(session.bearerToken)
+                flowViewModel.loadTodayAttendance(session.bearerToken, requireContext())
             }
         }
     }

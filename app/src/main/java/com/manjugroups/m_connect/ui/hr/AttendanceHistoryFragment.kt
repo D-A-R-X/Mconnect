@@ -34,7 +34,9 @@ import androidx.recyclerview.widget.RecyclerView
 import com.manjugroups.m_connect.network.RejectRequest
 import com.manjugroups.m_connect.network.AttendanceApprovalRecord
 import com.manjugroups.m_connect.ui.common.HorizontalTabLayout
+import com.manjugroups.m_connect.ui.common.LocalCache
 import com.manjugroups.m_connect.ui.common.navigateUp
+import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.async
 import java.text.SimpleDateFormat
@@ -436,6 +438,25 @@ class AttendanceHistoryFragment : Fragment() {
                 }
 
                 myDeferred.await()?.let { if (it.success) cachedMyRecords = it.records }
+                // Offline-resilience for the personal "My Attendance" tab: on a
+                // successful non-empty fetch, persist to disk; when the fetch
+                // yielded nothing (offline / failure), hydrate the last-known
+                // month from disk so the calendar shows real days instead of a
+                // wall of synthesized "Absent".
+                run {
+                    val ctx = context?.applicationContext
+                    val key = myAttnCacheKey()
+                    if (ctx != null && key != null) {
+                        if (cachedMyRecords.isNotEmpty()) {
+                            LocalCache.put(ctx, key, cachedMyRecords, System.currentTimeMillis())
+                        } else {
+                            val cached: List<AttendanceRecord>? = LocalCache.get(
+                                ctx, key, object : TypeToken<List<AttendanceRecord>>() {}.type,
+                            )
+                            if (!cached.isNullOrEmpty()) cachedMyRecords = cached
+                        }
+                    }
+                }
                 updateBadgeFor(0, cachedMyRecords.size)
 
                 teamDeferred.await()?.let { if (it.success) cachedTeamAttendance = it.records }
@@ -514,6 +535,13 @@ class AttendanceHistoryFragment : Fragment() {
                 }
             }
         }
+    }
+
+    /** Cache key for the personal "My Attendance" tab, namespaced by staff and
+     *  the active date range so different filters never overwrite each other. */
+    private fun myAttnCacheKey(): String? {
+        val staffId = session.staffId?.takeIf { it.isNotBlank() } ?: return null
+        return "attn_my:$staffId:$filterFromDate:$filterToDate"
     }
 
     private fun renderCurrentTab() {

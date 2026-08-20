@@ -124,7 +124,7 @@ class CpVisitsFragment : Fragment() {
 
         wireApprovalsBanner(view)
         loadVisits()
-        attendanceVm.loadTodayAttendance(session.bearerToken)
+        attendanceVm.loadTodayAttendance(session.bearerToken, requireContext())
 
         primeEntryAnimation(view)
         view.post { playEntryAnimation(view) }
@@ -135,7 +135,7 @@ class CpVisitsFragment : Fragment() {
         (activity as? com.manjugroups.m_connect.MainActivity)?.setTopBarAppearance(Color.WHITE, true)
         (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(false)
         // Refresh clock-in state in case the user clocked in/out from another tab.
-        attendanceVm.loadTodayAttendance(session.bearerToken)
+        attendanceVm.loadTodayAttendance(session.bearerToken, requireContext())
         // A GM may have cleared approvals elsewhere (push → queue); re-check.
         refreshApprovalsBanner()
     }
