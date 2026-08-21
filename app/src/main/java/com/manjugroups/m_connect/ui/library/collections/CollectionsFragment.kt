@@ -107,6 +107,7 @@ class CollectionsFragment : Fragment() {
     private fun setupRecyclerView() {
         adapter = CollectionsAdapter().apply {
             isAccountantRole = false
+            viewerStaffId = session.staffId
             onAcceptClick = { /* executive can't approve */ }
             onRejectClick = { /* executive can't reject */ }
             onRectifyClick = { item -> startRectifyFlow(item) }

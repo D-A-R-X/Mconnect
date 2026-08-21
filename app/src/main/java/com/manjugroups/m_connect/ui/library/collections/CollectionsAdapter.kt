@@ -24,6 +24,10 @@ class CollectionsAdapter : RecyclerView.Adapter<CollectionsAdapter.CollectionVH>
     var onRectifyClick: ((CollectionItem) -> Unit)? = null
     // Collector edits their own still-pending row (fix a wrong amount, etc.).
     var onEditClick: ((CollectionItem) -> Unit)? = null
+
+    /** The signed-in staff id — gates Edit/Re-submit to rows this viewer
+     *  personally collected (the scope-aware list also shows others'). */
+    var viewerStaffId: String? = null
     var onImageClick: ((CollectionItem) -> Unit)? = null
     // Fragment-provided hook: takes the server-side _storage id, resolves
     // it to a signed URL (/api/storage/get-url), and loads the result
@@ -119,15 +123,19 @@ class CollectionsAdapter : RecyclerView.Adapter<CollectionsAdapter.CollectionVH>
                 b.layoutRemarks.visibility = View.GONE
             }
 
-            // Rectify (rejected) OR Edit (own, still-pending). The executive's
-            // "My Collections" feed only contains their own rows, so any pending
-            // row here is editable by them until Accounts acts on it.
+            // Rectify (rejected) OR Edit (still-pending) — OWN rows only. The
+            // list is scope-aware (admins / team leads also see other people's
+            // collections), and the server's correct/re-submit path enforces
+            // collector ownership, so the affordances must match: no Edit
+            // button on a row the viewer didn't personally collect.
+            val ownRow = !item.collectedByStaffId.isNullOrBlank() &&
+                item.collectedByStaffId == viewerStaffId
             when {
-                !isAccountantRole && item.status == CollectionStatus.REJECTED -> {
+                !isAccountantRole && ownRow && item.status == CollectionStatus.REJECTED -> {
                     b.btnRectify.visibility = View.VISIBLE
                     b.tvRectifyLabel.text = "Re-submit"
                 }
-                !isAccountantRole && item.status == CollectionStatus.PENDING -> {
+                !isAccountantRole && ownRow && item.status == CollectionStatus.PENDING -> {
                     b.btnRectify.visibility = View.VISIBLE
                     b.tvRectifyLabel.text = "Edit amount"
                 }
