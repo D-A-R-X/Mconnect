@@ -314,6 +314,9 @@ class CollectionsFragment : Fragment() {
             val amount = bundle.getDouble(CollectionCreateBottomSheet.KEY_AMOUNT, 0.0)
             val paymentMode = bundle.getString(CollectionCreateBottomSheet.KEY_PAYMENT_MODE).orEmpty()
             val refId = bundle.getString(CollectionCreateBottomSheet.KEY_TRANSACTION_REF).orEmpty()
+            val bankName = bundle.getString(CollectionCreateBottomSheet.KEY_BANK_NAME).orEmpty()
+            val branchName = bundle.getString(CollectionCreateBottomSheet.KEY_BRANCH_NAME).orEmpty()
+            val instrumentDate = bundle.getString(CollectionCreateBottomSheet.KEY_INSTRUMENT_DATE).orEmpty()
             val notes = bundle.getString(CollectionCreateBottomSheet.KEY_NOTES).orEmpty()
             val proofLocalPath = bundle.getString(CollectionCreateBottomSheet.KEY_PROOF_LOCAL_PATH)
             val proofFileName = bundle.getString(CollectionCreateBottomSheet.KEY_PROOF_FILE_NAME)
@@ -329,6 +332,9 @@ class CollectionsFragment : Fragment() {
                 amount = amount,
                 paymentMode = paymentMode,
                 transactionReference = refId.ifBlank { null },
+                bankName = bankName.ifBlank { null },
+                branchName = branchName.ifBlank { null },
+                paymentInstrumentDate = instrumentDate.ifBlank { null },
                 notes = notes.ifBlank { null },
                 proofLocalPath = proofLocalPath,
                 proofFileName = proofFileName,
@@ -342,6 +348,9 @@ class CollectionsFragment : Fragment() {
         amount: Double,
         paymentMode: String,
         transactionReference: String?,
+        bankName: String? = null,
+        branchName: String? = null,
+        paymentInstrumentDate: String? = null,
         notes: String?,
         proofLocalPath: String?,
         proofFileName: String?,
@@ -366,6 +375,9 @@ class CollectionsFragment : Fragment() {
                             amount = amount,
                             paymentMode = paymentMode,
                             transactionReference = transactionReference,
+                            bankName = bankName,
+                            branchName = branchName,
+                            paymentInstrumentDate = paymentInstrumentDate,
                             proofStorageId = proofStorageId,
                             proofFileName = proofFileName,
                             notes = notes,
