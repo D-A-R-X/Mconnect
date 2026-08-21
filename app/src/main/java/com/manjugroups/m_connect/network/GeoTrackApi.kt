@@ -342,6 +342,18 @@ interface GeoTrackApi {
     // assignee can act); Legal Team accepts or rejects with required
     // remarks. See convex/postSales.ts for the state machine.
 
+    /** POST /api/postsales/loans/upload-document — attach an uploaded
+     *  (scanned-PDF) document to ONE checklist slot of a loan case.
+     *  Upload the bytes first via /api/storage/upload; send the
+     *  storageId here. Wraps postSales.setLoanChecklistDocument, the
+     *  same mutation the web Loan Desk uses, so per-slot uploads
+     *  persist server-side without re-submitting the whole set. */
+    @POST("api/postsales/loans/upload-document")
+    suspend fun uploadLoanDocument(
+        @Header("Authorization") token: String,
+        @Body body: UploadLoanDocumentRequest,
+    ): UploadLoanDocumentResponse
+
     @GET("api/postsales/loans/forSales")
     suspend fun listLoanDeskForSales(
         @Header("Authorization") token: String,
@@ -1276,6 +1288,19 @@ data class CorrectCollectionRequest(
 // Legal Team). The mobile UI only renders a subset of these fields,
 // but keeping the full payload lets later screens (case detail,
 // audit log) reuse the same DTO without a second fetch.
+
+/** POST /api/postsales/loans/upload-document — per-slot checklist attach. */
+data class UploadLoanDocumentRequest(
+    val loanCaseId: String,
+    val index: Int,
+    val storageId: String,
+    val fileName: String? = null,
+)
+
+data class UploadLoanDocumentResponse(
+    val success: Boolean = false,
+    val error: String? = null,
+)
 
 data class LoanCaseDocument(
     val label: String = "",

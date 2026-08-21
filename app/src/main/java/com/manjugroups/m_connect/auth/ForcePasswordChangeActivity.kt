@@ -144,11 +144,16 @@ class ForcePasswordChangeActivity : AppCompatActivity() {
                 )
             }.onSuccess { response ->
                 if (!response.success) {
-                    if (isDeadSessionMessage(response.error)) {
+                    val clean = sanitizeServerMessage(response.error)
+                    if (isDeadSessionMessage(clean)) {
                         redirectToLoginSessionExpired()
                         return@onSuccess
                     }
-                    showError(response.error ?: "Failed to change password")
+                    if (isStaleForceFlagMessage(clean)) {
+                        continuePastStaleForceFlag()
+                        return@onSuccess
+                    }
+                    showError(clean ?: "Failed to change password")
                     setLoading(false)
                     return@onSuccess
                 }
@@ -165,9 +170,20 @@ class ForcePasswordChangeActivity : AppCompatActivity() {
                 // backend still reports mustChangePassword, so they land back
                 // here with a token that works.
                 val httpCode = (it as? retrofit2.HttpException)?.code()
-                val message = extractHttpErrorMessage(it)
+                val message = sanitizeServerMessage(extractHttpErrorMessage(it))
                 if (httpCode == 401 || isDeadSessionMessage(message) || isDeadSessionMessage(it.message)) {
                     redirectToLoginSessionExpired()
+                    return@onFailure
+                }
+                // "Current password is required" here means the server does NOT
+                // consider this account force-flagged (the password was already
+                // changed — via web, or a previous submit whose local flag-clear
+                // was lost). The local mustChangePassword flag is stale and this
+                // screen has no current-password field and blocks back — without
+                // this branch the user is permanently trapped. Clear the stale
+                // flag and continue into the app.
+                if (isStaleForceFlagMessage(message)) {
+                    continuePastStaleForceFlag()
                     return@onFailure
                 }
                 // The backend returns HTTP 400 with a {error:"…"} body when it
@@ -191,6 +207,37 @@ class ForcePasswordChangeActivity : AppCompatActivity() {
         if (message.isNullOrBlank()) return false
         return message.contains("Not authenticated", ignoreCase = true) ||
             message.contains("Session expired", ignoreCase = true)
+    }
+
+    /** The server demanding a current password on THIS screen means the account
+     *  is not actually force-flagged any more — the local mustChangePassword is
+     *  stale (changed via web, or a prior submit whose flag-clear was lost). */
+    private fun isStaleForceFlagMessage(message: String?): Boolean =
+        message?.contains("Current password is required", ignoreCase = true) == true
+
+    /** Clear the stale force flag and continue into the app — the password is
+     *  already set; there is nothing for the user to do here. */
+    private fun continuePastStaleForceFlag() {
+        session.mustChangePassword = false
+        android.widget.Toast.makeText(
+            this,
+            "Your password is already up to date.",
+            android.widget.Toast.LENGTH_LONG,
+        ).show()
+        requestNotificationAccessThenContinue()
+    }
+
+    /** The self-hosted Convex backend wraps thrown errors as
+     *  "Uncaught Error: <message>\n    at handler (…)" — strip the wrapper and
+     *  the stack tail so users see the actual sentence, not a stack trace. */
+    private fun sanitizeServerMessage(raw: String?): String? {
+        if (raw.isNullOrBlank()) return null
+        return raw
+            .removePrefix("Uncaught Error: ")
+            .removePrefix("Uncaught ConvexError: ")
+            .substringBefore("\n")
+            .trim()
+            .takeIf { it.isNotBlank() }
     }
 
     /** Wipe the dead session (and per-user disk cache) and restart at login
