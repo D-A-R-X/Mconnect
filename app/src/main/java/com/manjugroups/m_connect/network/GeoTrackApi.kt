@@ -690,7 +690,12 @@ data class GeoTrackResponse(
     val success: Boolean,
     val error: String? = null,
     val inserted: Int? = null,
-    val tamperDetected: Boolean? = null
+    val tamperDetected: Boolean? = null,
+    // Server-side rejection diagnostics for a batch: how many points were
+    // dropped by the accuracy gate vs the clock-in→clock-out window clamp.
+    // Makes a "Live but zero GPS stored" day attributable from logcat.
+    val rejectedAccuracy: Int? = null,
+    val rejectedWindow: Int? = null,
 )
 
 data class ConsentStatusResponse(
