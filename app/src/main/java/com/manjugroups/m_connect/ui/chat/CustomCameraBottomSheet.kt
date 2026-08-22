@@ -42,6 +42,38 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
         this.listener = listener
     }
 
+    /**
+     * Attendance-selfie mode: locks the camera to the FRONT lens and removes
+     * every route to another source — the lens-switch button, the gallery
+     * picker and video mode are all hidden. Punch proof must be a live selfie,
+     * and the system camera intent this replaced could not enforce that (its
+     * facing extras are OEM hints and the user can always flip the lens).
+     * Off by default, so chat / CP / form callers are unaffected.
+     */
+    private var selfieOnly = false
+
+    fun setSelfieOnly(enabled: Boolean) {
+        selfieOnly = enabled
+        if (enabled) cameraLensFacing = CameraSelector.LENS_FACING_FRONT
+    }
+
+    /**
+     * Fires whenever the sheet goes away — after a confirmed capture AND on a
+     * plain close/back. Callers that gate a re-entrancy flag on the camera
+     * being open need this to clear it when the user backs out; without it the
+     * flag sticks and the host button stops responding.
+     */
+    private var onDismissed: (() -> Unit)? = null
+
+    fun setOnDismissedListener(callback: () -> Unit) {
+        onDismissed = callback
+    }
+
+    override fun onDismiss(dialog: android.content.DialogInterface) {
+        super.onDismiss(dialog)
+        onDismissed?.invoke()
+    }
+
     private lateinit var cameraExecutor: ExecutorService
     private var cameraProvider: ProcessCameraProvider? = null
     private var preview: Preview? = null
@@ -217,10 +249,12 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
         // Set listeners
         btnClose.setOnClickListener { dismiss() }
         btnGallery.setOnClickListener {
+            if (selfieOnly) return@setOnClickListener // no gallery for punch proof
             listener?.onGalleryClicked()
             dismiss()
         }
         btnSwitch.setOnClickListener {
+            if (selfieOnly) return@setOnClickListener // front lens is locked
             cameraLensFacing = if (cameraLensFacing == CameraSelector.LENS_FACING_BACK) {
                 CameraSelector.LENS_FACING_FRONT
             } else {
@@ -232,7 +266,18 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
         btnCapture.setOnClickListener { handleCapture() }
 
         tabPhoto.setOnClickListener { switchToPhotoMode() }
-        tabVideo.setOnClickListener { checkAudioPermissionAndSwitchToVideo() }
+        tabVideo.setOnClickListener {
+            if (selfieOnly) return@setOnClickListener // photo only for punch proof
+            checkAudioPermissionAndSwitchToVideo()
+        }
+
+        if (selfieOnly) {
+            // Hide, don't just disable: an inert-looking button reads as a bug.
+            btnSwitch.visibility = View.GONE
+            btnGallery.visibility = View.GONE
+            modeTabs.visibility = View.GONE
+            cameraLensFacing = CameraSelector.LENS_FACING_FRONT
+        }
 
         tvZoom05.setOnClickListener { setZoom(0.5f, tvZoom05) }
         tvZoom1x.setOnClickListener { setZoom(1.0f, tvZoom1x) }
