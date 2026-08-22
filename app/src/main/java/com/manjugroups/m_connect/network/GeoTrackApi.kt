@@ -570,6 +570,12 @@ interface GeoTrackApi {
                 response
             }
             val client = OkHttpClient.Builder()
+                // Offline support — see OfflineHttpCache: GETs are stored and
+                // replayed when the device has no network, so screens keep
+                // their data. Online behaviour is unchanged.
+                .apply { OfflineHttpCache.cache()?.let { cache(it) } }
+                .addInterceptor(OfflineHttpCache.serveStaleWhenOffline)
+                .addNetworkInterceptor(OfflineHttpCache.storeResponses)
                 .addInterceptor(authWatchdog)
                 .addInterceptor(logging)
                 .connectTimeout(30, TimeUnit.SECONDS)

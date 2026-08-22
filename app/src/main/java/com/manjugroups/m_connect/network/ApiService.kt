@@ -1255,6 +1255,13 @@ interface ApiService {
                 response
             }
             val client = OkHttpClient.Builder()
+                // Offline support: store GET responses and replay the last
+                // known one when the device has no network, so screens keep
+                // their data instead of emptying. Online behaviour is
+                // unchanged (entries are stored already-stale).
+                .apply { OfflineHttpCache.cache()?.let { cache(it) } }
+                .addInterceptor(OfflineHttpCache.serveStaleWhenOffline)
+                .addNetworkInterceptor(OfflineHttpCache.storeResponses)
                 .addInterceptor(authWatchdog)
                 .addInterceptor(logging)
                 .connectTimeout(30, TimeUnit.SECONDS)
