@@ -96,9 +96,17 @@ object OfflineHttpCache {
                             .build(),
                     )
                 }.getOrNull()
-                // Nothing cached for this call — rethrow so the screen behaves
-                // exactly as it did before this cache existed.
-                cached ?: throw io
+                // A cache MISS is not an exception — OkHttp answers
+                // `only-if-cached` with a synthetic 504. Handing that back would
+                // turn a "you are offline" failure into a confusing HTTP error,
+                // so discard it and rethrow the original IOException: screens
+                // then behave exactly as they did before this cache existed.
+                if (cached != null && cached.isSuccessful) {
+                    cached
+                } else {
+                    cached?.close()
+                    throw io
+                }
             }
         }
     }
