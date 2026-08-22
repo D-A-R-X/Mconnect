@@ -120,6 +120,13 @@ class CollectionsFragment : Fragment() {
         binding.rvCollections.layoutManager = lm
         binding.rvCollections.adapter = adapter
         collectionsPager.bindRecyclerView(binding.rvCollections, lm) { collectionsFilteredCount }
+        // The RecyclerView sits inside a NestedScrollView, so it never scrolls
+        // itself and the RecyclerView-bound trigger above never fires — the
+        // window stayed frozen at the first 20 rows while the header counted
+        // 300+. Drive the window from the OUTER scroll instead (same pattern as
+        // Leaves / Permissions); the RecyclerView binding stays as a no-op
+        // fallback should the layout ever change.
+        collectionsPager.bindNestedScroll(binding.collectionsScroll, totalCount = { collectionsFilteredCount })
     }
 
     private fun loadProofThumbnail(storageId: String, target: ImageView) {
@@ -507,9 +514,15 @@ class CollectionsFragment : Fragment() {
         val to = dateToYmd
         val filtered = masterList.filter { item ->
             val matchesTab = selectedTypeFilter == null || item.type == selectedTypeFilter
+            val row = rowsById[item.id]
             val matchesSearch = currentSearchQuery.isBlank() ||
                 item.bookingName.contains(currentSearchQuery, ignoreCase = true) ||
-                item.refId.contains(currentSearchQuery, ignoreCase = true)
+                item.refId.contains(currentSearchQuery, ignoreCase = true) ||
+                // Web parity: the web Collections search also hits the
+                // customer name, booking ref and plot number.
+                row?.customerName.orEmpty().contains(currentSearchQuery, ignoreCase = true) ||
+                row?.bookingRefNo.orEmpty().contains(currentSearchQuery, ignoreCase = true) ||
+                row?.plotNo.orEmpty().contains(currentSearchQuery, ignoreCase = true)
             val matchesDate = if (from == null || to == null) {
                 true
             } else {
