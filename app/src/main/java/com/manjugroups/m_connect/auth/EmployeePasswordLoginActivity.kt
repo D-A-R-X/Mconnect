@@ -76,12 +76,23 @@ class EmployeePasswordLoginActivity : AppCompatActivity() {
         }
 
         binding.btnEmployeeLogin.setOnClickListener { submit() }
+
+        // Dismiss a stale error as soon as the user edits either field.
+        val clearErrorWatcher = object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) = Unit
+            override fun afterTextChanged(s: android.text.Editable?) = hideError()
+        }
+        binding.etEmployeeId.addTextChangedListener(clearErrorWatcher)
+        binding.etEmployeePassword.addTextChangedListener(clearErrorWatcher)
     }
 
     private fun submit() {
         val employeeId = binding.etEmployeeId.text.toString().trim()
         val password = binding.etEmployeePassword.text.toString()
-        binding.tvEmployeeLoginError.visibility = View.GONE
+        // Hide the whole banner, not just its text view — hiding the inner
+        // TextView alone left an empty red card with a lone icon.
+        hideError()
 
         when {
             employeeId.isBlank() -> showError("Enter your Employee ID")
@@ -234,7 +245,13 @@ class EmployeePasswordLoginActivity : AppCompatActivity() {
 
     private fun showError(message: String) {
         binding.tvEmployeeLoginError.text = message
-        binding.tvEmployeeLoginError.visibility = View.VISIBLE
+        binding.layoutEmployeeLoginError.visibility = View.VISIBLE
+    }
+
+    /** Clear a stale error once the user starts fixing their input — leaving a
+     *  red alert under fields the user has already edited reads as broken. */
+    private fun hideError() {
+        binding.layoutEmployeeLoginError.visibility = View.GONE
     }
 
     private fun setLoading(loading: Boolean) {

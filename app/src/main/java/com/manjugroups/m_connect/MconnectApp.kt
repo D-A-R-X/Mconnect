@@ -44,6 +44,9 @@ class MconnectApp : Application(), ImageLoaderFactory {
 
     override fun onCreate() {
         super.onCreate()
+        // Publish the app context before anything builds an HTTP client — the
+        // shared offline response cache needs it to open its cache directory.
+        com.manjugroups.m_connect.network.MconnectAppContext.set(this)
         // Force a single visual mode for now: app always runs in light mode.
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
         

@@ -121,6 +121,9 @@ class LogoutBottomSheet : BottomSheetDialogFragment() {
             }
             session.clearSession()
             com.manjugroups.m_connect.ui.common.LocalCache.clearAll(ctx)
+            // Drop cached HTTP responses too — otherwise a later user could be
+            // served the previous user's offline data.
+            com.manjugroups.m_connect.network.OfflineHttpCache.clear()
             OnboardingPrefs(ctx).onboardingCompleted = true
             startActivity(Intent(ctx, LoginActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK

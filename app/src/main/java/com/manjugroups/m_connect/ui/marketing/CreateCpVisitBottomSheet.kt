@@ -633,6 +633,12 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         // Client name from the lead (blank-only, like the address fields).
         val clientName = pickFirst(lead.contactName, ai?.clientName, mp?.clientName)
         fillIfBlank(R.id.etClientName, clientName)
+        // Telecaller / LMO: the lead already records who owns it, so fill the
+        // required LMO field instead of making the user hunt for the same
+        // person the web form fills automatically. When the lead has no owner
+        // (or the owner isn't an eligible LMO) the field stays empty and the
+        // existing required check makes the user pick one.
+        prefillLmoFromLead(view, lead.assignedToStaffId)
         fillIfBlank(R.id.etDoorNo, doorNo)
         fillIfBlank(R.id.etAddressLine1, addressLine1)
         fillIfBlank(R.id.etAddressLine2, addressLine2)
@@ -733,6 +739,44 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
 
     /** LMO / Channel Partner / BDO owner picker — reuses the staff list but
      *  filters to the same eligible roles the web CP form allows. */
+    /**
+     * Fill the LMO field from the lead's assigned staff. Never overwrites a
+     * choice the user already made, and only accepts staff who pass the same
+     * eligibility rule as the picker — an ineligible owner leaves the field
+     * empty so the required check still fires.
+     */
+    private fun prefillLmoFromLead(view: View, assignedToStaffId: String?) {
+        if (selectedLmo != null) return
+        val staffId = assignedToStaffId?.trim().orEmpty()
+        if (staffId.isEmpty()) return
+        val label = view.findViewById<EditText>(R.id.etLmo) ?: return
+
+        fun apply(from: List<StaffData>) {
+            if (selectedLmo != null) return
+            val match = from.firstOrNull { it.id == staffId && isEligibleLmo(it) } ?: return
+            selectedLmo = match
+            if (label.text?.toString()?.isBlank() != false) {
+                label.setText(match.name ?: "Selected")
+            }
+        }
+
+        if (staffCache.isNotEmpty()) {
+            apply(staffCache)
+            return
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.getStaff(session.bearerToken)
+                if (!isAdded || !resp.success) return@launch
+                staffCache = resp.staff
+                apply(resp.staff)
+            } catch (_: Exception) {
+                // Silent: the field simply stays empty and the required check
+                // asks the user to pick.
+            }
+        }
+    }
+
     private fun pickLmo(label: EditText) {
         if (staffCache.isNotEmpty()) {
             showLmoPicker(label, staffCache)
