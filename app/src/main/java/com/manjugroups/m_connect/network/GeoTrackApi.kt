@@ -313,10 +313,15 @@ interface GeoTrackApi {
     // Convex JS client. Approve / reject hit updateVerification with
     // the bearer-auth caller stamped as verifiedByStaffId.
 
+    // `cursor` is the previous response's nextCursor, sent as a string so
+    // Retrofit can't reformat the creation-time value into something the
+    // backend parses differently. Omit it for the first page.
     @GET("api/postsales/collections/my")
     suspend fun listMyCustomerCollections(
         @Header("Authorization") token: String,
         @Query("verificationStatus") verificationStatus: String? = null,
+        @Query("cursor") cursor: String? = null,
+        @Query("pageSize") pageSize: Int? = null,
     ): CustomerCollectionsListResponse
 
     @GET("api/postsales/collections/for-accounts")
@@ -1258,6 +1263,11 @@ data class CustomerCollectionsListResponse(
     val success: Boolean = false,
     val collections: List<CustomerCollectionRow> = emptyList(),
     val error: String? = null,
+    // Scroll pagination. Both are absent on endpoints/backends that don't
+    // paginate, which reads as "this was the whole list" — the pre-pagination
+    // behavior.
+    val nextCursor: Double? = null,
+    val hasMore: Boolean = false,
 )
 
 /** Accountant taps Approve. `notes` is optional remarks attached to

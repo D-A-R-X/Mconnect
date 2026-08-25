@@ -72,7 +72,26 @@ class CollectionsFragment : Fragment() {
     private var collectionsFilteredCount: Int = 0
     private val collectionsPager = com.manjugroups.m_connect.ui.common.InfiniteScrollPager(
         onLoadMore = { filterCollections() },
+        // The window above only pages through rows already in memory. The
+        // server hands back one bounded page at a time (this table is far too
+        // large to send whole — doing so is what 502'd the screen), so reaching
+        // the end also has to pull the NEXT page in.
+        onEndReached = { loadNextCollectionsPage() },
     )
+
+    // Server-side scroll pagination state. `nextCursor` is the creation-time
+    // watermark of the last row received; `hasMore` is the backend telling us
+    // rows remain below it. `loadingPage` collapses the burst of end-of-list
+    // scroll callbacks into a single in-flight request.
+    private var collectionsCursor: Double? = null
+    private var collectionsHasMore: Boolean = false
+    private var loadingCollectionsPage: Boolean = false
+    // A page whose rows all fail the active tab/search/date filter adds
+    // nothing visible, and the user is already at the bottom with nothing left
+    // to scroll — so the list would look finished while rows remain. Chase the
+    // next page automatically in that case, bounded so a search that matches
+    // nothing can't walk the entire table.
+    private var emptyAppendStreak: Int = 0
 
     private var selectedTypeFilter: CollectionType? = null
     private var currentSearchQuery: String = ""
@@ -433,23 +452,66 @@ class CollectionsFragment : Fragment() {
 
     // ── Data load ─────────────────────────────────────────────────────
 
-    private fun refreshFromApi() {
+    private fun refreshFromApi() = loadCollectionsPage(reset = true)
+
+    /**
+     * Pull the next server page once the user scrolls to the end of what we
+     * hold. No-ops unless the backend said more rows exist, so a fully loaded
+     * list costs nothing no matter how much the user scrolls.
+     */
+    private fun loadNextCollectionsPage() {
+        if (!collectionsHasMore || loadingCollectionsPage) return
+        loadCollectionsPage(reset = false)
+    }
+
+    private fun loadCollectionsPage(reset: Boolean) {
+        if (loadingCollectionsPage) return
+        loadingCollectionsPage = true
         viewLifecycleOwner.lifecycleScope.launch {
             try {
+                val cursor = if (reset) null else collectionsCursor
                 val resp = withContext(Dispatchers.IO) {
-                    api.listMyCustomerCollections(session.bearerToken, null)
+                    api.listMyCustomerCollections(
+                        token = session.bearerToken,
+                        verificationStatus = null,
+                        cursor = cursor?.toString(),
+                    )
                 }
                 if (!resp.success) {
                     toast(resp.error ?: "Failed to load collections")
                     return@launch
                 }
-                rowsById.clear()
-                resp.collections.forEach { rowsById[it.id] = it }
-                masterList.clear()
-                masterList.addAll(resp.collections.map(CollectionMapper::map))
+                if (reset) {
+                    rowsById.clear()
+                    masterList.clear()
+                }
+                // Append only rows we don't already hold. Pages don't overlap
+                // (each starts strictly below the previous cursor), but a row
+                // written between two requests could shift the boundary, and a
+                // duplicate card is more visible than a missing one.
+                val fresh = resp.collections.filterNot { rowsById.containsKey(it.id) }
+                fresh.forEach { rowsById[it.id] = it }
+                masterList.addAll(fresh.map(CollectionMapper::map))
+                collectionsCursor = resp.nextCursor
+                // Stop only when the backend says the stream is exhausted. A
+                // page can legitimately arrive short — rows get filtered out
+                // server-side — so a small page is NOT the end of the list.
+                collectionsHasMore = resp.hasMore && resp.nextCursor != null
+                val visibleBefore = collectionsFilteredCount
                 filterCollections()
+                emptyAppendStreak =
+                    if (reset || collectionsFilteredCount > visibleBefore) 0 else emptyAppendStreak + 1
+                if (collectionsHasMore &&
+                    collectionsFilteredCount <= visibleBefore &&
+                    emptyAppendStreak < MAX_EMPTY_APPEND_STREAK
+                ) {
+                    loadingCollectionsPage = false
+                    loadCollectionsPage(reset = false)
+                }
             } catch (e: Exception) {
                 toast(e.message ?: "Failed to load collections")
+            } finally {
+                loadingCollectionsPage = false
             }
         }
     }
@@ -603,5 +665,9 @@ class CollectionsFragment : Fragment() {
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
+    }
+
+    companion object {
+        private const val MAX_EMPTY_APPEND_STREAK = 3
     }
 }

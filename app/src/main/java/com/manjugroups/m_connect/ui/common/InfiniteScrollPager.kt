@@ -32,6 +32,17 @@ class InfiniteScrollPager(
     val pageSize: Int = DEFAULT_PAGE,
     private val nearEndThreshold: Int = DEFAULT_THRESHOLD,
     private val onLoadMore: () -> Unit,
+    /**
+     * Fired whenever the user scrolls to the end — including when the window
+     * ALREADY covers every fetched row, which is precisely the moment a
+     * server-paginated screen needs to fetch its next page. Screens whose
+     * endpoint returns the whole set in one shot leave this null and behave
+     * exactly as before.
+     *
+     * It fires on each scroll event near the bottom, so the host must guard
+     * with an "already loading" flag rather than assume one call per page.
+     */
+    private val onEndReached: (() -> Unit)? = null,
 ) {
     private var visibleLimit = pageSize
 
@@ -47,6 +58,10 @@ class InfiniteScrollPager(
     }
 
     private fun extend(total: Int) {
+        // Signal first and unconditionally: the host may have more rows on the
+        // server even when the local window is already full, and that case is
+        // exactly when `visibleLimit >= total` short-circuits below.
+        onEndReached?.invoke()
         if (visibleLimit >= total) return
         visibleLimit += pageSize
         onLoadMore()
