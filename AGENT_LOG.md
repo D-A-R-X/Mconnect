@@ -11025,3 +11025,50 @@ not committed, pushed, or deployed.
    #1 project location in GeoTrack, #6 QR after confirm, #7 SV confirm completion, #9 SV GM dropdown by
      template, #10 outstation CP across days: need product clarity or are web-side.
   assembleDebug + FULL Android unit suite green.
+
+- 2026-08-26 (main-chat) — "do the rest also" (remaining 11 of the 13-item batch). SHIPPED 5 more, and two of
+  them turned out to be fabricated-data bugs rather than missing features:
+  #1 GEOTRACK PROJECT LOCATION — ROOT CAUSE FOUND: projects.liveTrackable INVENTED coordinates for any
+    project with no stored lat/lng — `13.0827 + ((idx % 10) * 0.015 - 0.07)`, a synthetic grid around Chennai
+    spaced BY LIST INDEX. Indistinguishable from a real pin, so selecting such a project flew the map to a
+    place the project is not. Now returns null + hasCoordinates. CHECKED BOTH CONSUMERS: geotrack/live
+    already type-guarded before recentring (only its param TYPE needed widening to accept null);
+    staff-day-tracking-map DID push markers blindly → added a skip. Missing pin > fake pin.
+  #2 DASHBOARD IAM FOR GM — REAL GAP: `vpDashboard.view` gated FIVE backend routes but was absent from
+    lib/iam-model.ts, so it could not be ticked on the IAM screen AT ALL. The apps fall back to a VP/GM
+    DESIGNATION regex, which is why some managers had the dashboard and a differently-titled GM could not be
+    given it. Added to PERMISSIONS + a "Company Dashboard" group + a reports.companyDashboard sub-module.
+    BONUS: the taxonomy test was ALREADY FAILING on two orphans of the same class — staff.resetDeviceBinding
+    (the Reset Device button we just built!) and attendance.markManual — both also ungrantable. Adopted both;
+    lib/iam-taxonomy.test.ts + convex/iam.test.ts now 15/15 (were 2 failing before I touched anything).
+  #3 FINES IAM — ALREADY EXISTS, no work needed: fines.manage ("Create/edit staff fines and deductions") is
+    in the taxonomy, in the "Fines & Deductions" group and the hr.fines module. Verified rather than
+    duplicated.
+  #4 GM/AVP EDIT UNAPPROVED ATTENDANCE TIMES — the app's Time Correction button was a STUB that toasted
+    "Time Correction clicked" and dismissed. Backend already had staffAttendance.correctPunchTimes (gated on
+    attendance.correctPunchTimes, and refusing self-correction) + full web UI, but NO mobile route. Added
+    POST /api/hr/attendance/correct-punch-times (adds no permission logic of its own — the mutation keeps
+    owning the rule) + Android time pickers (either side skippable, since forgetting to clock OUT is the
+    common case) + reason prompt; button hidden unless the viewer holds the permission. Times sent as ISO
+    instants built from the row's own date, matching what the web sends.
+  #6 SV CLIENT QR — had NO status gate whatsoever. Schema has confirmationStatus pending→confirmed ("fixed
+    first, then CP confirmation moves them to confirmed"), so the QR is now hidden while pending. Rows with
+    NO confirmationStatus (legacy) still show it, so nothing working stops working. This lives on the WEB
+    detail page — the app SCANS the QR, it does not display it.
+  GOTCHA WORTH REMEMBERING: adding a method to ReviewAttendanceRequestBottomSheet.OnActionClickListener
+  compiled "successfully" TWICE because Kotlin INCREMENTAL compilation never recompiled the implementing
+  fragment. Only `--rerun-tasks` exposed "Class '<anonymous>' is not abstract and does not implement abstract
+  member". ALWAYS force a rerun after changing an interface.
+  NOT DONE, and why — these need product answers, not code:
+   #5 GeoTrack by IAM: app already gates on attendance.liveTracking; needs the intended scoping rule.
+   #7 "complete the process once SV confirms", #9 SV dropdown GM-by-template: no "template" concept exists on
+     the SV pages — cannot locate what it refers to.
+   #10 outstation CP across days: "outstation" exists ONLY as outstationCharge (fleet billing); there is no
+     outstation VISIT concept to hang this on.
+   #11 BDO auto-attendance (5 CP/SV = full, 3 CP = half): NO visit-based attendance automation exists at all.
+     This WRITES ATTENDANCE, so guessing is unsafe — needs: which designations count as BDO, what counts as a
+     completed visit, whether it overrides a real punch or only fills a blank day, and when it runs.
+   #12 super-admin notifications: categories are derived by KEYWORD matching on text; a real section needs a
+     backend-tagged audience. A keyword guess would misfile notifications.
+  VERIFIED: full convex suite 1059 passed / 22 failed — IDENTICAL to the stashed baseline, so none of the 22
+  are mine. tsc clean. Android assembleDebug + unit tests green.
