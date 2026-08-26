@@ -137,4 +137,120 @@ class OfflineHttpCacheTest {
         }
         assertTrue("POSTs must never be replayed from cache", threw)
     }
+
+    /**
+     * The regression that made the app behave offline WHILE ONLINE: once a
+     * response was cached, the next online request must still hit the network
+     * and must show the NEW data. If a stale entry can win here, every screen
+     * freezes on whatever was captured first.
+     */
+    @Test
+    fun `second online request returns fresh data, not the cached copy`() {
+        val url = server.url("/api/attendance").toString()
+        server.enqueue(MockResponse().setBody("""{"present":0}"""))
+        server.enqueue(MockResponse().setBody("""{"present":42}"""))
+
+        get(url).use { assertEquals("""{"present":0}""", it.body!!.string()) }
+        get(url).use { response ->
+            assertEquals("""{"present":42}""", response.body!!.string())
+            assertNotNull("second online call must reach the network", response.networkResponse)
+        }
+        assertEquals(2, server.requestCount)
+    }
+
+    /**
+     * Same thing when the server answers the revalidation with 304. OkHttp
+     * replays the stored BODY on a 304, so a server that validates rather than
+     * re-sends must not leave the screen showing nothing.
+     */
+    @Test
+    fun `a 304 revalidation replays the stored body rather than an empty one`() {
+        val url = server.url("/api/attendance").toString()
+        server.enqueue(
+            MockResponse()
+                .setBody("""{"present":7}""")
+                .setHeader("ETag", "v1"),
+        )
+        server.enqueue(MockResponse().setResponseCode(304).setHeader("ETag", "v1"))
+
+        get(url).use { assertEquals("""{"present":7}""", it.body!!.string()) }
+        get(url).use { response ->
+            assertEquals(200, response.code)
+            assertEquals("""{"present":7}""", response.body!!.string())
+        }
+        assertEquals(2, server.requestCount)
+    }
+
+    /**
+     * A server ERROR must never displace the last good response in the cache.
+     * The 502 itself is now answered from cache (see the 5xx test below), so
+     * what this pins is that the good entry SURVIVES the error and is still
+     * intact for the offline path afterwards.
+     */
+    @Test
+    fun `a server error is not stored over the last good response`() {
+        val url = server.url("/api/attendance").toString()
+        server.enqueue(MockResponse().setBody("""{"present":9}"""))
+        server.enqueue(MockResponse().setResponseCode(502).setBody("Bad Gateway"))
+
+        get(url).use { assertEquals("""{"present":9}""", it.body!!.string()) }
+        get(url).use { assertEquals("""{"present":9}""", it.body!!.string()) }
+
+        // Network now fails; the good entry must still be intact.
+        server.shutdown()
+        get(url).use { response ->
+            assertEquals(200, response.code)
+            assertEquals("""{"present":9}""", response.body!!.string())
+        }
+    }
+
+
+    /**
+     * The production failure this was written for: the device is ONLINE but the
+     * backend is 5xx-ing. Before, every screen went blank — and a blank
+     * Attendance month renders as a wall of synthesized "Absent". Now the last
+     * known response is shown instead.
+     */
+    @Test
+    fun `a 5xx while online replays the last known response`() {
+        val url = server.url("/api/hr/attendance/all").toString()
+        server.enqueue(MockResponse().setBody("""{"records":["mon","tue"]}"""))
+        server.enqueue(MockResponse().setResponseCode(500).setBody("boom"))
+
+        get(url).use { assertEquals("""{"records":["mon","tue"]}""", it.body!!.string()) }
+        get(url).use { response ->
+            assertEquals(200, response.code)
+            assertEquals("""{"records":["mon","tue"]}""", response.body!!.string())
+        }
+    }
+
+    /**
+     * With nothing cached there is nothing better to show, so the server error
+     * must reach the caller unchanged rather than being swallowed.
+     */
+    @Test
+    fun `a 5xx with nothing cached is passed through`() {
+        server.enqueue(MockResponse().setResponseCode(502).setBody("Bad Gateway"))
+        get(server.url("/api/hr/attendance/all").toString()).use {
+            assertEquals(502, it.code)
+        }
+    }
+
+    /**
+     * Auth and not-found answers are REAL answers about this request — the auth
+     * watchdog logs the user out on 401, and screens show proper empty states
+     * on 404. Replaying stale data over those would hide both.
+     */
+    @Test
+    fun `401 and 404 are never replaced by cached data`() {
+        val url = server.url("/api/hr/attendance/all").toString()
+        server.enqueue(MockResponse().setBody("""{"records":["mon"]}"""))
+        server.enqueue(MockResponse().setResponseCode(401).setBody("unauthorized"))
+        server.enqueue(MockResponse().setResponseCode(404).setBody("gone"))
+
+        get(url).use { assertEquals(200, it.code) }
+        get(url).use { assertEquals(401, it.code) }
+        get(url).use { assertEquals(404, it.code) }
+    }
+
 }

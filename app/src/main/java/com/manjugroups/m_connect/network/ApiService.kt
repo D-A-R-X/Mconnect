@@ -260,6 +260,12 @@ interface ApiService {
         // only the newest ~750 rows company-wide (≈ a few days), so client-side
         // filtering silently missed a person's older records.
         @Query("search") search: String? = null,
+        // Scroll pagination. The company-wide range is far too large to return
+        // in one response — attempting it exceeded the backend's read budget
+        // and the request failed outright, which the All tab rendered as every
+        // day being "Absent". Omit for the first page.
+        @Query("cursor") cursor: String? = null,
+        @Query("pageSize") pageSize: Int? = null,
     ): AttendanceApprovalsResponse
 
     // Whether the caller has a team (direct reports) — drives which attendance
@@ -1633,6 +1639,11 @@ data class AttendanceApprovalsResponse(
     // backend that doesn't return the field yet yields null — a non-null
     // declaration would NPE at first use.
     val requests: List<AttendanceApprovalRecord>? = null,
+    // Scroll pagination for the All tab. Absent on endpoints/backends that
+    // don't paginate, which reads as "that was the whole list" — the
+    // pre-pagination behaviour.
+    val nextCursor: String? = null,
+    val hasMore: Boolean = false,
 )
 
 data class AttendanceApprovalRecord(

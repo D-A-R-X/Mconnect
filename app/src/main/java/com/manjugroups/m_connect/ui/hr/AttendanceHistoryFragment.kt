@@ -64,7 +64,18 @@ class AttendanceHistoryFragment : Fragment() {
         onLoadMore = {
             filterCurrentListOnTyping(binding.etSearch.text?.toString().orEmpty())
         },
+        // The window above only pages through rows already in memory. The All
+        // tab's range is company-wide and far too large to fetch at once, so
+        // reaching the end also has to pull the next page from the server.
+        onEndReached = { loadNextAllAttendancePage() },
     )
+
+    // Server-side paging for the All tab. `hasMore` is the backend telling us
+    // rows remain past the cursor; `loading` collapses the burst of
+    // end-of-list scroll callbacks into a single in-flight request.
+    private var allAttendanceCursor: String? = null
+    private var allAttendanceHasMore: Boolean = false
+    private var loadingAllAttendancePage: Boolean = false
     // All-time bounds for HR Review (which shows the entire review backlog).
     // The "All" tab now honors the date filter instead (filterFromDate/To),
     // so "Last month" and friends actually apply there.
@@ -371,6 +382,10 @@ class AttendanceHistoryFragment : Fragment() {
             cachedAllApprovals = emptyList()
             cachedHrReview = emptyList()
             cachedAllAttendance = emptyList()
+            // The cursor belongs to the range we just discarded — carrying it
+            // into a new range would append rows from the old one.
+            allAttendanceCursor = null
+            allAttendanceHasMore = false
             cachedFines = emptyList()
         }
 
@@ -517,6 +532,8 @@ class AttendanceHistoryFragment : Fragment() {
                 val allResp = allDeferred.await()
                 if (allResp?.success == true) {
                     cachedAllAttendance = allResp.records
+                    allAttendanceCursor = allResp.nextCursor
+                    allAttendanceHasMore = allResp.hasMore && allResp.nextCursor != null
                     updateBadgeFor(5, cachedAllAttendance.size)
                 }
 
@@ -769,7 +786,46 @@ class AttendanceHistoryFragment : Fragment() {
             }.getOrNull() ?: return@launch
             if (_binding == null || !resp.success) return@launch
             cachedAllAttendance = resp.records
+            allAttendanceCursor = resp.nextCursor
+            allAttendanceHasMore = resp.hasMore && resp.nextCursor != null
             if (activeTab == 5) renderCurrentTab()
+        }
+    }
+
+    /**
+     * Pull the next page of company-wide attendance once the user scrolls to
+     * the end of what we hold. No-ops unless the backend said more rows exist,
+     * so a fully loaded range costs nothing however far the user scrolls.
+     */
+    private fun loadNextAllAttendancePage() {
+        if (activeTab != 5 || !allAttendanceHasMore || loadingAllAttendancePage) return
+        val cursor = allAttendanceCursor ?: return
+        loadingAllAttendancePage = true
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = runCatching {
+                    api.getAllAttendance(
+                        session.bearerToken,
+                        filterFromDate,
+                        filterToDate,
+                        search = binding.etSearch.text?.toString()?.trim()?.ifBlank { null },
+                        cursor = cursor,
+                    )
+                }.getOrNull()
+                if (_binding == null || resp?.success != true) return@launch
+                // Append only rows we don't already hold. Pages don't overlap,
+                // but a punch written between two requests could shift the
+                // boundary, and a duplicate day is more visible than a gap.
+                val seen = cachedAllAttendance.mapNotNull { it.id }.toHashSet()
+                val fresh = resp.records.filter { it.id == null || seen.add(it.id) }
+                cachedAllAttendance = cachedAllAttendance + fresh
+                allAttendanceCursor = resp.nextCursor
+                allAttendanceHasMore = resp.hasMore && resp.nextCursor != null
+                updateBadgeFor(5, cachedAllAttendance.size)
+                if (activeTab == 5) renderCurrentTab()
+            } finally {
+                loadingAllAttendancePage = false
+            }
         }
     }
 

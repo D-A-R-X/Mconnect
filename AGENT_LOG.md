@@ -10847,3 +10847,28 @@ not committed, pushed, or deployed.
   leadName?.nilIfBlank so the backend fix covers it. Also widened CP + SV search to match the client name.
   TESTS: lib/visit-display.test.ts 11 passing, pinning blank/whitespace/null fall-through and lead-wins.
   tsc clean, eslint 0 errors, convex/marketing 38 pass. NEEDS CONVEX DEPLOY (mobile SV) + web deploy.
+
+- 2026-08-26 (main-chat) — "online but the app acts offline; attendance ALL ABSENT; nothing loads".
+  DIAGNOSIS — it is NOT the app, it is the LIVE BACKEND. Probe `curl /api/bookings` (unauth) → 401, which
+  means my earlier parity batch IS DEPLOYED, while my fixes for that batch's wide reads are NOT
+  (1a4d3a31 / f68f50ce / 867f571c all still undeployed). So prod is running the version with
+  attendance `limit: 4000` + scope-aware collections full-table scan — the exact read-budget blowups I
+  already found. SYMPTOM MAPPING CONFIRMED IN CODE: AttendanceHistoryFragment does
+  `runCatching{ getAllAttendance }.getOrNull()` then `fillAbsentDays(...)` — a FAILED fetch is swallowed and
+  every dateless day is synthesised as "Absent". So a 500 from the backend renders as the whole company being
+  absent. That is why it looks offline while online. TWO FIXES: (1) APP RESILIENCE — OfflineHttpCache now
+  replays the last-known GET on 5xx, not only on IOException; a failing backend empties a screen exactly like
+  no-network does. Strictly 5xx: 401/403/404 still reach the caller (auth watchdog + real empty states).
+  GOTCHA FOUND BY TEST: the replay silently never worked because OkHttp refuses a new request while the
+  previous response body is open — "cannot make a new request because the previous response is still open".
+  Must drain+close the error body BEFORE calling the cache, then rebuild the response if the cache misses.
+  Proved with a throwaway probe test that printed the actual IllegalStateException rather than guessing.
+  (2) ROOT CAUSE — /api/hr/attendance/all now uses listForReportPaginated (200/page, cursor) instead of one
+  capped read. The old cap did BOTH bad things: enrichment over thousands of rows blew the read budget so the
+  request failed, and whatever came back was truncated — and a truncated day is an "Absent" day. Response
+  keeps `records` and adds nextCursor/hasMore, so older builds still render page one. Android All tab pages
+  via InfiniteScrollPager.onEndReached with id-dedup; cursor cleared when the date range changes.
+  NOTE / NOT DONE: /api/hr/attendance/team-attendance still uses listTeamAttendance which is
+  company-wide-then-filter at limit 2500 — same anti-pattern, bounded but worth converting next.
+  Cache suite 11/11, :app:testDebugUnitTest green, tsc clean, staffAttendance 8/8. NEEDS CONVEX DEPLOY — the
+  app cannot fix a backend that is failing; the deploy is what actually restores it.
