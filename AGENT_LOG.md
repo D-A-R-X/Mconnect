@@ -10925,3 +10925,30 @@ not committed, pushed, or deployed.
   ALL TEAMS pill (sheet with one no-op option — left untouched deliberately). Making the 3 empty tiles real
   needs new backend aggregate fields + a deploy. assembleDebug + unit tests green; NOT visually verified
   on-device (needs a vpDashboard.view login).
+
+- 2026-08-26 (main-chat) — Made the 3 dead dashboard tiles LIVE (bookings / booking value / collection),
+  under the explicit constraint "don't affect any other API, don't break working features".
+  BACKEND: new SELF-CONTAINED convex/mobileDashboardCommercials.ts → dailyTotals({date, viewerStaffId}).
+  Nothing else reads it, so no existing screen can shift behaviour. Reads are day-INDEXED (by_bookingDate,
+  by_collectionDate) + DAY_READ_CAP 1000 — a wide read on customerCollections (160k rows) is exactly what
+  502'd Collections. DEFINITIONS (deliberate, tested): bookings exclude draft + cancelled (not commitments /
+  not revenue); value = agreedAmount ?? bookingCost; collection = APPROVED rows only (pending is a claim,
+  rejected is money that never arrived) with pendingCollectionAmount returned separately.
+  GATE: admin OR vpDashboard.view / marketing.bookings.viewAll / postSales.collections.viewAll /
+  postSales.manage / accounts.verify → otherwise NULL, never zeros, so an unauthorised viewer sees "–"
+  not "the company booked nothing today". WIRED INTO /api/mobile/dashboard additively, inside its OWN
+  try/catch so a failure can't take down the calls/leads/visits/attendance numbers that already work.
+  TWO TRAPS HIT AND FIXED: (1) viewerStaffId is only resolved on the scope=... path, but the app calls
+  UNSCOPED — the fields would have been permanently null; now resolved in-block. (2) the handler is SHARED
+  with /api/telecaller/dashboard/stats (external consumers) — restricted the whole block to the unscoped
+  path so that endpoint gains neither fields nor the 2 extra table reads.
+  CODEGEN LAG: `npx convex codegen` fails (stale colorful-grouse token, see memory), so
+  convex/_generated/api.d.ts was hand-edited with the import + module-map line — real codegen reproduces it
+  identically at deploy.
+  APP: MobileDashboardResponse gains bookingCount/bookingValue/collectionAmount/pendingCollectionAmount as
+  NULLABLE (Gson gives null on an older backend → tiles keep "–"); new inrCompact() renders ₹18.60 L / ₹1.85
+  Cr. Tests: 6 new convex tests (incl. permission-denied → null, quiet day → 0 which must differ from no
+  access, malformed date rejected before any read); executiveDashboard + marketingInsights +
+  marketingVisitScope suites re-run green (23) to prove the shared handler is untouched; tsc clean;
+  assembleDebug + Android unit tests green. STILL MOCK, flagged: 4 conversion KPIs + TODAY'S FUNNEL rows +
+  the ALL TEAMS pill. NEEDS CONVEX DEPLOY — until then the tiles correctly show "–" rather than fake numbers.

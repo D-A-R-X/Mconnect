@@ -1188,6 +1188,24 @@ class HomeFragment : Fragment() {
         value(R.id.cardTotalCalls, d?.totalCalls?.toString() ?: "–")
         value(R.id.cardHotLeads, d?.hot?.toString() ?: "–")
         value(R.id.cardSiteVisits, d?.svVisitsFixed?.toString() ?: "–")
+        // Null means the backend predates these fields OR the viewer lacks the
+        // permission — both are "we can't say", which is a dash, not a zero.
+        value(R.id.cardBookings, d?.bookingCount?.toString() ?: "–")
+        value(R.id.cardCollection, d?.collectionAmount?.let { inrCompact(it) } ?: "–")
+        value(R.id.cardBookingValue, d?.bookingValue?.let { inrCompact(it) } ?: "–")
+    }
+
+    /**
+     * Rupees in the Indian short scale the rest of the app uses — ₹18.60 L,
+     * ₹1.85 Cr. Money on a dashboard tile has to fit one line, and a raw
+     * 18600000 is unreadable at a glance.
+     */
+    private fun inrCompact(amount: Double): String = when {
+        amount >= 10_000_000 -> "₹%.2f Cr".format(amount / 10_000_000)
+        amount >= 100_000 -> "₹%.2f L".format(amount / 100_000)
+        amount >= 1_000 -> "₹%.1f K".format(amount / 1_000)
+        amount > 0 -> "₹%.0f".format(amount)
+        else -> "₹0"
     }
 
     /** Header + date-chip copy for the current dashboard date. */

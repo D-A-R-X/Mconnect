@@ -4125,6 +4125,15 @@ data class MobileDashboardResponse(
     val prevHot: Int? = null,
     val prevWarm: Int? = null,
     val prevCold: Int? = null,
+    // Day's commercial totals. NULLABLE on purpose, same reasoning as the
+    // prev* fields above: a backend that predates them returns nothing (Gson
+    // → null) and the tiles keep showing "–". Null also means "you don't hold
+    // the permission" — which must not render as a company that booked
+    // nothing, so do NOT give these defaults.
+    val bookingCount: Int? = null,
+    val bookingValue: Double? = null,
+    val collectionAmount: Double? = null,
+    val pendingCollectionAmount: Double? = null,
     val error: String? = null,
 )
 
