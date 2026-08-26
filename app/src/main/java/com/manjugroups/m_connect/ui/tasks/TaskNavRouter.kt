@@ -22,8 +22,23 @@ object TaskNavRouter {
     // Web app origin — tasks with no mobile screen are completed here.
     private const val WEB_APP_URL = "https://mg.theairix.com"
 
+    /** Backend source key for the approver's CP-completion task. Must stay in
+     *  step with CP_APPROVAL_TASK_SOURCE in convex/marketing/clientPlaceVisits.ts. */
+    private const val CP_APPROVAL_SOURCE = "cp_completion_approval"
+
     fun open(activity: FragmentActivity, task: DailyTaskData) {
         val source = task.sourceReferenceType?.trim()?.lowercase().orEmpty()
+
+        // The CP approval queue is a bottom sheet, not a pushable screen, so it
+        // can't go through the fragment table below. Handled first so the
+        // approver's task opens the queue itself rather than the CP list — or
+        // worse, the "open this in the web app" dialog.
+        if (source == CP_APPROVAL_SOURCE) {
+            com.manjugroups.m_connect.ui.marketing.CpApprovalQueueBottomSheet
+                .show(activity.supportFragmentManager)
+            return
+        }
+
         val fragment: Fragment? = when {
             source == "staff-attendance" ->
                 com.manjugroups.m_connect.ui.hr.AttendanceHistoryFragment()

@@ -11111,3 +11111,26 @@ not committed, pushed, or deployed.
   and node_modules/@tailwindcss/ contains only `postcss` — the package is in package.json but not installed
   (same class as the tiptap tsc errors). Nothing to do with these changes. So: tsc clean + 20 tests green, but
   the tab has NOT been seen rendered. Run `pnpm install` to restore the dev server before trusting the visuals.
+
+- 2026-08-26 (main-chat) — CP approval now arrives as a TASK, and the task opens the approval screen on BOTH
+  platforms. BACKEND: when a CP completion is held (status → pending_gm_approval) we already pinged the GM via
+  notifyCpApprovalRequested; that is missable, so it now ALSO raises a dailyTask through the existing
+  ensureDailyTaskForSource pattern (same one ensureHandoffDailyTask uses) — assignedTo = the resolved
+  approver, assignedBy = the field staff who completed out of geofence, deadline = the visit's scheduled date,
+  actionUrl = `/marketing/cp-visits?view=approvals&cp=<id>`. New shared key
+  CP_APPROVAL_TASK_SOURCE = "cp_completion_approval" (sourceReferenceType is a free string in the schema, so
+  no migration). Both approveCpCompletion AND rejectCpCompletion call markDailyTasksForSourceCompleted —
+  rejecting is a decision too, and leaving the task open would make it go overdue in the approver's list.
+  Added resolveCpVisitDisplayName (client → lead → place → mobile) for the task title.
+  WEB: cp-visits page reads ?view= and switches to the approvals tab on mount, so the task lands on the queue
+  not the visits list. MOBILE: TaskNavRouter handles the source FIRST, before the fragment table, because the
+  approval UI is a BottomSheetDialogFragment (CpApprovalQueueBottomSheet.show) and cannot go through
+  pushDetail — without that branch the task would have fallen through to the "open this in the web app"
+  dialog. Constant duplicated in TaskNavRouter with a comment pointing at the Convex one; keep them in step.
+  TEST HONESTY: the new 6th test pins the task CONTRACT (assignedTo = approver, actionUrl carries
+  view=approvals + the id, sourceReferenceType is the exact string the mobile router matches) by seeding the
+  task — it does NOT drive completeCpVisit end-to-end, which would need fieldVisit + OTP proof + geofence
+  fixtures. So the contract between backend and both clients is covered; the creation call site is not.
+  VERIFIED: 6/6 new, marketing suites 17/17, cpVisit/clientPlaceVisit 12 pass + 1 fail that is IDENTICAL
+  stashed (the known pre-existing cpVisitAudit failure). tsc clean. Android assembleDebug + unit tests green.
+  STILL UNSEEN IN A BROWSER — the dev server is down on the pre-existing missing @tailwindcss/typography dep.
