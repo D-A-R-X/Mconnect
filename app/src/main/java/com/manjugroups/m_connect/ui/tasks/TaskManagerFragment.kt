@@ -44,6 +44,16 @@ class TaskManagerFragment : Fragment() {
 
     private var status: Status = Status.ALL
     private var moduleFilter: String = "All"
+
+    /**
+     * Assignment filter — the third axis alongside Status and Module.
+     *
+     * The five stat cards already counted these groups but were inert, so
+     * there was no way to actually SEE just the tasks assigned to you. Tapping
+     * a card now filters to it; tapping the active one again clears it.
+     */
+    private enum class Assignment { ALL, MINE, TEAM, ASSIGNED_BY_ME, EXTENSION, OVERDUE }
+    private var assignment: Assignment = Assignment.ALL
     private var moduleTabsList: List<String> = listOf("All")
     private var allTasks: List<DailyTaskData> = emptyList()
     // Infinite scroll: render 20, extend by 20 near the end. The filtered
@@ -128,6 +138,24 @@ class TaskManagerFragment : Fragment() {
                 .map { HorizontalTabLayout.Tab(it) },
             defaultSelection = 0,
         )
+
+        // Stat cards double as the assignment filter.
+        view.findViewById<View>(R.id.cardMyTasks)?.setOnClickListener {
+            selectAssignment(Assignment.MINE)
+        }
+        view.findViewById<View>(R.id.cardTeamTasks)?.setOnClickListener {
+            selectAssignment(Assignment.TEAM)
+        }
+        view.findViewById<View>(R.id.cardAssignedByMe)?.setOnClickListener {
+            selectAssignment(Assignment.ASSIGNED_BY_ME)
+        }
+        view.findViewById<View>(R.id.cardExtRequests)?.setOnClickListener {
+            selectAssignment(Assignment.EXTENSION)
+        }
+        view.findViewById<View>(R.id.cardOverdue)?.setOnClickListener {
+            selectAssignment(Assignment.OVERDUE)
+        }
+        applyAssignmentCardStyles()
 
         view.findViewById<androidx.swiperefreshlayout.widget.SwipeRefreshLayout>(
             R.id.taskManagerRefresh
@@ -285,6 +313,47 @@ class TaskManagerFragment : Fragment() {
     private fun visibleTasks(): List<DailyTaskData> =
         allTasks.filter { matchesStatus(it, status) }
             .filter { moduleFilter == "All" || moduleOf(it) == moduleFilter }
+            .filter { matchesAssignment(it) }
+
+    /** Same rules the stat-card counts are computed from, so a card's number
+     *  and the list it opens can never disagree. */
+    private fun matchesAssignment(t: DailyTaskData): Boolean {
+        val me = session.staffId
+        return when (assignment) {
+            Assignment.ALL -> true
+            Assignment.MINE -> me != null && t.assignedTo == me
+            Assignment.TEAM -> scope == "all" || (t.assignedTo != null && teamIds.contains(t.assignedTo))
+            Assignment.ASSIGNED_BY_ME -> me != null && t.assignedBy == me
+            Assignment.EXTENSION -> t.pendingExtensionRequest.let { it != null && it != false }
+            Assignment.OVERDUE -> isOverdue(t)
+        }
+    }
+
+    /** Tap to filter, tap the active card again to clear. */
+    private fun selectAssignment(next: Assignment) {
+        assignment = if (assignment == next) Assignment.ALL else next
+        pager.reset()
+        recycler?.scrollToPosition(0)
+        applyAssignmentCardStyles()
+        render()
+    }
+
+    /** Highlight the active card so the filter is visible, not invisible state. */
+    private fun applyAssignmentCardStyles() {
+        val v = view ?: return
+        val cards = listOf(
+            R.id.cardMyTasks to Assignment.MINE,
+            R.id.cardTeamTasks to Assignment.TEAM,
+            R.id.cardAssignedByMe to Assignment.ASSIGNED_BY_ME,
+            R.id.cardExtRequests to Assignment.EXTENSION,
+            R.id.cardOverdue to Assignment.OVERDUE,
+        )
+        for ((id, which) in cards) {
+            val card = v.findViewById<View>(id) ?: continue
+            card.isSelected = assignment == which
+            card.alpha = if (assignment == Assignment.ALL || assignment == which) 1f else 0.55f
+        }
+    }
 
     private fun matchesStatus(t: DailyTaskData, s: Status): Boolean = when (s) {
         Status.ALL -> true

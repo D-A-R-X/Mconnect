@@ -500,6 +500,18 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                             return@launch
                         }
                     }
+                    // One open CP per client. Creating a second while one is
+                    // still scheduled/in-progress produced duplicate visits for
+                    // the same person, which then had to be cancelled by hand.
+                    // Checked here rather than server-side on purpose: CP visits
+                    // are also auto-spawned by backend automation, and a throw
+                    // in the mutation would break that path too.
+                    val duplicate = findOpenCpVisitFor(phone)
+                    if (duplicate != null) {
+                        btnSubmit.isEnabled = true
+                        toast(duplicate)
+                        return@launch
+                    }
                     val resp = geoApi.createCpVisit(
                         session.bearerToken,
                         CreateCpVisitRequest(
@@ -1015,4 +1027,29 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
 
         fun newInstance(): CreateCpVisitBottomSheet = CreateCpVisitBottomSheet()
     }
+
+    /**
+     * Returns a message when this client already has an OPEN CP visit, or null
+     * when they don't and the create may proceed.
+     *
+     * Fails OPEN: if the lookup itself errors (offline, backend hiccup) we
+     * return null and let the create through. A guard that blocked on a
+     * transient network failure would break CP creation in the field, which is
+     * a worse outcome than an occasional duplicate.
+     */
+    private suspend fun findOpenCpVisitFor(phone: String): String? {
+        if (OpenCpVisitGuard.normalizePhone(phone).length < 10) return null
+        val existing = try {
+            geoApi.getMyMarketingCpVisits(
+                token = session.bearerToken,
+                search = OpenCpVisitGuard.normalizePhone(phone),
+                limit = 50,
+            )
+        } catch (_: Exception) {
+            return null
+        }
+        if (!existing.success) return null
+        return OpenCpVisitGuard.blockReason(existing.visits, phone)
+    }
+
 }

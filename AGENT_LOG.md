@@ -10996,3 +10996,32 @@ not committed, pushed, or deployed.
   blocked, no-id still blocked, model recorded, model backfilled) + existing binding test + auth.test.ts 10 —
   all green. tsc clean, assembleDebug + Android unit tests green. NEEDS CONVEX DEPLOY for the backend half;
   the app half needs a new APK.
+
+- 2026-08-26 (main-chat) — 13-item Android batch. DELIVERED 2 of 13, properly tested; the rest investigated
+  with concrete findings rather than half-implemented (user asked for careful work + real testing).
+  DONE #13 TASK MANAGER ASSIGNMENT FILTER: the 5 stat cards (My Tasks / My Team / Assigned By Me /
+  Extension Requests / Overdue) already COUNTED those groups but were completely inert — no way to actually
+  see just your assigned tasks. Cards are now tappable and act as a third filter axis alongside Status and
+  Module (new Assignment enum); tapping the active card clears it; active card highlighted + others dimmed so
+  the filter state is visible. matchesAssignment() reuses the SAME predicates renderStats() counts with, so a
+  card's number and the list it opens can never disagree. NO API CHANGE NEEDED — DailyTaskData already
+  carries assignedTo/assignedBy and session.staffId/teamIds were already loaded.
+  DONE #8 NO DUPLICATE CP WHILE ONE IS PENDING: new OpenCpVisitGuard (separate object, NOT buried in the
+  sheet, so it is unit-testable). Create flow now calls /api/marketing/clientPlaceVisits/my with the existing
+  server-side `search` param (phone) + limit 50, then blocks if any returned visit for that number is still
+  open. FAILS OPEN by design — a lookup error returns null and the create proceeds, because blocking CP
+  creation in the field on a transient network error is worse than an occasional duplicate. Deliberately
+  CLIENT-SIDE not a backend throw: CP visits are ALSO auto-spawned by backend automation and a mutation throw
+  would break that path (same lesson as the CP-telecaller backend throw that broke 3 tests earlier).
+  Phone matched on last-10-digits so +91/spaces/leading-0 all compare equal; all 7 backend spellings of
+  in-progress accepted. 9 unit tests green.
+  INVESTIGATED, NOT DONE — findings for the next pass:
+   #5/#9 GeoTrack by IAM: app ALREADY gates GeoTrackLiveFragment on `attendance.liveTracking`. The ask is
+     probably web-side or finer scoping — needs product clarity before coding.
+   #12 Super-admin notifications: NotificationsFragment already has a category filter system; a "separate
+     section" needs a backend-tagged category first, not an app-only change.
+   #2 (GM dashboard) / #3 (fines IAM) / #11 (BDO 5-CP/3-CP automation): backend IAM taxonomy + rules, and
+     blocked on the Convex deploy regardless.
+   #1 project location in GeoTrack, #6 QR after confirm, #7 SV confirm completion, #9 SV GM dropdown by
+     template, #10 outstation CP across days: need product clarity or are web-side.
+  assembleDebug + FULL Android unit suite green.
