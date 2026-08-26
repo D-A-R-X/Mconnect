@@ -278,6 +278,16 @@ interface ApiService {
         @Body body: RejectRequest,
     ): SimpleResponse
 
+    // Direct punch-time correction (web parity). The backend gates this on
+    // `attendance.correctPunchTimes` and separately refuses to let anyone
+    // correct their OWN clock, so the app only decides whether to SHOW the
+    // action — it never decides whether it is allowed.
+    @POST("api/hr/attendance/correct-punch-times")
+    suspend fun correctAttendancePunchTimes(
+        @Header("Authorization") token: String,
+        @Body body: CorrectPunchTimesRequest,
+    ): SimpleResponse
+
     @GET("api/hr/attendance/team-scope")
     suspend fun getAttendanceTeamScope(
         @Header("Authorization") token: String,
@@ -1644,6 +1654,15 @@ data class AttendanceApprovalsResponse(
     // pre-pagination behaviour.
     val nextCursor: String? = null,
     val hasMore: Boolean = false,
+)
+
+/** Times are full ISO instants built from the row's own date + the picked
+ *  clock time, matching what the web sends. */
+data class CorrectPunchTimesRequest(
+    val id: String,
+    val correctedPunchIn: String? = null,
+    val correctedPunchOut: String? = null,
+    val reason: String? = null,
 )
 
 data class AttendanceApprovalRecord(

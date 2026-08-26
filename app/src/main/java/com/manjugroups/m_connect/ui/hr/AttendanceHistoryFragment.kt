@@ -1437,6 +1437,14 @@ class AttendanceHistoryFragment : Fragment() {
                     override fun onReject(recordId: String) {
                         showRejectDialog(recordId, isRequestRow)
                     }
+                    override fun onCorrectTimes(
+                        recordId: String,
+                        correctedPunchIn: String?,
+                        correctedPunchOut: String?,
+                        reason: String?,
+                    ) {
+                        correctPunchTimes(recordId, correctedPunchIn, correctedPunchOut, reason)
+                    }
                 })
                 sheet.showOnce(parentFragmentManager, "review_attendance_request")
             }
@@ -1837,4 +1845,54 @@ class AttendanceHistoryFragment : Fragment() {
         super.onDestroyView()
         _binding = null
     }
+
+    /**
+     * Save a reviewer's punch-time correction, then reload so the row shows the
+     * corrected times rather than the stale ones.
+     *
+     * The backend owns the rules — it requires `attendance.correctPunchTimes`
+     * and refuses a self-correction — so its message is surfaced verbatim
+     * instead of being second-guessed here.
+     */
+    private fun correctPunchTimes(
+        recordId: String,
+        correctedPunchIn: String?,
+        correctedPunchOut: String?,
+        reason: String?,
+    ) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.correctAttendancePunchTimes(
+                    session.bearerToken,
+                    com.manjugroups.m_connect.network.CorrectPunchTimesRequest(
+                        id = recordId,
+                        correctedPunchIn = correctedPunchIn,
+                        correctedPunchOut = correctedPunchOut,
+                        reason = reason,
+                    ),
+                )
+                if (resp.success) {
+                    Toast.makeText(
+                        requireContext(),
+                        "Punch times corrected",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                    loadData()
+                } else {
+                    Toast.makeText(
+                        requireContext(),
+                        resp.error ?: "Couldn't correct the punch times",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(
+                    requireContext(),
+                    e.message ?: "Couldn't correct the punch times",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
+    }
+
 }
