@@ -11086,3 +11086,28 @@ not committed, pushed, or deployed.
   three Others gates use cpTypeSupportsOtherOutcome ALONE, which never included sv_cum_cp — no edit needed.
   WEB: no CP-completion outcome UI exists (completion is a field-staff mobile flow), so nothing to mirror.
   CpOutcomePolicyTest 4/4; assembleDebug + full Android unit suite green.
+
+- 2026-08-26 (main-chat) — CP APPROVAL: own tab + detail view + the wrong-GM scoping bug (WEB).
+  SCOPING ROOT CAUSE (the important half): the visit stamps completionApproval.gmStaffId at COMPLETION time
+  via resolveHandoffManagerStaffId, which walks the staff's reportingTo chain looking for a GM designation —
+  but when that walk finds nothing it falls back to
+  `allActive.find(s => isGmDesignationText(s.designation) && deptOk(s))` = THE FIRST GM IN THE DEPARTMENT,
+  with a console.warn literally saying "Wire up reportingTo to silence this". That is exactly how GOVARADHAN
+  ended up approving staff who don't report to him. FIX in listPendingCpCompletionApprovals: the stamp still
+  decides ownership, but the row must ALSO have its assignedStaffId inside the approver's reporting subtree
+  (getReportingTeamStaffIds). SUPER-ADMIN CATCH-ALL kept deliberately — otherwise a completion whose
+  reportingTo was never wired becomes invisible to EVERYONE and unapprovable forever. 5 tests: direct report
+  shown / stranger hidden / indirect (2 levels) counted / super-admin still sees unwired rows / a row stamped
+  for another GM never appears even for the staff's real manager.
+  UI: replaced the amber banner (features/marketing/components/cp-approval-queue.tsx — DELETED, was
+  unreferenced afterwards) with a third tab beside List/Calendar carrying a pending-count badge, rendering a
+  table styled like the CP list. Row click → dialog with started/arrived/completed times, trip duration,
+  start + end + client-place coordinates (each a Maps link), distance out of geofence, staff reason, arrival
+  proof photo, and the DAY'S TRAVEL PATH via the existing StaffDayTrackingMap (staffId + scheduledDate) —
+  reused rather than rebuilt. Query extended with startedAt/completedAt/arrivalVerifiedAt/start+end/arrival/
+  place lat-lng + scheduledTime + fieldVisitId to feed it.
+  VERIFICATION LIMIT — BE HONEST: could NOT view it in a browser. `pnpm dev` fails before rendering anything
+  on a PRE-EXISTING missing dependency: app/globals.css does `@plugin "../node_modules/@tailwindcss/typography"`
+  and node_modules/@tailwindcss/ contains only `postcss` — the package is in package.json but not installed
+  (same class as the tiptap tsc errors). Nothing to do with these changes. So: tsc clean + 20 tests green, but
+  the tab has NOT been seen rendered. Run `pnpm install` to restore the dev server before trusting the visuals.
