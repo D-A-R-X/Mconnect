@@ -1154,8 +1154,45 @@ class HomeFragment : Fragment() {
         ).showOnce(parentFragmentManager, "dash_date_picker")
     }
 
+    /**
+     * Date pill on the marketing overview. Mirrors the dashboard's real
+     * selection: "Today" while the live day is showing, otherwise the picked
+     * date. Kept in sync with [applyDashHeader] so the two pills can never
+     * disagree about which day is on screen.
+     */
+    private fun applyOverviewDateLabel() {
+        val day = vpSelectedDate
+        val label = if (day == null) {
+            java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.US).apply {
+                timeZone = java.util.TimeZone.getTimeZone("Asia/Kolkata")
+            }.format(java.util.Date())
+        } else {
+            prettyDashDate(day)
+        }
+        _binding?.root?.findViewById<TextView>(R.id.tvOverviewDateFilter)?.text =
+            label.uppercase(java.util.Locale.US)
+    }
+
+    /**
+     * Writes the selected day's real counts into the marketing overview tiles.
+     * Only the three the dashboard endpoint answers for are filled; bookings,
+     * collections and booking value have no field on the response, so they
+     * keep their "–" rather than showing a number we cannot stand behind.
+     */
+    private fun bindOverviewCards() {
+        val root = _binding?.root ?: return
+        val d = vpDashboardData
+        fun value(id: Int, text: String) {
+            root.findViewById<View>(id)?.findViewById<TextView>(R.id.tvKpiValue)?.text = text
+        }
+        value(R.id.cardTotalCalls, d?.totalCalls?.toString() ?: "–")
+        value(R.id.cardHotLeads, d?.hot?.toString() ?: "–")
+        value(R.id.cardSiteVisits, d?.svVisitsFixed?.toString() ?: "–")
+    }
+
     /** Header + date-chip copy for the current dashboard date. */
     private fun applyDashHeader() {
+        applyOverviewDateLabel()
         val day = vpSelectedDate
         binding.tvVisitSectionTitle.text =
             if (day == null) "Today's Overview" else "Overview"
@@ -1236,6 +1273,8 @@ class HomeFragment : Fragment() {
         set(R.id.numCold, d.cold)
         set(R.id.numSv, d.svVisitsFixed)
         set(R.id.numCp, d.cpVisitsFixed)
+        // Same numbers, second surface: the marketing overview tiles.
+        bindOverviewCards()
 
         // Trend pills. These were hardcoded strings with no ids ("↗ 12% vs
         // last week" sat under a value of 0), so they were decoration that
@@ -2106,7 +2145,7 @@ class HomeFragment : Fragment() {
         val root = _binding?.root ?: return
         
         // Populate Grid Cards
-        fun bindMarketingCard(card: View?, title: String, value: String, trend: String, trendUp: Boolean, iconRes: Int, colorHex: String, animate: Boolean) {
+        fun bindMarketingCard(card: View?, title: String, value: String, trend: String?, trendUp: Boolean, iconRes: Int, colorHex: String, animate: Boolean) {
             card?.findViewById<TextView>(R.id.tvKpiTitle)?.text = title
             
             val tvValue = card?.findViewById<TextView>(R.id.tvKpiValue)
@@ -2118,6 +2157,11 @@ class HomeFragment : Fragment() {
             
             val tvTrendText = card?.findViewById<TextView>(R.id.tvTrendValue)
             val arrow = card?.findViewById<ImageView>(R.id.ivTrendArrow)
+            // No baseline to compare against → show no pill at all. A "↗ 12%"
+            // under a value we don't have is decoration that reads as data.
+            tvTrendText?.visibility = if (trend == null) View.GONE else View.VISIBLE
+            arrow?.visibility = if (trend == null) View.GONE else View.VISIBLE
+            if (trend != null) tvTrendText?.text = trend
             val trendColor = if (trendUp) android.graphics.Color.parseColor("#10B981") else android.graphics.Color.parseColor("#EF4444")
             arrow?.setColorFilter(trendColor)
             tvTrendText?.setTextColor(trendColor)
@@ -2128,12 +2172,21 @@ class HomeFragment : Fragment() {
             card?.findViewById<ImageView>(R.id.ivKpiIcon)?.startAnimation(anim)
         }
 
-        bindMarketingCard(root.findViewById(R.id.cardTotalCalls), "Total Calls", "984", "12%", true, R.drawable.ic_3d_calls, "#3B82F6", true)
-        bindMarketingCard(root.findViewById(R.id.cardHotLeads), "Hot Leads", "37", "16%", true, R.drawable.ic_3d_hot, "#10B981", true)
-        bindMarketingCard(root.findViewById(R.id.cardSiteVisits), "Site Visits", "15", "25%", true, R.drawable.ic_3d_sv, "#8B5CF6", true)
-        bindMarketingCard(root.findViewById(R.id.cardBookings), "Bookings", "2", "100%", true, R.drawable.ic_3d_bookings, "#F59E0B", true)
-        bindMarketingCard(root.findViewById(R.id.cardCollection), "Collection (Today)", "₹18.60 L", "32%", true, R.drawable.ic_3d_collection, "#10B981", false)
-        bindMarketingCard(root.findViewById(R.id.cardBookingValue), "Booking Value", "₹1.85 Cr", "120%", true, R.drawable.ic_3d_value, "#3B82F6", false)
+        // These six tiles shipped with hardcoded demo figures ("984", "₹1.85
+        // Cr") that read exactly like live data — on a management dashboard
+        // that is worse than showing nothing, because the numbers get acted on.
+        // The three the dashboard endpoint actually answers for are bound to
+        // it below (see bindOverviewCards, re-run whenever the day's data
+        // lands or the date changes). The three it does NOT return —
+        // bookings, collections, booking value — render as "–" until the
+        // backend carries them, rather than inventing a figure.
+        bindMarketingCard(root.findViewById(R.id.cardTotalCalls), "Total Calls", "–", null, true, R.drawable.ic_3d_calls, "#3B82F6", true)
+        bindMarketingCard(root.findViewById(R.id.cardHotLeads), "Hot Leads", "–", null, true, R.drawable.ic_3d_hot, "#10B981", true)
+        bindMarketingCard(root.findViewById(R.id.cardSiteVisits), "Site Visits", "–", null, true, R.drawable.ic_3d_sv, "#8B5CF6", true)
+        bindMarketingCard(root.findViewById(R.id.cardBookings), "Bookings", "–", null, true, R.drawable.ic_3d_bookings, "#F59E0B", true)
+        bindMarketingCard(root.findViewById(R.id.cardCollection), "Collection", "–", null, true, R.drawable.ic_3d_collection, "#10B981", false)
+        bindMarketingCard(root.findViewById(R.id.cardBookingValue), "Booking Value", "–", null, true, R.drawable.ic_3d_value, "#3B82F6", false)
+        bindOverviewCards()
 
         // Populate Funnel
         fun setupFunnelRow(id: Int, label: String, value: String, percent: String, colorHex: String) {
@@ -2213,25 +2266,20 @@ class HomeFragment : Fragment() {
             funnelChart?.startLayoutAnimation()
         }
 
-        // Date & Team Filters
+        // Date filter. This pill used to open its own picker and then only
+        // relabel ITSELF — it never touched the date the tiles are fetched
+        // for, and the label started life as a hardcoded "18 JUL 2026" in the
+        // layout, so the dashboard advertised a day months in the past while
+        // showing something else entirely. It now shares the one piece of
+        // state the fetch actually reads (vpSelectedDate) and reloads.
         root.findViewById<View>(R.id.llOverviewDateFilter)?.setOnClickListener {
-            com.manjugroups.m_connect.ui.projects.DateFilterBottomSheet.newInstance()
-                .show(childFragmentManager, "DateFilter")
+            showDashDatePicker()
         }
-        childFragmentManager.setFragmentResultListener(
-            com.manjugroups.m_connect.ui.projects.DateFilterBottomSheet.REQUEST_KEY,
-            viewLifecycleOwner
-        ) { _, bundle ->
-            val from = bundle.getString(com.manjugroups.m_connect.ui.projects.DateFilterBottomSheet.RESULT_FROM) ?: return@setFragmentResultListener
-            try {
-                val date = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).parse(from)
-                if (date != null) {
-                    val formatted = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.US).format(date)
-                    root.findViewById<TextView>(R.id.tvOverviewDateFilter)?.text = formatted.uppercase(java.util.Locale.US)
-                }
-            } catch(e: Exception) {}
-        }
-        
+        applyOverviewDateLabel()
+
+        // Team filter left exactly as it was — it opens a sheet whose only
+        // option is "All Teams". Out of scope here, but flagging it: there is
+        // no per-team dashboard fetch behind it, so it is a stub.
         root.findViewById<View>(R.id.llOverviewTeamFilter)?.setOnClickListener {
             com.manjugroups.m_connect.ui.common.AppBottomSheets.showOptions(
                 requireContext(),

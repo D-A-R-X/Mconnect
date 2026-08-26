@@ -10903,3 +10903,25 @@ not committed, pushed, or deployed.
   statusBarInset + topBar. Only the topBar part is reducible without letting the title ride under the OS
   status icons. assembleDebug green. NOT visually verified on-device — reaching this screen needs a live
   enroute CP visit; measured from the layout, not a screenshot.
+
+- 2026-08-26 (main-chat) — Home marketing-overview dashboard showed "18 JUL 2026". Root cause was NOT a stale
+  date: the ENTIRE overview block was hardcoded demo UI. `android:text="18 JUL 2026"` was a literal in
+  layout_home_overview.xml that nothing ever overwrote, and setupMarketingOverview() passed literal strings —
+  bindMarketingCard(..., "Total Calls", "984"), "Hot Leads" 37, "Site Visits" 15, "Bookings" 2,
+  "Collection (Today)" ₹18.60 L, "Booking Value" ₹1.85 Cr — plus fixed trend pills and conversion KPIs. The
+  date pill's picker (DateFilterBottomSheet) only relabelled ITSELF and never touched vpSelectedDate or
+  refetched, so it was decoration on top of decoration. Meanwhile the REAL working control already existed:
+  btnDashDateFilter → vpSelectedDate → loadVpDashboard(force) → bindDashboardData(). FIX: the overview date
+  pill now calls the same showDashDatePicker() and renders via new applyOverviewDateLabel() (called from
+  applyDashHeader so the two pills can never disagree); hardcoded date literal deleted so it cannot flash.
+  New bindOverviewCards() fills Total Calls / Hot Leads / Site Visits from vpDashboardData
+  (totalCalls / hot / svVisitsFixed), called from bindDashboardData so it repaints on every load and date
+  change. IMPORTANT — Bookings, Collection and Booking Value now render "–", NOT a number: verified
+  MobileDashboardResponse and convex/mobileDashboard.ts carry NO bookings/collections/booking-value fields
+  (computeVpFallback's own comment says collections have no clean company-wide source), so there is nothing
+  truthful to bind. On a management dashboard a fabricated ₹1.85 Cr is worse than a dash — it gets reported
+  upward. bindMarketingCard's `trend` is now nullable and hides the arrow+pill when null. STILL MOCK, flagged
+  not fixed: the 4 conversion KPIs (Interest Rate 55.0% etc, line ~2283) and TODAY'S FUNNEL rows, and the
+  ALL TEAMS pill (sheet with one no-op option — left untouched deliberately). Making the 3 empty tiles real
+  needs new backend aggregate fields + a deploy. assembleDebug + unit tests green; NOT visually verified
+  on-device (needs a vpDashboard.view login).

@@ -42,7 +42,6 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:layout_marginStart="8dp"
-                android:text="18 JUL 2026"
                 android:textColor="#1F2937"
                 android:textSize="14sp"
                 android:fontFamily="@font/inter_semibold" />
