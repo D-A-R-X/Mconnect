@@ -93,6 +93,44 @@
                 app:tint="#667085" />
         </LinearLayout>
 
+        <!-- Half-day toggle. Web parity: a half day is an OPTION ON a real
+             leave type (casual / sick / earned / unpaid), not a type of its
+             own — so the staff choose which balance the 0.5 comes out of.
+             Shown once a category is picked. -->
+        <LinearLayout
+            android:id="@+id/layoutHalfDayToggle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/bg_apply_leave_field"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:minHeight="48dp"
+            android:orientation="horizontal"
+            android:paddingHorizontal="14dp"
+            android:paddingVertical="10dp"
+            android:visibility="gone">
+
+            <CheckBox
+                android:id="@+id/cbHalfDay"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:clickable="false"
+                android:duplicateParentState="true"
+                android:focusable="false" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:fontFamily="@font/inter_regular"
+                android:text="Half-day leave (0.5 day)"
+                android:textColor="#101828"
+                android:textSize="14sp" />
+        </LinearLayout>
+
         <!-- Half Day Session Selection (shown only for half day leave) -->
         <LinearLayout
             android:id="@+id/layoutHalfDaySession"

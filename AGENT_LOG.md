@@ -10872,3 +10872,22 @@ not committed, pushed, or deployed.
   company-wide-then-filter at limit 2500 — same anti-pattern, bounded but worth converting next.
   Cache suite 11/11, :app:testDebugUnitTest green, tsc clean, staffAttendance 8/8. NEEDS CONVEX DEPLOY — the
   app cannot fix a backend that is failing; the deploy is what actually restores it.
+
+- 2026-08-26 (main-chat) — HALF-DAY LEAVE brought to web parity on BOTH apps. The apps already had half-day,
+  but modelled WRONGLY: "Half Day" was a pseudo leave CATEGORY sitting next to Unpaid/Comp-Off, so the app had
+  to GUESS which balance to book it against — Android halfDayBaseType() / iOS halfDayBaseType = "first type
+  that isn't half_day or compensatory, else unpaid". The staff could never choose whether the 0.5 came out of
+  casual/sick/earned/unpaid. Web has always done it correctly: pick the leave type, THEN tick "Half-day leave
+  (0.5 day)" + morning/afternoon. NOW BOTH APPS MATCH: category list is unpaid + compensatory; new half-day
+  toggle row (Android: layoutHalfDayToggle/cbHalfDay in bottom_sheet_apply_leave.xml, whole row is the tap
+  target; iOS: halfDayToggle button view); ticking it collapses an already-picked RANGE to a single day
+  (otherwise only the first day would silently submit), switches the calendar to single-date, shows the
+  session picker, relabels the field to "Leave Date", prefixes the reason with [Morning]/[Afternoon], and
+  submits leaveType = THE CHOSEN TYPE with toDate = fromDate + isHalfDay/halfDaySession/halfDayType.
+  BONUS PARITY: half-day COMP OFF now works on both apps — backend /api/hr/compoff/apply has always accepted
+  isHalfDay/halfDaySession (and compOff.applyCompOff consumes 0.5 vs 1.0), but neither app sent them, so a
+  credit was always spent whole. Added to Android ApplyCompOffRequest + iOS applyCompOff. NOTE: backend needed
+  NO change — /api/hr/leaves/apply already takes isHalfDay/halfDaySession, so this ships with the APK and does
+  NOT wait on the Convex deploy. Android assembleDebug + full unit tests green. iOS NOT COMPILED (no Swift
+  toolchain on Windows) — brace/paren balance checked and every half_day/halfDayBaseType/requiresReasonPrefix
+  reference confirmed gone; needs a Mac build before release.

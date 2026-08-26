@@ -1807,7 +1807,14 @@ data class CompOffCreditsResponse(
     val credits: List<CompOffCredit> = emptyList(),
     val error: String? = null
 )
-data class ApplyCompOffRequest(val creditId: String, val date: String)
+data class ApplyCompOffRequest(
+    val creditId: String,
+    val date: String,
+    // Half-day comp off — the web has always supported taking a credit as
+    // 0.5 day; the app used to spend the whole credit either way.
+    val isHalfDay: Boolean? = null,
+    val halfDaySession: String? = null,
+)
 data class ApplyCompOffResponse(val success: Boolean, val leaveId: String? = null, val error: String? = null)
 
 // IAM models
