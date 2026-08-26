@@ -10827,3 +10827,23 @@ not committed, pushed, or deployed.
   AND that global scope isn't silently narrowed to own-rows. tsc clean; :app:compileDebugKotlin clean. The 3
   failures in aiPresalesCustomer/bookings.search are PRE-EXISTING (verified by stashing). NEEDS CONVEX DEPLOY
   + a new APK.
+
+- 2026-08-26 (main-chat) — CP/SV rows showed a bare phone number where the clients master HAS a name.
+  TWO causes, plus a REGRESSION I had to find first. (1) REGRESSION: my 0e5725ad (CP list client-name
+  fallback) and 16c33b27 (fleet Agency/Company column) were both wiped by a teammate's 21672507
+  `Revert "Merge branch 'development-testing'"` (62 files, -5925). Restored both — cherry-picked the fleet one,
+  re-applied the CP one on current code. This is the SV/CP + Fleet regression pattern the standing memory
+  warns about: worked, then silently un-worked via someone else's revert. WORTH CHECKING AFTER EVERY BIG
+  MERGE. (2) ROOT CAUSE `??` vs BLANK: a lead created from a bare mobile number carries contactName as an
+  EMPTY STRING, not undefined — so `lead?.contactName ?? client?.clientName` KEEPS THE BLANK and every
+  fallback downstream is skipped. Web SV had this at 7 sites; mobile SV backend (siteVisits.ts leadName) had
+  it too, where `!leadName` correctly entered the fallback block but `leadName ?? cpClient.clientName` then
+  kept "". New lib/visit-display.ts (firstNonBlank / visitDisplayName / visitDisplayPhone) is blank-safe and
+  now used by both web pages. (3) MOBILE SV never consulted the clients master at all — it only fell back via
+  a linked sourceCp. Added a final by_mobileNumberNormalized lookup (indexed, only for rows still lacking a
+  name, so read cost stays bounded — the 502 lesson). CHECKED AND LEFT ALONE (already correct): web+mobile CP
+  backends reconcile by phone via reconcileDisplayClient/enrichVisit; Android CpVisitsFragment has
+  asClientNameOrNull (blank + phone-like rejection); iOS CP uses cpClientName, iOS SV uses
+  leadName?.nilIfBlank so the backend fix covers it. Also widened CP + SV search to match the client name.
+  TESTS: lib/visit-display.test.ts 11 passing, pinning blank/whitespace/null fall-through and lead-wins.
+  tsc clean, eslint 0 errors, convex/marketing 38 pass. NEEDS CONVEX DEPLOY (mobile SV) + web deploy.
