@@ -10891,3 +10891,15 @@ not committed, pushed, or deployed.
   NOT wait on the Convex deploy. Android assembleDebug + full unit tests green. iOS NOT COMPILED (no Swift
   toolchain on Windows) — brace/paren balance checked and every half_day/halfDayBaseType/requiresReasonPrefix
   reference confirmed gone; needs a Mac build before release.
+
+- 2026-08-26 (main-chat) — Trip Details header height trimmed. Screen identified as
+  fragment_trip_navigation.xml (the only trip layout carrying "Swipe to Complete Trip" / Call Client — NOT
+  the driver/agency trip detail layouts). topBar was paddingTop 14dp + 32dp back button + paddingBottom 14dp
+  = a 60dp bar for a bare centred title; now 8dp/8dp = 48dp, the standard compact app-bar height, keeping the
+  back button's touch area intact. WORTH KNOWING for the next "too much header space" report on this screen:
+  a large part of the white band above the title is NOT this layout — MainActivity paints a separate
+  statusBarBackground strip sized to cachedTopInset (TripNavigationFragment.onResume calls
+  setTopBarAppearance(#FEFEFE, darkStatusIcons=true, fullBleed=false)), so the visible band is
+  statusBarInset + topBar. Only the topBar part is reducible without letting the title ride under the OS
+  status icons. assembleDebug green. NOT visually verified on-device — reaching this screen needs a live
+  enroute CP visit; measured from the layout, not a screenshot.
