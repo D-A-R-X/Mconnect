@@ -2063,7 +2063,13 @@ data class PushRegisterRequest(
     val bundleId: String,
     val appId: String,
     val appName: String,
-    val deviceId: String
+    // Empty when the device can't be identified — the backend then binds
+    // nothing rather than binding a placeholder the login path would never
+    // send back (which locked staff out of their own phone).
+    val deviceId: String,
+    // Carried so a binding created from this channel records the real phone
+    // instead of showing as "Unknown · android" in the Security tab.
+    val deviceModel: String? = null
 )
 data class PushRegisterResponse(val success: Boolean, val deviceTokenId: String? = null, val error: String? = null)
 data class PushUnregisterRequest(val token: String)

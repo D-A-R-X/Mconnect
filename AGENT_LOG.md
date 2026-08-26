@@ -10969,3 +10969,30 @@ not committed, pushed, or deployed.
   NOT visually verified on-device (needs a vpDashboard.view login); widths reasoned from the layout.
   REMINDER: the funnel's numbers are still the hardcoded 984/541/239/37/15/2 — alignment fixed, data still
   mock, same for the 4 conversion KPIs.
+
+- 2026-08-26 (main-chat) — DEVICE LOCK: "same device shows already-locked error" + "device shows Unknown on
+  first login, real name on second". User's evidence was decisive: BOTH Security-tab cards showed the SAME
+  device id 8f0ca9c1750b7943 — so the id was never the problem; the METADATA was, and a second defect
+  explained the lockouts. TWO INDEPENDENT BUGS, both fixed:
+  (1) LOCKOUT — the two channels disagree exactly when Settings.Secure.ANDROID_ID reads null:
+      PushTokenManager sent `?: "unknown-device"` (a LITERAL string) while LoginDeviceInfo.capture() returns
+      NULL so login OMITS the id. Push-register therefore bound the account to a string login would never
+      send; enforceMobileDeviceBinding's "binding exists + no id → BLOCK" rule then refused the owner on
+      their own phone. Reset did NOT help because the next app launch re-bound "unknown-device".
+      isLegacyStaleBinding didn't catch it (it only matches lowercase dashed UUIDs).
+      FIX: PLACEHOLDER_DEVICE_IDS {unknown-device, unknown, null, undefined, 9774d56d682e549c} treated as NO
+      id — never bound (both channels), and an existing row holding one self-heals to the real id on the next
+      identified login via new isUnusableBinding = legacy-UUID OR placeholder. App side: PushTokenManager now
+      uses LoginDeviceInfo.capture() — ONE identity source for both channels — and sends "" when unidentifiable.
+      Lock strength unchanged and pinned by tests: genuine 2nd device still blocked, no-id login still blocked.
+  (2) "Unknown · android" + battery "—" — /api/push/register never forwarded deviceModel to
+      captureAndEnforceLoginDevice, so a row CREATED by that channel had no model; the next login matched the
+      id and patched the model in, which is exactly why logout→login "fixed" the name. Route now forwards it;
+      PushRegisterRequest carries deviceModel.
+  NO MIGRATION NEEDED: stuck rows repair themselves on next login.
+  iOS CHECKED, NOT CHANGED: its only placeholder ("mconnect-ios") is in ModernDialerBridge's dialer embed URL,
+  not the binding path.
+  Tests: 8 new (placeholder never binds, broken shared ANDROID_ID refused, stuck row heals, 2nd device still
+  blocked, no-id still blocked, model recorded, model backfilled) + existing binding test + auth.test.ts 10 —
+  all green. tsc clean, assembleDebug + Android unit tests green. NEEDS CONVEX DEPLOY for the backend half;
+  the app half needs a new APK.
