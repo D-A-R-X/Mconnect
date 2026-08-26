@@ -10952,3 +10952,20 @@ not committed, pushed, or deployed.
   marketingVisitScope suites re-run green (23) to prove the shared handler is untouched; tsc clean;
   assembleDebug + Android unit tests green. STILL MOCK, flagged: 4 conversion KPIs + TODAY'S FUNNEL rows +
   the ALL TEAMS pill. NEEDS CONVEX DEPLOY — until then the tiles correctly show "–" rather than fake numbers.
+
+- 2026-08-26 (main-chat) — TODAY'S FUNNEL legend alignment. Two separate defects in item_funnel_row.xml:
+  (1) the label had layout_weight=1 inside a legend column that only gets ~160dp after the 150dp funnel
+  chart, so long labels broke MID-WORD — "Intere/sted", "Booking/s"; (2) the value was wrap_content, so
+  984 / 541 / 239 / 37 / 15 / 2 each ended at a different x and the number column read as ragged. FIXES:
+  label → maxLines=1 + ellipsize=end + hyphenationFrequency=none (API 23; minSdk is 24 so safe on every
+  supported device) and 13sp→12sp; value → minWidth 30dp + textAlignment=viewEnd so digits right-align yet
+  the box still grows past 4 digits; percent → 45dp fixed → wrap_content + minWidth 40dp + viewEnd; margins
+  tightened (label start 12→8, value end 16→8). ALSO reclaimed dead space: funnelChart column was 150dp while
+  its widest bar is 120dp, so 26dp was doing nothing — now 124dp, giving the labels ~94dp on a 360dp screen
+  (fits "Warm Leads" ~62dp comfortably). On a rare 320dp device it now ELLIPSISES instead of breaking
+  mid-word. GOTCHA: first attempt put an XML comment INSIDE the LinearLayout tag's attribute list →
+  packageDebugResources failed with 'Element type "LinearLayout" must be followed by attribute
+  specifications' — comments must precede the element. assembleDebug green (AAPT validates the resources).
+  NOT visually verified on-device (needs a vpDashboard.view login); widths reasoned from the layout.
+  REMINDER: the funnel's numbers are still the hardcoded 984/541/239/37/15/2 — alignment fixed, data still
+  mock, same for the 4 conversion KPIs.

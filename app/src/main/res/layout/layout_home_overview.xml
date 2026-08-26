@@ -180,9 +180,11 @@
                 android:gravity="center_vertical">
 
                 <!-- Funnel Chart visual drawn in code -->
+                <!-- 150dp here held a 120dp widest bar; the spare 26dp was
+                     dead space the legend badly needed to fit its labels. -->
                 <LinearLayout
                     android:id="@+id/funnelChart"
-                    android:layout_width="150dp"
+                    android:layout_width="124dp"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
                     android:gravity="center_horizontal"
