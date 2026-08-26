@@ -69,6 +69,7 @@ import java.util.Calendar
 import java.util.Locale
 import com.manjugroups.m_connect.ui.common.showOnce
 import com.manjugroups.m_connect.ui.marketing.cpTypeSupportsOtherOutcome
+import com.manjugroups.m_connect.ui.marketing.shouldOfferOtherOutcome
 
 /**
  * Outcome Information bottom sheet — full Booking flow (7 sub-tabs).
@@ -986,9 +987,13 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         if (isSvCumCp) {
             list.add(opt("CANCEL", "Cancel Visit", R.drawable.ic_outcome_close))
         }
-        // Pure SV / sv_cum_cp retain the Others outcome. For other CP visits the
-        // free-text close path is intentionally limited to the approved types.
-        if (svStyle || cpTypeSupportsOtherOutcome(cpType)) {
+        // Pure SV retains the Others outcome. SV-confirmation CP (sv_cum_cp)
+        // does NOT: it already closes through Booking / Postpone / Not
+        // Interested / Cancel, which cover every real ending, so a free-text
+        // "Others" only let a confirmation visit be closed without saying what
+        // actually happened. Every other CP type still follows the approved
+        // list in cpTypeSupportsOtherOutcome (which excludes sv_cum_cp).
+        if (shouldOfferOtherOutcome(isPureSiteVisit = isSiteVisitMode, cpType = cpType)) {
             list.add(opt("OTHER", "Others", R.drawable.ic_chat_more_dots))
         }
         return list

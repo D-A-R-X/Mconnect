@@ -14,3 +14,16 @@ fun cpTypeSupportsOtherOutcome(cpType: String?): Boolean =
         ?.trim()
         ?.lowercase(Locale.ROOT)
         ?.let(CP_TYPES_WITH_OTHER_OUTCOME::contains) == true
+
+/**
+ * Whether the outcome list should offer the free-text "Others" close.
+ *
+ * A PURE site visit keeps it. An SV-CONFIRMATION CP (`sv_cum_cp`) does not:
+ * it already closes through Booking / Postpone / Not Interested / Cancel,
+ * which cover every real ending, so "Others" only allowed a confirmation
+ * visit to be closed without recording what actually happened.
+ *
+ * Every other CP type follows [cpTypeSupportsOtherOutcome].
+ */
+fun shouldOfferOtherOutcome(isPureSiteVisit: Boolean, cpType: String?): Boolean =
+    isPureSiteVisit || cpTypeSupportsOtherOutcome(cpType)

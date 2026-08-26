@@ -11072,3 +11072,17 @@ not committed, pushed, or deployed.
      backend-tagged audience. A keyword guess would misfile notifications.
   VERIFIED: full convex suite 1059 passed / 22 failed — IDENTICAL to the stashed baseline, so none of the 22
   are mine. tsc clean. Android assembleDebug + unit tests green.
+
+- 2026-08-26 (main-chat) — SV-confirmation CP: removed the "Others" outcome. WHERE IT LEAKED IN:
+  CompleteCpVisitBottomSheet gated Others on `svStyle || cpTypeSupportsOtherOutcome(cpType)`, and
+  `svStyle = isSiteVisitMode || cpType == "sv_cum_cp"` — so sv_cum_cp reached Others through the SHARED
+  "SV-style" branch even though CP_TYPES_WITH_OTHER_OUTCOME already excluded it (the existing test even
+  asserted `assertFalse(cpTypeSupportsOtherOutcome("sv_cum_cp"))`, so the policy and the UI disagreed).
+  Now `shouldOfferOtherOutcome(isPureSiteVisit, cpType)` — a new function in CpOutcomePolicy.kt so the
+  decision is unit-testable instead of buried in a 6000-line sheet. PURE SV KEEPS Others (only
+  sv_cum_cp was asked for); every other CP type still follows the approved list. sv_cum_cp already closes
+  via Booking / Postpone / Not Interested / Cancel, which cover every real ending, so Others only let a
+  confirmation visit close without recording what happened. CHECKED AND UNCHANGED: TripNavigationFragment's
+  three Others gates use cpTypeSupportsOtherOutcome ALONE, which never included sv_cum_cp — no edit needed.
+  WEB: no CP-completion outcome UI exists (completion is a field-staff mobile flow), so nothing to mirror.
+  CpOutcomePolicyTest 4/4; assembleDebug + full Android unit suite green.

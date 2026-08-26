@@ -24,4 +24,30 @@ class CpOutcomePolicyTest {
         assertFalse(cpTypeSupportsOtherOutcome(null))
         assertFalse(cpTypeSupportsOtherOutcome(""))
     }
+
+    @Test
+    fun `sv confirmation CP no longer offers others`() {
+        // The regression this guards: sv_cum_cp used to reach the Others
+        // option through the shared "SV-style" branch, even though the policy
+        // set above already excluded it.
+        assertFalse(shouldOfferOtherOutcome(isPureSiteVisit = false, cpType = "sv_cum_cp"))
+        assertFalse(shouldOfferOtherOutcome(isPureSiteVisit = false, cpType = "SV_CUM_CP"))
+    }
+
+    @Test
+    fun `a pure site visit keeps others`() {
+        // Only sv_cum_cp was asked for — a plain site visit is unchanged.
+        assertTrue(shouldOfferOtherOutcome(isPureSiteVisit = true, cpType = null))
+    }
+
+    @Test
+    fun `the approved CP types are unaffected`() {
+        for (type in listOf("booking_cp", "gift_distribution", "follow_up")) {
+            assertTrue(type, shouldOfferOtherOutcome(isPureSiteVisit = false, cpType = type))
+        }
+        for (type in listOf("collection_cp", "old_client", "direct_cp", "new_client_cp")) {
+            assertFalse(type, shouldOfferOtherOutcome(isPureSiteVisit = false, cpType = type))
+        }
+    }
+
 }
