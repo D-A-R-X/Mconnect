@@ -14,7 +14,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         PendingChatMessageEntity::class,
         PendingPunchEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class GeoTrackDatabase : RoomDatabase() {
@@ -76,6 +76,17 @@ abstract class GeoTrackDatabase : RoomDatabase() {
 
         // V5 adds the offline attendance-punch queue. Same shape as the
         // Room-generated CREATE for PendingPunchEntity.
+        // V6 binds a queued punch to the staff who took it. A punch survives a
+        // logout, so without this it could be replayed under the next person to
+        // sign in on the device and recorded against them. Nullable so rows
+        // queued before this upgrade are kept, not dropped - they flush under
+        // the legacy path below.
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE pending_punches ADD COLUMN staffId TEXT")
+            }
+        }
+
         private val MIGRATION_4_5 = object : Migration(4, 5) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
@@ -106,7 +117,10 @@ abstract class GeoTrackDatabase : RoomDatabase() {
                     GeoTrackDatabase::class.java,
                     "geotrack_db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(
+                        MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4,
+                        MIGRATION_4_5, MIGRATION_5_6,
+                    )
                     .build()
                 INSTANCE = instance
                 instance

@@ -34,13 +34,26 @@ class PunchSyncWorker(
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
-        val token = SessionManager(applicationContext).bearerToken
+        val session = SessionManager(applicationContext)
+        val token = session.bearerToken
+        val currentStaffId = session.staffId
         val dao = GeoTrackDatabase.getInstance(applicationContext).pendingPunchDao()
-        val pending = dao.listAll()
-        if (pending.isEmpty()) return Result.success()
+        val allPending = dao.listAll()
+        if (allPending.isEmpty()) return Result.success()
         // No session (logged out) — leave the rows; a later enqueue after login
         // will flush them. Don't spin a retry loop with no way to succeed.
         if (token.isBlank()) return Result.success()
+
+        // Only replay punches belonging to the signed-in staff. A queued punch
+        // outlives a logout, so flushing indiscriminately would record one
+        // person's clock-in against whoever signed in next on that device.
+        // Rows queued before staffId existed carry null and are still flushed —
+        // dropping them would lose real attendance, and the pre-upgrade app
+        // could not have had a second account on the device anyway.
+        val pending = allPending.filter { p ->
+            p.staffId.isNullOrBlank() || p.staffId == currentStaffId
+        }
+        if (pending.isEmpty()) return Result.success()
 
         val api = ApiService.create()
         var networkFailure = false
