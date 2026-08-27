@@ -11159,3 +11159,40 @@ not committed, pushed, or deployed.
   VERIFIED: full convex suite 1083 passed / 21 failed vs a stashed baseline of 1080 / 24 — the 3-test
   difference is exactly my new tests failing against the old code, so ZERO regressions and the 21 are
   pre-existing. tsc clean. NEEDS CONVEX DEPLOY.
+
+- 2026-08-27 (main-chat) — GEOTRACK "offline on a stable network" + timeline gaps with no explanation.
+  BUG 1, THE HEADLINE — convex/geotrack/monitoring.ts THRESHOLD_MS had DRIFTED TO 2 MINUTES while the comment
+  directly above it explains at length that 5 minutes caused "false-positive cascades on every Android doze
+  cycle (OPPO / Realme / Xiaomi devices suspend background coroutines aggressively)" and that "15 minutes is
+  the sweet spot". The code was tighter than the value its own comment REJECTS. Every doze on the handsets
+  field staff actually carry → HEARTBEAT_MISSED tamper event + isOnline=false + trackingSession patched. That
+  is the offline-while-online report AND the timeline break at that exact point. Restored to 15 min.
+  BUG 2 — the HEARTBEAT_MISSED event recorded only {lastSeen, gapMs, lastBatteryPct}: NO cause. Yet
+  geoHeartbeats carries airplaneMode/locationEnabled and geoLiveStatus carries isAirplaneModeOn/
+  isNetworkAvailable/isLocationEnabled, and the schema comment literally says they exist "to attribute a
+  heartbeat gap to flight mode / location-off tampering rather than a bare heartbeat missed" — nothing ever
+  read them. New attributeHeartbeatGap() checks EXPLICIT tamper events first, most-specific first
+  (DEVICE_SHUTDOWN > DEVICE_REBOOT > AIRPLANE_MODE_ON > LOCATION_DISABLED > GPS_DISABLED > PERMISSION_* >
+  APP_FORCE_KILLED > NETWORK_OFFLINE — a phone switched off explains the gap better than the network drop that
+  necessarily followed), then the last known flags, then battery <=5%, then honestly returns UNEXPLAINED
+  rather than asserting "doze". Stored as reasonCode (filter/colour) + reason (human sentence) + the three
+  last-known flags.
+  iOS PARITY (standing rule: mobile changes = BOTH platforms) — GeoTrackAPIService.heartbeat was sending
+  `airplaneMode: nil, locationEnabled: nil` HARDCODED, so every iPhone gap was unexplainable by construction.
+  Now sends real location state via authorizationStatus (NOT locationServicesEnabled(), which blocks the
+  thread and is deprecated on the main actor). airplaneMode DELIBERATELY stays nil: iOS has NO public
+  flight-mode API, and inferring it from "no interfaces" would mislabel a phone merely out of signal —
+  GeoTrackTamperMonitor already infers it via NWPathMonitor and raises AIRPLANE_MODE_ON, which the new
+  attribution prefers over the fallback flags anyway.
+  WHY IT FAILS ON SOME DEVICES AND NOT OTHERS: aggressive OEM battery managers (OPPO ColorOS / Realme /
+  Xiaomi MIUI / Vivo FuntouchOS / Samsung "Deep sleeping apps") suspend background work far harder than stock
+  Android, so those handsets blew a 2-minute budget while a Pixel/stock device would not — same network, same
+  app, different outcome.
+  TESTS: new convex/geotrackHeartbeatGap.test.ts, 8 passing — 6-min silence does NOT go offline (the
+  complaint), 40-min silence still IS caught (loosening must not blind us), flight mode / location-off /
+  battery named, an explicit DEVICE_SHUTDOWN beats a NETWORK_OFFLINE flag, a healthy-looking gap says
+  UNEXPLAINED, and non-tracking staff are untouched. tsc clean. Full convex suite: 9 failing FILES, the same
+  pre-existing set (accountsLedger, aiPresalesCustomer, autoDialRequests, cpVisitAudit, projectSimulation,
+  siteVisitFollowupOutcome, siteVisitManagementIssues, telecallerMissions, travelDeskAgencyStaffAccess) —
+  NONE of which I touched; autoDialRequests fails 11/14 identically with and without my changes, and the
+  exact failed-count wobbles run to run in those suites. NEEDS CONVEX DEPLOY + iOS Mac build.
