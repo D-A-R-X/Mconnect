@@ -95,6 +95,13 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
     private lateinit var etRefId: TextInputEditText
     private lateinit var etNotes: TextInputEditText
     private lateinit var btnRemoveProof: TextView
+    private lateinit var tvRefLabel: TextView
+    private lateinit var layoutInstrumentDetails: View
+    private lateinit var etBankName: TextInputEditText
+    private lateinit var etBranchName: TextInputEditText
+    private lateinit var etInstrumentDate: TextInputEditText
+    /** yyyy-MM-dd picked via the date dialog; what the backend expects. */
+    private var instrumentDateIso: String? = null
 
     // Device-level draft (NOT keyed to the logged-in account) so a form
     // interrupted by a crash resumes on this device regardless of who is
@@ -200,6 +207,26 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
         ivUploadIcon = view.findViewById(R.id.ivUploadIcon)
         btnRemoveProof = view.findViewById(R.id.btnRemoveProof)
         btnRemoveProof.setOnClickListener { clearAttachedImage() }
+        tvRefLabel = view.findViewById(R.id.tvRefLabel)
+        layoutInstrumentDetails = view.findViewById(R.id.layoutInstrumentDetails)
+        etBankName = view.findViewById(R.id.etBankName)
+        etBranchName = view.findViewById(R.id.etBranchName)
+        etInstrumentDate = view.findViewById(R.id.etInstrumentDate)
+        etInstrumentDate.setOnClickListener {
+            val cal = java.util.Calendar.getInstance()
+            android.app.DatePickerDialog(
+                requireContext(),
+                { _, y, m, d ->
+                    instrumentDateIso = String.format(java.util.Locale.US, "%04d-%02d-%02d", y, m + 1, d)
+                    etInstrumentDate.setText(
+                        String.format(java.util.Locale.US, "%02d/%02d/%04d", d, m + 1, y),
+                    )
+                },
+                cal.get(java.util.Calendar.YEAR),
+                cal.get(java.util.Calendar.MONTH),
+                cal.get(java.util.Calendar.DAY_OF_MONTH),
+            ).show()
+        }
 
         @Suppress("DEPRECATION")
         rectifyItem = arguments?.getSerializable(ARG_RECTIFY_ITEM) as? CollectionItem
@@ -258,9 +285,12 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
             paymentModes.getOrNull(position)?.let {
                 selectedMode = it
                 etPaymentMode.setText(it.label)
+                applyModeRequirements()
                 if (!rectifyLocked) saveDraft()
             }
         }
+        // Reflect the initial mode (default, restored draft, or rectify prefill).
+        applyModeRequirements()
 
         btnCamera.setOnClickListener {
             if (ContextCompat.checkSelfPermission(
@@ -311,9 +341,34 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
             }
             selectedMode = resolvedMode
             val refId = etRefId.text?.toString()?.trim().orEmpty()
-            if (refId.isBlank()) {
-                toast("Transaction reference is required")
+            // Cash has no transaction reference — demanding one blocked every
+            // cash entry outright. Every other mode genuinely has one (UPI txn
+            // id, NEFT/RTGS UTR, cheque/DD number) and the backend requires it
+            // for cheque/DD, so keep it mandatory there.
+            if (refId.isBlank() && selectedMode.id != "cash") {
+                toast(
+                    if (isInstrumentMode(selectedMode.id)) "Cheque/DD number is required"
+                    else "Transaction reference is required",
+                )
                 return@setOnClickListener
+            }
+            // Cheque/DD: the backend rejects the row without bank, branch and
+            // instrument date — collect them here instead of failing at submit.
+            val bankName = etBankName.text?.toString()?.trim().orEmpty()
+            val branchName = etBranchName.text?.toString()?.trim().orEmpty()
+            if (isInstrumentMode(selectedMode.id)) {
+                if (bankName.isBlank()) {
+                    toast("Bank name is required for ${selectedMode.label}")
+                    return@setOnClickListener
+                }
+                if (branchName.isBlank()) {
+                    toast("Branch name is required for ${selectedMode.label}")
+                    return@setOnClickListener
+                }
+                if (instrumentDateIso.isNullOrBlank()) {
+                    toast("Cheque/DD date is required")
+                    return@setOnClickListener
+                }
             }
             val notes = etNotes.text?.toString()?.trim().orEmpty()
 
@@ -328,6 +383,9 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
                     KEY_PAYMENT_MODE to selectedMode.id,
                     KEY_PAYMENT_MODE_LABEL to selectedMode.label,
                     KEY_TRANSACTION_REF to refId,
+                    KEY_BANK_NAME to (bankName.takeIf { isInstrumentMode(selectedMode.id) } ?: ""),
+                    KEY_BRANCH_NAME to (branchName.takeIf { isInstrumentMode(selectedMode.id) } ?: ""),
+                    KEY_INSTRUMENT_DATE to (instrumentDateIso.takeIf { isInstrumentMode(selectedMode.id) } ?: ""),
                     KEY_NOTES to notes,
                     KEY_PROOF_LOCAL_PATH to (selectedPhotoFile?.absolutePath ?: ""),
                     KEY_PROOF_FILE_NAME to (selectedPhotoFile?.name ?: ""),
@@ -503,6 +561,7 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
             paymentModes.firstOrNull { it.id == id }?.let {
                 selectedMode = it
                 etPaymentMode.setText(it.label)
+                applyModeRequirements()
             }
         }
         if (!refId.isNullOrBlank()) etRefId.setText(refId)
@@ -568,6 +627,21 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
         null
     }
 
+    private fun isInstrumentMode(modeId: String): Boolean =
+        modeId == "cheque" || modeId == "dd"
+
+    /** Show the cheque/DD bank-details block only for those modes, and relax
+     *  the reference label for cash (which has no transaction reference). */
+    private fun applyModeRequirements() {
+        layoutInstrumentDetails.visibility =
+            if (isInstrumentMode(selectedMode.id)) View.VISIBLE else View.GONE
+        tvRefLabel.text = when {
+            selectedMode.id == "cash" -> "Transaction Reference (optional)"
+            isInstrumentMode(selectedMode.id) -> "Cheque / DD Number *"
+            else -> "Transaction Reference *"
+        }
+    }
+
     private fun toast(message: String) {
         Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
     }
@@ -583,6 +657,9 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
         const val KEY_PAYMENT_MODE = "paymentMode"
         const val KEY_PAYMENT_MODE_LABEL = "paymentModeLabel"
         const val KEY_TRANSACTION_REF = "transactionRef"
+        const val KEY_BANK_NAME = "bankName"
+        const val KEY_BRANCH_NAME = "branchName"
+        const val KEY_INSTRUMENT_DATE = "instrumentDate"
         const val KEY_NOTES = "notes"
         const val KEY_PROOF_LOCAL_PATH = "proofLocalPath"
         const val KEY_PROOF_FILE_NAME = "proofFileName"

@@ -120,7 +120,11 @@ class LogoutBottomSheet : BottomSheetDialogFragment() {
                 if (!serverLoggedOut && attempt < 1) kotlinx.coroutines.delay(400)
             }
             session.clearSession()
-            com.manjugroups.m_connect.ui.common.LocalCache.clearAll(ctx)
+            // Stop tracking, clear every notification, cancel background work
+            // and drop cached data. Previously only the caches were cleared,
+            // so a signed-out phone kept showing the tracking notification and
+            // pending-task reminders for a user who had left.
+            com.manjugroups.m_connect.auth.SessionTeardown.run(ctx)
             OnboardingPrefs(ctx).onboardingCompleted = true
             startActivity(Intent(ctx, LoginActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK

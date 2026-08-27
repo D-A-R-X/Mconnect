@@ -511,6 +511,74 @@
                     app:tint="#667085" />
             </LinearLayout>
 
+            <!-- Second field staff — Joint CP only. A Joint CP puts two
+                 people on the same client place, each running their own trip,
+                 so it needs a partner alongside the field staff above. Shown
+                 only when the Joint CP type is picked; hidden (and cleared)
+                 otherwise so it can never be submitted for another type. -->
+            <LinearLayout
+                android:id="@+id/blockJointPartner"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:fontFamily="@font/inter_medium"
+                    android:text="Joint CP Partner *"
+                    android:textColor="#344054"
+                    android:textSize="13sp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="50dp"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/bg_cp_creation_input_box"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="14dp">
+
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@drawable/ic_cp_staff" />
+
+                    <EditText
+                        android:id="@+id/etJointPartner"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_marginStart="10dp"
+                        android:layout_weight="1"
+                        android:background="@null"
+                        android:clickable="true"
+                        android:focusable="false"
+                        android:fontFamily="@font/inter_medium"
+                        android:hint="Select the second staff"
+                        android:inputType="none"
+                        android:textColor="#101828"
+                        android:textColorHint="#9CA3AF"
+                        android:textSize="14sp" />
+
+                    <ImageView
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:src="@drawable/ic_chevron_down"
+                        app:tint="#667085" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:fontFamily="@font/inter_regular"
+                    android:text="Both staff travel separately and record their own outcome."
+                    android:textColor="#667085"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
             <!-- Project -->
             <TextView
                 android:layout_width="wrap_content"
@@ -611,7 +679,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="14dp"
                 android:fontFamily="@font/inter_medium"
-                android:text="CP Type"
+                android:text="CP Type *"
                 android:textColor="#344054"
                 android:textSize="13sp" />
 

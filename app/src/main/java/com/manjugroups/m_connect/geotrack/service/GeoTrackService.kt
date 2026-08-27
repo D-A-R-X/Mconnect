@@ -606,10 +606,28 @@ class GeoTrackService : Service() {
         if (now - last < 3_000) return
         if (!lastProcessedTime.compareAndSet(last, now)) return // Another thread got here first
 
-        // Skip very inaccurate points (>50m) — indoor GPS jitter
+        // Prefer fine fixes (≤50m). But DON'T go silent when they never come:
+        // indoors — and especially with "Precise location" toggled OFF
+        // (approximate fixes ≈ 2km accuracy) — a device can fail this gate ALL
+        // DAY. Previously every such fix was dropped outright, so the staff
+        // stayed "Live" via heartbeat while the map pin never moved off the
+        // punch-in point and the day recorded zero GPS. Fallback: when no
+        // point has been stored for 5+ minutes, let ONE coarse fix (≤250m)
+        // through, tagged with its real accuracy — the server accepts ≤250m
+        // and the display-side pin stabilizer absorbs the wobble.
         if (location.accuracy > 50f) {
-            Log.d(TAG, "Skipping inaccurate point: accuracy=${location.accuracy}m")
-            return
+            val sinceStoredMs = now - lastStoredTimeMs
+            val coarseFallbackDue =
+                location.accuracy <= 250f && sinceStoredMs >= 5 * 60_000L
+            if (!coarseFallbackDue) {
+                Log.d(TAG, "Skipping inaccurate point: accuracy=${location.accuracy}m")
+                return
+            }
+            Log.d(
+                TAG,
+                "Storing coarse fallback point: accuracy=${location.accuracy}m " +
+                    "(no stored fix for ${sinceStoredMs / 1000}s)",
+            )
         }
 
         val isMock = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) location.isMock
@@ -1097,9 +1115,10 @@ class GeoTrackService : Service() {
         val missing = mutableListOf<String>()
         val hasFine = checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) ==
             PackageManager.PERMISSION_GRANTED
-        val hasCoarse = checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION) ==
-            PackageManager.PERMISSION_GRANTED
-        if (!hasFine && !hasCoarse) missing.add("fine_location")
+        // Strictly FINE — coarse-only ("Precise location" off) yields ~2km
+        // fixes that fail the capture gate, so it must flag as missing here
+        // exactly like the in-app gate does (shared key contract).
+        if (!hasFine) missing.add("fine_location")
         if (!hasBackgroundLocationPermission()) missing.add("background_location")
         if (!hasActivityRecognitionPermission()) missing.add("activity_recognition")
         if (!isIgnoringBatteryOptimizations()) missing.add("battery_optimization")

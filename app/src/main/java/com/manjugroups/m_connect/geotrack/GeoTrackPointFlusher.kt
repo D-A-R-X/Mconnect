@@ -108,6 +108,17 @@ object GeoTrackPointFlusher {
                     dao.deleteByIds(rows.map { it.id })
                     flushed += resp.inserted ?: rows.size
                     progressed = true
+                    // A fully-rejected batch is the "Live but zero GPS" trap —
+                    // make the reason visible in logcat (accuracy gate vs
+                    // window clamp) instead of silently acking.
+                    if ((resp.inserted ?: 0) == 0 && rows.isNotEmpty()) {
+                        Log.w(
+                            TAG,
+                            "Batch ack'd but stored 0/${rows.size} points " +
+                                "(rejectedAccuracy=${resp.rejectedAccuracy ?: -1}, " +
+                                "rejectedWindow=${resp.rejectedWindow ?: -1}, session=$sid)",
+                        )
+                    }
                 } else {
                     hadFailure = true
                     lastError = resp.error

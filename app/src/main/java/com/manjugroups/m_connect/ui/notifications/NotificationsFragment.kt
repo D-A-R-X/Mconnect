@@ -251,6 +251,13 @@ class NotificationsFragment : Fragment() {
                 api.getNotifications(session.bearerToken)
             }.onSuccess { response ->
                 allNotifications = response.notifications
+                // Surface unread approvals/tasks on the phone's tray so they
+                // aren't missed once the app is closed. Only genuinely new
+                // ones post — see PriorityInboxNotification.
+                context?.let {
+                    com.manjugroups.m_connect.notifications.PriorityInboxNotification
+                        .notifyNew(it, response.notifications)
+                }
                 renderNotifications()
             }.onFailure {
                 toast("Unable to load notifications")
@@ -562,6 +569,11 @@ class NotificationAdapter(
 
             val badgeColors = getCategoryBadgeColors(context, category, isDarkMode)
 
+            // Approvals and tasks are work someone is WAITING on, so they get a
+            // peach row instead of the default surface. Everything else keeps
+            // the standard styling — if every row shouted, none would.
+            val isPriority = NotificationPriority.isHighPriority(item)
+
             // Unread badge styling
             if (item.read) {
                 binding.tvUnread.visibility = View.GONE
@@ -571,9 +583,18 @@ class NotificationAdapter(
                 context.theme.resolveAttribute(R.attr.colorForegroundPrimary, typedValueFore, true)
                 binding.tvTitle.setTextColor(typedValueFore.data)
 
-                val typedValue = android.util.TypedValue()
-                context.theme.resolveAttribute(R.attr.colorSurfaceSecondary, typedValue, true)
-                binding.notificationRoot.backgroundTintList = ColorStateList.valueOf(typedValue.data)
+                val readBg = if (isPriority) {
+                    androidx.core.content.ContextCompat.getColor(
+                        context,
+                        if (isDarkMode) R.color.notif_priority_read_dark
+                        else R.color.notif_priority_read,
+                    )
+                } else {
+                    val typedValue = android.util.TypedValue()
+                    context.theme.resolveAttribute(R.attr.colorSurfaceSecondary, typedValue, true)
+                    typedValue.data
+                }
+                binding.notificationRoot.backgroundTintList = ColorStateList.valueOf(readBg)
             } else {
                 binding.tvUnread.visibility = View.VISIBLE
                 binding.tvTitle.setTypeface(null, Typeface.BOLD)
@@ -585,10 +606,14 @@ class NotificationAdapter(
                 // Always show green dot for unread notifications
                 binding.tvUnread.setBackgroundResource(R.drawable.bg_dot_green)
 
-                val unreadBgColor = if (isDarkMode) {
-                    android.graphics.Color.parseColor("#1E2D4A")
-                } else {
-                    android.graphics.Color.parseColor("#F5F9FF")
+                val unreadBgColor = when {
+                    isPriority -> androidx.core.content.ContextCompat.getColor(
+                        context,
+                        if (isDarkMode) R.color.notif_priority_unread_dark
+                        else R.color.notif_priority_unread,
+                    )
+                    isDarkMode -> android.graphics.Color.parseColor("#1E2D4A")
+                    else -> android.graphics.Color.parseColor("#F5F9FF")
                 }
                 binding.notificationRoot.backgroundTintList = ColorStateList.valueOf(unreadBgColor)
             }

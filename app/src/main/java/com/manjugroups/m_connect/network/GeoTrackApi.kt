@@ -233,6 +233,14 @@ interface GeoTrackApi {
     ): GeoTrackResponse
 
     // Stashes the staff's out-of-geofence reason on the visit (shown to the GM).
+    // "The client won't give me the OTP." Messages the assigned GM over chat
+    // with the visit context and the code itself so they can read it back.
+    @POST("api/marketing/cp-visits/otp-assist")
+    suspend fun requestCpOtpAssist(
+        @Header("Authorization") token: String,
+        @Body body: CpOtpAssistRequest,
+    ): CpOtpAssistResponse
+
     @POST("api/marketing/cp-visits/geofence-remark")
     suspend fun setCpGeofenceRemark(
         @Header("Authorization") token: String,
@@ -313,10 +321,15 @@ interface GeoTrackApi {
     // Convex JS client. Approve / reject hit updateVerification with
     // the bearer-auth caller stamped as verifiedByStaffId.
 
+    // `cursor` is the previous response's nextCursor, sent as a string so
+    // Retrofit can't reformat the creation-time value into something the
+    // backend parses differently. Omit it for the first page.
     @GET("api/postsales/collections/my")
     suspend fun listMyCustomerCollections(
         @Header("Authorization") token: String,
         @Query("verificationStatus") verificationStatus: String? = null,
+        @Query("cursor") cursor: String? = null,
+        @Query("pageSize") pageSize: Int? = null,
     ): CustomerCollectionsListResponse
 
     @GET("api/postsales/collections/for-accounts")
@@ -341,6 +354,18 @@ interface GeoTrackApi {
     // case to a Legal Team staffer (server-side guard ensures only the
     // assignee can act); Legal Team accepts or rejects with required
     // remarks. See convex/postSales.ts for the state machine.
+
+    /** POST /api/postsales/loans/upload-document — attach an uploaded
+     *  (scanned-PDF) document to ONE checklist slot of a loan case.
+     *  Upload the bytes first via /api/storage/upload; send the
+     *  storageId here. Wraps postSales.setLoanChecklistDocument, the
+     *  same mutation the web Loan Desk uses, so per-slot uploads
+     *  persist server-side without re-submitting the whole set. */
+    @POST("api/postsales/loans/upload-document")
+    suspend fun uploadLoanDocument(
+        @Header("Authorization") token: String,
+        @Body body: UploadLoanDocumentRequest,
+    ): UploadLoanDocumentResponse
 
     @GET("api/postsales/loans/forSales")
     suspend fun listLoanDeskForSales(
@@ -558,6 +583,12 @@ interface GeoTrackApi {
                 response
             }
             val client = OkHttpClient.Builder()
+                // Offline support — see OfflineHttpCache: GETs are stored and
+                // replayed when the device has no network, so screens keep
+                // their data. Online behaviour is unchanged.
+                .apply { OfflineHttpCache.cache()?.let { cache(it) } }
+                .addInterceptor(OfflineHttpCache.serveStaleWhenOffline)
+                .addNetworkInterceptor(OfflineHttpCache.storeResponses)
                 .addInterceptor(authWatchdog)
                 .addInterceptor(logging)
                 .connectTimeout(30, TimeUnit.SECONDS)
@@ -678,7 +709,12 @@ data class GeoTrackResponse(
     val success: Boolean,
     val error: String? = null,
     val inserted: Int? = null,
-    val tamperDetected: Boolean? = null
+    val tamperDetected: Boolean? = null,
+    // Server-side rejection diagnostics for a batch: how many points were
+    // dropped by the accuracy gate vs the clock-in→clock-out window clamp.
+    // Makes a "Live but zero GPS stored" day attributable from logcat.
+    val rejectedAccuracy: Int? = null,
+    val rejectedWindow: Int? = null,
 )
 
 data class ConsentStatusResponse(
@@ -980,6 +1016,13 @@ data class CreateCpVisitRequest(
     // collection_cp, old_client, gift_distribution. Optional so older
     // builds without the picker still create successfully.
     val cpType: String? = null,
+    // Explicit 6-digit pincode. The compiled visitAddress already carries it
+    // as a "Pincode: NNNNNN" segment, but sending it separately means the
+    // server stores it as a real column instead of re-parsing free text.
+    val pincode: String? = null,
+    // Joint CP only: the SECOND participant. Ignored server-side for every
+    // other cpType.
+    val jointStaffIds: List<String>? = null,
 )
 
 data class CreateCpVisitResponse(
@@ -1235,6 +1278,11 @@ data class CustomerCollectionsListResponse(
     val success: Boolean = false,
     val collections: List<CustomerCollectionRow> = emptyList(),
     val error: String? = null,
+    // Scroll pagination. Both are absent on endpoints/backends that don't
+    // paginate, which reads as "this was the whole list" — the pre-pagination
+    // behavior.
+    val nextCursor: Double? = null,
+    val hasMore: Boolean = false,
 )
 
 /** Accountant taps Approve. `notes` is optional remarks attached to
@@ -1276,6 +1324,19 @@ data class CorrectCollectionRequest(
 // Legal Team). The mobile UI only renders a subset of these fields,
 // but keeping the full payload lets later screens (case detail,
 // audit log) reuse the same DTO without a second fetch.
+
+/** POST /api/postsales/loans/upload-document — per-slot checklist attach. */
+data class UploadLoanDocumentRequest(
+    val loanCaseId: String,
+    val index: Int,
+    val storageId: String,
+    val fileName: String? = null,
+)
+
+data class UploadLoanDocumentResponse(
+    val success: Boolean = false,
+    val error: String? = null,
+)
 
 data class LoanCaseDocument(
     val label: String = "",
@@ -1511,6 +1572,38 @@ data class SiteVisitIdRequest(val id: String)
 // (b) the backend returns the doc as-is. Defensive nullability prevents
 // Gson from blowing up when a key is missing.
 
+/**
+ * One participant of a Joint CP. Each travels separately and records their own
+ * outcome, so status/times are per-person rather than shared with the visit.
+ */
+data class JointCpParticipant(
+    val staffId: String? = null,
+    val staffName: String? = null,
+    val isPrimary: Boolean = false,
+    val status: String? = null,
+    val outcome: String? = null,
+    val notes: String? = null,
+    val clientMet: Boolean? = null,
+    val startedAt: Long? = null,
+    val completedAt: Long? = null,
+    val distanceMeters: Double? = null,
+    val outOfGeofence: Boolean = false,
+)
+
+/**
+ * Joint CP roll-up. Null on every other CP type, so a null check is the same
+ * as "this is a normal single-staff visit".
+ */
+data class JointCpSummary(
+    val participants: List<JointCpParticipant>? = null,
+    // The senior staff, who enters the OTP and records the one outcome.
+    val leadStaffName: String? = null,
+    val leadStaffId: String? = null,
+    // The other participant, who travels but records no outcome.
+    val companionNames: List<String>? = null,
+    val totalCount: Int = 0,
+)
+
 data class CpVisitDetailResponse(
     val success: Boolean,
     val visit: CpVisitDetail? = null,
@@ -1520,6 +1613,19 @@ data class CpVisitDetailResponse(
 // Marketing CP visits list response — used by Home today's trip merge.
 // Each visit is the enriched clientPlaceVisits row (same shape as
 // `CpVisitDetail` minus arrival proof we don't need for the home card).
+data class CpOtpAssistRequest(
+    val clientPlaceVisitId: String,
+    val lat: Double? = null,
+    val lng: Double? = null,
+    val remark: String? = null,
+)
+
+data class CpOtpAssistResponse(
+    val success: Boolean = false,
+    val gmName: String? = null,
+    val error: String? = null,
+)
+
 data class MyMarketingCpVisitsResponse(
     val success: Boolean,
     val total: Int? = null,
@@ -1551,6 +1657,8 @@ data class CpVisitDetail(
     // drops it without this field, leaving every merged CP row
     // looking like a generic Direct CP downstream.
     val cpType: String? = null,
+    // Joint CP participants. Null for every other cpType.
+    val joint: JointCpSummary? = null,
     val convertedSiteVisitId: String? = null,
     val convertedBookingId: String? = null,
     val fieldVisitId: String? = null,
@@ -1876,6 +1984,9 @@ data class TodayVisit(
     val leadName: String? = null,
     val leadPhone: String? = null,
     val cpVisit: CpVisitState? = null,
+    // Joint CP participants, carried onto the list row so a card can name BOTH
+    // staff. Null for every other cpType.
+    val joint: JointCpSummary? = null,
     // Out-of-geofence completion approval (top-level in the compact list shape).
     // approvalGmName is the GM the staff is waiting on; rejectRemark +
     // reassignedFromRejection surface a bounced-back completion.
@@ -1967,6 +2078,13 @@ data class CpVisitState(
     // tells the trip flow to skip the booking-outcome sheet after
     // arrival and finalise directly with outcome=gift_distributed.
     val cpType: String? = null,
+    // "The trip is over but no outcome was recorded." Computed by the CP list
+    // mapper, which can see BOTH the CP row's status and its field visit's.
+    // The card's merged status prefers fieldVisit.status, so a response that
+    // omitted fieldVisit made a finished trip look in-progress and hid the
+    // action that records the missing outcome. Client-side only; never sent by
+    // the server, so Gson leaves it null for every other caller.
+    val outcomePending: Boolean? = null,
 )
 
 data class TodayVisitsResponse(

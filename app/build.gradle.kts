@@ -176,6 +176,8 @@ dependencies {
 
     ksp(libs.room.compiler)
     testImplementation(libs.junit)
+    // Local HTTP server for verifying the offline response cache.
+    testImplementation(libs.okhttp.mockwebserver)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 }

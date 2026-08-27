@@ -64,27 +64,32 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal">
 
-            <LinearLayout style="@style/TaskStatCard">
+            <LinearLayout android:id="@+id/cardMyTasks" style="@style/TaskStatCard"
+                android:clickable="true" android:focusable="true">
                 <TextView style="@style/TaskStatLabel" android:text="My Tasks" />
                 <TextView android:id="@+id/tvCardMyCount" style="@style/TaskStatValue" />
             </LinearLayout>
 
-            <LinearLayout style="@style/TaskStatCard" android:layout_marginStart="10dp">
+            <LinearLayout android:id="@+id/cardTeamTasks" style="@style/TaskStatCard" android:layout_marginStart="10dp"
+                android:clickable="true" android:focusable="true">
                 <TextView style="@style/TaskStatLabel" android:text="My Team Tasks" />
                 <TextView android:id="@+id/tvCardTeamCount" style="@style/TaskStatValue" />
             </LinearLayout>
 
-            <LinearLayout style="@style/TaskStatCard" android:layout_marginStart="10dp">
+            <LinearLayout android:id="@+id/cardAssignedByMe" style="@style/TaskStatCard" android:layout_marginStart="10dp"
+                android:clickable="true" android:focusable="true">
                 <TextView style="@style/TaskStatLabel" android:text="Assigned By Me" />
                 <TextView android:id="@+id/tvCardAssignedCount" style="@style/TaskStatValue" />
             </LinearLayout>
 
-            <LinearLayout style="@style/TaskStatCard" android:layout_marginStart="10dp">
+            <LinearLayout android:id="@+id/cardExtRequests" style="@style/TaskStatCard" android:layout_marginStart="10dp"
+                android:clickable="true" android:focusable="true">
                 <TextView style="@style/TaskStatLabel" android:text="Extension Requests" />
                 <TextView android:id="@+id/tvCardExtCount" style="@style/TaskStatValue" />
             </LinearLayout>
 
-            <LinearLayout style="@style/TaskStatCard" android:layout_marginStart="10dp">
+            <LinearLayout android:id="@+id/cardOverdue" style="@style/TaskStatCard" android:layout_marginStart="10dp"
+                android:clickable="true" android:focusable="true">
                 <TextView style="@style/TaskStatLabel" android:text="Overdue" />
                 <TextView android:id="@+id/tvCardOverdueCount" style="@style/TaskStatValue"
                     android:textColor="#DC2626" />

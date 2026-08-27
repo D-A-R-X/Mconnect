@@ -32,6 +32,9 @@ import com.google.gson.reflect.TypeToken
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
+import com.manjugroups.m_connect.network.GeoTrackApi
+import com.manjugroups.m_connect.network.UploadLoanDocumentRequest
+import com.manjugroups.m_connect.util.ScanPdfBuilder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -104,6 +107,12 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
     private var cameraUri: Uri? = null
     private var isViewMode = false
     private var caseId: String? = null
+    /** postSaleLoanCases id — when present, each successful slot upload is
+     *  also persisted server-side via /api/postsales/loans/upload-document. */
+    private var loanCaseId: String? = null
+    /** Camera-scanned pages accumulated for the active slot; assembled into a
+     *  single PDF on "Finish scan". */
+    private val scanPages = mutableListOf<File>()
 
     private lateinit var btnSubmit: TextView
     private val gson = Gson()
@@ -140,8 +149,14 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
         if (result.resultCode == Activity.RESULT_OK) {
             val f = cameraFile
             if (f != null && f.exists() && f.length() > 0) {
-                startUploadFromCameraFile(activeSlotIndex, f)
+                // Scanned page: accumulate, then ask add-another vs finish —
+                // all pages of one scan become a SINGLE PDF for the slot.
+                scanPages += f
+                promptScanNextPage()
             }
+        } else if (scanPages.isNotEmpty()) {
+            // Camera cancelled mid-scan: finish with the pages we have.
+            promptScanNextPage()
         }
     }
 
@@ -183,6 +198,7 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
 
         isViewMode = arguments?.getBoolean("isViewMode", false) ?: false
         caseId = arguments?.getString(ARG_CASE_ID)
+        loanCaseId = arguments?.getString(ARG_LOAN_CASE_ID)
         val requiredLabels = arguments?.getStringArrayList(ARG_REQUIRED_LABELS).orEmpty()
         val preExistingNames = arguments?.getStringArrayList(ARG_PRE_NAMES).orEmpty()
         val preExistingStorageIds = arguments?.getStringArrayList(ARG_PRE_STORAGE_IDS).orEmpty()
@@ -279,6 +295,9 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
                 }
                 btnCamera.setOnClickListener {
                     activeSlotIndex = index
+                    // Fresh scan for this slot — drop pages from an aborted
+                    // scan of another slot.
+                    scanPages.clear()
                     checkCameraPermissionAndLaunch()
                 }
                 layoutUploaded.setOnLongClickListener {
@@ -410,6 +429,53 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
+    /** After each captured page: keep scanning, or finish into one PDF. */
+    private fun promptScanNextPage() {
+        if (!isAdded) return
+        val slot = slots.getOrNull(activeSlotIndex)
+        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setTitle("Page ${scanPages.size} captured")
+            .setMessage(
+                "Scan another page of ${slot?.label ?: "this document"}, " +
+                    "or finish and upload everything as a single PDF.",
+            )
+            .setPositiveButton("Add page") { _, _ -> launchCamera() }
+            .setNegativeButton("Finish scan") { _, _ -> finishScanAndUpload() }
+            .setCancelable(false)
+            .show()
+    }
+
+    /** Assemble the accumulated pages into one PDF and run the normal
+     *  slot-upload pipeline with it. */
+    private fun finishScanAndUpload() {
+        val slotIndex = activeSlotIndex
+        val slot = slots.getOrNull(slotIndex) ?: return
+        val pages = scanPages.toList()
+        scanPages.clear()
+        if (pages.isEmpty()) return
+        slot.state = SlotUiState.UPLOADING
+        slot.fileName = scanPdfName(slot.label)
+        renderSlot(slot)
+        updateSubmitButtonState()
+        viewLifecycleOwner.lifecycleScope.launch {
+            val pdf = withContext(Dispatchers.IO) {
+                val out = File(requireContext().cacheDir, scanPdfName(slot.label))
+                ScanPdfBuilder.build(pages, out)
+            }
+            pages.forEach { runCatching { it.delete() } }
+            if (pdf == null) {
+                onSlotUploadFailed(slot, "Couldn't build the scan PDF")
+                return@launch
+            }
+            startUploadFromCameraFile(slotIndex, pdf)
+        }
+    }
+
+    private fun scanPdfName(label: String): String =
+        "scan_" +
+            label.lowercase(Locale.US).replace(Regex("[^a-z0-9]+"), "_").trim('_') +
+            "_${System.currentTimeMillis()}.pdf"
+
     private fun startUploadFromCameraFile(slotIndex: Int, file: File) {
         val slot = slots.getOrNull(slotIndex) ?: return
         slot.fileName = file.name
@@ -442,6 +508,37 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
         result.onSuccess { resp ->
             val sid = resp.storageId
             if (resp.success && !sid.isNullOrBlank()) {
+                // When editing a real loan case, persist the slot server-side
+                // right away via /api/postsales/loans/upload-document (the
+                // same setLoanChecklistDocument path the web Loan Desk uses)
+                // so the scanned PDF lands on the case even if the sheet is
+                // dismissed before a full submit.
+                val lcId = loanCaseId
+                if (!lcId.isNullOrBlank()) {
+                    val attach = withContext(Dispatchers.IO) {
+                        runCatching {
+                            GeoTrackApi.create().uploadLoanDocument(
+                                token = token,
+                                body = UploadLoanDocumentRequest(
+                                    loanCaseId = lcId,
+                                    index = slot.index,
+                                    storageId = sid,
+                                    fileName = slot.fileName,
+                                ),
+                            )
+                        }
+                    }
+                    val attached = attach.getOrNull()
+                    if (attached?.success != true) {
+                        onSlotUploadFailed(
+                            slot,
+                            attached?.error
+                                ?: attach.exceptionOrNull()?.message
+                                ?: "Couldn't save the document to the loan case",
+                        )
+                        return
+                    }
+                }
                 slot.storageId = sid
                 slot.state = SlotUiState.READY
                 slot.lastError = null
@@ -765,6 +862,7 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
         private const val ARG_PRE_NAMES = "preExistingNames"
         private const val ARG_PRE_STORAGE_IDS = "preExistingStorageIds"
         private const val ARG_CASE_ID = "caseId"
+        private const val ARG_LOAN_CASE_ID = "loanCaseId"
         private const val DRAFT_PREFS = "loan_desk_drafts"
 
         /**
@@ -789,11 +887,15 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
             preExistingFileNames: List<String?> = emptyList(),
             preExistingStorageIds: List<String?> = emptyList(),
             isViewMode: Boolean,
+            /** postSaleLoanCases id — pass it so each slot upload also persists
+             *  server-side immediately via /loans/upload-document. */
+            loanCaseId: String? = null,
             onSubmitted: (uploads: List<SubmittedDoc>) -> Unit,
         ): LoanDeskUploadBottomSheet = LoanDeskUploadBottomSheet().apply {
             arguments = Bundle().apply {
                 putBoolean("isViewMode", isViewMode)
                 putString(ARG_CASE_ID, caseId)
+                putString(ARG_LOAN_CASE_ID, loanCaseId)
                 putStringArrayList(ARG_REQUIRED_LABELS, ArrayList(requiredLabels))
                 putStringArrayList(
                     ARG_PRE_NAMES,

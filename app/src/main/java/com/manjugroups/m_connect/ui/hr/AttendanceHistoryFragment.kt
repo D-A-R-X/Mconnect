@@ -34,7 +34,9 @@ import androidx.recyclerview.widget.RecyclerView
 import com.manjugroups.m_connect.network.RejectRequest
 import com.manjugroups.m_connect.network.AttendanceApprovalRecord
 import com.manjugroups.m_connect.ui.common.HorizontalTabLayout
+import com.manjugroups.m_connect.ui.common.LocalCache
 import com.manjugroups.m_connect.ui.common.navigateUp
+import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.async
 import java.text.SimpleDateFormat
@@ -62,7 +64,18 @@ class AttendanceHistoryFragment : Fragment() {
         onLoadMore = {
             filterCurrentListOnTyping(binding.etSearch.text?.toString().orEmpty())
         },
+        // The window above only pages through rows already in memory. The All
+        // tab's range is company-wide and far too large to fetch at once, so
+        // reaching the end also has to pull the next page from the server.
+        onEndReached = { loadNextAllAttendancePage() },
     )
+
+    // Server-side paging for the All tab. `hasMore` is the backend telling us
+    // rows remain past the cursor; `loading` collapses the burst of
+    // end-of-list scroll callbacks into a single in-flight request.
+    private var allAttendanceCursor: String? = null
+    private var allAttendanceHasMore: Boolean = false
+    private var loadingAllAttendancePage: Boolean = false
     // All-time bounds for HR Review (which shows the entire review backlog).
     // The "All" tab now honors the date filter instead (filterFromDate/To),
     // so "Last month" and friends actually apply there.
@@ -369,6 +382,10 @@ class AttendanceHistoryFragment : Fragment() {
             cachedAllApprovals = emptyList()
             cachedHrReview = emptyList()
             cachedAllAttendance = emptyList()
+            // The cursor belongs to the range we just discarded — carrying it
+            // into a new range would append rows from the old one.
+            allAttendanceCursor = null
+            allAttendanceHasMore = false
             cachedFines = emptyList()
         }
 
@@ -436,6 +453,25 @@ class AttendanceHistoryFragment : Fragment() {
                 }
 
                 myDeferred.await()?.let { if (it.success) cachedMyRecords = it.records }
+                // Offline-resilience for the personal "My Attendance" tab: on a
+                // successful non-empty fetch, persist to disk; when the fetch
+                // yielded nothing (offline / failure), hydrate the last-known
+                // month from disk so the calendar shows real days instead of a
+                // wall of synthesized "Absent".
+                run {
+                    val ctx = context?.applicationContext
+                    val key = myAttnCacheKey()
+                    if (ctx != null && key != null) {
+                        if (cachedMyRecords.isNotEmpty()) {
+                            LocalCache.put(ctx, key, cachedMyRecords, System.currentTimeMillis())
+                        } else {
+                            val cached: List<AttendanceRecord>? = LocalCache.get(
+                                ctx, key, object : TypeToken<List<AttendanceRecord>>() {}.type,
+                            )
+                            if (!cached.isNullOrEmpty()) cachedMyRecords = cached
+                        }
+                    }
+                }
                 updateBadgeFor(0, cachedMyRecords.size)
 
                 teamDeferred.await()?.let { if (it.success) cachedTeamAttendance = it.records }
@@ -496,6 +532,8 @@ class AttendanceHistoryFragment : Fragment() {
                 val allResp = allDeferred.await()
                 if (allResp?.success == true) {
                     cachedAllAttendance = allResp.records
+                    allAttendanceCursor = allResp.nextCursor
+                    allAttendanceHasMore = allResp.hasMore && allResp.nextCursor != null
                     updateBadgeFor(5, cachedAllAttendance.size)
                 }
 
@@ -514,6 +552,13 @@ class AttendanceHistoryFragment : Fragment() {
                 }
             }
         }
+    }
+
+    /** Cache key for the personal "My Attendance" tab, namespaced by staff and
+     *  the active date range so different filters never overwrite each other. */
+    private fun myAttnCacheKey(): String? {
+        val staffId = session.staffId?.takeIf { it.isNotBlank() } ?: return null
+        return "attn_my:$staffId:$filterFromDate:$filterToDate"
     }
 
     private fun renderCurrentTab() {
@@ -741,7 +786,46 @@ class AttendanceHistoryFragment : Fragment() {
             }.getOrNull() ?: return@launch
             if (_binding == null || !resp.success) return@launch
             cachedAllAttendance = resp.records
+            allAttendanceCursor = resp.nextCursor
+            allAttendanceHasMore = resp.hasMore && resp.nextCursor != null
             if (activeTab == 5) renderCurrentTab()
+        }
+    }
+
+    /**
+     * Pull the next page of company-wide attendance once the user scrolls to
+     * the end of what we hold. No-ops unless the backend said more rows exist,
+     * so a fully loaded range costs nothing however far the user scrolls.
+     */
+    private fun loadNextAllAttendancePage() {
+        if (activeTab != 5 || !allAttendanceHasMore || loadingAllAttendancePage) return
+        val cursor = allAttendanceCursor ?: return
+        loadingAllAttendancePage = true
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = runCatching {
+                    api.getAllAttendance(
+                        session.bearerToken,
+                        filterFromDate,
+                        filterToDate,
+                        search = binding.etSearch.text?.toString()?.trim()?.ifBlank { null },
+                        cursor = cursor,
+                    )
+                }.getOrNull()
+                if (_binding == null || resp?.success != true) return@launch
+                // Append only rows we don't already hold. Pages don't overlap,
+                // but a punch written between two requests could shift the
+                // boundary, and a duplicate day is more visible than a gap.
+                val seen = cachedAllAttendance.mapNotNull { it.id }.toHashSet()
+                val fresh = resp.records.filter { it.id == null || seen.add(it.id) }
+                cachedAllAttendance = cachedAllAttendance + fresh
+                allAttendanceCursor = resp.nextCursor
+                allAttendanceHasMore = resp.hasMore && resp.nextCursor != null
+                updateBadgeFor(5, cachedAllAttendance.size)
+                if (activeTab == 5) renderCurrentTab()
+            } finally {
+                loadingAllAttendancePage = false
+            }
         }
     }
 
@@ -1353,6 +1437,14 @@ class AttendanceHistoryFragment : Fragment() {
                     override fun onReject(recordId: String) {
                         showRejectDialog(recordId, isRequestRow)
                     }
+                    override fun onCorrectTimes(
+                        recordId: String,
+                        correctedPunchIn: String?,
+                        correctedPunchOut: String?,
+                        reason: String?,
+                    ) {
+                        correctPunchTimes(recordId, correctedPunchIn, correctedPunchOut, reason)
+                    }
                 })
                 sheet.showOnce(parentFragmentManager, "review_attendance_request")
             }
@@ -1753,4 +1845,54 @@ class AttendanceHistoryFragment : Fragment() {
         super.onDestroyView()
         _binding = null
     }
+
+    /**
+     * Save a reviewer's punch-time correction, then reload so the row shows the
+     * corrected times rather than the stale ones.
+     *
+     * The backend owns the rules — it requires `attendance.correctPunchTimes`
+     * and refuses a self-correction — so its message is surfaced verbatim
+     * instead of being second-guessed here.
+     */
+    private fun correctPunchTimes(
+        recordId: String,
+        correctedPunchIn: String?,
+        correctedPunchOut: String?,
+        reason: String?,
+    ) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.correctAttendancePunchTimes(
+                    session.bearerToken,
+                    com.manjugroups.m_connect.network.CorrectPunchTimesRequest(
+                        id = recordId,
+                        correctedPunchIn = correctedPunchIn,
+                        correctedPunchOut = correctedPunchOut,
+                        reason = reason,
+                    ),
+                )
+                if (resp.success) {
+                    Toast.makeText(
+                        requireContext(),
+                        "Punch times corrected",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                    loadData()
+                } else {
+                    Toast.makeText(
+                        requireContext(),
+                        resp.error ?: "Couldn't correct the punch times",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(
+                    requireContext(),
+                    e.message ?: "Couldn't correct the punch times",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
+    }
+
 }

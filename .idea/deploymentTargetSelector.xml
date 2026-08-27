@@ -4,10 +4,10 @@
     <selectionStates>
       <SelectionState runConfigName="app">
         <option name="selectionMode" value="DROPDOWN" />
-        <DropdownSelection timestamp="2026-07-16T10:00:56.659873800Z">
+        <DropdownSelection timestamp="2026-08-26T04:36:33.674632600Z">
           <Target type="DEFAULT_BOOT">
             <handle>
-              <DeviceId pluginId="PhysicalDevice" identifier="serial=007518c50e16489a" />
+              <DeviceId pluginId="Wireless" identifier="serviceName=adb-7ceb9213-bk5cd8" />
             </handle>
           </Target>
         </DropdownSelection>
@@ -15,10 +15,10 @@
       </SelectionState>
       <SelectionState runConfigName="androidTest">
         <option name="selectionMode" value="DROPDOWN" />
-        <DropdownSelection timestamp="2026-07-23T05:52:19.188506200Z">
+        <DropdownSelection timestamp="2026-08-26T04:36:39.284001100Z">
           <Target type="DEFAULT_BOOT">
             <handle>
-              <DeviceId pluginId="PhysicalDevice" identifier="serial=77cd83cc" />
+              <DeviceId pluginId="Wireless" identifier="serviceName=adb-7ceb9213-bk5cd8" />
             </handle>
           </Target>
         </DropdownSelection>
@@ -26,12 +26,7 @@
           <targets>
             <Target type="DEFAULT_BOOT">
               <handle>
-                <DeviceId pluginId="PhysicalDevice" identifier="serial=77cd83cc" />
-              </handle>
-            </Target>
-            <Target type="DEFAULT_BOOT">
-              <handle>
-                <DeviceId pluginId="PhysicalDevice" identifier="serial=007518c50e16489a" />
+                <DeviceId pluginId="PhysicalDevice" identifier="serial=7ceb9213" />
               </handle>
             </Target>
             <Target type="DEFAULT_BOOT">

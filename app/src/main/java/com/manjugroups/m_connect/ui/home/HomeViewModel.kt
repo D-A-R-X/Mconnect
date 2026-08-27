@@ -14,6 +14,7 @@ import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.MmsFleetDriverTrip
 import com.manjugroups.m_connect.network.PunchRequest
 import com.manjugroups.m_connect.network.StorageUploader
+import com.manjugroups.m_connect.attendance.OfflinePunchQueue
 import com.manjugroups.m_connect.attendance.PunchSyncWorker
 import com.manjugroups.m_connect.geotrack.data.GeoTrackDatabase
 import com.manjugroups.m_connect.geotrack.data.PendingPunchEntity
@@ -224,6 +225,11 @@ class HomeViewModel : ViewModel() {
             // this device time means the punch is recorded at the moment the
             // staff tapped, not when the server finally receives it.
             val punchIso = isoNow()
+            // Resolved BEFORE the try so the offline branch can carry it too.
+            // Geocoding is on-device and does not need the network, and a
+            // queued punch that reaches the web without an address reads as a
+            // punch from nowhere.
+            val address = reverseGeocode(context, lat, lng)
             try {
                 // Step 1: Upload photo if available
                 var storageId: String? = null
@@ -231,13 +237,7 @@ class HomeViewModel : ViewModel() {
                     storageId = uploadPhoto(bearerToken, photoFile)
                 }
 
-                // Step 2: Resolve a human-readable address from the punch
-                // coordinates. The backend can geocode too, but sending an
-                // on-device address gives the punch record a value even when
-                // the server-side geocoder is rate-limited / offline.
-                val address = reverseGeocode(context, lat, lng)
-
-                // Step 3: Call punch API
+                // Step 2: Call punch API. The address was resolved above.
                 val request = PunchRequest(
                     latitude = lat,
                     longitude = lng,
@@ -284,7 +284,9 @@ class HomeViewModel : ViewModel() {
                 // Network / server failure — DON'T lose the punch. Queue it with
                 // the real tap time (and photo) so it syncs when connectivity
                 // returns and records the time the staff actually punched.
-                val queued = enqueueOfflinePunch(context, isPunchIn, punchIso, lat, lng, photoFile)
+                val queued = enqueueOfflinePunch(
+                    context, isPunchIn, punchIso, lat, lng, photoFile, address,
+                )
                 _uiState.value = current.copy(isPunching = false)
                 if (queued) {
                     PunchSyncWorker.enqueue(context)
@@ -308,6 +310,14 @@ class HomeViewModel : ViewModel() {
 
     /** Persist a failed punch to the offline queue (with its photo copied to a
      *  stable location so it survives until sync). Returns true when queued. */
+    /**
+     * Queue a punch the network refused, via the SHARED queue.
+     *
+     * This used to be a private copy of OfflinePunchQueue.enqueue, which is the
+     * exact drift that helper exists to prevent - and it had already drifted:
+     * the copy stored the raw camera selfie while the shared one now compresses
+     * it, and the copy always sent a null address.
+     */
     private suspend fun enqueueOfflinePunch(
         context: Context,
         isPunchIn: Boolean,
@@ -315,34 +325,16 @@ class HomeViewModel : ViewModel() {
         lat: Double?,
         lng: Double?,
         photoFile: File?,
-    ): Boolean = try {
-        val persistedPhoto = photoFile
-            ?.takeIf { it.exists() }
-            ?.let { src ->
-                runCatching {
-                    val dir = File(context.filesDir, "punch_queue").apply { mkdirs() }
-                    val dst = File(dir, "punch_${System.currentTimeMillis()}_${src.name}")
-                    src.copyTo(dst, overwrite = true)
-                    dst.absolutePath
-                }.getOrNull()
-            }
-        GeoTrackDatabase.getInstance(context).pendingPunchDao().insert(
-            PendingPunchEntity(
-                isPunchIn = isPunchIn,
-                clientPunchTime = punchIso,
-                latitude = lat,
-                longitude = lng,
-                address = null,
-                photoPath = persistedPhoto,
-                deviceId = SessionManager(context).trackingDeviceId,
-                source = "mobile",
-                createdAt = System.currentTimeMillis(),
-            )
-        )
-        true
-    } catch (_: Exception) {
-        false
-    }
+        address: String? = null,
+    ): Boolean = OfflinePunchQueue.enqueue(
+        context = context,
+        isPunchIn = isPunchIn,
+        punchIso = punchIso,
+        latitude = lat,
+        longitude = lng,
+        photoFile = photoFile,
+        address = address,
+    )
 
     // ── Trip / Visit Selection ──
 

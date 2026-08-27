@@ -49,6 +49,8 @@ class ArrivalOtpBottomSheet : BottomSheetDialogFragment() {
     private var countdownTimer: CountDownTimer? = null
     private var resendTimer: CountDownTimer? = null
     private var resendInFlight: Boolean = false
+    private var cpVisitId: String? = null
+    private var gmRequestInFlight: Boolean = false
 
     private var visitId: String = ""
     private var lat: Double? = null
@@ -101,6 +103,7 @@ class ArrivalOtpBottomSheet : BottomSheetDialogFragment() {
         lng = if (args.containsKey(ARG_LNG)) args.getDouble(ARG_LNG) else null
         resendCooldownSeconds = args.getInt(ARG_RESEND_COOLDOWN, 60)
         arrivalPhotoStorageId = args.getString(ARG_ARRIVAL_PHOTO_STORAGE_ID)
+        cpVisitId = args.getString(ARG_CP_VISIT_ID)
         val phoneMasked = args.getString(ARG_PHONE_MASKED)
         val expiresIn = args.getInt(ARG_EXPIRES_IN, 600)
 
@@ -159,6 +162,16 @@ class ArrivalOtpBottomSheet : BottomSheetDialogFragment() {
 
         verifyBtn?.setOnClickListener { performVerify() }
         resendBtn?.setOnClickListener { performResend() }
+
+        // "Client not sharing the OTP? Request GM" — only offered when we know
+        // which CP visit this is; without it there is nothing to ask about.
+        val requestGmBtn = view.findViewById<TextView>(R.id.btnArrivalOtpRequestGm)
+        if (cpVisitId.isNullOrBlank()) {
+            requestGmBtn?.visibility = View.GONE
+        } else {
+            requestGmBtn?.visibility = View.VISIBLE
+            requestGmBtn?.setOnClickListener { promptGmRequest() }
+        }
 
         // OTP expiry countdown displayed inline.
         startExpiryCountdown(expiresIn)
@@ -297,6 +310,79 @@ class ArrivalOtpBottomSheet : BottomSheetDialogFragment() {
         errorText?.visibility = View.VISIBLE
     }
 
+
+    /**
+     * Ask for an optional remark, then send the request to the GM.
+     *
+     * The remark is genuinely optional — a staff member standing in front of
+     * an uncooperative client should not be made to write an essay before
+     * they can get help.
+     */
+    private fun promptGmRequest() {
+        if (gmRequestInFlight) return
+        val cpId = cpVisitId?.takeIf { it.isNotBlank() } ?: return
+        val ctx = context ?: return
+
+        val input = android.widget.EditText(ctx).apply {
+            hint = "Remark (optional) — e.g. client refused to share the code"
+            setPadding(48, 32, 48, 32)
+            maxLines = 3
+        }
+        android.app.AlertDialog.Builder(ctx)
+            .setTitle("Request GM for OTP")
+            .setMessage(
+                "Your GM will get a chat message with the client, your location, " +
+                    "the distance from the client's place and the OTP.",
+            )
+            .setView(input)
+            .setPositiveButton("Send request") { _, _ ->
+                sendGmRequest(cpId, input.text?.toString()?.trim().orEmpty())
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun sendGmRequest(cpVisitId: String, remark: String) {
+        gmRequestInFlight = true
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = geoApi.requestCpOtpAssist(
+                    session.bearerToken,
+                    com.manjugroups.m_connect.network.CpOtpAssistRequest(
+                        clientPlaceVisitId = cpVisitId,
+                        lat = lat,
+                        lng = lng,
+                        remark = remark.takeIf { it.isNotEmpty() },
+                    ),
+                )
+                if (!isAdded) return@launch
+                if (resp.success) {
+                    Toast.makeText(
+                        requireContext(),
+                        "Sent to ${resp.gmName ?: "your manager"}. They can read the OTP back to you.",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                } else {
+                    Toast.makeText(
+                        requireContext(),
+                        resp.error ?: "Couldn't send the request",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+            } catch (e: Exception) {
+                if (isAdded) {
+                    Toast.makeText(
+                        requireContext(),
+                        e.message ?: "Couldn't send the request",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+            } finally {
+                gmRequestInFlight = false
+            }
+        }
+    }
+
     companion object {
         const val RESULT_KEY = "arrival_otp_result"
         const val KEY_OTP = "otp"
@@ -307,9 +393,13 @@ class ArrivalOtpBottomSheet : BottomSheetDialogFragment() {
         private const val ARG_LAT = "arg_lat"
         private const val ARG_LNG = "arg_lng"
         private const val ARG_ARRIVAL_PHOTO_STORAGE_ID = "arg_arrival_photo_storage_id"
+        private const val ARG_CP_VISIT_ID = "arg_cp_visit_id"
 
         fun newInstance(
             visitId: String,
+            /** The CP visit this arrival belongs to — needed to ask the GM
+             *  for help when the client won't share the code. */
+            cpVisitId: String? = null,
             phoneMasked: String?,
             expiresInSeconds: Int,
             resendCooldownSeconds: Int,
@@ -319,6 +409,7 @@ class ArrivalOtpBottomSheet : BottomSheetDialogFragment() {
         ): ArrivalOtpBottomSheet = ArrivalOtpBottomSheet().apply {
             arguments = Bundle().apply {
                 putString(ARG_VISIT_ID, visitId)
+                if (cpVisitId != null) putString(ARG_CP_VISIT_ID, cpVisitId)
                 if (phoneMasked != null) putString(ARG_PHONE_MASKED, phoneMasked)
                 putInt(ARG_EXPIRES_IN, expiresInSeconds)
                 putInt(ARG_RESEND_COOLDOWN, resendCooldownSeconds)

@@ -68,6 +68,16 @@ class MconnectFirebaseMessagingService : FirebaseMessagingService() {
         super.onMessageReceived(message)
         Log.d("MconnectFCM", "onMessageReceived: from=${message.from}, data=${message.data}, notificationTitle=${message.notification?.title}, notificationBody=${message.notification?.body}")
 
+        // Nobody is signed in — drop it. The push token is unregistered on
+        // sign-out, but that is a network call that can fail or never run (a
+        // phone offline at logout, a session expiring server-side), and a push
+        // landing afterwards would put a notification back on a logged-out
+        // phone. Guarding here means a stale push can never resurrect one.
+        if (!com.manjugroups.m_connect.auth.SessionManager(applicationContext).isLoggedIn) {
+            Log.d("MconnectFCM", "Dropped push: no signed-in session")
+            return
+        }
+
         if (ModernDialerCallController.isIncomingCall(message.data)) {
             ModernDialerCallController.showIncomingCall(this, message.data)
             return

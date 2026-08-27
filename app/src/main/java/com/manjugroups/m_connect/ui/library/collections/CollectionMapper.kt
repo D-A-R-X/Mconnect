@@ -52,6 +52,7 @@ object CollectionMapper {
             remarks = row.verificationNotes,
             proofStorageId = row.proofStorageId,
             edited = !row.collectorEditedAt.isNullOrBlank(),
+            collectedByStaffId = row.collectedByStaffId,
         )
     }
 

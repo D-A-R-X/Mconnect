@@ -25,6 +25,7 @@ fun formatCpVisitTypeLabel(
             "gift_distribution" -> return "Gift Distribution"
             "new_client_cp" -> return "New Client CP"
             "other_cp" -> return "Other CP"
+            "joint_cp" -> return "Joint CP"
         }
     }
     return when (visitCategory) {
@@ -37,4 +38,31 @@ fun formatCpVisitTypeLabel(
             else -> "Visit"
         }
     }
+}
+
+
+/**
+ * Display label for a CP visit's OUTCOME.
+ *
+ * Split out of the site-visit sheet's private copy because a Joint CP shows
+ * each participant's outcome side by side, and two screens disagreeing on the
+ * wording of the same value would read as two different results.
+ */
+fun formatCpOutcomeLabel(outcome: String?): String = when (outcome?.lowercase()) {
+    "interested" -> "Interested"
+    "not_interested" -> "Not Interested"
+    "postponed", "follow_up" -> "Follow up"
+    "converted_to_site_visit" -> "Converted to SV"
+    "converted_to_booking" -> "Converted as Booking"
+    "rejected" -> "Rejected"
+    "gift_distributed" -> "Gift Distributed"
+    "old_client_visited" -> "Visited"
+    "collection_done" -> "Collected"
+    "not_collected" -> "Not Collected"
+    "referral" -> "Referral"
+    "other" -> "Other"
+    null, "" -> ""
+    // An unknown value is shown rather than swallowed: a new server-side
+    // outcome should be visible, not silently blank.
+    else -> outcome.replace('_', ' ').replaceFirstChar { it.uppercase() }
 }

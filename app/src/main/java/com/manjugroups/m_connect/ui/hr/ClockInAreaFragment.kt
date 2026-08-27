@@ -39,6 +39,7 @@ import com.google.android.gms.tasks.CancellationTokenSource
 import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
+import com.manjugroups.m_connect.ui.common.showOnce
 import com.manjugroups.m_connect.databinding.FragmentClockInAreaBinding
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.HomeFenceData
@@ -70,6 +71,9 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
     private var pendingPunchImageFile: File? = null
     private var pendingPunchImageUri: android.net.Uri? = null
     private var isLaunchingCamera = false
+    /** True once a capture came back, so the dismiss callback can tell a
+     *  confirmed selfie from the user backing out of the camera. */
+    private var punchSelfieHandled = false
 
     // Home geofence enforcement — mirrors HrDashboardFragment. Blocks
     // the Selfie-To-Clock-In path the same way the dashboard blocks
@@ -117,7 +121,7 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
         val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true
         val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         if (cameraGranted && (fineGranted || coarseGranted)) {
-            launchSystemCamera()
+            launchSelfieCamera()
         } else {
             isLaunchingCamera = false
             Toast.makeText(
@@ -128,58 +132,6 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
         }
     }
 
-    private val captureSelfieLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult(),
-    ) { result ->
-        if (!isAdded || _binding == null) return@registerForActivityResult
-        val imageUri = pendingPunchImageUri
-        if (imageUri != null) {
-            runCatching {
-                requireContext().revokeUriPermission(
-                    imageUri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
-                )
-            }
-        }
-
-        val mode = pendingPunchMode
-        val imageFile = pendingPunchImageFile
-        if (mode == null || imageFile == null) {
-            isLaunchingCamera = false
-            return@registerForActivityResult
-        }
-
-        val success = result.resultCode == Activity.RESULT_OK
-        if (!success) {
-            isLaunchingCamera = false
-            Toast.makeText(requireContext(), "Selfie capture cancelled.", Toast.LENGTH_SHORT).show()
-            return@registerForActivityResult
-        }
-
-        if (!imageFile.exists()) {
-            isLaunchingCamera = false
-            Toast.makeText(requireContext(), "Failed to read captured selfie.", Toast.LENGTH_SHORT).show()
-            return@registerForActivityResult
-        }
-
-        binding.layoutPunchLoading.visibility = View.VISIBLE
-
-        viewLifecycleOwner.lifecycleScope.launch {
-            // Best-effort location — a null fix (offline / indoors) must NOT
-            // block the clock-in; the punch still records and queues offline.
-            val location = fetchLocationOrNull()
-            val address = location?.let { resolveAddress(it) }
-            isLaunchingCamera = false
-            binding.layoutPunchLoading.visibility = View.GONE
-            navigateToPunchDetail(
-                mode = mode,
-                photoPath = imageFile.absolutePath,
-                latitude = location?.latitude,
-                longitude = location?.longitude,
-                address = address,
-            )
-        }
-    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -510,7 +462,7 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
         if (isLaunchingCamera) return
         pendingPunchMode = mode
         if (hasPunchPermissions()) {
-            launchSystemCamera()
+            launchSelfieCamera()
             return
         }
         isLaunchingCamera = true
@@ -523,7 +475,7 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
         )
     }
 
-    private fun launchSystemCamera() {
+    private fun launchSelfieCamera() {
         val imageFile = createPunchPhotoFile()
         if (imageFile == null) {
             isLaunchingCamera = false
@@ -537,21 +489,79 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
             imageFile,
         )
         pendingPunchImageUri = imageUri
-        val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
-            putExtra(MediaStore.EXTRA_OUTPUT, imageUri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-            clipData = ClipData.newUri(
-                requireContext().contentResolver,
-                "PunchSelfie",
-                imageUri,
-            )
+        // In-app FRONT-lens-only camera. The system ACTION_IMAGE_CAPTURE
+        // intent used before could not enforce a selfie: its camera-facing
+        // extras are OEM hints that most camera apps ignore, and the user
+        // could always flip to the rear lens (or pick a gallery image on some
+        // OEM camera apps). CustomCameraBottomSheet in selfieOnly mode locks
+        // the front lens and hides the switch / gallery / video controls.
+        // Plain local, NOT .apply{} — inside apply the sheet becomes the
+        // implicit receiver and unqualified requireContext() resolves to IT.
+        val camera = com.manjugroups.m_connect.ui.chat.CustomCameraBottomSheet()
+        camera.setSelfieOnly(true)
+        camera.setListener(object :
+            com.manjugroups.m_connect.ui.chat.CustomCameraBottomSheet.CameraResultListener {
+            override fun onMediaCaptured(uri: android.net.Uri, isVideo: Boolean) {
+                if (isVideo) return
+                onPunchSelfieCaptured(uri)
+            }
+
+            // Unreachable in selfieOnly mode (the gallery button is hidden),
+            // but the interface requires it.
+            override fun onGalleryClicked() = Unit
+        })
+        // Closing the camera without capturing must release the re-entrancy
+        // guard, otherwise the Clock In button stays dead for the rest of the
+        // screen's life. A confirmed capture sets punchSelfieHandled first, so
+        // this only fires for a genuine cancel.
+        punchSelfieHandled = false
+        camera.setOnDismissedListener {
+            if (!punchSelfieHandled) isLaunchingCamera = false
         }
-        try {
-            isLaunchingCamera = true
-            captureSelfieLauncher.launch(intent)
-        } catch (_: ActivityNotFoundException) {
+        isLaunchingCamera = true
+        camera.showOnce(parentFragmentManager, "punch_selfie_camera")
+    }
+
+    /**
+     * Shared post-capture path for the punch selfie: copy the captured photo
+     * into the pending punch file, resolve a best-effort location, and hand
+     * off to the punch-detail screen. Mirrors what the old
+     * ActivityResultLauncher callback did.
+     */
+    private fun onPunchSelfieCaptured(uri: android.net.Uri) {
+        punchSelfieHandled = true
+        if (!isAdded || _binding == null) return
+        val mode = pendingPunchMode
+        val target = pendingPunchImageFile
+        if (mode == null || target == null) {
             isLaunchingCamera = false
-            Toast.makeText(requireContext(), "No camera app available.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val copied = runCatching {
+            requireContext().contentResolver.openInputStream(uri)?.use { input ->
+                target.outputStream().use { output -> input.copyTo(output) }
+            } != null
+        }.getOrDefault(false)
+        if (!copied || !target.exists() || target.length() <= 0L) {
+            isLaunchingCamera = false
+            Toast.makeText(requireContext(), "Failed to read captured selfie.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            // Best-effort location. Offline / indoors it may be null — that must
+            // NOT block the clock-in. The punch still records and queues offline
+            // when there's no network; the backend accepts an optional location.
+            val location = fetchLocationOrNull()
+            val address = location?.let { resolveAddress(it) }
+            isLaunchingCamera = false
+            navigateToPunchDetail(
+                mode = mode,
+                photoPath = target.absolutePath,
+                latitude = location?.latitude,
+                longitude = location?.longitude,
+                address = address,
+            )
         }
     }
 

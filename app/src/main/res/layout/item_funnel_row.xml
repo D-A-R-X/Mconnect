@@ -14,37 +14,48 @@
         android:background="@drawable/bg_circle"
         android:backgroundTint="#3B82F6" />
 
-    <!-- Label -->
+    <!-- Label. The legend sits in the ~160dp left after the 150dp funnel
+         chart, which left too little room for "Interested" or "Bookings" —
+         they wrapped MID-WORD ("Intere/sted", "Booking/s"). One line, no
+         hyphenation, and the columns below are tightened to make room. -->
     <TextView
         android:id="@+id/tvFunnelLabel"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:layout_marginStart="12dp"
+        android:layout_marginStart="8dp"
+        android:ellipsize="end"
+        android:hyphenationFrequency="none"
+        android:maxLines="1"
         android:text="Total Calls"
         android:textColor="#374151"
-        android:textSize="13sp"
+        android:textSize="12sp"
         android:fontFamily="@font/inter_medium" />
 
-    <!-- Value -->
+    <!-- Value. Was wrap_content, so 984 / 37 / 2 each ended at a different
+         x and the column read as ragged. A minimum width plus end alignment
+         lines the digits up, and still grows if a count ever exceeds it. -->
     <TextView
         android:id="@+id/tvFunnelValue"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:minWidth="30dp"
         android:text="984"
         android:textColor="#111827"
-        android:textSize="13sp"
+        android:textSize="12sp"
         android:fontFamily="@font/inter_bold"
-        android:layout_marginEnd="16dp" />
+        android:textAlignment="viewEnd"
+        android:layout_marginEnd="8dp" />
 
     <!-- Percentage -->
     <TextView
         android:id="@+id/tvFunnelPercent"
-        android:layout_width="45dp"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:minWidth="40dp"
         android:text="100%"
         android:textColor="#111827"
-        android:textSize="13sp"
+        android:textSize="12sp"
         android:fontFamily="@font/inter_bold"
         android:textAlignment="viewEnd" />
 </LinearLayout>

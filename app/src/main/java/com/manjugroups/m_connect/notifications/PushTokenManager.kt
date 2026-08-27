@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.os.Build
 import android.provider.Settings
+import com.manjugroups.m_connect.auth.LoginDeviceInfo
 import androidx.core.content.ContextCompat
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
@@ -158,6 +159,7 @@ object PushTokenManager {
         return try {
             val token = FirebaseMessaging.getInstance().token.await()
             Log.d("PushTokenManager", "syncCurrentToken: fetched FCM token: $token")
+            val deviceInfo = LoginDeviceInfo.capture(context)
             api.registerPushDevice(
                 session.bearerToken,
                 PushRegisterRequest(
@@ -167,10 +169,13 @@ object PushTokenManager {
                     bundleId = context.packageName,
                     appId = context.packageName,
                     appName = context.getString(R.string.app_name),
-                    deviceId = Settings.Secure.getString(
-                        context.contentResolver,
-                        Settings.Secure.ANDROID_ID
-                    ) ?: "unknown-device"
+                    // Same identity the login path binds with. Falling back
+                    // to a literal "unknown-device" here bound the account to
+                    // a string login never sends, so the phone blocked its own
+                    // owner and a device reset didn't help — the next launch
+                    // just re-bound it. Empty means "don't bind".
+                    deviceId = deviceInfo?.deviceId.orEmpty(),
+                    deviceModel = deviceInfo?.model
                 )
             )
             session.pushToken = token
@@ -224,6 +229,7 @@ object PushTokenManager {
             return false
         }
         return try {
+            val deviceInfo = LoginDeviceInfo.capture(context)
             api.registerPushDevice(
                 session.bearerToken,
                 PushRegisterRequest(
@@ -233,10 +239,13 @@ object PushTokenManager {
                     bundleId = context.packageName,
                     appId = context.packageName,
                     appName = context.getString(R.string.app_name),
-                    deviceId = Settings.Secure.getString(
-                        context.contentResolver,
-                        Settings.Secure.ANDROID_ID
-                    ) ?: "unknown-device"
+                    // Same identity the login path binds with. Falling back
+                    // to a literal "unknown-device" here bound the account to
+                    // a string login never sends, so the phone blocked its own
+                    // owner and a device reset didn't help — the next launch
+                    // just re-bound it. Empty means "don't bind".
+                    deviceId = deviceInfo?.deviceId.orEmpty(),
+                    deviceModel = deviceInfo?.model
                 )
             )
             session.pushToken = token

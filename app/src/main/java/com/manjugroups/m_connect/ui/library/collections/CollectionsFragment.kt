@@ -72,7 +72,26 @@ class CollectionsFragment : Fragment() {
     private var collectionsFilteredCount: Int = 0
     private val collectionsPager = com.manjugroups.m_connect.ui.common.InfiniteScrollPager(
         onLoadMore = { filterCollections() },
+        // The window above only pages through rows already in memory. The
+        // server hands back one bounded page at a time (this table is far too
+        // large to send whole — doing so is what 502'd the screen), so reaching
+        // the end also has to pull the NEXT page in.
+        onEndReached = { loadNextCollectionsPage() },
     )
+
+    // Server-side scroll pagination state. `nextCursor` is the creation-time
+    // watermark of the last row received; `hasMore` is the backend telling us
+    // rows remain below it. `loadingPage` collapses the burst of end-of-list
+    // scroll callbacks into a single in-flight request.
+    private var collectionsCursor: Double? = null
+    private var collectionsHasMore: Boolean = false
+    private var loadingCollectionsPage: Boolean = false
+    // A page whose rows all fail the active tab/search/date filter adds
+    // nothing visible, and the user is already at the bottom with nothing left
+    // to scroll — so the list would look finished while rows remain. Chase the
+    // next page automatically in that case, bounded so a search that matches
+    // nothing can't walk the entire table.
+    private var emptyAppendStreak: Int = 0
 
     private var selectedTypeFilter: CollectionType? = null
     private var currentSearchQuery: String = ""
@@ -107,6 +126,7 @@ class CollectionsFragment : Fragment() {
     private fun setupRecyclerView() {
         adapter = CollectionsAdapter().apply {
             isAccountantRole = false
+            viewerStaffId = session.staffId
             onAcceptClick = { /* executive can't approve */ }
             onRejectClick = { /* executive can't reject */ }
             onRectifyClick = { item -> startRectifyFlow(item) }
@@ -119,6 +139,13 @@ class CollectionsFragment : Fragment() {
         binding.rvCollections.layoutManager = lm
         binding.rvCollections.adapter = adapter
         collectionsPager.bindRecyclerView(binding.rvCollections, lm) { collectionsFilteredCount }
+        // The RecyclerView sits inside a NestedScrollView, so it never scrolls
+        // itself and the RecyclerView-bound trigger above never fires — the
+        // window stayed frozen at the first 20 rows while the header counted
+        // 300+. Drive the window from the OUTER scroll instead (same pattern as
+        // Leaves / Permissions); the RecyclerView binding stays as a no-op
+        // fallback should the layout ever change.
+        collectionsPager.bindNestedScroll(binding.collectionsScroll, totalCount = { collectionsFilteredCount })
     }
 
     private fun loadProofThumbnail(storageId: String, target: ImageView) {
@@ -314,6 +341,9 @@ class CollectionsFragment : Fragment() {
             val amount = bundle.getDouble(CollectionCreateBottomSheet.KEY_AMOUNT, 0.0)
             val paymentMode = bundle.getString(CollectionCreateBottomSheet.KEY_PAYMENT_MODE).orEmpty()
             val refId = bundle.getString(CollectionCreateBottomSheet.KEY_TRANSACTION_REF).orEmpty()
+            val bankName = bundle.getString(CollectionCreateBottomSheet.KEY_BANK_NAME).orEmpty()
+            val branchName = bundle.getString(CollectionCreateBottomSheet.KEY_BRANCH_NAME).orEmpty()
+            val instrumentDate = bundle.getString(CollectionCreateBottomSheet.KEY_INSTRUMENT_DATE).orEmpty()
             val notes = bundle.getString(CollectionCreateBottomSheet.KEY_NOTES).orEmpty()
             val proofLocalPath = bundle.getString(CollectionCreateBottomSheet.KEY_PROOF_LOCAL_PATH)
             val proofFileName = bundle.getString(CollectionCreateBottomSheet.KEY_PROOF_FILE_NAME)
@@ -329,6 +359,9 @@ class CollectionsFragment : Fragment() {
                 amount = amount,
                 paymentMode = paymentMode,
                 transactionReference = refId.ifBlank { null },
+                bankName = bankName.ifBlank { null },
+                branchName = branchName.ifBlank { null },
+                paymentInstrumentDate = instrumentDate.ifBlank { null },
                 notes = notes.ifBlank { null },
                 proofLocalPath = proofLocalPath,
                 proofFileName = proofFileName,
@@ -342,6 +375,9 @@ class CollectionsFragment : Fragment() {
         amount: Double,
         paymentMode: String,
         transactionReference: String?,
+        bankName: String? = null,
+        branchName: String? = null,
+        paymentInstrumentDate: String? = null,
         notes: String?,
         proofLocalPath: String?,
         proofFileName: String?,
@@ -366,6 +402,9 @@ class CollectionsFragment : Fragment() {
                             amount = amount,
                             paymentMode = paymentMode,
                             transactionReference = transactionReference,
+                            bankName = bankName,
+                            branchName = branchName,
+                            paymentInstrumentDate = paymentInstrumentDate,
                             proofStorageId = proofStorageId,
                             proofFileName = proofFileName,
                             notes = notes,
@@ -413,23 +452,66 @@ class CollectionsFragment : Fragment() {
 
     // ── Data load ─────────────────────────────────────────────────────
 
-    private fun refreshFromApi() {
+    private fun refreshFromApi() = loadCollectionsPage(reset = true)
+
+    /**
+     * Pull the next server page once the user scrolls to the end of what we
+     * hold. No-ops unless the backend said more rows exist, so a fully loaded
+     * list costs nothing no matter how much the user scrolls.
+     */
+    private fun loadNextCollectionsPage() {
+        if (!collectionsHasMore || loadingCollectionsPage) return
+        loadCollectionsPage(reset = false)
+    }
+
+    private fun loadCollectionsPage(reset: Boolean) {
+        if (loadingCollectionsPage) return
+        loadingCollectionsPage = true
         viewLifecycleOwner.lifecycleScope.launch {
             try {
+                val cursor = if (reset) null else collectionsCursor
                 val resp = withContext(Dispatchers.IO) {
-                    api.listMyCustomerCollections(session.bearerToken, null)
+                    api.listMyCustomerCollections(
+                        token = session.bearerToken,
+                        verificationStatus = null,
+                        cursor = cursor?.toString(),
+                    )
                 }
                 if (!resp.success) {
                     toast(resp.error ?: "Failed to load collections")
                     return@launch
                 }
-                rowsById.clear()
-                resp.collections.forEach { rowsById[it.id] = it }
-                masterList.clear()
-                masterList.addAll(resp.collections.map(CollectionMapper::map))
+                if (reset) {
+                    rowsById.clear()
+                    masterList.clear()
+                }
+                // Append only rows we don't already hold. Pages don't overlap
+                // (each starts strictly below the previous cursor), but a row
+                // written between two requests could shift the boundary, and a
+                // duplicate card is more visible than a missing one.
+                val fresh = resp.collections.filterNot { rowsById.containsKey(it.id) }
+                fresh.forEach { rowsById[it.id] = it }
+                masterList.addAll(fresh.map(CollectionMapper::map))
+                collectionsCursor = resp.nextCursor
+                // Stop only when the backend says the stream is exhausted. A
+                // page can legitimately arrive short — rows get filtered out
+                // server-side — so a small page is NOT the end of the list.
+                collectionsHasMore = resp.hasMore && resp.nextCursor != null
+                val visibleBefore = collectionsFilteredCount
                 filterCollections()
+                emptyAppendStreak =
+                    if (reset || collectionsFilteredCount > visibleBefore) 0 else emptyAppendStreak + 1
+                if (collectionsHasMore &&
+                    collectionsFilteredCount <= visibleBefore &&
+                    emptyAppendStreak < MAX_EMPTY_APPEND_STREAK
+                ) {
+                    loadingCollectionsPage = false
+                    loadCollectionsPage(reset = false)
+                }
             } catch (e: Exception) {
                 toast(e.message ?: "Failed to load collections")
+            } finally {
+                loadingCollectionsPage = false
             }
         }
     }
@@ -494,9 +576,15 @@ class CollectionsFragment : Fragment() {
         val to = dateToYmd
         val filtered = masterList.filter { item ->
             val matchesTab = selectedTypeFilter == null || item.type == selectedTypeFilter
+            val row = rowsById[item.id]
             val matchesSearch = currentSearchQuery.isBlank() ||
                 item.bookingName.contains(currentSearchQuery, ignoreCase = true) ||
-                item.refId.contains(currentSearchQuery, ignoreCase = true)
+                item.refId.contains(currentSearchQuery, ignoreCase = true) ||
+                // Web parity: the web Collections search also hits the
+                // customer name, booking ref and plot number.
+                row?.customerName.orEmpty().contains(currentSearchQuery, ignoreCase = true) ||
+                row?.bookingRefNo.orEmpty().contains(currentSearchQuery, ignoreCase = true) ||
+                row?.plotNo.orEmpty().contains(currentSearchQuery, ignoreCase = true)
             val matchesDate = if (from == null || to == null) {
                 true
             } else {
@@ -577,5 +665,9 @@ class CollectionsFragment : Fragment() {
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
+    }
+
+    companion object {
+        private const val MAX_EMPTY_APPEND_STREAK = 3
     }
 }

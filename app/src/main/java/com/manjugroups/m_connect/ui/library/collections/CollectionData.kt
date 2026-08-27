@@ -22,6 +22,10 @@ data class CollectionItem(
     // the thumbnail with Coil. Null when the executive submitted the
     // collection without a proof attachment.
     var proofStorageId: String? = null,
+    // Who collected this row. The list is scope-aware (admins/team leads see
+    // other people's collections), so Edit/Re-submit must only show on rows
+    // the viewer personally collected — the server enforces the same.
+    var collectedByStaffId: String? = null,
 ) : Serializable
 
 enum class CollectionStatus {

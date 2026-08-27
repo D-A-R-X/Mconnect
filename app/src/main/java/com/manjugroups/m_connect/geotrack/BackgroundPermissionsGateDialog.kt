@@ -62,6 +62,14 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
             return fine || coarse
         }
 
+        /** Precise (FINE) location specifically — coarse-only is NOT enough
+         *  for tracking: approximate fixes (~2km) fail the capture accuracy
+         *  gate, producing a Live staffer with a frozen pin. */
+        fun hasPreciseLocation(ctx: Context): Boolean =
+            ContextCompat.checkSelfPermission(
+                ctx, Manifest.permission.ACCESS_FINE_LOCATION,
+            ) == PackageManager.PERMISSION_GRANTED
+
         fun hasBatteryOptIgnored(ctx: Context): Boolean {
             val pm = ctx.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
             return pm.isIgnoringBatteryOptimizations(ctx.packageName)
@@ -96,7 +104,14 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
          */
         fun missingPermissionKeys(ctx: Context): List<String> {
             val missing = mutableListOf<String>()
-            if (!hasForegroundLocation(ctx)) missing.add("fine_location")
+            // STRICTLY precise (FINE) — an approximate-only grant ("Precise
+            // location" toggled off) used to pass this check silently while
+            // every ~2km-accuracy fix failed the capture gate, so the staff
+            // looked Live with a pin frozen on the punch-in and zero GPS
+            // saved all day. Re-requesting FINE over a coarse-only grant
+            // shows the OS precise-upgrade prompt, so the existing request
+            // flow heals it.
+            if (!hasPreciseLocation(ctx)) missing.add("fine_location")
             if (!hasBackgroundLocation(ctx)) missing.add("background_location")
             if (!hasActivityRecognition(ctx)) missing.add("activity_recognition")
             if (!hasBatteryOptIgnored(ctx)) missing.add("battery_optimization")
