@@ -282,6 +282,27 @@ interface ApiService {
     // `attendance.correctPunchTimes` and separately refuses to let anyone
     // correct their OWN clock, so the app only decides whether to SHOW the
     // action — it never decides whether it is allowed.
+    // ── Staff security (mobile parity with the web Security tab) ──
+    // All three are gated server-side by `staff.resetDeviceBinding`; the app
+    // only decides whether to SHOW the section.
+    @GET("api/hr/staff/security")
+    suspend fun getStaffSecurity(
+        @Header("Authorization") token: String,
+        @Query("staffId") staffId: String,
+    ): StaffSecurityResponse
+
+    @POST("api/hr/staff/device-reset")
+    suspend fun resetStaffDevice(
+        @Header("Authorization") token: String,
+        @Body body: StaffIdRequest,
+    ): StaffSecurityActionResponse
+
+    @POST("api/hr/staff/force-logout")
+    suspend fun forceStaffMobileLogout(
+        @Header("Authorization") token: String,
+        @Body body: StaffIdRequest,
+    ): StaffSecurityActionResponse
+
     @POST("api/hr/attendance/correct-punch-times")
     suspend fun correctAttendancePunchTimes(
         @Header("Authorization") token: String,
@@ -1658,6 +1679,33 @@ data class AttendanceApprovalsResponse(
 
 /** Times are full ISO instants built from the row's own date + the picked
  *  clock time, matching what the web sends. */
+data class StaffIdRequest(val staffId: String)
+
+data class StaffSecurityActionResponse(
+    val success: Boolean = false,
+    val cleared: Int? = null,
+    val signedOut: Int? = null,
+    val error: String? = null,
+)
+
+/** Mirrors getDeviceBindingStatus: `bound=false` when no device is locked. */
+data class StaffBoundDevice(
+    val bound: Boolean = false,
+    val deviceId: String? = null,
+    val platform: String? = null,
+    val deviceModel: String? = null,
+    val batteryPct: Double? = null,
+    val ip: String? = null,
+    val boundAt: Double? = null,
+    val lastSeenAt: Double? = null,
+)
+
+data class StaffSecurityResponse(
+    val success: Boolean = false,
+    val binding: StaffBoundDevice? = null,
+    val error: String? = null,
+)
+
 data class CorrectPunchTimesRequest(
     val id: String,
     val correctedPunchIn: String? = null,

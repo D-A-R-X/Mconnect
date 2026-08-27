@@ -36,6 +36,27 @@
             android:textColor="?attr/colorForegroundPrimary"
             android:textSize="18sp" />
 
+        <!-- Device & access actions. Hidden unless the viewer holds
+             staff.resetDeviceBinding — the same permission the server
+             enforces, so nobody is shown a button that will be refused. -->
+        <FrameLayout
+            android:id="@+id/btnStaffSecurity"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginEnd="8dp"
+            android:background="@drawable/bg_stat_card"
+            android:clickable="true"
+            android:focusable="true"
+            android:visibility="gone">
+            <ImageView
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_device_mobile_outline"
+                android:contentDescription="Device and access"
+                app:tint="?attr/colorAccentPrimary" />
+        </FrameLayout>
+
         <!-- Message button in header -->
         <FrameLayout
             android:id="@+id/btnMessage"

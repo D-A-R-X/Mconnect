@@ -11473,3 +11473,32 @@ not committed, pushed, or deployed.
   defaulting to My Tasks.
   22 task-suite tests green; tsc clean. NEEDS CONVEX DEPLOY — none of this is live yet, which is exactly why
   the screenshot still looks wrong.
+
+- 2026-08-27 (main-chat) — NEW FEATURE: staff Device & Access security on MOBILE (web Security tab parity),
+  IAM-gated.
+  BACKEND ALREADY HAD the hard parts — staffDeviceBinding.resetDeviceBinding (gated on
+  staff.resetDeviceBinding, also ends mobile sessions) and getDeviceBindingStatus — but NO HTTP routes, so
+  mobile had nothing. Added 3: GET /api/hr/staff/security, POST /api/hr/staff/device-reset,
+  POST /api/hr/staff/force-logout. The routes add NO permission logic of their own — the mutations/queries
+  keep enforcing it, so the gate cannot drift between surfaces.
+  NEW MUTATION forceMobileLogout — DELIBERATELY SEPARATE from resetDeviceBinding, and this is the whole
+  design point: resetting the lock FREES the account for a NEW phone, while forcing a logout kills the
+  session and KEEPS the account pinned to the old handset. A lost/stolen phone needs the second; conflating
+  them would mean every "log them out" quietly let any new phone claim the account. Web sessions untouched by
+  both, matching the existing behaviour.
+  ANDROID: new ui/hr/StaffSecurityBottomSheet (code-built, same style as CpApprovalQueueBottomSheet) showing
+  the bound device — model, id, battery, IP, bound-at, last-seen — plus the two actions, each behind a
+  confirm dialog that spells out which one to use when. Re-reads state after acting rather than guessing it;
+  an inFlight flag serialises the two so a double-tap can't fire both. Entry is a header button on
+  StaffDetailFragment, hidden unless the viewer holds staff.resetDeviceBinding AND is not looking at their
+  OWN record — resetting your own device from this screen would just lock you out mid-task.
+  NOTE: staff.resetDeviceBinding was one of the two IAM ORPHANS I adopted into the taxonomy earlier today —
+  until then it was defined and enforced but could not be granted from the IAM screen at all, so this feature
+  would have been ungrantable.
+  TEST: added one pinning the distinction — after a forced logout the binding row still holds the original
+  deviceId while every session is inactive. staffDeviceBinding suites 9/9, iam+taxonomy 25/25 combined, tsc
+  clean, assembleDebug (--rerun-tasks) + full Android unit suite green.
+  NOT DONE — iOS: same three routes are platform-neutral, so iOS needs only the UI. Flagged, not silently
+  skipped. Password reset (the "Reset Password" / "Don't ask to change password" half of the web card) is
+  also NOT included — it is a separate mutation with its own policy and was not part of "logout and device
+  reset". NEEDS CONVEX DEPLOY + new APK.
