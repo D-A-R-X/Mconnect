@@ -11556,3 +11556,34 @@ The checkmark.seal toolbar button in CpVisitsView is untouched.
 
 `:app:assembleDebug --rerun-tasks` passes. iOS NOT compiled (no Swift toolchain
 here) -- inspection and brace balance only.
+
+## 2026-08-27 - CP create now requires mobile, name and pincode
+
+Rules centralised in convex/marketing/lib/cpClientDetails.ts so web, Android,
+iOS and the server agree:
+- mobile: 10 digits starting 6-9 (the arrival OTP goes to this number)
+- name: non-empty AND not the phone number; resolved after the lead /
+  existing-client lookup so a repeat client need not retype a known name
+- pincode: explicit field or parsed from the address; leading zero rejected,
+  and a longer digit run is never mistaken for one
+
+Server returns every problem at once. Pincode is now persisted as a real
+clientPlaces column (both ensureClientPlaceForLead and ...ForClient) instead of
+living only inside the free-text address, and is sent as its own field by all
+three clients.
+
+Scope decision: system-spawned CPs (booking CP, SV-cum-CP, collection
+follow-ups, Aster new-client CP) are NOT gated. They continue an existing
+workflow from a record that already exists, and blocking them over a legacy
+place with no pincode would strand real work. The in-repo note in
+ensureClientPlaceForLead already identified that path as the source of the
+pincode-less CPs.
+
+Client forms already required name/phone/pincode; the three cases that still
+reached the server (landline, name-is-number, pincode starting 0) now fail
+inline instead.
+
+20 new tests; convex suite back to its pre-existing baseline. The intermittent
+files (asterCalls, marketingReportData, postSalesLoan, transcriptionQueue) were
+verified to fail identically on a stashed clean tree. Android
+:app:assembleDebug --rerun-tasks passes. iOS NOT compiled.
