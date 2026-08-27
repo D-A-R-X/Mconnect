@@ -1695,6 +1695,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     swipeArrived?.lockAsBusy("Enter OTP to confirm")
                     ArrivalOtpBottomSheet.newInstance(
                         visitId = id,
+                        cpVisitId = cpVisitId,
                         phoneMasked = pendingArrivalOtpPhoneMasked,
                         expiresInSeconds = pendingArrivalOtpExpiresInSeconds,
                         resendCooldownSeconds = pendingArrivalOtpResendCooldownSeconds,
@@ -1802,6 +1803,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             swipeArrived?.lockAsBusy("Enter OTP to confirm")
             ArrivalOtpBottomSheet.newInstance(
                 visitId = id,
+                cpVisitId = cpVisitId,
                 phoneMasked = pendingArrivalOtpPhoneMasked,
                 expiresInSeconds = pendingArrivalOtpExpiresInSeconds,
                 resendCooldownSeconds = pendingArrivalOtpResendCooldownSeconds,

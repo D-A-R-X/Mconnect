@@ -233,6 +233,14 @@ interface GeoTrackApi {
     ): GeoTrackResponse
 
     // Stashes the staff's out-of-geofence reason on the visit (shown to the GM).
+    // "The client won't give me the OTP." Messages the assigned GM over chat
+    // with the visit context and the code itself so they can read it back.
+    @POST("api/marketing/cp-visits/otp-assist")
+    suspend fun requestCpOtpAssist(
+        @Header("Authorization") token: String,
+        @Body body: CpOtpAssistRequest,
+    ): CpOtpAssistResponse
+
     @POST("api/marketing/cp-visits/geofence-remark")
     suspend fun setCpGeofenceRemark(
         @Header("Authorization") token: String,
@@ -1566,6 +1574,19 @@ data class CpVisitDetailResponse(
 // Marketing CP visits list response — used by Home today's trip merge.
 // Each visit is the enriched clientPlaceVisits row (same shape as
 // `CpVisitDetail` minus arrival proof we don't need for the home card).
+data class CpOtpAssistRequest(
+    val clientPlaceVisitId: String,
+    val lat: Double? = null,
+    val lng: Double? = null,
+    val remark: String? = null,
+)
+
+data class CpOtpAssistResponse(
+    val success: Boolean = false,
+    val gmName: String? = null,
+    val error: String? = null,
+)
+
 data class MyMarketingCpVisitsResponse(
     val success: Boolean,
     val total: Int? = null,

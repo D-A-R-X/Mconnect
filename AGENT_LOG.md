@@ -11359,3 +11359,35 @@ not committed, pushed, or deployed.
   Also re-ran the Android compile with --rerun-tasks (incremental compilation hid a signature break earlier
   this session) — clean. assembleDebug + full unit suite green. iOS NOT COMPILED (no Swift toolchain);
   brace/paren balanced, needs a Mac build.
+
+- 2026-08-27 (main-chat) — NEW FEATURE: "client won't give the OTP" → Request GM.
+  BACKEND: new convex/marketing/cpOtpAssist.ts → requestOtpAssist mutation + POST
+  /api/marketing/cp-visits/otp-assist. Gathers client name (client → lead → place → mobile), staff name, IST
+  timestamp, CP location, where the trip ENDED (args.lat/lng → arrivalLat/Lng → endLat/Lng), the distance
+  between those two points (haversineMeters against the place, falling back to the stored
+  arrivalDistanceFromPlaceMeters), the optional remark, and THE OTP — read from
+  fieldVisits.arrivalOtpAssistCode, which already existed for exactly this purpose. Delivered over the chat
+  module: chat.conversations.findOrCreateDm(staff, gm) then chat.messages.send.
+  GUARDS: only the ASSIGNED staff may ask (not any viewer); refuses when no OTP has been sent yet ("send the
+  OTP first"), and when no reporting manager resolves (points at HR rather than failing silently). The GM is
+  the SAME approver resolveHandoffManagerStaffId picks for out-of-geofence completions, so a staff member's
+  requests all land with one manager. The code goes ONLY to that approver, never echoed back to the requester.
+  AUDIT: new clientPlaceVisits.otpAssistRequest object (requestedAt/by, gmStaffId, lat/lng, distance, remark)
+  so the ask survives outside a chat thread. VERIFIED the field landed in clientPlaceVisits — completionApproval
+  appears in more than one table, so I checked the enclosing table by line number rather than trusting the regex.
+  BOLD: the spec asked for the OTP in bold. Web chat renders markdown (react-markdown) so `**` works there, but
+  ANDROID CHAT HAS NO MARKDOWN RENDERER — it would have shown literal asterisks on the GM's phone. Added
+  ui/chat/ChatTextFormat: handles ONLY `**bold**`, returns the input untouched when there is no matched pair,
+  applied to both bubble variants. Benefits every markdown message written from web, not just this one.
+  TEST-DESIGN NOTE: first version built the span inline and 3 tests died on "SpannableStringBuilder not
+  mocked". Split the pure parsing (parse → text + bold ranges) from the span application so the logic that can
+  actually be wrong is what's under test. 7 tests green, incl. "2**3" and a trailing "**" staying literal.
+  ANDROID UI: "Client not sharing the OTP? Request GM" link BELOW the OTP entry (deliberately not an equal
+  first choice), hidden when the sheet has no cpVisitId; optional-remark dialog; cpVisitId threaded from both
+  TripNavigationFragment launch sites. Re-ran with --rerun-tasks since incremental compilation has masked a
+  signature break before. assembleDebug + full unit suite green; tsc clean; marketing+chat suites 38/38.
+  CODEGEN LAG: hand-registered marketing/cpOtpAssist in _generated/api.d.ts (npx convex codegen still fails on
+  the stale token) — real codegen reproduces it at deploy.
+  NOT DONE — iOS: its arrival-OTP sheet needs the same button. Flagged, not silently skipped; the backend
+  route is platform-neutral so iOS only needs the UI.
+  NEEDS CONVEX DEPLOY + a new APK.
