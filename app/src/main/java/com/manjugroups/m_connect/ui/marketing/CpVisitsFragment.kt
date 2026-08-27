@@ -190,13 +190,19 @@ class CpVisitsFragment : Fragment() {
                 geoApi.getPendingCpApprovals(session.bearerToken).items.size
             }.getOrDefault(0)
             if (!isAdded) return@launch
-            if (count > 0) {
-                title?.text =
-                    if (count == 1) "1 approval waiting" else "$count approvals waiting"
-                banner.visibility = View.VISIBLE
-            } else {
-                banner.visibility = View.GONE
+            // Anyone who HOLDS the approval right keeps a permanent entry, even
+            // at zero — the queue was previously undiscoverable until work
+            // happened to be waiting, so a GM had no way to check it. Everyone
+            // else keeps the old behaviour exactly: visible only when they
+            // actually have something to approve, so nobody who relied on it
+            // loses it, and nobody new is shown an empty queue.
+            val isApprover = session.hasPermission("marketing.cpVisits.approve")
+            title?.text = when {
+                count == 1 -> "1 approval waiting"
+                count > 0 -> "$count approvals waiting"
+                else -> "CP Approvals — nothing waiting"
             }
+            banner.visibility = if (count > 0 || isApprover) View.VISIBLE else View.GONE
         }
     }
 

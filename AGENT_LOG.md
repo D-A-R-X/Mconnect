@@ -11419,3 +11419,35 @@ not committed, pushed, or deployed.
   suite green, code paths traced end to end, but the logged-out-tray behaviour itself is NOT empirically
   verified. Worth a manual check: sign in, start tracking, sign out, confirm the tray is empty and stays
   empty. iOS NOT COMPILED (no Swift toolchain).
+
+- 2026-08-27 (main-chat) — CP IAM: My CP / Team CP / ALL CP + CP-approval permission + mobile approval entry.
+  CRITICAL FINDING: `marketing.cpVisits.viewAll` is a LEGACY ALIAS in lib/iam-model.ts
+  (LEGACY_PERMISSION_ALIASES: viewAll → viewTeam). sanitizeIamGrantList rewrites it on save, so NOBODY CAN
+  HOLD IT — which means yesterday's mobile-route gate on `viewAll` effectively read "admins only", and there
+  was no true company-wide CP permission at all.
+  DID NOT UN-ALIAS IT — that was the tempting one-line fix and it is dangerous: any staff record still
+  carrying the literal "marketing.cpVisits.viewAll" string would have jumped from team-scoped to COMPANY-WIDE
+  the instant it became real, which is precisely the leak Safeer reported. I cannot query prod to see who
+  holds it. Added a BRAND-NEW key instead — `marketing.cpVisits.viewCompany` — which no existing grant can
+  contain, so access only ever widens when an admin deliberately ticks it.
+  ALSO NEW: `marketing.cpVisits.approve` for the CP Approval queue. Relabelled the existing two so the IAM
+  screen states the actual scope ("My CP visits — only the visits assigned to me" / "Team CP visits — my
+  reporting hierarchy"). All added to PERMISSIONS + the grouped index + the permission-matrix module (the
+  taxonomy test enforces all three, and stays green at 16).
+  BACKEND: resolveCpVisitViewerScope returns undefined (unrestricted) for viewCompany, ABOVE the viewTeam
+  branch; the mobile /clientPlaceVisits/my route now gates on viewCompany instead of the unholdable viewAll.
+  APPROVAL QUEUE is now IAM-aware and STRICTLY ADDITIVE: approve + viewCompany ⇒ sees every queue; the
+  stamped-approver + reporting-subtree rule is untouched for everyone else, so no current approver loses
+  anything. Pinned by 2 new tests INCLUDING the important negative — `approve` ALONE must NOT widen the queue,
+  or granting the approval right would quietly hand over the whole company.
+  MOBILE: the approvals entry was `visibility = if (count > 0) VISIBLE else GONE`, i.e. undiscoverable until
+  work happened to be waiting — a GM had no way to check. Now permanent for anyone holding
+  cpVisits.approve (with a "nothing waiting" state); everyone else keeps the EXACT old behaviour, so nobody
+  who relied on it loses it and nobody new is shown an empty queue.
+  REGRESSION DILIGENCE (user said "should never affect any working features"): first full run showed 10
+  failing FILES vs the known 9 — transcriptionQueue.test.ts was new. Did NOT hand-wave it: ran it in
+  isolation twice (4/4 both times), grepped it for cpVisits/iam/permission/clientPlaceVisit (ZERO matches, so
+  it cannot be affected), stashed my changes and re-ran the full suite (9 files — transcriptionQueue absent),
+  then re-ran WITH my changes (9 files / 21 tests — matches baseline exactly). Conclusion: flaky under
+  full-suite load, not mine. cpApprovalScope 8/8, marketing suites 44/44, tsc clean, assembleDebug + Android
+  unit suite green. NEEDS CONVEX DEPLOY + new APK.
