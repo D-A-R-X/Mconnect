@@ -679,7 +679,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="14dp"
                 android:fontFamily="@font/inter_medium"
-                android:text="CP Type"
+                android:text="CP Type *"
                 android:textColor="#344054"
                 android:textSize="13sp" />
 

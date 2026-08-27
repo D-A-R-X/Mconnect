@@ -407,6 +407,15 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                 return@setOnClickListener
             }
 
+            // CP Type drives the whole post-arrival branch below (gift /
+            // old-client / collection finalise straight from the photo; the
+            // rest open the booking-outcome sheet). An untyped CP also shows
+            // as a bare dash in every list. The server rejects it too.
+            if (selectedCpType == null) {
+                toast("Select the CP type")
+                return@setOnClickListener
+            }
+
             // A Joint CP is meaningless with one person on it.
             val jointPartnerId = selectedJointPartner?.id
             if (selectedCpType?.id == "joint_cp") {
