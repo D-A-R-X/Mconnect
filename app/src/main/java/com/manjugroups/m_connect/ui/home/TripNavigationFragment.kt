@@ -53,6 +53,8 @@ import com.manjugroups.m_connect.network.CompleteVisitRequest
 import com.manjugroups.m_connect.network.CreateVisitRequest
 import com.manjugroups.m_connect.network.DirectionsClient
 import com.manjugroups.m_connect.network.GeoTrackApi
+import com.manjugroups.m_connect.network.JointCpParticipant
+import com.manjugroups.m_connect.network.JointCpSummary
 import com.manjugroups.m_connect.network.MmsFleetDriverSiteVisitRequest
 import com.manjugroups.m_connect.network.StartVisitRequest
 import com.manjugroups.m_connect.network.TrackingBootstrapData
@@ -544,6 +546,119 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         }
     }
 
+    // ---------- Joint CP ----------
+
+    /**
+     * Renders a Joint CP onto the field-staff card: both participants with
+     * their own progress, and who the visit is still waiting on.
+     *
+     * A Joint CP is two independent trips against one client place, so a
+     * single "Field Staff" name would be actively misleading — the person
+     * reading this screen may be either participant, or a manager looking at
+     * both. Called with null for every other cpType, which restores the plain
+     * single-name card.
+     */
+    private fun bindJointCp(view: View, joint: JointCpSummary?) {
+        val block = view.findViewById<LinearLayout>(R.id.jointParticipantsBlock)
+        val pill = view.findViewById<TextView>(R.id.tvJointCpPill)
+        val rows = view.findViewById<LinearLayout>(R.id.jointParticipantRows)
+        val pending = view.findViewById<TextView>(R.id.tvJointPendingFor)
+        val label = view.findViewById<TextView>(R.id.tvFieldStaffLabel)
+        val nameView = view.findViewById<TextView>(R.id.tvTripFieldStaff)
+        val card = view.findViewById<View>(R.id.fieldStaffCard)
+
+        val participants = joint?.participants.orEmpty()
+        if (participants.isEmpty()) {
+            block?.visibility = View.GONE
+            pill?.visibility = View.GONE
+            label?.text = "Field Staff"
+            return
+        }
+
+        card?.visibility = View.VISIBLE
+        pill?.visibility = View.VISIBLE
+        block?.visibility = View.VISIBLE
+        label?.text = "Field Staff (2)"
+        // The headline names both, because "assigned to" on a Joint CP means
+        // both people, not the one whose id happens to sit on the visit row.
+        nameView?.text = participants
+            .mapNotNull { it.staffName?.takeIf { n -> n.isNotBlank() } }
+            .joinToString(" & ")
+            .ifBlank { "—" }
+
+        rows?.removeAllViews()
+        participants.forEach { p -> rows?.addView(jointParticipantRow(p)) }
+
+        val pendingNames = joint?.pendingForNames.orEmpty()
+            .filter { it.isNotBlank() }
+        if (pendingNames.isEmpty()) {
+            pending?.visibility = View.GONE
+        } else {
+            pending?.text = "Pending for ${pendingNames.joinToString(", ")}"
+            pending?.visibility = View.VISIBLE
+        }
+    }
+
+    /** One participant line: name on the left, their own status chip right. */
+    private fun jointParticipantRow(p: JointCpParticipant): View {
+        val ctx = requireContext()
+        val row = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            setPadding(0, dpToPx(8), 0, dpToPx(8))
+        }
+        row.addView(TextView(ctx).apply {
+            text = p.staffName?.takeIf { it.isNotBlank() } ?: "Unnamed staff"
+            textSize = 13f
+            setTextColor(android.graphics.Color.parseColor("#101828"))
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            layoutParams = LinearLayout.LayoutParams(
+                0,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                1f,
+            )
+        })
+        // The outcome matters as much as the status: a manager wants to see
+        // that one said Interested and the other did not.
+        p.outcome?.takeIf { it.isNotBlank() }?.let { outcome ->
+            row.addView(TextView(ctx).apply {
+                text = com.manjugroups.m_connect.ui.marketing.formatCpOutcomeLabel(outcome)
+                textSize = 11f
+                setTextColor(android.graphics.Color.parseColor("#475467"))
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ).apply { marginEnd = dpToPx(8) }
+            })
+        }
+        row.addView(jointStatusChip(p.status))
+        return row
+    }
+
+    private fun jointStatusChip(status: String?): View {
+        val (text, fg, bg) = when (status) {
+            "completed" -> Triple("Done", "#067647", "#ECFDF3")
+            "in_progress" -> Triple("On the way", "#B54708", "#FFFAEB")
+            "pending_gm_approval" -> Triple("Awaiting GM", "#B54708", "#FFFAEB")
+            "cancelled" -> Triple("Cancelled", "#B42318", "#FEF3F2")
+            else -> Triple("Not started", "#475467", "#F2F4F7")
+        }
+        return TextView(requireContext()).apply {
+            this.text = text
+            textSize = 10f
+            setTextColor(android.graphics.Color.parseColor(fg))
+            setPadding(dpToPx(8), dpToPx(3), dpToPx(8), dpToPx(3))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = dpToPx(9).toFloat()
+                setColor(android.graphics.Color.parseColor(bg))
+            }
+        }
+    }
+
+    private fun dpToPx(value: Int): Int =
+        (value * resources.displayMetrics.density).toInt()
+
     /** Fill (or hide) the LMO + Deadline cells on the Trip Details card. */
     private fun bindTripMeta(
         view: View,
@@ -551,15 +666,16 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         fieldStaffName: String?,
         deadline: String?,
     ) {
-        // Assigned field staff. Hidden when unknown rather than showing a
-        // dash — an empty labelled row is worse than no row.
-        val staffRow = view.findViewById<View>(R.id.rowTripFieldStaff)
+        // Assigned field staff, on its own full-width card above Call Client.
+        // Hidden when unknown rather than showing a dash — an empty labelled
+        // card is worse than no card.
+        val staffCard = view.findViewById<View>(R.id.fieldStaffCard)
         val staff = fieldStaffName?.takeIf { it.isNotBlank() }
         if (staff != null) {
             view.findViewById<TextView>(R.id.tvTripFieldStaff)?.text = staff
-            staffRow?.visibility = View.VISIBLE
+            staffCard?.visibility = View.VISIBLE
         } else {
-            staffRow?.visibility = View.GONE
+            staffCard?.visibility = View.GONE
         }
 
         val lmoRow = view.findViewById<View>(R.id.rowTripLmo)
@@ -632,6 +748,13 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     "reconcile: cpIsSvFixed=$cpIsSvFixed (proposed=$proposedHasFields " +
                         "lead=$leadFlaggedSvFixed party=$hasSvFixParty)",
                 )
+
+                // Joint CP: paint both participants and who the visit is
+                // still waiting on. Done on the reconcile rather than at
+                // bind time because the partner's leg advances while this
+                // staff is on the road, and this is the call that already
+                // re-reads the server's view of the visit.
+                view?.let { bindJointCp(it, cp.joint) }
 
                 // Pick the most-advanced authoritative status: prefer the
                 // spawned fieldVisits row (where "arrived" lives) over

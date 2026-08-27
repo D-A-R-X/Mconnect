@@ -1020,6 +1020,9 @@ data class CreateCpVisitRequest(
     // as a "Pincode: NNNNNN" segment, but sending it separately means the
     // server stores it as a real column instead of re-parsing free text.
     val pincode: String? = null,
+    // Joint CP only: the SECOND participant. Ignored server-side for every
+    // other cpType.
+    val jointStaffIds: List<String>? = null,
 )
 
 data class CreateCpVisitResponse(
@@ -1569,6 +1572,37 @@ data class SiteVisitIdRequest(val id: String)
 // (b) the backend returns the doc as-is. Defensive nullability prevents
 // Gson from blowing up when a key is missing.
 
+/**
+ * One participant of a Joint CP. Each travels separately and records their own
+ * outcome, so status/times are per-person rather than shared with the visit.
+ */
+data class JointCpParticipant(
+    val staffId: String? = null,
+    val staffName: String? = null,
+    val isPrimary: Boolean = false,
+    val status: String? = null,
+    val outcome: String? = null,
+    val notes: String? = null,
+    val clientMet: Boolean? = null,
+    val startedAt: Long? = null,
+    val completedAt: Long? = null,
+    val distanceMeters: Double? = null,
+    val outOfGeofence: Boolean = false,
+)
+
+/**
+ * Joint CP roll-up. Null on every other CP type, so a null check is the same
+ * as "this is a normal single-staff visit".
+ */
+data class JointCpSummary(
+    val participants: List<JointCpParticipant>? = null,
+    // Names still owing an outcome, in display order.
+    val pendingForNames: List<String>? = null,
+    val completedCount: Int = 0,
+    val totalCount: Int = 0,
+    val allCompleted: Boolean = false,
+)
+
 data class CpVisitDetailResponse(
     val success: Boolean,
     val visit: CpVisitDetail? = null,
@@ -1622,6 +1656,8 @@ data class CpVisitDetail(
     // drops it without this field, leaving every merged CP row
     // looking like a generic Direct CP downstream.
     val cpType: String? = null,
+    // Joint CP participants. Null for every other cpType.
+    val joint: JointCpSummary? = null,
     val convertedSiteVisitId: String? = null,
     val convertedBookingId: String? = null,
     val fieldVisitId: String? = null,
