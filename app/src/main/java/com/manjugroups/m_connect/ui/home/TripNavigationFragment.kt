@@ -578,7 +578,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         card?.visibility = View.VISIBLE
         pill?.visibility = View.VISIBLE
         block?.visibility = View.VISIBLE
-        label?.text = "Field Staff (2)"
+        label?.text = "Field Staff (2) · Joint"
         // The headline names both, because "assigned to" on a Joint CP means
         // both people, not the one whose id happens to sit on the visit row.
         nameView?.text = participants
@@ -589,12 +589,14 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         rows?.removeAllViews()
         participants.forEach { p -> rows?.addView(jointParticipantRow(p)) }
 
-        val pendingNames = joint?.pendingForNames.orEmpty()
-            .filter { it.isNotBlank() }
-        if (pendingNames.isEmpty()) {
+        // Who owns the OTP and the outcome. There is exactly one of each on a
+        // Joint CP, so the companion is told plainly that it is not theirs to
+        // record rather than being left to guess.
+        val leadName = joint?.leadStaffName?.takeIf { it.isNotBlank() }
+        if (leadName == null) {
             pending?.visibility = View.GONE
         } else {
-            pending?.text = "Pending for ${pendingNames.joinToString(", ")}"
+            pending?.text = "$leadName enters the OTP and records the outcome"
             pending?.visibility = View.VISIBLE
         }
     }

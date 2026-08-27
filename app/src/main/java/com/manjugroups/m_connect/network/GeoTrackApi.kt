@@ -1596,11 +1596,12 @@ data class JointCpParticipant(
  */
 data class JointCpSummary(
     val participants: List<JointCpParticipant>? = null,
-    // Names still owing an outcome, in display order.
-    val pendingForNames: List<String>? = null,
-    val completedCount: Int = 0,
+    // The senior staff, who enters the OTP and records the one outcome.
+    val leadStaffName: String? = null,
+    val leadStaffId: String? = null,
+    // The other participant, who travels but records no outcome.
+    val companionNames: List<String>? = null,
     val totalCount: Int = 0,
-    val allCompleted: Boolean = false,
 )
 
 data class CpVisitDetailResponse(
