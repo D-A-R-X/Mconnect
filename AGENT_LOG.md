@@ -11134,3 +11134,28 @@ not committed, pushed, or deployed.
   VERIFIED: 6/6 new, marketing suites 17/17, cpVisit/clientPlaceVisit 12 pass + 1 fail that is IDENTICAL
   stashed (the known pre-existing cpVisitAudit failure). tsc clean. Android assembleDebug + unit tests green.
   STILL UNSEEN IN A BROWSER — the dev server is down on the pre-existing missing @tailwindcss/typography dep.
+
+- 2026-08-27 (main-chat) — "higher staff get notifications meant for their reporting staff". ROOT CAUSE was a
+  single function: dailyTasks.getOverdueEscalationRecipientIds built its recipient set from the assignee's
+  reportingTo + EVERY staffReportingOfficers link + EVERY active super-admin, then did
+  `recipientIds.delete(String(assignedStaff._id))` — i.e. it deliberately EXCLUDED the assignee. So a manager's
+  inbox filled with their whole team's overdue tasks while the one person who could actually do the work was
+  the only one never told. (Checked the rest first: notifyTaskAssigned, task-status-update,
+  task-extension-*, reassign — all already target the assignee only; listPendingRemindersForStaff and
+  listForTaskManager are correctly scoped by assignedTo. This was the sole offender.)
+  FIX: recipients = [the assignee]. Message switched to second person ("Your task ... passed the deadline"),
+  since the old third-person wording only made sense when it was going to someone else. Managers still see
+  team tasks in the Task Manager — the surface built for that — they just aren't pinged per task.
+  BONUS: deleted the `staff.take(2000)` read that existed ONLY to collect super-admin ids for the CC. That
+  mutation (syncOverdueTaskEscalationsForStaff) runs on APP OPEN, so this is a real read-budget saving on the
+  deployment that has been 502-ing.
+  EXISTING TEST ADJUSTED, NOT DELETED: dailyTasks.test.ts "overdue escalation uses the task reference index
+  and does not duplicate older notifications" seeded its pre-existing notification for the ADMIN (who was a
+  recipient under the old rule) and asserted created:0. Its point is DEDUP, which still holds — retargeted the
+  fixture + assertion to the assignee. My own new test independently proves dedup (second sync creates 0).
+  NEW convex/taskOverdueRecipients.test.ts, 4 tests: only the assignee is notified (not manager, not
+  super-admin), a linked reporting officer is not notified either, no duplicate on repeat app opens, and a
+  task still inside its deadline notifies nobody.
+  VERIFIED: full convex suite 1083 passed / 21 failed vs a stashed baseline of 1080 / 24 — the 3-test
+  difference is exactly my new tests failing against the old code, so ZERO regressions and the 21 are
+  pre-existing. tsc clean. NEEDS CONVEX DEPLOY.
