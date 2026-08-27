@@ -11451,3 +11451,25 @@ not committed, pushed, or deployed.
   then re-ran WITH my changes (9 files / 21 tests — matches baseline exactly). Conclusion: flaky under
   full-suite load, not mine. cpApprovalScope 8/8, marketing suites 44/44, tsc clean, assembleDebug + Android
   unit suite green. NEEDS CONVEX DEPLOY + new APK.
+
+- 2026-08-27 (main-chat) — "tasks/task manager should show only their reporting persons (VP→AVP, AVP→HOD…)".
+  INVESTIGATED BEFORE BUILDING: the rule is ALREADY what the code does. getTeamIds() resolves via
+  `by_reportingTo` = DIRECT reports only (plus explicitly linked staffReportingOfficers) — NOT a transitive
+  subtree — and it backs both listForTaskManager's team scope AND (through today's earlier fix) the overdue
+  notification recipients (assignee + their reportingTo). So a VP hears about AVPs, an AVP about HODs, and no
+  further. The screenshot is PRE-DEPLOY production behaviour: the old rule CC'd every super-admin on every
+  overdue task, which is why Dhivagar's list is full of other people's work.
+  Rather than invent work, added 2 tests to pin the rule so it cannot drift.
+  TEST CAUGHT A DESIGN POINT I HAD ASSUMED WRONG: my first version expected a VP's app-open to notify the
+  field staff + HOD for a task 3 levels down. It produced NOTHING — because syncOverdueTaskEscalationsForStaff
+  only processes tasks the VIEWER can see (canSeeTask), and a task 3 levels down is outside a VP's direct-report
+  scope entirely. Corrected the test to assert BOTH halves: running as the VP raises nothing (no leak upward),
+  and running as the staff's ACTUAL manager raises exactly two notifications (the assignee + that manager).
+  That is correct-by-design, not a bug — notifications are surfaced by whoever can see the task.
+  STILL TRUE BY DESIGN, FLAGGED NOT CHANGED: a SUPER-ADMIN viewer keeps company-wide sight in Task Manager
+  (scope "all") and their app-open still processes every overdue task company-wide to raise ITS recipients'
+  notifications — the recipients are now correct so no super-admin receives them, but the scan is broad. The
+  practical complaint was already handled by the Home nudge being own-only and the mobile Task Manager
+  defaulting to My Tasks.
+  22 task-suite tests green; tsc clean. NEEDS CONVEX DEPLOY — none of this is live yet, which is exactly why
+  the screenshot still looks wrong.
