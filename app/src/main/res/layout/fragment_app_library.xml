@@ -1186,6 +1186,69 @@
                             android:layout_height="1dp"
                             android:background="@drawable/bg_apps_divider_gradient" />
 
+                        <!-- CP Approvals — out-of-geofence CP completions waiting on
+                             this user. Also reachable from the banner inside CP
+                             Visits; this row gives approvers a direct entry from
+                             the library, between CP Visits and Site Visits. -->
+                        <LinearLayout
+                            android:id="@+id/itemMarketingCpApprovals"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="12dp">
+
+                            <ImageView
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
+                                android:contentDescription="@null"
+                                android:scaleType="fitCenter"
+                                android:src="@drawable/ic_apps_cp_approvals" />
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="12dp"
+                                android:layout_weight="1"
+                                android:fontFamily="@font/inter_medium"
+                                android:includeFontPadding="false"
+                                android:text="CP Approvals"
+                                android:textColor="#111111"
+                                android:textSize="14sp" />
+
+                            <!-- Pending count. Hidden at zero so the row never
+                                 shows a "0" badge. -->
+                            <TextView
+                                android:id="@+id/tvMarketingCpApprovalsCount"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginEnd="8dp"
+                                android:background="@drawable/bg_cp_approvals_count"
+                                android:fontFamily="@font/inter_medium"
+                                android:includeFontPadding="false"
+                                android:minWidth="20dp"
+                                android:paddingHorizontal="6dp"
+                                android:paddingVertical="2dp"
+                                android:textAlignment="center"
+                                android:textColor="#B54708"
+                                android:textSize="11sp"
+                                android:visibility="gone" />
+
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:contentDescription="@null"
+                                android:src="@drawable/ic_apps_chevron" />
+                        </LinearLayout>
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:background="@drawable/bg_apps_divider_gradient" />
+
                         <!-- Site Visits — client-comes-to-plot trips owned by the
                              site incharge. Sits below CP Visits in the Marketing
                              group to mirror the web sidebar order. -->

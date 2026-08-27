@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  CP Approvals item icon: amber circle with a clipboard outline and a
+  checkmark. Amber matches the approvals banner inside CP Visits, so the
+  library row and the banner read as the same feature. Deliberately not the
+  starburst ic_apps_verified_outline, which already means Post Sales
+  Verification in the Accounts group.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="32dp"
+    android:height="32dp"
+    android:viewportWidth="32"
+    android:viewportHeight="32">
+
+    <!-- Amber background circle -->
+    <path
+        android:fillColor="#FFFEF0C7"
+        android:pathData="M16,0 a16,16 0 1,1 0,32 a16,16 0 1,1 0,-32 Z" />
+
+    <!-- Clipboard body -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#B54708"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12,9.5 h-1.5 A1.5,1.5 0 0 0 9,11 v11.5 A1.5,1.5 0 0 0 10.5,24 h11 A1.5,1.5 0 0 0 23,22.5 v-11.5 A1.5,1.5 0 0 0 21.5,9.5 h-1.5" />
+
+    <!-- Clip at the top -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#B54708"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12.75,8 h6.5 A0.75,0.75 0 0 1 20,8.75 v1.5 A0.75,0.75 0 0 1 19.25,11 h-6.5 A0.75,0.75 0 0 1 12,10.25 v-1.5 A0.75,0.75 0 0 1 12.75,8 Z" />
+
+    <!-- Approval checkmark -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#B54708"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12.25,17.75 L14.75,20.25 L19.75,14.75" />
+</vector>

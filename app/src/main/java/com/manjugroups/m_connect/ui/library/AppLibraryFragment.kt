@@ -26,6 +26,8 @@ import com.manjugroups.m_connect.ui.hr.AttendanceReviewFragment
 import com.manjugroups.m_connect.ui.hr.LeavesFragment
 import com.manjugroups.m_connect.ui.hr.PermissionsFragment
 import com.manjugroups.m_connect.auth.SessionManager
+import com.manjugroups.m_connect.network.GeoTrackApi
+import com.manjugroups.m_connect.ui.marketing.CpApprovalQueueBottomSheet
 import com.manjugroups.m_connect.ui.marketing.CpVisitsFragment
 import com.manjugroups.m_connect.ui.marketing.SiteVisitsFragment
 import com.manjugroups.m_connect.ui.marketing.bookings.BookingsFragment
@@ -49,6 +51,9 @@ class AppLibraryFragment : Fragment() {
 
     private var _binding: FragmentAppLibraryBinding? = null
     private val binding get() = _binding!!
+
+    // Only used for the CP Approvals row's pending count.
+    private val geoApi = GeoTrackApi.create()
 
     private enum class Filter { ALL, TASK_MANAGER, HR, MARKETING, PROJECT, LAND, FLEET, SALES, ACCOUNTS, FRONT_DESK, SETTINGS }
 
@@ -89,6 +94,7 @@ class AppLibraryFragment : Fragment() {
         movePillStripIntoScroll()
         setupClickActions()
         pruneEmptySections()
+        refreshCpApprovalsEntry()
         setupFilterPills()
         setupScrollAnimation()
         applyFilter(Filter.ALL)
@@ -109,9 +115,16 @@ class AppLibraryFragment : Fragment() {
                     setupClickActions()
                     pruneEmptySections()
                     applyFilter(currentFilter)
+                    refreshCpApprovalsEntry()
                 }
             }
         }
+
+        // The queue emits this after each approve/reject and on dismiss, so the
+        // row's count reflects what the user just cleared.
+        childFragmentManager.setFragmentResultListener(
+            CpApprovalQueueBottomSheet.RESULT_KEY, viewLifecycleOwner,
+        ) { _, _ -> refreshCpApprovalsEntry() }
 
         // App Library has no remote data of its own — the pull just
         // re-plays the entry animation so the user sees the screen
@@ -414,6 +427,17 @@ class AppLibraryFragment : Fragment() {
             row = binding.itemMarketingCpVisits,
             allowed = session.hasPermission("marketing.cpVisits.view"),
         ) { openScreen(CpVisitsFragment()) }
+        // CP Approvals — the out-of-geofence completion queue. Same entry the
+        // banner inside CP Visits opens, surfaced here so an approver can reach
+        // it without first loading the visit list. Gated on the approve right;
+        // refreshCpApprovalsEntry() additionally reveals it for anyone who has
+        // work actually waiting, matching the banner's rule so nobody who could
+        // reach the queue before loses it.
+        bindIamEntry(
+            row = binding.itemMarketingCpApprovals,
+            allowed = session.hasPermission("marketing.cpVisits.approve"),
+        ) { openCpApprovalQueue() }
+
         bindIamEntry(
             row = binding.itemMarketingSiteVisits,
             allowed = session.hasPermission("marketing.siteVisits.view"),
@@ -680,6 +704,50 @@ class AppLibraryFragment : Fragment() {
         }
     }
 
+    // ---------- CP Approvals row ----------
+
+    private fun openCpApprovalQueue() {
+        CpApprovalQueueBottomSheet.show(childFragmentManager)
+    }
+
+    /**
+     * Fills in the CP Approvals row's pending count, and reveals the row for a
+     * user who has approvals waiting without holding the approve permission.
+     *
+     * The banner inside CP Visits shows on `count > 0 || isApprover`. Mirroring
+     * that here matters: the queue endpoint resolves the approver server-side,
+     * so a completion can be stamped to someone whose IAM template never granted
+     * the right. Gating the row on the permission alone would strand them.
+     *
+     * Runs after the synchronous bind so first paint is never blocked on a
+     * network call — an approver sees the row immediately, and the badge (or a
+     * late reveal) lands when the count returns.
+     */
+    private fun refreshCpApprovalsEntry() {
+        if (_binding == null) return
+        val session = SessionManager(requireContext())
+        viewLifecycleOwner.lifecycleScope.launch {
+            val count = runCatching {
+                geoApi.getPendingCpApprovals(session.bearerToken).items.size
+            }.getOrNull() ?: return@launch   // leave the synchronous state alone on failure
+            if (!isAdded || _binding == null) return@launch
+
+            val badge = binding.tvMarketingCpApprovalsCount
+            badge.text = count.toString()
+            badge.visibility = if (count > 0) View.VISIBLE else View.GONE
+
+            val row = binding.itemMarketingCpApprovals
+            if (count > 0 && row.visibility != View.VISIBLE) {
+                row.visibility = View.VISIBLE
+                row.setOnClickListener { openCpApprovalQueue() }
+                // The row appearing can un-hide the Marketing card and change
+                // which dividers are dangling, so recompute both.
+                pruneEmptySections()
+                applyFilter(currentFilter)
+            }
+        }
+    }
+
     private fun bindIamEntry(row: View, allowed: Boolean, onClick: () -> Unit) {
         if (allowed) {
             row.visibility = View.VISIBLE
@@ -716,6 +784,7 @@ class AppLibraryFragment : Fragment() {
                 Filter.MARKETING, binding.cardMarketing,
                 listOf(
                     R.id.itemMarketingCpVisits,
+                    R.id.itemMarketingCpApprovals,
                     R.id.itemMarketingSiteVisits,
                     R.id.itemMarketingMyLeads,
                     R.id.itemMarketingDialer,
@@ -897,6 +966,7 @@ class AppLibraryFragment : Fragment() {
         // re-binds tiles automatically when the fetch returns a
         // changed permission set.
         if (_binding == null) return
+        refreshCpApprovalsEntry()
         val session = SessionManager(requireContext())
         viewLifecycleOwner.lifecycleScope.launch {
             IamUpdateBus.refresh(session)
