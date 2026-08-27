@@ -11530,3 +11530,29 @@ notifications and wide scans have caused 502s here.
 
 6 new tests pass. Full convex suite: 1110 passed / 21 failed across the same 9
 files that fail on a clean tree (verified by stashing).
+
+## 2026-08-27 — CP Approvals promoted to its own Marketing row
+
+Requested: a separate entry in the mobile Marketing module, below CP Visits and
+above Site Visits.
+
+Android (`fragment_app_library.xml` + `AppLibraryFragment.kt`):
+- New row `itemMarketingCpApprovals` with a pending-count badge, plus new
+  drawables `ic_apps_cp_approvals.xml` and `bg_cp_approvals_count.xml` (amber,
+  matching the approvals banner). Did not reuse `ic_apps_verified_outline`,
+  which already means Post Sales Verification in Accounts.
+- Gated on `marketing.cpVisits.approve`; `refreshCpApprovalsEntry()` also
+  reveals it when the pending count is non-zero, mirroring the banner's
+  `count > 0 || isApprover`. Count is fetched after the synchronous bind, and a
+  failed fetch leaves the permission-based state untouched.
+- Registered in `sectionTileMap` so the existing divider-pruning and
+  empty-section sweeps cover it. Refresh runs on first paint, IAM bus updates,
+  onResume, and the queue's RESULT_KEY.
+- The banner inside CP Visits is unchanged; this is an extra entry.
+
+iOS (`AppLibraryView.swift`): same position and amber treatment, new
+`.cpApprovals` destination resolving to the existing `CpApprovalQueueView`.
+The checkmark.seal toolbar button in CpVisitsView is untouched.
+
+`:app:assembleDebug --rerun-tasks` passes. iOS NOT compiled (no Swift toolchain
+here) -- inspection and brace balance only.
