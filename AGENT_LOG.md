@@ -11196,3 +11196,29 @@ not committed, pushed, or deployed.
   siteVisitFollowupOutcome, siteVisitManagementIssues, telecallerMissions, travelDeskAgencyStaffAccess) —
   NONE of which I touched; autoDialRequests fails 11/14 identically with and without my changes, and the
   exact failed-count wobbles run to run in those suites. NEEDS CONVEX DEPLOY + iOS Mac build.
+
+- 2026-08-27 (main-chat) — CP address: (a) pincode edits didn't refresh the other fields, (b) how a CP exists
+  with no pincode.
+  (a) components/unified-address-fields.tsx — the India Post lookup filled district/locality ONLY when they
+  were blank (`current.city.trim() ? current.city : district`), while state WAS corrected unconditionally.
+  Blank-only is correct on FIRST load (don't clobber text saved with the record) but wrong when the user
+  EDITS the pincode — they are saying the place changed. Result was the screenshot: pincode 600116 (Chennai),
+  District "India", Address Line 2 "Chittorgarh", coords 24.86/74.61 (Rajasthan) all on screen together.
+  FIX: `isPincodeEdit = /^\d{6}$/.test(lastFetchedPinRef.current)` — i.e. we had already resolved a DIFFERENT
+  valid pin, so this is an edit → overwrite district + locality; first resolution keeps blank-only behaviour.
+  (b) WHY A PINCODE-LESS CP IS POSSIBLE — it was never created through a form. `pincode` is
+  `v.optional(v.string())` in EVERY backend path (clientPlaces.create/update, clientPlaceVisits args), so the
+  required-asterisk lives only in the two manual forms. CPs raised from a LEAD go through
+  ensureClientPlaceForLead, which inserted a clientPlaces row with `address` = free-text
+  locationPreferred/clientCity and NO pincode / district / doorNo / state at all — even though the lead's
+  `manualProfile` object carries exactly pincode/district/state/doorNo/landmark. Three internal auto-spawns
+  (spawnBookingCpFromSource, spawnSvCumCpFromSiteVisit, spawnNewClientCpFromAster) plus legacyImport and
+  hr/fieldVisits also create places outside any form. FIX: carry the lead's structured address into the place.
+  DELIBERATELY NOT A THROW — CP visits are auto-spawned by backend automation and rejecting an address-less
+  lead there would break that path (same lesson as the CP-telecaller throw that broke 3 tests). Note
+  spawnNewClientCpFromAster ALREADY gates on a resolvable address and skips cleanly, so it was never the
+  culprit.
+  TESTS: new convex/cpPlaceAddressCarry.test.ts, 3 passing — profile pincode/district/state/doorNo reach the
+  place, a profile-less lead STILL yields a place (automation must not break) with city falling back to
+  clientCity, and whitespace-only profile values are stored as undefined rather than masquerading as filled.
+  tsc clean; convex/marketing suites 47/47. NEEDS CONVEX DEPLOY (b) + web deploy (a).
