@@ -11280,3 +11280,29 @@ not committed, pushed, or deployed.
   NOTE FOR THE USER: the screenshot's "SOUNDARARAJAN.S's task ... passed the deadline" rows are the OLD
   third-person overdue notifications that shouldn't reach him at all — that's the assignee-scoping fix from
   earlier today, still awaiting the Convex deploy.
+
+- 2026-08-27 (main-chat) — SVs visible on MOBILE but not on WEB for a GM (KAMALAKANNAN C, all tabs 0).
+  ROOT CAUSE — the two platforms ask DIFFERENT questions:
+    MOBILE (siteVisits.listForViewerAsMobileVisits) fans out over the slots the viewer PERSONALLY occupies:
+      telecallerId, inchargeStaffId, convertedByStaffId → finds the GM's visits.
+    WEB (listPending/list/stats → resolveSiteVisitViewerScope) for a `marketing.siteVisits.view`-only holder
+      returned `{ staffIds: {me}, includeManagementSlots: FALSE }`, and siteVisitDirectlyInvolvesStaff bails
+      at `if (!scope.includeManagementSlots) return false` BEFORE it ever checks inchargeStaffId / gmStaffId /
+      avpStaffId / hodStaffId / seniorManagerStaffId. A GM is never in the OWNER slots (telecaller / bdo /
+      assignedTelecaller / convertedBy), so the web matched nothing → every tab 0.
+  FIX: includeManagementSlots: true on the view-only branch. SAFE BY CONSTRUCTION — the slot check is
+  evaluated against `staffIds`, which on that branch contains ONLY the requester, so this can add nothing
+  except visits the person is themselves named on. It cannot widen anyone to a colleague's visits, and a test
+  pins exactly that (another manager's visit stays invisible).
+  NOTE: getPrimaryMarketingReportingTeamStaffIds already includes the root staff, so the viewTeam branch was
+  never the problem — I checked before changing it.
+  TESTS: new convex/siteVisitManagementSlotScope.test.ts, 4 passing — GM sees the visit they are INCHARGE on
+  (the reported bug), GM sees the visit they are named GM on, a COLLEAGUE's visit stays invisible (no
+  widening), and the owner-slot case is unchanged. Targeted at listPending because that is what the web
+  "Fixed" tab actually calls — confirmed in site-visits-list-page.tsx rather than assumed.
+  REGRESSION CHECK (user asked explicitly): resolveSiteVisitViewerScope is shared by 4 call sites, so ran the
+  full convex suite — 9 failed FILES / 21 failed tests, IDENTICAL to the known pre-existing set;
+  siteVisitManagementIssues' "Confirm SV is rejected when the caller is not the assigned GM" fails 1/4
+  with AND without my change (verified by stashing). marketingVisitScope 12/12 green — that suite guards SV
+  leakage to a source-CP owner, the exact class this change could have broken. tsc clean.
+  NEEDS CONVEX DEPLOY.
