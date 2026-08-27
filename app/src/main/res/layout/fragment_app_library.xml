@@ -1233,7 +1233,7 @@
                                 android:paddingHorizontal="6dp"
                                 android:paddingVertical="2dp"
                                 android:textAlignment="center"
-                                android:textColor="#B54708"
+                                android:textColor="#5925DC"
                                 android:textSize="11sp"
                                 android:visibility="gone" />
 

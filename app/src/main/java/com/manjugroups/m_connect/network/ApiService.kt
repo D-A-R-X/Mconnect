@@ -303,6 +303,27 @@ interface ApiService {
         @Body body: StaffIdRequest,
     ): StaffSecurityActionResponse
 
+    // Password half of the Security screen. Gated server-side by
+    // `staff.password` - a separate right from the device actions above, so a
+    // user may hold one without the other.
+    @GET("api/hr/staff/password-status")
+    suspend fun getStaffPasswordStatus(
+        @Header("Authorization") token: String,
+        @Query("staffId") staffId: String,
+    ): StaffPasswordStatusResponse
+
+    @POST("api/hr/staff/set-password")
+    suspend fun setStaffPassword(
+        @Header("Authorization") token: String,
+        @Body body: SetStaffPasswordRequest,
+    ): StaffSecurityActionResponse
+
+    @POST("api/hr/staff/password-expiry-exempt")
+    suspend fun setStaffPasswordExpiryExempt(
+        @Header("Authorization") token: String,
+        @Body body: PasswordExpiryExemptRequest,
+    ): StaffSecurityActionResponse
+
     @POST("api/hr/attendance/correct-punch-times")
     suspend fun correctAttendancePunchTimes(
         @Header("Authorization") token: String,
@@ -1680,6 +1701,32 @@ data class AttendanceApprovalsResponse(
 /** Times are full ISO instants built from the row's own date + the picked
  *  clock time, matching what the web sends. */
 data class StaffIdRequest(val staffId: String)
+
+data class SetStaffPasswordRequest(
+    val staffId: String,
+    val newPassword: String,
+    /** When true the staff must change it at next login. */
+    val mustChangePassword: Boolean = true,
+)
+
+data class PasswordExpiryExemptRequest(
+    val staffId: String,
+    val exempt: Boolean,
+)
+
+/** Mirrors the web Security tab's password card. */
+data class StaffPasswordStatus(
+    val hasPassword: Boolean = false,
+    val mustChangePassword: Boolean = false,
+    val passwordExpiryExempt: Boolean = false,
+    val passwordUpdatedAt: Double? = null,
+)
+
+data class StaffPasswordStatusResponse(
+    val success: Boolean = false,
+    val status: StaffPasswordStatus? = null,
+    val error: String? = null,
+)
 
 data class StaffSecurityActionResponse(
     val success: Boolean = false,

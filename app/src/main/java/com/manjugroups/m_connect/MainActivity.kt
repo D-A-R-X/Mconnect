@@ -2016,8 +2016,10 @@ class MainActivity : AppCompatActivity() {
             // GM taps the "CP completion needs approval" push → open the
             // out-of-geofence approval queue over the current screen.
             "approvals" -> {
-                com.manjugroups.m_connect.ui.marketing.CpApprovalQueueBottomSheet
-                    .show(supportFragmentManager)
+                supportFragmentManager.pushDetail(
+                    com.manjugroups.m_connect.ui.marketing.CpApprovalQueueFragment
+                        .newInstance(),
+                )
             }
             WorkflowNotificationRoute.TAB_HR -> {
                 selectTab(TAB_HR)

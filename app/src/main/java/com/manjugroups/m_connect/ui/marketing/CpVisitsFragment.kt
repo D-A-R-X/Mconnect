@@ -168,12 +168,13 @@ class CpVisitsFragment : Fragment() {
      */
     private fun wireApprovalsBanner(root: View) {
         root.findViewById<View>(R.id.cpvApprovalsBanner).setOnClickListener {
-            CpApprovalQueueBottomSheet.show(childFragmentManager)
+            pushDetail(CpApprovalQueueFragment.newInstance())
         }
         // The queue emits this after each approve/reject (and on dismiss) so the
         // banner count and the visit list stay in sync without a manual refresh.
-        childFragmentManager.setFragmentResultListener(
-            CpApprovalQueueBottomSheet.RESULT_KEY, viewLifecycleOwner,
+        // Pushed page -> the result comes back on the parent manager.
+        parentFragmentManager.setFragmentResultListener(
+            CpApprovalQueueFragment.RESULT_KEY, viewLifecycleOwner,
         ) { _, _ ->
             if (!isAdded) return@setFragmentResultListener
             refreshApprovalsBanner()

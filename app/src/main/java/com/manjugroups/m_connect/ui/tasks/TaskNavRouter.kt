@@ -29,13 +29,13 @@ object TaskNavRouter {
     fun open(activity: FragmentActivity, task: DailyTaskData) {
         val source = task.sourceReferenceType?.trim()?.lowercase().orEmpty()
 
-        // The CP approval queue is a bottom sheet, not a pushable screen, so it
-        // can't go through the fragment table below. Handled first so the
-        // approver's task opens the queue itself rather than the CP list — or
-        // worse, the "open this in the web app" dialog.
+        // Handled first so the approver's task opens the queue itself rather
+        // than the CP list — or worse, the "open this in the web app" dialog.
         if (source == CP_APPROVAL_SOURCE) {
-            com.manjugroups.m_connect.ui.marketing.CpApprovalQueueBottomSheet
-                .show(activity.supportFragmentManager)
+            activity.supportFragmentManager.pushDetail(
+                com.manjugroups.m_connect.ui.marketing.CpApprovalQueueFragment
+                    .newInstance(),
+            )
             return
         }
 

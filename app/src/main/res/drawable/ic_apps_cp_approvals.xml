@@ -12,15 +12,15 @@
     android:viewportWidth="32"
     android:viewportHeight="32">
 
-    <!-- Amber background circle -->
+    <!-- Lilac background circle -->
     <path
-        android:fillColor="#FFFEF0C7"
+        android:fillColor="#FFEDE4FF"
         android:pathData="M16,0 a16,16 0 1,1 0,32 a16,16 0 1,1 0,-32 Z" />
 
     <!-- Clipboard body -->
     <path
         android:fillColor="@android:color/transparent"
-        android:strokeColor="#B54708"
+        android:strokeColor="#7F56D9"
         android:strokeWidth="1.5"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"
@@ -29,7 +29,7 @@
     <!-- Clip at the top -->
     <path
         android:fillColor="@android:color/transparent"
-        android:strokeColor="#B54708"
+        android:strokeColor="#7F56D9"
         android:strokeWidth="1.5"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"
@@ -38,7 +38,7 @@
     <!-- Approval checkmark -->
     <path
         android:fillColor="@android:color/transparent"
-        android:strokeColor="#B54708"
+        android:strokeColor="#7F56D9"
         android:strokeWidth="1.8"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"

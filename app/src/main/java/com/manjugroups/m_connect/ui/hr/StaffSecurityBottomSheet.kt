@@ -18,7 +18,10 @@ import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.StaffBoundDevice
+import com.manjugroups.m_connect.network.PasswordExpiryExemptRequest
+import com.manjugroups.m_connect.network.SetStaffPasswordRequest
 import com.manjugroups.m_connect.network.StaffIdRequest
+import com.manjugroups.m_connect.network.StaffPasswordStatus
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -106,6 +109,9 @@ class StaffSecurityBottomSheet : BottomSheetDialogFragment() {
             val binding = runCatching {
                 api.getStaffSecurity(session.bearerToken, staffId)
             }.getOrNull()
+            val passwordStatus = runCatching {
+                api.getStaffPasswordStatus(session.bearerToken, staffId)
+            }.getOrNull()
             if (!isAdded) return@launch
             progress.visibility = View.GONE
             container.visibility = View.VISIBLE
@@ -113,9 +119,13 @@ class StaffSecurityBottomSheet : BottomSheetDialogFragment() {
 
             if (binding?.success != true) {
                 container.addView(label(binding?.error ?: "Couldn't load device details"))
-                return@launch
+            } else {
+                renderBinding(binding.binding)
             }
-            renderBinding(binding.binding)
+            // Separate permission (staff.password) - a caller may hold the
+            // device rights without it, so a failure here just omits the
+            // section instead of failing the whole screen.
+            renderPassword(passwordStatus?.takeIf { it.success }?.status)
         }
     }
 
@@ -162,6 +172,140 @@ class StaffSecurityBottomSheet : BottomSheetDialogFragment() {
                     "phone. Use this for a lost or handed-over device.",
             ) { forceLogout() }
         })
+    }
+
+    /**
+     * Password card — the other half of the web Security tab.
+     *
+     * Gated by `staff.password`, which is a DIFFERENT right from the device
+     * actions above, so this section is loaded separately and simply omitted
+     * when the caller does not hold it (the request 403s and we render nothing
+     * rather than an error).
+     */
+    private fun renderPassword(status: StaffPasswordStatus?) {
+        if (status == null) return
+        container.addView(divider())
+        container.addView(sectionTitle("Password"))
+        container.addView(
+            row(
+                "Status",
+                if (status.hasPassword) "Password is set" else "No password set",
+            ),
+        )
+        if (status.mustChangePassword) {
+            container.addView(label("Must change at next login."))
+        }
+        status.passwordUpdatedAt?.let {
+            container.addView(row("Last changed", formatTime(it)))
+        }
+
+        container.addView(actionButton("Set a new password", "#0B61CA") {
+            promptSetPassword()
+        })
+
+        // "Don't ask to change password" — same switch the web tab has.
+        val exempt = status.passwordExpiryExempt
+        container.addView(
+            actionButton(
+                if (exempt) "Re-enable password expiry" else "Exempt from password expiry",
+                "#475467",
+            ) {
+                confirm(
+                    if (exempt) "Re-enable expiry?" else "Exempt from expiry?",
+                    if (exempt) {
+                        "This staff will be asked to change their password again on the normal schedule."
+                    } else {
+                        "This staff will stop being asked to change their password on the normal schedule."
+                    },
+                ) { setExpiryExempt(!exempt) }
+            },
+        )
+    }
+
+    /**
+     * Collects a new password.
+     *
+     * The value is sent straight to the server, which hashes it and applies the
+     * strength policy; it is never stored or echoed back by the app. The
+     * "must change at next login" default matches the web tab.
+     */
+    private fun promptSetPassword() {
+        val ctx = requireContext()
+        val wrapper = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), 0)
+        }
+        val input = android.widget.EditText(ctx).apply {
+            hint = "New password"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            textSize = 15f
+        }
+        wrapper.addView(input)
+        val hint = TextView(ctx).apply {
+            text = "At least 8 characters with upper, lower, a number and a symbol."
+            textSize = 11f
+            setTextColor(Color.parseColor("#667085"))
+            setPadding(0, dp(8), 0, 0)
+        }
+        wrapper.addView(hint)
+
+        AlertDialog.Builder(ctx)
+            .setTitle("Set a new password")
+            .setView(wrapper)
+            .setPositiveButton("Save") { _, _ ->
+                val value = input.text?.toString().orEmpty()
+                if (value.isBlank()) {
+                    Toast.makeText(ctx, "Enter a password", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                savePassword(value)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun savePassword(newPassword: String) = runAction {
+        val resp = api.setStaffPassword(
+            session.bearerToken,
+            SetStaffPasswordRequest(
+                staffId = staffId,
+                newPassword = newPassword,
+                mustChangePassword = true,
+            ),
+        )
+        if (resp.success) {
+            "Password updated — they must change it at next login"
+        } else {
+            resp.error ?: "Couldn't set the password"
+        }
+    }
+
+    private fun setExpiryExempt(exempt: Boolean) = runAction {
+        val resp = api.setStaffPasswordExpiryExempt(
+            session.bearerToken,
+            PasswordExpiryExemptRequest(staffId = staffId, exempt = exempt),
+        )
+        if (resp.success) {
+            if (exempt) "Exempted from password expiry" else "Password expiry re-enabled"
+        } else {
+            resp.error ?: "Couldn't update the setting"
+        }
+    }
+
+    private fun sectionTitle(text: String): View = TextView(requireContext()).apply {
+        this.text = text
+        textSize = 13f
+        setTypeface(typeface, Typeface.BOLD)
+        setTextColor(Color.parseColor("#101828"))
+        setPadding(0, dp(6), 0, dp(2))
+    }
+
+    private fun divider(): View = View(requireContext()).apply {
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(1),
+        ).apply { topMargin = dp(16); bottomMargin = dp(8) }
+        setBackgroundColor(Color.parseColor("#EAECF0"))
     }
 
     private fun confirm(title: String, message: String, onYes: () -> Unit) {

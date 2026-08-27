@@ -27,7 +27,7 @@ import com.manjugroups.m_connect.ui.hr.LeavesFragment
 import com.manjugroups.m_connect.ui.hr.PermissionsFragment
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.GeoTrackApi
-import com.manjugroups.m_connect.ui.marketing.CpApprovalQueueBottomSheet
+import com.manjugroups.m_connect.ui.marketing.CpApprovalQueueFragment
 import com.manjugroups.m_connect.ui.marketing.CpVisitsFragment
 import com.manjugroups.m_connect.ui.marketing.SiteVisitsFragment
 import com.manjugroups.m_connect.ui.marketing.bookings.BookingsFragment
@@ -122,8 +122,10 @@ class AppLibraryFragment : Fragment() {
 
         // The queue emits this after each approve/reject and on dismiss, so the
         // row's count reflects what the user just cleared.
-        childFragmentManager.setFragmentResultListener(
-            CpApprovalQueueBottomSheet.RESULT_KEY, viewLifecycleOwner,
+        // The queue is now a pushed page, so its result lands on the PARENT
+        // manager rather than this fragment's child manager.
+        parentFragmentManager.setFragmentResultListener(
+            CpApprovalQueueFragment.RESULT_KEY, viewLifecycleOwner,
         ) { _, _ -> refreshCpApprovalsEntry() }
 
         // App Library has no remote data of its own — the pull just
@@ -707,7 +709,7 @@ class AppLibraryFragment : Fragment() {
     // ---------- CP Approvals row ----------
 
     private fun openCpApprovalQueue() {
-        CpApprovalQueueBottomSheet.show(childFragmentManager)
+        openScreen(CpApprovalQueueFragment.newInstance())
     }
 
     /**
