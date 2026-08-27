@@ -1439,6 +1439,31 @@ class MainActivity : AppCompatActivity() {
         return tabBarContainer.visibility == android.view.View.VISIBLE
     }
 
+    /**
+     * Height of the status-bar strip, resolved NOW rather than waiting for an
+     * inset pass.
+     *
+     * `cachedTopInset` is only filled by the inset listener, so a screen that
+     * asks for a solid top bar before any pass has reported a non-zero top
+     * insets a strip of height 0 and draws its header underneath the clock and
+     * battery icons. That is most likely when arriving from a full-bleed
+     * screen, whose transparent window can report a top inset of 0.
+     *
+     * Reading the root window insets directly closes that window; the async
+     * request stays as a backstop for the case where even this is not ready.
+     */
+    private fun resolveTopInset(): Int {
+        if (cachedTopInset > 0) return cachedTopInset
+        if (!::mainRoot.isInitialized) return 0
+        val insets = ViewCompat.getRootWindowInsets(mainRoot) ?: return 0
+        val top = maxOf(
+            insets.getInsets(WindowInsetsCompat.Type.statusBars()).top,
+            insets.getInsets(WindowInsetsCompat.Type.displayCutout()).top,
+        )
+        if (top > 0) cachedTopInset = top
+        return cachedTopInset
+    }
+
     fun setTopBarAppearance(backgroundColor: Int, darkStatusIcons: Boolean, fullBleed: Boolean = false) {
         if (!::statusBarBackground.isInitialized) return
         val wasFullBleed = statusBarFullBleed
@@ -1449,7 +1474,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             statusBarBackground.setBackgroundColor(backgroundColor)
             statusBarBackground.layoutParams = statusBarBackground.layoutParams.apply {
-                height = cachedTopInset
+                height = resolveTopInset()
             }
             window.statusBarColor = backgroundColor
         }

@@ -2074,6 +2074,13 @@ data class CpVisitState(
     // tells the trip flow to skip the booking-outcome sheet after
     // arrival and finalise directly with outcome=gift_distributed.
     val cpType: String? = null,
+    // "The trip is over but no outcome was recorded." Computed by the CP list
+    // mapper, which can see BOTH the CP row's status and its field visit's.
+    // The card's merged status prefers fieldVisit.status, so a response that
+    // omitted fieldVisit made a finished trip look in-progress and hid the
+    // action that records the missing outcome. Client-side only; never sent by
+    // the server, so Gson leaves it null for every other caller.
+    val outcomePending: Boolean? = null,
 )
 
 data class TodayVisitsResponse(

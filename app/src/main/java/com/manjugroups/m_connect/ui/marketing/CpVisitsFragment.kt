@@ -581,7 +581,18 @@ class CpVisitsFragment : Fragment() {
                 ?.let { "converted_to_site_visit" }
             ?: this.convertedBookingId?.takeIf { it.isNotBlank() }
                 ?.let { "converted_to_booking" }
+        // "Trip over, outcome never recorded" - decided HERE because this is the
+        // only place that can see both the CP row's own status and its field
+        // visit's. The card's merged `effectiveStatus` prefers
+        // fieldVisit.status, so whenever a response came back without a
+        // fieldVisit the status fell back to in_progress, the card rendered as
+        // Enroute, and the action that records the missing outcome vanished -
+        // the "sometimes disappearing" Pending button. Deciding it from BOTH
+        // signals means a missing fieldVisit can no longer hide it.
+        val tripFinished = listOf(this.status, this.fieldVisit?.status)
+            .any { isCompleted((it ?: "").lowercase(Locale.US)) }
         val cpState = CpVisitState(
+            outcomePending = tripFinished && effectiveOutcome.isNullOrBlank(),
             clientMet = this.clientMet,
             clientMetAt = this.clientMetAt,
             clientNoShowReason = this.clientNoShowReason,
@@ -873,8 +884,10 @@ class CpVisitsFragment : Fragment() {
         // SV-via-CP visits land in the locked SV tab automatically via
         // the sheet's own detectAndApplyLockedSvMode signal, regular CP
         // visits open in the default Booking-tab flow.
-        val isOutcomePending = completed &&
-            visit.cpVisit?.outcome.isNullOrBlank()
+        // Additive on purpose: the mapper's flag can only ever ADD the Pending
+        // action, never remove one the old rule would have shown.
+        val isOutcomePending = visit.cpVisit?.outcomePending == true ||
+            (completed && visit.cpVisit?.outcome.isNullOrBlank())
 
         // Three click outcomes: open the trip flow, open the completed-visit
         // detail (read-only summary), or no-op (cancelled cards stay inert).
