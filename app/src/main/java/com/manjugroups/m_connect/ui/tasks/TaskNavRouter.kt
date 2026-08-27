@@ -43,7 +43,12 @@ object TaskNavRouter {
             source == "staff-attendance" ->
                 com.manjugroups.m_connect.ui.hr.AttendanceHistoryFragment()
             source == "client_place_visit" || source == "clientplacevisit" ->
-                com.manjugroups.m_connect.ui.marketing.CpVisitsFragment()
+                // Straight to THIS visit's trip screen — the task is about one
+                // visit, so dropping the user on a list of hundreds to find it
+                // again is not "routing them to the work". Falls back to the
+                // plain list if the visit isn't in their loaded scope.
+                com.manjugroups.m_connect.ui.marketing.CpVisitsFragment
+                    .newInstance(task.sourceReferenceId)
             source == "site_visit" || source == "sitevisit" ->
                 com.manjugroups.m_connect.ui.marketing.SiteVisitsFragment()
             source == "land-inspection" || source == "landinspection" || source == "landproperty" ->

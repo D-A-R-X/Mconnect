@@ -56,6 +56,17 @@ class CpVisitsFragment : Fragment() {
     private enum class Filter { ALL, SCHEDULED, POSTPONED, IN_PROGRESS, COMPLETED, CANCELLED }
 
     private var allVisits: List<TodayVisit> = emptyList()
+    private var focusArgApplied = false
+
+    /**
+     * A CP visit id to open as soon as the list has loaded — set when the user
+     * arrives from their task, so the task lands on THAT visit's trip screen
+     * rather than on a list they then have to search.
+     *
+     * Cleared once consumed so a back-navigation returns to the list instead
+     * of bouncing straight back into the trip.
+     */
+    private var focusCpVisitId: String? = null
     private var currentFilter: Filter = Filter.ALL
     private var searchQuery: String = ""
     // Debounces the server-side search reload so a super-admin can find an
@@ -100,6 +111,12 @@ class CpVisitsFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         session = SessionManager(requireContext())
         rootView = view
+        // Read the requested visit ONCE. Re-reading it on every view creation
+        // would re-open the trip each time the user came back to the list.
+        if (!focusArgApplied) {
+            focusArgApplied = true
+            focusCpVisitId = arguments?.getString(ARG_FOCUS_CP_VISIT_ID)
+        }
 
         view.findViewById<View>(R.id.btnCpVisitsBack).setOnClickListener {
             navigateUp()
@@ -448,6 +465,7 @@ class CpVisitsFragment : Fragment() {
                             .thenByDescending { it.creationTime ?: 0.0 }
                             .thenByDescending { it.scheduledDate }
                     )
+                consumeFocusVisit()
                 // Empty-state diagnostic toasts removed — the
                 // "No Cp Visits Yet" empty-state UI already conveys
                 // the same information, and the "server sent N but
@@ -1163,6 +1181,26 @@ class CpVisitsFragment : Fragment() {
         )
     }
 
+    /**
+     * Open the visit the caller asked to focus, if it is in the loaded list.
+     *
+     * Silently does nothing when the id isn't found — the visit may be outside
+     * the current filter or scope, and dropping the user on the list is a far
+     * better outcome than an error about a record they can still scroll to.
+     */
+    private fun consumeFocusVisit() {
+        val target = focusCpVisitId?.takeIf { it.isNotBlank() } ?: return
+        // Strip the argument too: the list reloads on every resume, and a
+        // still-present argument would fling the user back into the trip each
+        // time they navigated back to the list.
+        arguments?.remove(ARG_FOCUS_CP_VISIT_ID)
+        val match = allVisits.firstOrNull {
+            it.clientPlaceVisitId == target || it.id == target
+        } ?: return
+        focusCpVisitId = null
+        openVisit(match)
+    }
+
     private fun openVisit(visit: TodayVisit) {
         parentFragmentManager.pushDetail(
             TripNavigationFragment.forVisit(
@@ -1310,4 +1348,19 @@ class CpVisitsFragment : Fragment() {
         }
         CreateCpVisitBottomSheet.newInstance().showOnce(parentFragmentManager, "create_cp_visit")
     }
+
+    companion object {
+        private const val ARG_FOCUS_CP_VISIT_ID = "arg_focus_cp_visit_id"
+
+        /** Entry used by the task router: opens the list, then that visit. */
+        fun newInstance(focusCpVisitId: String? = null): CpVisitsFragment =
+            CpVisitsFragment().apply {
+                if (!focusCpVisitId.isNullOrBlank()) {
+                    arguments = android.os.Bundle().apply {
+                        putString(ARG_FOCUS_CP_VISIT_ID, focusCpVisitId)
+                    }
+                }
+            }
+    }
+
 }

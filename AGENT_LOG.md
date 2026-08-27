@@ -11222,3 +11222,31 @@ not committed, pushed, or deployed.
   place, a profile-less lead STILL yields a place (automation must not break) with city falling back to
   clientCity, and whitespace-only profile values are stored as undefined rather than masquerading as filled.
   tsc clean; convex/marketing suites 47/47. NEEDS CONVEX DEPLOY (b) + web deploy (a).
+
+- 2026-08-27 (main-chat) — "unrelated tasks showing to Dhivagar (super-admin dev); only his own should show".
+  Evidence was decisive: Task Manager read My Tasks 0 / My Team Tasks 200, yet the Home banner said
+  "You have 82 pending tasks".
+  ROOT CAUSE — MainActivity.scopeToOwnTasks() opened with
+  `val isSuper = session.isAdmin || role == "super-admin"; if (isSuper) return tasks`. The Home nudge is a
+  PERSONAL reminder, and the exemption handed a super-admin EVERY staff member's open tasks. Being an admin
+  does not mean you personally owe 82 CP visits. Exemption deleted — everyone is scoped to
+  `assignedTo == me`. Covers both call sites (cached paint + live fetch).
+  MADE TESTABLE: extracted to ui/tasks/PendingTaskScope.kt (ownTasks / openOnly) instead of leaving the rule
+  buried in a 3000-line Activity. 5 tests: only my tasks counted, an admin gets NOTHING extra (the function
+  takes no role at all now — there is no branch left to regress), an unknown/blank staffId yields NOTHING
+  rather than everything (fail CLOSED — failing open would leak the company's tasks to an unidentifiable
+  session), an unassigned task is never "mine", and only pending/in-progress count as a reminder.
+  TASK MANAGER DEFAULT → MY TASKS: the screen opened on the whole visible pool, which for an admin/manager is
+  hundreds of other people's rows. Now opens on the My Tasks card (the assignment filter added earlier);
+  other cards are one tap away.
+  TASK → REAL SCREEN: a client_place_visit task routed to CpVisitsFragment, i.e. a LIST of hundreds the user
+  then had to search. Added CpVisitsFragment.newInstance(focusCpVisitId) + consumeFocusVisit(), and
+  TaskNavRouter now passes task.sourceReferenceId, so the task opens THAT visit's TripNavigationFragment
+  (start/route/complete). Falls back to the plain list when the visit isn't in the loaded scope — better than
+  erroring about a row they can still scroll to.
+  BUG I INTRODUCED AND CAUGHT: first cut gave focusCpVisitId a getter falling back to arguments, so after
+  consuming it the argument re-supplied the id and the trip re-opened on EVERY list reload — exactly the
+  bounce my own comment warned about. Fixed by reading the arg ONCE at onViewCreated (focusArgApplied) and
+  removing it from the Bundle on consume.
+  assembleDebug + full Android unit suite green. iOS: this is Android-only UI (the nudge, task manager and
+  router have no iOS counterpart yet) — flagged, not silently skipped.

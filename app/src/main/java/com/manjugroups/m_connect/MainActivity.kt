@@ -667,10 +667,16 @@ class MainActivity : AppCompatActivity() {
     private fun scopeToOwnTasks(
         tasks: List<com.manjugroups.m_connect.network.DailyTaskData>,
     ): List<com.manjugroups.m_connect.network.DailyTaskData> {
-        val isSuper = session.isAdmin || session.role.equals("super-admin", ignoreCase = true)
-        if (isSuper) return tasks
-        val me = session.staffId?.takeIf { it.isNotBlank() } ?: return emptyList()
-        return tasks.filter { it.assignedTo == me }
+        // NO super-admin exemption. This banner is a PERSONAL reminder — "you
+        // have N pending tasks" — and being an admin does not mean you
+        // personally owe the whole company's work. The exemption handed a
+        // super-admin every staff member's open tasks: 82 CP visits belonging
+        // to other people, while their own My Tasks count was zero.
+        //
+        // Company-wide visibility belongs in the Task Manager, which is built
+        // for it and labels whose task each one is.
+        return com.manjugroups.m_connect.ui.tasks.PendingTaskScope
+            .ownTasks(tasks, session.staffId)
     }
 
     /** Renders the pending-tasks warning (system notification, collapsed peek,

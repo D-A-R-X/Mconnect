@@ -53,7 +53,16 @@ class TaskManagerFragment : Fragment() {
      * a card now filters to it; tapping the active one again clears it.
      */
     private enum class Assignment { ALL, MINE, TEAM, ASSIGNED_BY_ME, EXTENSION, OVERDUE }
-    private var assignment: Assignment = Assignment.ALL
+
+    /**
+     * Opens on MY TASKS, not everything.
+     *
+     * The screen used to land on the whole visible pool, which for an admin or
+     * a manager means hundreds of other people's rows — you had to hunt for
+     * your own work in a list that was mostly not yours. Your own tasks are
+     * what you came for; the other cards are one tap away.
+     */
+    private var assignment: Assignment = Assignment.MINE
     private var moduleTabsList: List<String> = listOf("All")
     private var allTasks: List<DailyTaskData> = emptyList()
     // Infinite scroll: render 20, extend by 20 near the end. The filtered
