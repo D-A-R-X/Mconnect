@@ -11502,3 +11502,31 @@ not committed, pushed, or deployed.
   skipped. Password reset (the "Reset Password" / "Don't ask to change password" half of the web card) is
   also NOT included — it is a separate mutation with its own policy and was not part of "logout and device
   reset". NEEDS CONVEX DEPLOY + new APK.
+
+## 2026-08-27 — Overdue task notifications reaching non-reporting officers
+
+Reported: a super-admin who is nobody's reporting officer sees 41 task rows in
+their inbox.
+
+Traced every creation path for `task-overdue`: exactly one insert
+(`convex/dailyTasks.ts:3009`), one dedup reader, one type check in
+`notifications.ts`, and no cron. The recipient rule at that insert is already
+correct (assignee + `reportingTo` + linked `staffReportingOfficers`, no
+super-admins) -- that fix is committed but NOT deployed, so the backend the app
+talks to still runs the old rule.
+
+Two consequences, both needing the Convex deploy:
+1. New rows keep being CC'd to super-admins until deploy.
+2. Rows already written stay forever -- they are database records, not derived
+   from the current code.
+
+Added `convex/taskOverdueCleanup.ts` for (2):
+`internal.taskOverdueCleanup.purgeStrayOverdueNotifications({ staffId })`.
+Dry run by default; `confirm: "DELETE_STRAY_TASK_OVERDUE"` to delete. Deletes
+only `task-overdue` rows addressed to someone who is neither the assignee nor
+one of the assignee's reporting officers; keeps manager escalations and the
+assignee's own copy. Scoped per-staff because there is no `by_type` index on
+notifications and wide scans have caused 502s here.
+
+6 new tests pass. Full convex suite: 1110 passed / 21 failed across the same 9
+files that fail on a clean tree (verified by stashing).
