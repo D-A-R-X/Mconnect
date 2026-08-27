@@ -11306,3 +11306,34 @@ not committed, pushed, or deployed.
   with AND without my change (verified by stashing). marketingVisitScope 12/12 green — that suite guards SV
   leakage to a source-CP owner, the exact class this change could have broken. tsc clean.
   NEEDS CONVEX DEPLOY.
+
+- 2026-08-27 (main-chat) — CP visibility by hierarchy + task notifications by reporting line. (Request relayed
+  from the team WhatsApp; user confirmed CONFIG is another dev's job and asked for the CODE side only.)
+  (1) CP LEAK — REAL CODE HOLE FOUND on the MOBILE route /api/marketing/clientPlaceVisits/my:
+      `canViewAllCp = callerHasAnyPermission([... "marketing.cpVisits.viewAll", "vpDashboard.view"])`.
+      vpDashboard.view was there so the Home dashboard TILE could count all of today's CPs — but the CP LIST
+      SCREEN calls the same endpoint, so any GM holding it browsed EVERY CP in the company. Counting and
+      browsing are different needs sharing one flag. Removed vpDashboard.view; company-wide now needs
+      marketing.cpVisits.viewAll (or admin) and everyone else falls through to requesterStaffId →
+      resolveCpVisitViewerScope → the SAME own/team hierarchy the web uses. Dashboard unaffected:
+      /api/mobile/dashboard aggregates server-side under its own gate; only the rarely-used client-side
+      fallback now counts a scoped pool for a VP without cpVisits.viewAll (noted, acceptable).
+      ALSO NOTED: the Android app sends `scope=all` on this endpoint but the ROUTE NEVER READS IT — the param
+      is decorative, permissions decide everything. Left as-is (reading it would change old-APK behaviour);
+      worth cleaning up later.
+      VERIFIED NO OTHER HOLE: all four CP list paths (list, listMobileCompact, listPaginated, stats) already
+      call the scope resolver — checked before concluding.
+  (2) TASK NOTIFICATIONS — ADJUSTED TODAY'S EARLIER CHANGE per the user's clarification. This morning I cut
+      recipients to the assignee ALONE (the complaint was unrelated managers being spammed). The user now
+      wants managers to see THEIR OWN team's overdue work, just not other people's. New rule: assignee +
+      reportingTo + explicitly linked staffReportingOfficers. Still NOT super-admins, still NOT the
+      department-wide fallback that caused the original noise. Message wording is now per-recipient —
+      "Your task ..." to the assignee, "<name>'s task ..." to the manager (a single wording is wrong for one
+      of them).
+  TESTS: taskOverdueRecipients 5 passing (rewritten to the new rule: assignee+manager notified, super-admin
+  NOT, linked officer included, no duplicates on repeat opens, and a NEW case pinning that an UNRELATED
+  manager is never notified — the actual complaint). Existing dailyTasks dedup test needed BOTH recipients
+  pre-seeded now that the manager is back; fixture updated faithfully, assertion unchanged. 6/6.
+  REGRESSION: full convex suite 9 failed FILES / 21 tests — IDENTICAL to the known pre-existing baseline.
+  tsc clean. NEEDS CONVEX DEPLOY. No app-side change was required for either fix — both are backend scoping,
+  so mobile AND web pick them up from the same deploy.
