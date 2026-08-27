@@ -11391,3 +11391,31 @@ not committed, pushed, or deployed.
   NOT DONE — iOS: its arrival-OTP sheet needs the same button. Flagged, not silently skipped; the backend
   route is platform-neutral so iOS only needs the UI.
   NEEDS CONVEX DEPLOY + a new APK.
+
+- 2026-08-27 (main-chat) — Logged-out phone still showed tracking + task notifications. BOTH PLATFORMS.
+  ANDROID ROOT CAUSE: LogoutBottomSheet cleared session + LocalCache + OfflineHttpCache and NOTHING ELSE —
+  it never stopped GeoTrackService (whose ONGOING foreground notification cannot be dismissed by
+  cancelAll(), only by stopping the service), never cancelled TasksNotification / chat / permission-alert
+  notifications, and never cancelled the WorkManager jobs that would happily re-post them. The FORCED
+  sign-out path (MainActivity's SessionInvalidationBus 401 handler) did even less — just clearSession().
+  FIX: new auth/SessionTeardown.run(context) — stops GeoTrackService, NotificationManagerCompat.cancelAll()
+  (a catch-all rather than a list, so a channel added later can't be forgotten) + TasksNotification.clear()
+  for its own state, cancels the three unique works (tracking_check_periodic, geotrack_flush_leftovers,
+  attendance-punch-sync), then clears LocalCache + OfflineHttpCache. EVERY step in its own runCatching — a
+  teardown that throws halfway leaves the app worse than before it ran. Wired into BOTH paths.
+  SECOND HALF — a push landing AFTER logout would put notifications straight back. The deliberate logout
+  already unregisters the push token, but that is a network call that can fail, never run (phone offline at
+  logout), or be impossible (expired session = invalid token). Added a guard at the top of
+  MconnectFirebaseMessagingService.onMessageReceived: no signed-in session → drop the push. So a stale push
+  can never resurrect a notification regardless of what happened to the token.
+  iOS: already stopped GeoTrack, unregistered the token and cleared LocalCache on BOTH logout() and
+  expireSession() — better shape than Android — but never cleared DELIVERED notifications, which sit in
+  Notification Center after sign-out. Added clearDeliveredNotifications() (removeAllDelivered +
+  removeAllPending + badge 0) to both paths. Note an app-side push guard is not applicable on iOS: the system
+  displays pushes, not the app.
+  VERIFICATION LIMIT — BE HONEST: this is integration-level Android/iOS behaviour (services, WorkManager,
+  NotificationManager) that plain JVM unit tests cannot exercise, and reproducing it needs a signed-in
+  session on a device, which I do not have credentials for. So: clean --rerun-tasks assembleDebug + full unit
+  suite green, code paths traced end to end, but the logged-out-tray behaviour itself is NOT empirically
+  verified. Worth a manual check: sign in, start tracking, sign out, confirm the tray is empty and stays
+  empty. iOS NOT COMPILED (no Swift toolchain).

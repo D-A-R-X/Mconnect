@@ -244,6 +244,11 @@ class MainActivity : AppCompatActivity() {
                             android.widget.Toast.LENGTH_LONG,
                         ).show()
                         session.clearSession()
+                        // Same teardown as a deliberate sign-out: an expired
+                        // session must not leave tracking running or reminders
+                        // on the tray either.
+                        com.manjugroups.m_connect.auth.SessionTeardown
+                            .run(this@MainActivity)
                         startActivity(
                             Intent(
                                 this@MainActivity,
