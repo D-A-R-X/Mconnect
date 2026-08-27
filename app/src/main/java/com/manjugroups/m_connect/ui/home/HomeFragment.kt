@@ -1883,6 +1883,7 @@ class HomeFragment : Fragment() {
             cpType = visit.cpVisit?.cpType,
             clientMobile = visit.leadPhone,
             lmoName = visit.lmoName,
+            fieldStaffName = visit.bdoName,
             deadline = com.manjugroups.m_connect.util.VisitDeadline.format(
                 visit.scheduledDate,
                 visit.scheduledEndTime ?: visit.scheduledStartTime,

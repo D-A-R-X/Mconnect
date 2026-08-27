@@ -603,6 +603,10 @@ class CpVisitsFragment : Fragment() {
             leadPhone = phoneLabel,
             scheduledStartTime = this.scheduledTime,
             // LMO = the telecaller who owns the CP visit (the creator).
+            // The field officer this CP is ASSIGNED to. Was never mapped, so
+            // the trip screen had no name to show and a manager viewing it
+            // could not tell whose visit it was.
+            bdoName = this.assignedStaff?.name?.takeIf { it.isNotBlank() },
             lmoName = this.telecaller?.name?.takeIf { it.isNotBlank() }
                 ?: this.telecaller?.staffName?.takeIf { it.isNotBlank() },
             cpVisit = cpState,
@@ -1218,6 +1222,7 @@ class CpVisitsFragment : Fragment() {
                 cpType = visit.cpVisit?.cpType,
                 clientMobile = visit.leadPhone,
                 lmoName = visit.lmoName,
+                fieldStaffName = visit.bdoName,
                 deadline = com.manjugroups.m_connect.util.VisitDeadline.format(
                     visit.scheduledDate,
                     visit.scheduledEndTime ?: visit.scheduledStartTime,

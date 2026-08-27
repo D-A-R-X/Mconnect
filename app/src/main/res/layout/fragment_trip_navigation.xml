@@ -291,6 +291,62 @@
                 </LinearLayout>
 
                 <!-- LMO (Lead Management Officer — the visit's telecaller) -->
+                <!-- Who the visit is ASSIGNED to. A manager opening someone
+                     else's trip had no way to tell whose it was — the card
+                     showed the client and the LMO but never the field staff. -->
+                <LinearLayout
+                    android:id="@+id/rowTripFieldStaff"
+                    android:layout_width="match_parent"
+                    android:layout_height="38dp"
+                    android:layout_marginTop="14dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:visibility="gone">
+
+                    <FrameLayout
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/bg_home_trip_stat_icon_v2">
+
+                        <ImageView
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:layout_gravity="center"
+                            android:contentDescription="@null"
+                            android:src="@drawable/ic_auth_user" />
+                    </FrameLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="12dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="@font/inter_regular"
+                            android:includeFontPadding="false"
+                            android:text="Field Staff"
+                            android:textColor="#667085"
+                            android:textSize="10sp" />
+
+                        <TextView
+                            android:id="@+id/tvTripFieldStaff"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="5dp"
+                            android:ellipsize="end"
+                            android:fontFamily="@font/inter_medium"
+                            android:includeFontPadding="false"
+                            android:maxLines="1"
+                            android:text="—"
+                            android:textColor="#111827"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+                </LinearLayout>
+
                 <LinearLayout
                     android:id="@+id/rowTripLmo"
                     android:layout_width="match_parent"

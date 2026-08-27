@@ -384,6 +384,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         bindTripMeta(
             view,
             lmoName = args.getString(ARG_LMO_NAME),
+            fieldStaffName = args.getString(ARG_FIELD_STAFF_NAME),
             deadline = args.getString(ARG_DEADLINE),
         )
 
@@ -544,7 +545,23 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     }
 
     /** Fill (or hide) the LMO + Deadline cells on the Trip Details card. */
-    private fun bindTripMeta(view: View, lmoName: String?, deadline: String?) {
+    private fun bindTripMeta(
+        view: View,
+        lmoName: String?,
+        fieldStaffName: String?,
+        deadline: String?,
+    ) {
+        // Assigned field staff. Hidden when unknown rather than showing a
+        // dash — an empty labelled row is worse than no row.
+        val staffRow = view.findViewById<View>(R.id.rowTripFieldStaff)
+        val staff = fieldStaffName?.takeIf { it.isNotBlank() }
+        if (staff != null) {
+            view.findViewById<TextView>(R.id.tvTripFieldStaff)?.text = staff
+            staffRow?.visibility = View.VISIBLE
+        } else {
+            staffRow?.visibility = View.GONE
+        }
+
         val lmoRow = view.findViewById<View>(R.id.rowTripLmo)
         val lmo = lmoName?.takeIf { it.isNotBlank() }
         if (lmo != null) {
@@ -3094,6 +3111,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         // back to a prior creation step.
         private const val ARG_CLIENT_MOBILE = "arg_client_mobile"
         private const val ARG_LMO_NAME = "arg_lmo_name"
+        private const val ARG_FIELD_STAFF_NAME = "arg_field_staff_name"
         private const val ARG_DEADLINE = "arg_deadline"
 
         fun forVisit(
@@ -3111,6 +3129,9 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             cpType: String? = null,
             clientMobile: String? = null,
             lmoName: String? = null,
+            /** Who the visit is assigned to — shown so a manager viewing
+             *  someone else's trip can tell whose it is. */
+            fieldStaffName: String? = null,
             deadline: String? = null,
         ): TripNavigationFragment = TripNavigationFragment().apply {
             arguments = Bundle().apply {
@@ -3128,6 +3149,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 if (cpType != null) putString(ARG_CP_TYPE, cpType)
                 if (clientMobile != null) putString(ARG_CLIENT_MOBILE, clientMobile)
                 if (lmoName != null) putString(ARG_LMO_NAME, lmoName)
+                if (fieldStaffName != null) putString(ARG_FIELD_STAFF_NAME, fieldStaffName)
                 if (deadline != null) putString(ARG_DEADLINE, deadline)
             }
         }

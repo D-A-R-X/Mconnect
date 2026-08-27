@@ -11337,3 +11337,25 @@ not committed, pushed, or deployed.
   REGRESSION: full convex suite 9 failed FILES / 21 tests — IDENTICAL to the known pre-existing baseline.
   tsc clean. NEEDS CONVEX DEPLOY. No app-side change was required for either fix — both are backend scoping,
   so mobile AND web pick them up from the same deploy.
+
+- 2026-08-27 (main-chat) — Trip Details didn't show WHO the CP is assigned to (a GM opened a trip and couldn't
+  tell whose visit it was). BOTH PLATFORMS.
+  ROOT CAUSE: TodayVisit already HAS `bdoName` ("the field officer ASSIGNED to this visit"), but
+  CpVisitsFragment.toCpListVisitOrNull() never mapped it — it set lmoName (telecaller) only, even though
+  CpVisitDetail.assignedStaff was right there. So the trip screen had no name to show for CP rows.
+  ANDROID: mapper now sets bdoName = assignedStaff.name; new rowTripFieldStaff / tvTripFieldStaff row in
+  fragment_trip_navigation.xml mirroring the existing LMO row; TripNavigationFragment.forVisit gains
+  fieldStaffName (defaulted null) and bindTripMeta renders it, HIDING the row when unknown rather than showing
+  a dash — an empty labelled row is worse than no row. Wired at ALL THREE entry points (CpVisitsFragment,
+  HomeFragment, MyTripsFragment) — checked for callers rather than assuming one.
+  iOS: TripNavigationView gains `fieldStaffName` (optional, so the other 4+ call sites keep compiling and just
+  hide the row) + a "Field Staff" tripMetric above LMO; wired at both CpVisitsView call sites from
+  visit.bdoName, which the iOS model already decodes. ALSO fixed the vertical divider — its height was
+  hardcoded for at most 3 rows, so adding a 4th made it stop short; now derived from whichever column is
+  taller.
+  MISTAKE CAUGHT: my scripted edit's second pattern matched inside the text the first had just inserted,
+  producing a DUPLICATE fieldStaffName line at the wrong indent in CpVisitsView. Spotted by grepping the
+  result instead of trusting the replace count; removed.
+  Also re-ran the Android compile with --rerun-tasks (incremental compilation hid a signature break earlier
+  this session) — clean. assembleDebug + full unit suite green. iOS NOT COMPILED (no Swift toolchain);
+  brace/paren balanced, needs a Mac build.
