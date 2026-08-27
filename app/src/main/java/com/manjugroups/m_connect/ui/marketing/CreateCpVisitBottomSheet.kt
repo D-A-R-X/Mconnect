@@ -368,16 +368,28 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         btnSubmit.setOnClickListener {
             // Validation
             val phone = etPhone.text.toString().filter { it.isDigit() }.takeLast(10)
-            if (phone.length != 10) {
-                toast("Enter a valid 10-digit phone number")
+            // Must be a real mobile: the arrival OTP is sent to this number, so
+            // a landline would make the CP impossible to complete. Matches the
+            // server rule so a rejection surfaces here rather than on submit.
+            if (phone.length != 10 || phone.first() !in '6'..'9') {
+                toast("Enter a valid 10-digit mobile number")
                 return@setOnClickListener
             }
 
             // Client name is required. For an existing client/lead it auto-fills
             // from the phone lookup; for a new number the staff must type it, so
             // the CP always stores a named client (never a phone-named one).
-            if (etClientName.text.toString().trim().isBlank()) {
+            val clientNameInput = etClientName.text.toString().trim()
+            if (clientNameInput.isBlank()) {
                 toast("Client name is required")
+                return@setOnClickListener
+            }
+            // A "name" that is really the number is how nameless clients used
+            // to reach the Clients tab.
+            if (clientNameInput.filter { it.isDigit() }.takeLast(10) == phone ||
+                clientNameInput.all { it.isDigit() || it.isWhitespace() }
+            ) {
+                toast("Enter the client's name, not their number")
                 return@setOnClickListener
             }
 
@@ -420,8 +432,10 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                 toast("District is required")
                 return@setOnClickListener
             }
-            if (pincode.isBlank() || pincode.length != 6) {
-                toast("Pincode must be 6 digits")
+            if (pincode.length != 6 || !pincode.all { it.isDigit() } ||
+                pincode.first() == '0'
+            ) {
+                toast("Enter a valid 6-digit pincode")
                 return@setOnClickListener
             }
 
@@ -515,7 +529,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                     val resp = geoApi.createCpVisit(
                         session.bearerToken,
                         CreateCpVisitRequest(
-                            clientName = etClientName.text.toString().trim().takeIf { it.isNotBlank() },
+                            clientName = clientNameInput,
                             mobileNumber = phone,
                             assignedStaffId = staff.id,
                             lmoStaffId = lmo.id,
@@ -528,6 +542,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                             notes = notesVal.takeIf { it.isNotBlank() },
                             projectId = project.id,
                             cpType = selectedCpType?.id,
+                            pincode = pincode,
                         )
                     )
                     btnSubmit.isEnabled = true

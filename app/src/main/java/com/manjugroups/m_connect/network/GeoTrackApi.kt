@@ -1016,6 +1016,10 @@ data class CreateCpVisitRequest(
     // collection_cp, old_client, gift_distribution. Optional so older
     // builds without the picker still create successfully.
     val cpType: String? = null,
+    // Explicit 6-digit pincode. The compiled visitAddress already carries it
+    // as a "Pincode: NNNNNN" segment, but sending it separately means the
+    // server stores it as a real column instead of re-parsing free text.
+    val pincode: String? = null,
 )
 
 data class CreateCpVisitResponse(
