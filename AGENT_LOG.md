@@ -11250,3 +11250,33 @@ not committed, pushed, or deployed.
   removing it from the Bundle on consume.
   assembleDebug + full Android unit suite green. iOS: this is Android-only UI (the nudge, task manager and
   router have no iOS counterpart yet) — flagged, not silently skipped.
+
+- 2026-08-27 (main-chat) — High-priority notifications: peach rows + phone tray. BOTH PLATFORMS (standing rule).
+  RULE (new, shared + testable): ui/notifications/NotificationPriority.kt and the Swift mirror
+  Services/NotificationPriority.swift. Actionable = something the staff must DO or DECIDE. Matches on TYPE
+  first (backend-set, stable): task-, approval, approve, leave-, permission-, attendance-, cp-approval, wfh-.
+  DELIBERATE EXCLUSIONS: task-status-update and task-extension-reviewed match a marker but arrive AFTER the
+  work is done — nothing left to act on, so they must not buzz. And a RECOGNISED type is never promoted by
+  its title (a "chat-message" titled "Approval needed" stays a chat); the title fallback applies ONLY to
+  legacy rows with no type at all.
+  ANDROID UI: 4 new colour tokens (notif_priority_unread #FFEDD5 / _read #FFF7ED + dark counterparts
+  #3D2A17/#2E2116 — dark mode needed its own pair or the peach would glow). Unread keeps the STRONGER tint so
+  the read/unread distinction survives inside the peach family; non-priority rows are untouched.
+  ANDROID TRAY: new notifications/PriorityInboxNotification.kt on its own "Approvals & Tasks" channel
+  (IMPORTANCE_HIGH). NOT ongoing — unlike TasksNotification this is news, not a standing state, so it can be
+  dismissed. Dedup by id in SharedPreferences (bounded to 200) so the same approval doesn't re-post on every
+  poll — re-posting is how people learn to swipe the tray without reading. Marks EVERYTHING currently
+  actionable as seen, not just what it posted, so an item read on another device never re-announces here.
+  Guards POST_NOTIFICATIONS on API 33+. Hooked into the existing getNotifications fetch — no backend deploy
+  needed for the tray.
+  iOS: same rule file + peach row tint in Views/Notifications/NotificationsListView.swift. NO tray work on
+  iOS — its pushes are server-driven (APNs), so a local re-raise would duplicate what the backend already
+  sends; flagged rather than half-built.
+  TESTS: NotificationPriorityTest, 7 passing — tasks/approvals in, chats/announcements out, already-decided
+  types out, a recognised type never promoted by title, legacy no-type rows fall back to title, case/padding
+  ignored, and only UNREAD actionable items reach the tray.
+  assembleDebug + full Android unit suite green. iOS NOT COMPILED (no Swift toolchain) — brace-balanced,
+  needs a Mac build.
+  NOTE FOR THE USER: the screenshot's "SOUNDARARAJAN.S's task ... passed the deadline" rows are the OLD
+  third-person overdue notifications that shouldn't reach him at all — that's the assignee-scoping fix from
+  earlier today, still awaiting the Convex deploy.
