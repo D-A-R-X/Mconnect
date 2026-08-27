@@ -27,6 +27,13 @@ data class PendingPunchEntity(
     val address: String? = null,
     /** Absolute path to the proof photo file (uploaded on flush), if any. */
     val photoPath: String? = null,
+    /**
+     * WHOSE punch this is. A queued punch outlives a logout, so without this a
+     * punch taken by one staff could be replayed under whoever logs in next and
+     * be recorded against them. The flush skips rows that do not belong to the
+     * signed-in staff.
+     */
+    val staffId: String? = null,
     val deviceId: String? = null,
     val source: String = "mobile",
     val createdAt: Long,

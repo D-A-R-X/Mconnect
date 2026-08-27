@@ -56,6 +56,17 @@ class CpVisitsFragment : Fragment() {
     private enum class Filter { ALL, SCHEDULED, POSTPONED, IN_PROGRESS, COMPLETED, CANCELLED }
 
     private var allVisits: List<TodayVisit> = emptyList()
+    private var focusArgApplied = false
+
+    /**
+     * A CP visit id to open as soon as the list has loaded — set when the user
+     * arrives from their task, so the task lands on THAT visit's trip screen
+     * rather than on a list they then have to search.
+     *
+     * Cleared once consumed so a back-navigation returns to the list instead
+     * of bouncing straight back into the trip.
+     */
+    private var focusCpVisitId: String? = null
     private var currentFilter: Filter = Filter.ALL
     private var searchQuery: String = ""
     // Debounces the server-side search reload so a super-admin can find an
@@ -100,6 +111,12 @@ class CpVisitsFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         session = SessionManager(requireContext())
         rootView = view
+        // Read the requested visit ONCE. Re-reading it on every view creation
+        // would re-open the trip each time the user came back to the list.
+        if (!focusArgApplied) {
+            focusArgApplied = true
+            focusCpVisitId = arguments?.getString(ARG_FOCUS_CP_VISIT_ID)
+        }
 
         view.findViewById<View>(R.id.btnCpVisitsBack).setOnClickListener {
             navigateUp()
@@ -151,12 +168,13 @@ class CpVisitsFragment : Fragment() {
      */
     private fun wireApprovalsBanner(root: View) {
         root.findViewById<View>(R.id.cpvApprovalsBanner).setOnClickListener {
-            CpApprovalQueueBottomSheet.show(childFragmentManager)
+            pushDetail(CpApprovalQueueFragment.newInstance())
         }
         // The queue emits this after each approve/reject (and on dismiss) so the
         // banner count and the visit list stay in sync without a manual refresh.
-        childFragmentManager.setFragmentResultListener(
-            CpApprovalQueueBottomSheet.RESULT_KEY, viewLifecycleOwner,
+        // Pushed page -> the result comes back on the parent manager.
+        parentFragmentManager.setFragmentResultListener(
+            CpApprovalQueueFragment.RESULT_KEY, viewLifecycleOwner,
         ) { _, _ ->
             if (!isAdded) return@setFragmentResultListener
             refreshApprovalsBanner()
@@ -173,13 +191,19 @@ class CpVisitsFragment : Fragment() {
                 geoApi.getPendingCpApprovals(session.bearerToken).items.size
             }.getOrDefault(0)
             if (!isAdded) return@launch
-            if (count > 0) {
-                title?.text =
-                    if (count == 1) "1 approval waiting" else "$count approvals waiting"
-                banner.visibility = View.VISIBLE
-            } else {
-                banner.visibility = View.GONE
+            // Anyone who HOLDS the approval right keeps a permanent entry, even
+            // at zero — the queue was previously undiscoverable until work
+            // happened to be waiting, so a GM had no way to check it. Everyone
+            // else keeps the old behaviour exactly: visible only when they
+            // actually have something to approve, so nobody who relied on it
+            // loses it, and nobody new is shown an empty queue.
+            val isApprover = session.hasPermission("marketing.cpVisits.approve")
+            title?.text = when {
+                count == 1 -> "1 approval waiting"
+                count > 0 -> "$count approvals waiting"
+                else -> "CP Approvals — nothing waiting"
             }
+            banner.visibility = if (count > 0 || isApprover) View.VISIBLE else View.GONE
         }
     }
 
@@ -448,6 +472,7 @@ class CpVisitsFragment : Fragment() {
                             .thenByDescending { it.creationTime ?: 0.0 }
                             .thenByDescending { it.scheduledDate }
                     )
+                consumeFocusVisit()
                 // Empty-state diagnostic toasts removed — the
                 // "No Cp Visits Yet" empty-state UI already conveys
                 // the same information, and the "server sent N but
@@ -557,7 +582,18 @@ class CpVisitsFragment : Fragment() {
                 ?.let { "converted_to_site_visit" }
             ?: this.convertedBookingId?.takeIf { it.isNotBlank() }
                 ?.let { "converted_to_booking" }
+        // "Trip over, outcome never recorded" - decided HERE because this is the
+        // only place that can see both the CP row's own status and its field
+        // visit's. The card's merged `effectiveStatus` prefers
+        // fieldVisit.status, so whenever a response came back without a
+        // fieldVisit the status fell back to in_progress, the card rendered as
+        // Enroute, and the action that records the missing outcome vanished -
+        // the "sometimes disappearing" Pending button. Deciding it from BOTH
+        // signals means a missing fieldVisit can no longer hide it.
+        val tripFinished = listOf(this.status, this.fieldVisit?.status)
+            .any { isCompleted((it ?: "").lowercase(Locale.US)) }
         val cpState = CpVisitState(
+            outcomePending = tripFinished && effectiveOutcome.isNullOrBlank(),
             clientMet = this.clientMet,
             clientMetAt = this.clientMetAt,
             clientNoShowReason = this.clientNoShowReason,
@@ -570,6 +606,8 @@ class CpVisitsFragment : Fragment() {
             clientPlaceId = this.clientPlaceId ?: cpId,
             scheduledDate = scheduled,
             status = effectiveStatus,
+            // Both participants, so the card can name them.
+            joint = this.joint,
             approvalGmName = this.approvalGmName,
             rejectRemark = this.rejectRemark,
             reassignedFromRejection = this.reassignedFromRejection,
@@ -585,6 +623,10 @@ class CpVisitsFragment : Fragment() {
             leadPhone = phoneLabel,
             scheduledStartTime = this.scheduledTime,
             // LMO = the telecaller who owns the CP visit (the creator).
+            // The field officer this CP is ASSIGNED to. Was never mapped, so
+            // the trip screen had no name to show and a manager viewing it
+            // could not tell whose visit it was.
+            bdoName = this.assignedStaff?.name?.takeIf { it.isNotBlank() },
             lmoName = this.telecaller?.name?.takeIf { it.isNotBlank() }
                 ?: this.telecaller?.staffName?.takeIf { it.isNotBlank() },
             cpVisit = cpState,
@@ -703,6 +745,25 @@ class CpVisitsFragment : Fragment() {
         val actionLabel = itemView.findViewById<TextView>(R.id.tvVisitItemActionLabel)
         val actionIcon = itemView.findViewById<ImageView>(R.id.ivVisitItemActionIcon)
         val lead = itemView.findViewById<TextView>(R.id.tvVisitItemLead)
+
+        // Joint CP: name BOTH staff. The row is assigned to the lead, so a
+        // single name would hide the other person who is also going. Lead
+        // first, matching the trip screen and the web detail.
+        val jointRow = itemView.findViewById<View>(R.id.rowVisitItemJoint)
+        val jointNames = itemView.findViewById<TextView>(R.id.tvVisitItemJointNames)
+        val joint = visit.joint
+        val jointLabel = joint?.let { j ->
+            listOfNotNull(
+                j.leadStaffName?.takeIf { it.isNotBlank() },
+                *j.companionNames.orEmpty().filter { it.isNotBlank() }.toTypedArray(),
+            ).joinToString(" & ").takeIf { it.isNotBlank() }
+        }
+        if (jointLabel != null) {
+            jointNames.text = jointLabel
+            jointRow.visibility = View.VISIBLE
+        } else {
+            jointRow.visibility = View.GONE
+        }
 
         // LMO (telecaller/creator) — shown only when the mapping supplied it.
         val lmoRow = itemView.findViewById<View>(R.id.rowVisitItemLmo)
@@ -845,8 +906,10 @@ class CpVisitsFragment : Fragment() {
         // SV-via-CP visits land in the locked SV tab automatically via
         // the sheet's own detectAndApplyLockedSvMode signal, regular CP
         // visits open in the default Booking-tab flow.
-        val isOutcomePending = completed &&
-            visit.cpVisit?.outcome.isNullOrBlank()
+        // Additive on purpose: the mapper's flag can only ever ADD the Pending
+        // action, never remove one the old rule would have shown.
+        val isOutcomePending = visit.cpVisit?.outcomePending == true ||
+            (completed && visit.cpVisit?.outcome.isNullOrBlank())
 
         // Three click outcomes: open the trip flow, open the completed-visit
         // detail (read-only summary), or no-op (cancelled cards stay inert).
@@ -1163,6 +1226,26 @@ class CpVisitsFragment : Fragment() {
         )
     }
 
+    /**
+     * Open the visit the caller asked to focus, if it is in the loaded list.
+     *
+     * Silently does nothing when the id isn't found — the visit may be outside
+     * the current filter or scope, and dropping the user on the list is a far
+     * better outcome than an error about a record they can still scroll to.
+     */
+    private fun consumeFocusVisit() {
+        val target = focusCpVisitId?.takeIf { it.isNotBlank() } ?: return
+        // Strip the argument too: the list reloads on every resume, and a
+        // still-present argument would fling the user back into the trip each
+        // time they navigated back to the list.
+        arguments?.remove(ARG_FOCUS_CP_VISIT_ID)
+        val match = allVisits.firstOrNull {
+            it.clientPlaceVisitId == target || it.id == target
+        } ?: return
+        focusCpVisitId = null
+        openVisit(match)
+    }
+
     private fun openVisit(visit: TodayVisit) {
         parentFragmentManager.pushDetail(
             TripNavigationFragment.forVisit(
@@ -1180,6 +1263,7 @@ class CpVisitsFragment : Fragment() {
                 cpType = visit.cpVisit?.cpType,
                 clientMobile = visit.leadPhone,
                 lmoName = visit.lmoName,
+                fieldStaffName = visit.bdoName,
                 deadline = com.manjugroups.m_connect.util.VisitDeadline.format(
                     visit.scheduledDate,
                     visit.scheduledEndTime ?: visit.scheduledStartTime,
@@ -1310,4 +1394,19 @@ class CpVisitsFragment : Fragment() {
         }
         CreateCpVisitBottomSheet.newInstance().showOnce(parentFragmentManager, "create_cp_visit")
     }
+
+    companion object {
+        private const val ARG_FOCUS_CP_VISIT_ID = "arg_focus_cp_visit_id"
+
+        /** Entry used by the task router: opens the list, then that visit. */
+        fun newInstance(focusCpVisitId: String? = null): CpVisitsFragment =
+            CpVisitsFragment().apply {
+                if (!focusCpVisitId.isNullOrBlank()) {
+                    arguments = android.os.Bundle().apply {
+                        putString(ARG_FOCUS_CP_VISIT_ID, focusCpVisitId)
+                    }
+                }
+            }
+    }
+
 }

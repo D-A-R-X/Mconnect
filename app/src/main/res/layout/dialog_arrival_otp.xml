@@ -143,6 +143,23 @@
         android:textColor="#0B61CA"
         android:textSize="12sp" />
 
+    <!-- Escape hatch for the client who simply will not read the code out.
+         Sits BELOW the OTP entry so it is found only after the normal path
+         has been tried, not offered as an equal first choice. -->
+    <TextView
+        android:id="@+id/btnArrivalOtpRequestGm"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:clickable="true"
+        android:focusable="true"
+        android:fontFamily="@font/inter_medium"
+        android:gravity="center"
+        android:padding="6dp"
+        android:text="Client not sharing the OTP? Request GM"
+        android:textColor="#B45309"
+        android:textSize="12sp" />
+
     <androidx.appcompat.widget.AppCompatButton
         android:id="@+id/btnArrivalOtpVerify"
         android:layout_width="match_parent"

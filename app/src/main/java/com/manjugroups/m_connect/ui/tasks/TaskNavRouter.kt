@@ -22,13 +22,33 @@ object TaskNavRouter {
     // Web app origin — tasks with no mobile screen are completed here.
     private const val WEB_APP_URL = "https://mg.theairix.com"
 
+    /** Backend source key for the approver's CP-completion task. Must stay in
+     *  step with CP_APPROVAL_TASK_SOURCE in convex/marketing/clientPlaceVisits.ts. */
+    private const val CP_APPROVAL_SOURCE = "cp_completion_approval"
+
     fun open(activity: FragmentActivity, task: DailyTaskData) {
         val source = task.sourceReferenceType?.trim()?.lowercase().orEmpty()
+
+        // Handled first so the approver's task opens the queue itself rather
+        // than the CP list — or worse, the "open this in the web app" dialog.
+        if (source == CP_APPROVAL_SOURCE) {
+            activity.supportFragmentManager.pushDetail(
+                com.manjugroups.m_connect.ui.marketing.CpApprovalQueueFragment
+                    .newInstance(),
+            )
+            return
+        }
+
         val fragment: Fragment? = when {
             source == "staff-attendance" ->
                 com.manjugroups.m_connect.ui.hr.AttendanceHistoryFragment()
             source == "client_place_visit" || source == "clientplacevisit" ->
-                com.manjugroups.m_connect.ui.marketing.CpVisitsFragment()
+                // Straight to THIS visit's trip screen — the task is about one
+                // visit, so dropping the user on a list of hundreds to find it
+                // again is not "routing them to the work". Falls back to the
+                // plain list if the visit isn't in their loaded scope.
+                com.manjugroups.m_connect.ui.marketing.CpVisitsFragment
+                    .newInstance(task.sourceReferenceId)
             source == "site_visit" || source == "sitevisit" ->
                 com.manjugroups.m_connect.ui.marketing.SiteVisitsFragment()
             source == "land-inspection" || source == "landinspection" || source == "landproperty" ->

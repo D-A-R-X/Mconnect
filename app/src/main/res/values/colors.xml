@@ -84,4 +84,13 @@
     <color name="category_equipment">#16A34A</color>
     <!-- Distinct purple so "Other" doesn't blend with the donut empty-state ring. -->
     <color name="category_other">#A855F7</color>
+
+    <!-- Actionable notifications (approvals + tasks). Peach rather than the
+         default blue-grey so work that needs a decision separates at a glance
+         from things that merely happened. Unread is the stronger tint so the
+         read/unread distinction survives inside the peach family. -->
+    <color name="notif_priority_unread">#FFEDD5</color>
+    <color name="notif_priority_read">#FFF7ED</color>
+    <color name="notif_priority_unread_dark">#3D2A17</color>
+    <color name="notif_priority_read_dark">#2E2116</color>
 </resources>

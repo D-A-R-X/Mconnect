@@ -244,6 +244,11 @@ class MainActivity : AppCompatActivity() {
                             android.widget.Toast.LENGTH_LONG,
                         ).show()
                         session.clearSession()
+                        // Same teardown as a deliberate sign-out: an expired
+                        // session must not leave tracking running or reminders
+                        // on the tray either.
+                        com.manjugroups.m_connect.auth.SessionTeardown
+                            .run(this@MainActivity)
                         startActivity(
                             Intent(
                                 this@MainActivity,
@@ -667,10 +672,16 @@ class MainActivity : AppCompatActivity() {
     private fun scopeToOwnTasks(
         tasks: List<com.manjugroups.m_connect.network.DailyTaskData>,
     ): List<com.manjugroups.m_connect.network.DailyTaskData> {
-        val isSuper = session.isAdmin || session.role.equals("super-admin", ignoreCase = true)
-        if (isSuper) return tasks
-        val me = session.staffId?.takeIf { it.isNotBlank() } ?: return emptyList()
-        return tasks.filter { it.assignedTo == me }
+        // NO super-admin exemption. This banner is a PERSONAL reminder — "you
+        // have N pending tasks" — and being an admin does not mean you
+        // personally owe the whole company's work. The exemption handed a
+        // super-admin every staff member's open tasks: 82 CP visits belonging
+        // to other people, while their own My Tasks count was zero.
+        //
+        // Company-wide visibility belongs in the Task Manager, which is built
+        // for it and labels whose task each one is.
+        return com.manjugroups.m_connect.ui.tasks.PendingTaskScope
+            .ownTasks(tasks, session.staffId)
     }
 
     /** Renders the pending-tasks warning (system notification, collapsed peek,
@@ -1428,6 +1439,31 @@ class MainActivity : AppCompatActivity() {
         return tabBarContainer.visibility == android.view.View.VISIBLE
     }
 
+    /**
+     * Height of the status-bar strip, resolved NOW rather than waiting for an
+     * inset pass.
+     *
+     * `cachedTopInset` is only filled by the inset listener, so a screen that
+     * asks for a solid top bar before any pass has reported a non-zero top
+     * insets a strip of height 0 and draws its header underneath the clock and
+     * battery icons. That is most likely when arriving from a full-bleed
+     * screen, whose transparent window can report a top inset of 0.
+     *
+     * Reading the root window insets directly closes that window; the async
+     * request stays as a backstop for the case where even this is not ready.
+     */
+    private fun resolveTopInset(): Int {
+        if (cachedTopInset > 0) return cachedTopInset
+        if (!::mainRoot.isInitialized) return 0
+        val insets = ViewCompat.getRootWindowInsets(mainRoot) ?: return 0
+        val top = maxOf(
+            insets.getInsets(WindowInsetsCompat.Type.statusBars()).top,
+            insets.getInsets(WindowInsetsCompat.Type.displayCutout()).top,
+        )
+        if (top > 0) cachedTopInset = top
+        return cachedTopInset
+    }
+
     fun setTopBarAppearance(backgroundColor: Int, darkStatusIcons: Boolean, fullBleed: Boolean = false) {
         if (!::statusBarBackground.isInitialized) return
         val wasFullBleed = statusBarFullBleed
@@ -1438,7 +1474,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             statusBarBackground.setBackgroundColor(backgroundColor)
             statusBarBackground.layoutParams = statusBarBackground.layoutParams.apply {
-                height = cachedTopInset
+                height = resolveTopInset()
             }
             window.statusBarColor = backgroundColor
         }
@@ -1980,8 +2016,10 @@ class MainActivity : AppCompatActivity() {
             // GM taps the "CP completion needs approval" push → open the
             // out-of-geofence approval queue over the current screen.
             "approvals" -> {
-                com.manjugroups.m_connect.ui.marketing.CpApprovalQueueBottomSheet
-                    .show(supportFragmentManager)
+                supportFragmentManager.pushDetail(
+                    com.manjugroups.m_connect.ui.marketing.CpApprovalQueueFragment
+                        .newInstance(),
+                )
             }
             WorkflowNotificationRoute.TAB_HR -> {
                 selectTab(TAB_HR)

@@ -324,7 +324,7 @@ class ChatMessageAdapter(
             if (telemetry != null || contact != null) {
                 binding.tvMessageBody.visibility = View.GONE
             } else {
-                binding.tvMessageBody.text = item.data.body
+                binding.tvMessageBody.text = ChatTextFormat.format(item.data.body)
                 binding.tvMessageBody.isVisible = !item.data.body.isNullOrBlank()
                 binding.tvMessageBody.alpha = 1f
                 binding.tvMessageBody.typeface = getFontRegular(binding.root.context)
@@ -531,7 +531,7 @@ class ChatMessageAdapter(
             if (telemetry != null || contact != null) {
                 binding.tvMessageBody.visibility = View.GONE
             } else {
-                binding.tvMessageBody.text = item.data.body
+                binding.tvMessageBody.text = ChatTextFormat.format(item.data.body)
                 binding.tvMessageBody.isVisible = !item.data.body.isNullOrBlank()
                 binding.tvMessageBody.alpha = 1f
                 binding.tvMessageBody.typeface = getFontRegular(binding.root.context)

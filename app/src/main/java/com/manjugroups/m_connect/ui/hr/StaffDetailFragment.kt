@@ -69,6 +69,7 @@ class StaffDetailFragment : Fragment() {
                     renderHeader(resp.staff)
                     setupTabs(resp.staff)
                     setupMessageButton(resp.staff)
+                    setupSecurityButton(resp.staff)
                 }
             } catch (_: Exception) { }
             
@@ -254,6 +255,26 @@ class StaffDetailFragment : Fragment() {
         if (bank.isNotEmpty()) tabs.add(TabDef("Bank", bank))
 
         return tabs
+    }
+
+    /**
+     * Device & access actions, for an HR/admin working from their phone.
+     *
+     * Shown only to holders of `staff.resetDeviceBinding` — the same
+     * permission the server enforces — and never on your own record: resetting
+     * your own device or ending your own sessions from this screen would just
+     * lock you out mid-task.
+     */
+    private fun setupSecurityButton(s: StaffFullData) {
+        val targetId = s.id
+        val mayManage = session.hasPermission("staff.resetDeviceBinding") &&
+            targetId != null &&
+            targetId != session.staffId
+        binding.btnStaffSecurity.visibility = if (mayManage) View.VISIBLE else View.GONE
+        if (!mayManage) return
+        binding.btnStaffSecurity.setOnClickListener {
+            StaffSecurityBottomSheet.show(childFragmentManager, targetId!!, s.name)
+        }
     }
 
     private fun setupMessageButton(s: StaffFullData) {

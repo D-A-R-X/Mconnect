@@ -49,10 +49,15 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
     // comes from the policy allocations (see loadLeaveTypes) and mirrors the
     // Product-approved mobile categories. Keep this explicit so policy data
     // cannot re-introduce Casual/Sick/Earned into the category sheet.
-    private var leaveTypes = listOf("unpaid", "compensatory", "half_day")
+    private var leaveTypes = listOf("unpaid", "compensatory")
     private var selectedLeaveType: String = "unpaid"
     private var selectedFromMillis: Long? = null
     private var selectedToMillis: Long? = null
+    // Web parity: a half day is an OPTION ON the chosen leave type, not a
+    // category of its own. As its own category the app had to GUESS which
+    // balance to book it against ("first type that isn't half_day"), so the
+    // staff could never choose. Now they pick the type, then tick this.
+    private var isHalfDay: Boolean = false
     private var selectedSession: String = "Morning"
 
     // Comp Off: the credit pool the "Compensatory Off" category spends from.
@@ -115,6 +120,24 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
         fieldLeaveDuration.setOnClickListener { showDurationSheet() }
         fieldCompCredit.setOnClickListener { showCompCreditSheet() }
         btnSubmit.setOnClickListener { promptSubmitConfirmation() }
+
+        // Half-day toggle. Tapping the whole row flips it (the checkbox is
+        // decorative so the tap target is the full row, matching the other
+        // fields in this sheet).
+        val layoutHalfDayToggle = view.findViewById<View>(R.id.layoutHalfDayToggle)
+        val cbHalfDay = view.findViewById<android.widget.CheckBox>(R.id.cbHalfDay)
+        layoutHalfDayToggle?.setOnClickListener {
+            isHalfDay = !isHalfDay
+            cbHalfDay?.isChecked = isHalfDay
+            // A half day is a single day: collapse any range the user had
+            // already picked rather than silently submitting only its first day.
+            if (isHalfDay && selectedFromMillis != null && selectedToMillis != selectedFromMillis) {
+                selectedToMillis = selectedFromMillis
+                updateDurationLabel()
+            }
+            applyTypeUi()
+            updateSubmitButtonState()
+        }
 
         // Setup session buttons for Half Day
         val btnSessionMorning = view.findViewById<View>(R.id.btnSessionMorning)
@@ -211,12 +234,16 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
         val lblLeaveDuration = view.findViewById<TextView>(R.id.lblLeaveDuration)
 
         val isComp = selectedLeaveType == "compensatory"
-        val isHalf = selectedLeaveType == "half_day"
 
-        layoutHalfDaySession?.visibility = if (isHalf) View.VISIBLE else View.GONE
+        val layoutHalfDayToggle = view.findViewById<View>(R.id.layoutHalfDayToggle)
+        layoutHalfDayToggle?.visibility =
+            if (selectedLeaveType.isNotBlank()) View.VISIBLE else View.GONE
+        view.findViewById<android.widget.CheckBox>(R.id.cbHalfDay)?.isChecked = isHalfDay
+        layoutHalfDaySession?.visibility = if (isHalfDay) View.VISIBLE else View.GONE
         layoutCompCredit?.visibility = if (isComp) View.VISIBLE else View.GONE
         layoutDescription?.visibility = if (isComp) View.GONE else View.VISIBLE
-        lblLeaveDuration?.text = if (isComp) "Comp Off Date" else "Leave Duration"
+        lblLeaveDuration?.text =
+            if (isComp) "Comp Off Date" else if (isHalfDay) "Leave Date" else "Leave Duration"
 
         if (isComp) loadCompCredits()
     }
@@ -260,7 +287,7 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun loadLeaveTypes() {
-        leaveTypes = listOf("unpaid", "compensatory", "half_day")
+        leaveTypes = listOf("unpaid", "compensatory")
         if (selectedLeaveType !in leaveTypes) selectedLeaveType = "unpaid"
         view?.findViewById<TextView>(R.id.tvLeaveCategoryValue)?.text = prettyType(selectedLeaveType)
         applyTypeUi()
@@ -401,16 +428,6 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
-    /**
-     * The real leave type a Half Day is booked against: the user's first
-     * available base type (casual → sick → earned → unpaid, in policy order),
-     * excluding the half_day and compensatory pseudo-categories. Falls back to
-     * unpaid so a half-day always has a valid, submittable base even when the
-     * user has no paid-leave allocation.
-     */
-    private fun halfDayBaseType(): String =
-        leaveTypes.firstOrNull { it != "half_day" && it != "compensatory" } ?: "unpaid"
-
     private fun submitLeave() {
         if (selectedLeaveType == "compensatory") {
             submitCompOff()
@@ -448,15 +465,17 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
                 val resp = api.applyLeave(
                     session.bearerToken,
                     ApplyLeaveRequest(
-                        leaveType = if (selectedLeaveType == "half_day") halfDayBaseType() else selectedLeaveType,
+                        // The half day comes out of the balance the staff
+                        // actually chose, and always covers a single day.
+                        leaveType = selectedLeaveType,
                         fromDate = from,
-                        toDate = to,
-                        reason = if (selectedLeaveType == "half_day") "[$selectedSession] $reason".trim() else reason,
+                        toDate = if (isHalfDay) from else to,
+                        reason = if (isHalfDay) "[$selectedSession] $reason".trim() else reason,
                         reportingToId = session.reportingToId,
                         reportingToName = session.reportingToName,
-                        isHalfDay = if (selectedLeaveType == "half_day") true else null,
-                        halfDaySession = if (selectedLeaveType == "half_day") selectedSession.lowercase() else null,
-                        halfDayType = if (selectedLeaveType == "half_day") selectedSession.lowercase() else null
+                        isHalfDay = if (isHalfDay) true else null,
+                        halfDaySession = if (isHalfDay) selectedSession.lowercase() else null,
+                        halfDayType = if (isHalfDay) selectedSession.lowercase() else null
                     )
                 )
                 if (resp.success) {
@@ -501,7 +520,12 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
             try {
                 val resp = api.applyCompOff(
                     session.bearerToken,
-                    com.manjugroups.m_connect.network.ApplyCompOffRequest(creditId = credit.id, date = date)
+                    com.manjugroups.m_connect.network.ApplyCompOffRequest(
+                        creditId = credit.id,
+                        date = date,
+                        isHalfDay = if (isHalfDay) true else null,
+                        halfDaySession = if (isHalfDay) selectedSession.lowercase() else null,
+                    )
                 )
                 if (resp.success) {
                     LeaveSubmittedSuccessSheet.newInstance().showOnce(parentFragmentManager, "leave_submitted_success")
@@ -587,12 +611,6 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
                 val previous = selectedLeaveType
                 selectedLeaveType = selected
                 view?.findViewById<TextView>(R.id.tvLeaveCategoryValue)?.text = prettyType(selected)
-
-                // If switching to half_day and we had a multi-day range, collapse it to a single day
-                if (selected == "half_day" && selectedFromMillis != null && selectedToMillis != null && selectedFromMillis != selectedToMillis) {
-                    selectedToMillis = selectedFromMillis
-                    updateDurationLabel()
-                }
 
                 // Comp Off dates are constrained to the chosen credit's month, so
                 // any date picked under another category is no longer valid.
@@ -722,7 +740,7 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
 
             if (selectable) {
                 cell.setOnClickListener {
-                    if (selectedLeaveType == "half_day" || isComp) {
+                    if (isHalfDay || isComp) {
                         tempFrom = dayMillis
                         tempTo = dayMillis
                     } else {

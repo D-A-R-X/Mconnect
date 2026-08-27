@@ -4,6 +4,7 @@ import android.content.Context
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.geotrack.data.GeoTrackDatabase
 import com.manjugroups.m_connect.geotrack.data.PendingPunchEntity
+import com.manjugroups.m_connect.util.ImageCompressor
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -44,9 +45,20 @@ object OfflinePunchQueue {
             ?.takeIf { it.exists() }
             ?.let { src ->
                 runCatching {
+                    // COMPRESS before storing, not just before uploading.
+                    // A queued punch may sit on the device for hours and is
+                    // then replayed over whatever connection came back - often
+                    // a weak one. Keeping a multi-MB camera original here fills
+                    // the device and makes that replay far more likely to fail.
+                    // ImageCompressor is best-effort and returns the source
+                    // untouched on any error, so this can never lose a selfie.
+                    val compressed = ImageCompressor.compress(src)
                     val dir = File(context.filesDir, "punch_queue").apply { mkdirs() }
                     val dst = File(dir, "punch_${System.currentTimeMillis()}_${src.name}")
-                    src.copyTo(dst, overwrite = true)
+                    compressed.copyTo(dst, overwrite = true)
+                    // The compressor writes a NEW temp file when it actually
+                    // shrank something; drop it now that we hold our own copy.
+                    if (compressed !== src) runCatching { compressed.delete() }
                     dst.absolutePath
                 }.getOrNull()
             }
@@ -58,6 +70,8 @@ object OfflinePunchQueue {
                 longitude = longitude,
                 address = address,
                 photoPath = persistedPhoto,
+                // Bind the punch to whoever took it - see PendingPunchEntity.
+                staffId = SessionManager(context).staffId,
                 deviceId = SessionManager(context).trackingDeviceId,
                 source = "mobile",
                 createdAt = System.currentTimeMillis(),

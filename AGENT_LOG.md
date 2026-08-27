@@ -10827,3 +10827,763 @@ not committed, pushed, or deployed.
   AND that global scope isn't silently narrowed to own-rows. tsc clean; :app:compileDebugKotlin clean. The 3
   failures in aiPresalesCustomer/bookings.search are PRE-EXISTING (verified by stashing). NEEDS CONVEX DEPLOY
   + a new APK.
+
+- 2026-08-26 (main-chat) — CP/SV rows showed a bare phone number where the clients master HAS a name.
+  TWO causes, plus a REGRESSION I had to find first. (1) REGRESSION: my 0e5725ad (CP list client-name
+  fallback) and 16c33b27 (fleet Agency/Company column) were both wiped by a teammate's 21672507
+  `Revert "Merge branch 'development-testing'"` (62 files, -5925). Restored both — cherry-picked the fleet one,
+  re-applied the CP one on current code. This is the SV/CP + Fleet regression pattern the standing memory
+  warns about: worked, then silently un-worked via someone else's revert. WORTH CHECKING AFTER EVERY BIG
+  MERGE. (2) ROOT CAUSE `??` vs BLANK: a lead created from a bare mobile number carries contactName as an
+  EMPTY STRING, not undefined — so `lead?.contactName ?? client?.clientName` KEEPS THE BLANK and every
+  fallback downstream is skipped. Web SV had this at 7 sites; mobile SV backend (siteVisits.ts leadName) had
+  it too, where `!leadName` correctly entered the fallback block but `leadName ?? cpClient.clientName` then
+  kept "". New lib/visit-display.ts (firstNonBlank / visitDisplayName / visitDisplayPhone) is blank-safe and
+  now used by both web pages. (3) MOBILE SV never consulted the clients master at all — it only fell back via
+  a linked sourceCp. Added a final by_mobileNumberNormalized lookup (indexed, only for rows still lacking a
+  name, so read cost stays bounded — the 502 lesson). CHECKED AND LEFT ALONE (already correct): web+mobile CP
+  backends reconcile by phone via reconcileDisplayClient/enrichVisit; Android CpVisitsFragment has
+  asClientNameOrNull (blank + phone-like rejection); iOS CP uses cpClientName, iOS SV uses
+  leadName?.nilIfBlank so the backend fix covers it. Also widened CP + SV search to match the client name.
+  TESTS: lib/visit-display.test.ts 11 passing, pinning blank/whitespace/null fall-through and lead-wins.
+  tsc clean, eslint 0 errors, convex/marketing 38 pass. NEEDS CONVEX DEPLOY (mobile SV) + web deploy.
+
+- 2026-08-26 (main-chat) — "online but the app acts offline; attendance ALL ABSENT; nothing loads".
+  DIAGNOSIS — it is NOT the app, it is the LIVE BACKEND. Probe `curl /api/bookings` (unauth) → 401, which
+  means my earlier parity batch IS DEPLOYED, while my fixes for that batch's wide reads are NOT
+  (1a4d3a31 / f68f50ce / 867f571c all still undeployed). So prod is running the version with
+  attendance `limit: 4000` + scope-aware collections full-table scan — the exact read-budget blowups I
+  already found. SYMPTOM MAPPING CONFIRMED IN CODE: AttendanceHistoryFragment does
+  `runCatching{ getAllAttendance }.getOrNull()` then `fillAbsentDays(...)` — a FAILED fetch is swallowed and
+  every dateless day is synthesised as "Absent". So a 500 from the backend renders as the whole company being
+  absent. That is why it looks offline while online. TWO FIXES: (1) APP RESILIENCE — OfflineHttpCache now
+  replays the last-known GET on 5xx, not only on IOException; a failing backend empties a screen exactly like
+  no-network does. Strictly 5xx: 401/403/404 still reach the caller (auth watchdog + real empty states).
+  GOTCHA FOUND BY TEST: the replay silently never worked because OkHttp refuses a new request while the
+  previous response body is open — "cannot make a new request because the previous response is still open".
+  Must drain+close the error body BEFORE calling the cache, then rebuild the response if the cache misses.
+  Proved with a throwaway probe test that printed the actual IllegalStateException rather than guessing.
+  (2) ROOT CAUSE — /api/hr/attendance/all now uses listForReportPaginated (200/page, cursor) instead of one
+  capped read. The old cap did BOTH bad things: enrichment over thousands of rows blew the read budget so the
+  request failed, and whatever came back was truncated — and a truncated day is an "Absent" day. Response
+  keeps `records` and adds nextCursor/hasMore, so older builds still render page one. Android All tab pages
+  via InfiniteScrollPager.onEndReached with id-dedup; cursor cleared when the date range changes.
+  NOTE / NOT DONE: /api/hr/attendance/team-attendance still uses listTeamAttendance which is
+  company-wide-then-filter at limit 2500 — same anti-pattern, bounded but worth converting next.
+  Cache suite 11/11, :app:testDebugUnitTest green, tsc clean, staffAttendance 8/8. NEEDS CONVEX DEPLOY — the
+  app cannot fix a backend that is failing; the deploy is what actually restores it.
+
+- 2026-08-26 (main-chat) — HALF-DAY LEAVE brought to web parity on BOTH apps. The apps already had half-day,
+  but modelled WRONGLY: "Half Day" was a pseudo leave CATEGORY sitting next to Unpaid/Comp-Off, so the app had
+  to GUESS which balance to book it against — Android halfDayBaseType() / iOS halfDayBaseType = "first type
+  that isn't half_day or compensatory, else unpaid". The staff could never choose whether the 0.5 came out of
+  casual/sick/earned/unpaid. Web has always done it correctly: pick the leave type, THEN tick "Half-day leave
+  (0.5 day)" + morning/afternoon. NOW BOTH APPS MATCH: category list is unpaid + compensatory; new half-day
+  toggle row (Android: layoutHalfDayToggle/cbHalfDay in bottom_sheet_apply_leave.xml, whole row is the tap
+  target; iOS: halfDayToggle button view); ticking it collapses an already-picked RANGE to a single day
+  (otherwise only the first day would silently submit), switches the calendar to single-date, shows the
+  session picker, relabels the field to "Leave Date", prefixes the reason with [Morning]/[Afternoon], and
+  submits leaveType = THE CHOSEN TYPE with toDate = fromDate + isHalfDay/halfDaySession/halfDayType.
+  BONUS PARITY: half-day COMP OFF now works on both apps — backend /api/hr/compoff/apply has always accepted
+  isHalfDay/halfDaySession (and compOff.applyCompOff consumes 0.5 vs 1.0), but neither app sent them, so a
+  credit was always spent whole. Added to Android ApplyCompOffRequest + iOS applyCompOff. NOTE: backend needed
+  NO change — /api/hr/leaves/apply already takes isHalfDay/halfDaySession, so this ships with the APK and does
+  NOT wait on the Convex deploy. Android assembleDebug + full unit tests green. iOS NOT COMPILED (no Swift
+  toolchain on Windows) — brace/paren balance checked and every half_day/halfDayBaseType/requiresReasonPrefix
+  reference confirmed gone; needs a Mac build before release.
+
+- 2026-08-26 (main-chat) — Trip Details header height trimmed. Screen identified as
+  fragment_trip_navigation.xml (the only trip layout carrying "Swipe to Complete Trip" / Call Client — NOT
+  the driver/agency trip detail layouts). topBar was paddingTop 14dp + 32dp back button + paddingBottom 14dp
+  = a 60dp bar for a bare centred title; now 8dp/8dp = 48dp, the standard compact app-bar height, keeping the
+  back button's touch area intact. WORTH KNOWING for the next "too much header space" report on this screen:
+  a large part of the white band above the title is NOT this layout — MainActivity paints a separate
+  statusBarBackground strip sized to cachedTopInset (TripNavigationFragment.onResume calls
+  setTopBarAppearance(#FEFEFE, darkStatusIcons=true, fullBleed=false)), so the visible band is
+  statusBarInset + topBar. Only the topBar part is reducible without letting the title ride under the OS
+  status icons. assembleDebug green. NOT visually verified on-device — reaching this screen needs a live
+  enroute CP visit; measured from the layout, not a screenshot.
+
+- 2026-08-26 (main-chat) — Home marketing-overview dashboard showed "18 JUL 2026". Root cause was NOT a stale
+  date: the ENTIRE overview block was hardcoded demo UI. `android:text="18 JUL 2026"` was a literal in
+  layout_home_overview.xml that nothing ever overwrote, and setupMarketingOverview() passed literal strings —
+  bindMarketingCard(..., "Total Calls", "984"), "Hot Leads" 37, "Site Visits" 15, "Bookings" 2,
+  "Collection (Today)" ₹18.60 L, "Booking Value" ₹1.85 Cr — plus fixed trend pills and conversion KPIs. The
+  date pill's picker (DateFilterBottomSheet) only relabelled ITSELF and never touched vpSelectedDate or
+  refetched, so it was decoration on top of decoration. Meanwhile the REAL working control already existed:
+  btnDashDateFilter → vpSelectedDate → loadVpDashboard(force) → bindDashboardData(). FIX: the overview date
+  pill now calls the same showDashDatePicker() and renders via new applyOverviewDateLabel() (called from
+  applyDashHeader so the two pills can never disagree); hardcoded date literal deleted so it cannot flash.
+  New bindOverviewCards() fills Total Calls / Hot Leads / Site Visits from vpDashboardData
+  (totalCalls / hot / svVisitsFixed), called from bindDashboardData so it repaints on every load and date
+  change. IMPORTANT — Bookings, Collection and Booking Value now render "–", NOT a number: verified
+  MobileDashboardResponse and convex/mobileDashboard.ts carry NO bookings/collections/booking-value fields
+  (computeVpFallback's own comment says collections have no clean company-wide source), so there is nothing
+  truthful to bind. On a management dashboard a fabricated ₹1.85 Cr is worse than a dash — it gets reported
+  upward. bindMarketingCard's `trend` is now nullable and hides the arrow+pill when null. STILL MOCK, flagged
+  not fixed: the 4 conversion KPIs (Interest Rate 55.0% etc, line ~2283) and TODAY'S FUNNEL rows, and the
+  ALL TEAMS pill (sheet with one no-op option — left untouched deliberately). Making the 3 empty tiles real
+  needs new backend aggregate fields + a deploy. assembleDebug + unit tests green; NOT visually verified
+  on-device (needs a vpDashboard.view login).
+
+- 2026-08-26 (main-chat) — Made the 3 dead dashboard tiles LIVE (bookings / booking value / collection),
+  under the explicit constraint "don't affect any other API, don't break working features".
+  BACKEND: new SELF-CONTAINED convex/mobileDashboardCommercials.ts → dailyTotals({date, viewerStaffId}).
+  Nothing else reads it, so no existing screen can shift behaviour. Reads are day-INDEXED (by_bookingDate,
+  by_collectionDate) + DAY_READ_CAP 1000 — a wide read on customerCollections (160k rows) is exactly what
+  502'd Collections. DEFINITIONS (deliberate, tested): bookings exclude draft + cancelled (not commitments /
+  not revenue); value = agreedAmount ?? bookingCost; collection = APPROVED rows only (pending is a claim,
+  rejected is money that never arrived) with pendingCollectionAmount returned separately.
+  GATE: admin OR vpDashboard.view / marketing.bookings.viewAll / postSales.collections.viewAll /
+  postSales.manage / accounts.verify → otherwise NULL, never zeros, so an unauthorised viewer sees "–"
+  not "the company booked nothing today". WIRED INTO /api/mobile/dashboard additively, inside its OWN
+  try/catch so a failure can't take down the calls/leads/visits/attendance numbers that already work.
+  TWO TRAPS HIT AND FIXED: (1) viewerStaffId is only resolved on the scope=... path, but the app calls
+  UNSCOPED — the fields would have been permanently null; now resolved in-block. (2) the handler is SHARED
+  with /api/telecaller/dashboard/stats (external consumers) — restricted the whole block to the unscoped
+  path so that endpoint gains neither fields nor the 2 extra table reads.
+  CODEGEN LAG: `npx convex codegen` fails (stale colorful-grouse token, see memory), so
+  convex/_generated/api.d.ts was hand-edited with the import + module-map line — real codegen reproduces it
+  identically at deploy.
+  APP: MobileDashboardResponse gains bookingCount/bookingValue/collectionAmount/pendingCollectionAmount as
+  NULLABLE (Gson gives null on an older backend → tiles keep "–"); new inrCompact() renders ₹18.60 L / ₹1.85
+  Cr. Tests: 6 new convex tests (incl. permission-denied → null, quiet day → 0 which must differ from no
+  access, malformed date rejected before any read); executiveDashboard + marketingInsights +
+  marketingVisitScope suites re-run green (23) to prove the shared handler is untouched; tsc clean;
+  assembleDebug + Android unit tests green. STILL MOCK, flagged: 4 conversion KPIs + TODAY'S FUNNEL rows +
+  the ALL TEAMS pill. NEEDS CONVEX DEPLOY — until then the tiles correctly show "–" rather than fake numbers.
+
+- 2026-08-26 (main-chat) — TODAY'S FUNNEL legend alignment. Two separate defects in item_funnel_row.xml:
+  (1) the label had layout_weight=1 inside a legend column that only gets ~160dp after the 150dp funnel
+  chart, so long labels broke MID-WORD — "Intere/sted", "Booking/s"; (2) the value was wrap_content, so
+  984 / 541 / 239 / 37 / 15 / 2 each ended at a different x and the number column read as ragged. FIXES:
+  label → maxLines=1 + ellipsize=end + hyphenationFrequency=none (API 23; minSdk is 24 so safe on every
+  supported device) and 13sp→12sp; value → minWidth 30dp + textAlignment=viewEnd so digits right-align yet
+  the box still grows past 4 digits; percent → 45dp fixed → wrap_content + minWidth 40dp + viewEnd; margins
+  tightened (label start 12→8, value end 16→8). ALSO reclaimed dead space: funnelChart column was 150dp while
+  its widest bar is 120dp, so 26dp was doing nothing — now 124dp, giving the labels ~94dp on a 360dp screen
+  (fits "Warm Leads" ~62dp comfortably). On a rare 320dp device it now ELLIPSISES instead of breaking
+  mid-word. GOTCHA: first attempt put an XML comment INSIDE the LinearLayout tag's attribute list →
+  packageDebugResources failed with 'Element type "LinearLayout" must be followed by attribute
+  specifications' — comments must precede the element. assembleDebug green (AAPT validates the resources).
+  NOT visually verified on-device (needs a vpDashboard.view login); widths reasoned from the layout.
+  REMINDER: the funnel's numbers are still the hardcoded 984/541/239/37/15/2 — alignment fixed, data still
+  mock, same for the 4 conversion KPIs.
+
+- 2026-08-26 (main-chat) — DEVICE LOCK: "same device shows already-locked error" + "device shows Unknown on
+  first login, real name on second". User's evidence was decisive: BOTH Security-tab cards showed the SAME
+  device id 8f0ca9c1750b7943 — so the id was never the problem; the METADATA was, and a second defect
+  explained the lockouts. TWO INDEPENDENT BUGS, both fixed:
+  (1) LOCKOUT — the two channels disagree exactly when Settings.Secure.ANDROID_ID reads null:
+      PushTokenManager sent `?: "unknown-device"` (a LITERAL string) while LoginDeviceInfo.capture() returns
+      NULL so login OMITS the id. Push-register therefore bound the account to a string login would never
+      send; enforceMobileDeviceBinding's "binding exists + no id → BLOCK" rule then refused the owner on
+      their own phone. Reset did NOT help because the next app launch re-bound "unknown-device".
+      isLegacyStaleBinding didn't catch it (it only matches lowercase dashed UUIDs).
+      FIX: PLACEHOLDER_DEVICE_IDS {unknown-device, unknown, null, undefined, 9774d56d682e549c} treated as NO
+      id — never bound (both channels), and an existing row holding one self-heals to the real id on the next
+      identified login via new isUnusableBinding = legacy-UUID OR placeholder. App side: PushTokenManager now
+      uses LoginDeviceInfo.capture() — ONE identity source for both channels — and sends "" when unidentifiable.
+      Lock strength unchanged and pinned by tests: genuine 2nd device still blocked, no-id login still blocked.
+  (2) "Unknown · android" + battery "—" — /api/push/register never forwarded deviceModel to
+      captureAndEnforceLoginDevice, so a row CREATED by that channel had no model; the next login matched the
+      id and patched the model in, which is exactly why logout→login "fixed" the name. Route now forwards it;
+      PushRegisterRequest carries deviceModel.
+  NO MIGRATION NEEDED: stuck rows repair themselves on next login.
+  iOS CHECKED, NOT CHANGED: its only placeholder ("mconnect-ios") is in ModernDialerBridge's dialer embed URL,
+  not the binding path.
+  Tests: 8 new (placeholder never binds, broken shared ANDROID_ID refused, stuck row heals, 2nd device still
+  blocked, no-id still blocked, model recorded, model backfilled) + existing binding test + auth.test.ts 10 —
+  all green. tsc clean, assembleDebug + Android unit tests green. NEEDS CONVEX DEPLOY for the backend half;
+  the app half needs a new APK.
+
+- 2026-08-26 (main-chat) — 13-item Android batch. DELIVERED 2 of 13, properly tested; the rest investigated
+  with concrete findings rather than half-implemented (user asked for careful work + real testing).
+  DONE #13 TASK MANAGER ASSIGNMENT FILTER: the 5 stat cards (My Tasks / My Team / Assigned By Me /
+  Extension Requests / Overdue) already COUNTED those groups but were completely inert — no way to actually
+  see just your assigned tasks. Cards are now tappable and act as a third filter axis alongside Status and
+  Module (new Assignment enum); tapping the active card clears it; active card highlighted + others dimmed so
+  the filter state is visible. matchesAssignment() reuses the SAME predicates renderStats() counts with, so a
+  card's number and the list it opens can never disagree. NO API CHANGE NEEDED — DailyTaskData already
+  carries assignedTo/assignedBy and session.staffId/teamIds were already loaded.
+  DONE #8 NO DUPLICATE CP WHILE ONE IS PENDING: new OpenCpVisitGuard (separate object, NOT buried in the
+  sheet, so it is unit-testable). Create flow now calls /api/marketing/clientPlaceVisits/my with the existing
+  server-side `search` param (phone) + limit 50, then blocks if any returned visit for that number is still
+  open. FAILS OPEN by design — a lookup error returns null and the create proceeds, because blocking CP
+  creation in the field on a transient network error is worse than an occasional duplicate. Deliberately
+  CLIENT-SIDE not a backend throw: CP visits are ALSO auto-spawned by backend automation and a mutation throw
+  would break that path (same lesson as the CP-telecaller backend throw that broke 3 tests earlier).
+  Phone matched on last-10-digits so +91/spaces/leading-0 all compare equal; all 7 backend spellings of
+  in-progress accepted. 9 unit tests green.
+  INVESTIGATED, NOT DONE — findings for the next pass:
+   #5/#9 GeoTrack by IAM: app ALREADY gates GeoTrackLiveFragment on `attendance.liveTracking`. The ask is
+     probably web-side or finer scoping — needs product clarity before coding.
+   #12 Super-admin notifications: NotificationsFragment already has a category filter system; a "separate
+     section" needs a backend-tagged category first, not an app-only change.
+   #2 (GM dashboard) / #3 (fines IAM) / #11 (BDO 5-CP/3-CP automation): backend IAM taxonomy + rules, and
+     blocked on the Convex deploy regardless.
+   #1 project location in GeoTrack, #6 QR after confirm, #7 SV confirm completion, #9 SV GM dropdown by
+     template, #10 outstation CP across days: need product clarity or are web-side.
+  assembleDebug + FULL Android unit suite green.
+
+- 2026-08-26 (main-chat) — "do the rest also" (remaining 11 of the 13-item batch). SHIPPED 5 more, and two of
+  them turned out to be fabricated-data bugs rather than missing features:
+  #1 GEOTRACK PROJECT LOCATION — ROOT CAUSE FOUND: projects.liveTrackable INVENTED coordinates for any
+    project with no stored lat/lng — `13.0827 + ((idx % 10) * 0.015 - 0.07)`, a synthetic grid around Chennai
+    spaced BY LIST INDEX. Indistinguishable from a real pin, so selecting such a project flew the map to a
+    place the project is not. Now returns null + hasCoordinates. CHECKED BOTH CONSUMERS: geotrack/live
+    already type-guarded before recentring (only its param TYPE needed widening to accept null);
+    staff-day-tracking-map DID push markers blindly → added a skip. Missing pin > fake pin.
+  #2 DASHBOARD IAM FOR GM — REAL GAP: `vpDashboard.view` gated FIVE backend routes but was absent from
+    lib/iam-model.ts, so it could not be ticked on the IAM screen AT ALL. The apps fall back to a VP/GM
+    DESIGNATION regex, which is why some managers had the dashboard and a differently-titled GM could not be
+    given it. Added to PERMISSIONS + a "Company Dashboard" group + a reports.companyDashboard sub-module.
+    BONUS: the taxonomy test was ALREADY FAILING on two orphans of the same class — staff.resetDeviceBinding
+    (the Reset Device button we just built!) and attendance.markManual — both also ungrantable. Adopted both;
+    lib/iam-taxonomy.test.ts + convex/iam.test.ts now 15/15 (were 2 failing before I touched anything).
+  #3 FINES IAM — ALREADY EXISTS, no work needed: fines.manage ("Create/edit staff fines and deductions") is
+    in the taxonomy, in the "Fines & Deductions" group and the hr.fines module. Verified rather than
+    duplicated.
+  #4 GM/AVP EDIT UNAPPROVED ATTENDANCE TIMES — the app's Time Correction button was a STUB that toasted
+    "Time Correction clicked" and dismissed. Backend already had staffAttendance.correctPunchTimes (gated on
+    attendance.correctPunchTimes, and refusing self-correction) + full web UI, but NO mobile route. Added
+    POST /api/hr/attendance/correct-punch-times (adds no permission logic of its own — the mutation keeps
+    owning the rule) + Android time pickers (either side skippable, since forgetting to clock OUT is the
+    common case) + reason prompt; button hidden unless the viewer holds the permission. Times sent as ISO
+    instants built from the row's own date, matching what the web sends.
+  #6 SV CLIENT QR — had NO status gate whatsoever. Schema has confirmationStatus pending→confirmed ("fixed
+    first, then CP confirmation moves them to confirmed"), so the QR is now hidden while pending. Rows with
+    NO confirmationStatus (legacy) still show it, so nothing working stops working. This lives on the WEB
+    detail page — the app SCANS the QR, it does not display it.
+  GOTCHA WORTH REMEMBERING: adding a method to ReviewAttendanceRequestBottomSheet.OnActionClickListener
+  compiled "successfully" TWICE because Kotlin INCREMENTAL compilation never recompiled the implementing
+  fragment. Only `--rerun-tasks` exposed "Class '<anonymous>' is not abstract and does not implement abstract
+  member". ALWAYS force a rerun after changing an interface.
+  NOT DONE, and why — these need product answers, not code:
+   #5 GeoTrack by IAM: app already gates on attendance.liveTracking; needs the intended scoping rule.
+   #7 "complete the process once SV confirms", #9 SV dropdown GM-by-template: no "template" concept exists on
+     the SV pages — cannot locate what it refers to.
+   #10 outstation CP across days: "outstation" exists ONLY as outstationCharge (fleet billing); there is no
+     outstation VISIT concept to hang this on.
+   #11 BDO auto-attendance (5 CP/SV = full, 3 CP = half): NO visit-based attendance automation exists at all.
+     This WRITES ATTENDANCE, so guessing is unsafe — needs: which designations count as BDO, what counts as a
+     completed visit, whether it overrides a real punch or only fills a blank day, and when it runs.
+   #12 super-admin notifications: categories are derived by KEYWORD matching on text; a real section needs a
+     backend-tagged audience. A keyword guess would misfile notifications.
+  VERIFIED: full convex suite 1059 passed / 22 failed — IDENTICAL to the stashed baseline, so none of the 22
+  are mine. tsc clean. Android assembleDebug + unit tests green.
+
+- 2026-08-26 (main-chat) — SV-confirmation CP: removed the "Others" outcome. WHERE IT LEAKED IN:
+  CompleteCpVisitBottomSheet gated Others on `svStyle || cpTypeSupportsOtherOutcome(cpType)`, and
+  `svStyle = isSiteVisitMode || cpType == "sv_cum_cp"` — so sv_cum_cp reached Others through the SHARED
+  "SV-style" branch even though CP_TYPES_WITH_OTHER_OUTCOME already excluded it (the existing test even
+  asserted `assertFalse(cpTypeSupportsOtherOutcome("sv_cum_cp"))`, so the policy and the UI disagreed).
+  Now `shouldOfferOtherOutcome(isPureSiteVisit, cpType)` — a new function in CpOutcomePolicy.kt so the
+  decision is unit-testable instead of buried in a 6000-line sheet. PURE SV KEEPS Others (only
+  sv_cum_cp was asked for); every other CP type still follows the approved list. sv_cum_cp already closes
+  via Booking / Postpone / Not Interested / Cancel, which cover every real ending, so Others only let a
+  confirmation visit close without recording what happened. CHECKED AND UNCHANGED: TripNavigationFragment's
+  three Others gates use cpTypeSupportsOtherOutcome ALONE, which never included sv_cum_cp — no edit needed.
+  WEB: no CP-completion outcome UI exists (completion is a field-staff mobile flow), so nothing to mirror.
+  CpOutcomePolicyTest 4/4; assembleDebug + full Android unit suite green.
+
+- 2026-08-26 (main-chat) — CP APPROVAL: own tab + detail view + the wrong-GM scoping bug (WEB).
+  SCOPING ROOT CAUSE (the important half): the visit stamps completionApproval.gmStaffId at COMPLETION time
+  via resolveHandoffManagerStaffId, which walks the staff's reportingTo chain looking for a GM designation —
+  but when that walk finds nothing it falls back to
+  `allActive.find(s => isGmDesignationText(s.designation) && deptOk(s))` = THE FIRST GM IN THE DEPARTMENT,
+  with a console.warn literally saying "Wire up reportingTo to silence this". That is exactly how GOVARADHAN
+  ended up approving staff who don't report to him. FIX in listPendingCpCompletionApprovals: the stamp still
+  decides ownership, but the row must ALSO have its assignedStaffId inside the approver's reporting subtree
+  (getReportingTeamStaffIds). SUPER-ADMIN CATCH-ALL kept deliberately — otherwise a completion whose
+  reportingTo was never wired becomes invisible to EVERYONE and unapprovable forever. 5 tests: direct report
+  shown / stranger hidden / indirect (2 levels) counted / super-admin still sees unwired rows / a row stamped
+  for another GM never appears even for the staff's real manager.
+  UI: replaced the amber banner (features/marketing/components/cp-approval-queue.tsx — DELETED, was
+  unreferenced afterwards) with a third tab beside List/Calendar carrying a pending-count badge, rendering a
+  table styled like the CP list. Row click → dialog with started/arrived/completed times, trip duration,
+  start + end + client-place coordinates (each a Maps link), distance out of geofence, staff reason, arrival
+  proof photo, and the DAY'S TRAVEL PATH via the existing StaffDayTrackingMap (staffId + scheduledDate) —
+  reused rather than rebuilt. Query extended with startedAt/completedAt/arrivalVerifiedAt/start+end/arrival/
+  place lat-lng + scheduledTime + fieldVisitId to feed it.
+  VERIFICATION LIMIT — BE HONEST: could NOT view it in a browser. `pnpm dev` fails before rendering anything
+  on a PRE-EXISTING missing dependency: app/globals.css does `@plugin "../node_modules/@tailwindcss/typography"`
+  and node_modules/@tailwindcss/ contains only `postcss` — the package is in package.json but not installed
+  (same class as the tiptap tsc errors). Nothing to do with these changes. So: tsc clean + 20 tests green, but
+  the tab has NOT been seen rendered. Run `pnpm install` to restore the dev server before trusting the visuals.
+
+- 2026-08-26 (main-chat) — CP approval now arrives as a TASK, and the task opens the approval screen on BOTH
+  platforms. BACKEND: when a CP completion is held (status → pending_gm_approval) we already pinged the GM via
+  notifyCpApprovalRequested; that is missable, so it now ALSO raises a dailyTask through the existing
+  ensureDailyTaskForSource pattern (same one ensureHandoffDailyTask uses) — assignedTo = the resolved
+  approver, assignedBy = the field staff who completed out of geofence, deadline = the visit's scheduled date,
+  actionUrl = `/marketing/cp-visits?view=approvals&cp=<id>`. New shared key
+  CP_APPROVAL_TASK_SOURCE = "cp_completion_approval" (sourceReferenceType is a free string in the schema, so
+  no migration). Both approveCpCompletion AND rejectCpCompletion call markDailyTasksForSourceCompleted —
+  rejecting is a decision too, and leaving the task open would make it go overdue in the approver's list.
+  Added resolveCpVisitDisplayName (client → lead → place → mobile) for the task title.
+  WEB: cp-visits page reads ?view= and switches to the approvals tab on mount, so the task lands on the queue
+  not the visits list. MOBILE: TaskNavRouter handles the source FIRST, before the fragment table, because the
+  approval UI is a BottomSheetDialogFragment (CpApprovalQueueBottomSheet.show) and cannot go through
+  pushDetail — without that branch the task would have fallen through to the "open this in the web app"
+  dialog. Constant duplicated in TaskNavRouter with a comment pointing at the Convex one; keep them in step.
+  TEST HONESTY: the new 6th test pins the task CONTRACT (assignedTo = approver, actionUrl carries
+  view=approvals + the id, sourceReferenceType is the exact string the mobile router matches) by seeding the
+  task — it does NOT drive completeCpVisit end-to-end, which would need fieldVisit + OTP proof + geofence
+  fixtures. So the contract between backend and both clients is covered; the creation call site is not.
+  VERIFIED: 6/6 new, marketing suites 17/17, cpVisit/clientPlaceVisit 12 pass + 1 fail that is IDENTICAL
+  stashed (the known pre-existing cpVisitAudit failure). tsc clean. Android assembleDebug + unit tests green.
+  STILL UNSEEN IN A BROWSER — the dev server is down on the pre-existing missing @tailwindcss/typography dep.
+
+- 2026-08-27 (main-chat) — "higher staff get notifications meant for their reporting staff". ROOT CAUSE was a
+  single function: dailyTasks.getOverdueEscalationRecipientIds built its recipient set from the assignee's
+  reportingTo + EVERY staffReportingOfficers link + EVERY active super-admin, then did
+  `recipientIds.delete(String(assignedStaff._id))` — i.e. it deliberately EXCLUDED the assignee. So a manager's
+  inbox filled with their whole team's overdue tasks while the one person who could actually do the work was
+  the only one never told. (Checked the rest first: notifyTaskAssigned, task-status-update,
+  task-extension-*, reassign — all already target the assignee only; listPendingRemindersForStaff and
+  listForTaskManager are correctly scoped by assignedTo. This was the sole offender.)
+  FIX: recipients = [the assignee]. Message switched to second person ("Your task ... passed the deadline"),
+  since the old third-person wording only made sense when it was going to someone else. Managers still see
+  team tasks in the Task Manager — the surface built for that — they just aren't pinged per task.
+  BONUS: deleted the `staff.take(2000)` read that existed ONLY to collect super-admin ids for the CC. That
+  mutation (syncOverdueTaskEscalationsForStaff) runs on APP OPEN, so this is a real read-budget saving on the
+  deployment that has been 502-ing.
+  EXISTING TEST ADJUSTED, NOT DELETED: dailyTasks.test.ts "overdue escalation uses the task reference index
+  and does not duplicate older notifications" seeded its pre-existing notification for the ADMIN (who was a
+  recipient under the old rule) and asserted created:0. Its point is DEDUP, which still holds — retargeted the
+  fixture + assertion to the assignee. My own new test independently proves dedup (second sync creates 0).
+  NEW convex/taskOverdueRecipients.test.ts, 4 tests: only the assignee is notified (not manager, not
+  super-admin), a linked reporting officer is not notified either, no duplicate on repeat app opens, and a
+  task still inside its deadline notifies nobody.
+  VERIFIED: full convex suite 1083 passed / 21 failed vs a stashed baseline of 1080 / 24 — the 3-test
+  difference is exactly my new tests failing against the old code, so ZERO regressions and the 21 are
+  pre-existing. tsc clean. NEEDS CONVEX DEPLOY.
+
+- 2026-08-27 (main-chat) — GEOTRACK "offline on a stable network" + timeline gaps with no explanation.
+  BUG 1, THE HEADLINE — convex/geotrack/monitoring.ts THRESHOLD_MS had DRIFTED TO 2 MINUTES while the comment
+  directly above it explains at length that 5 minutes caused "false-positive cascades on every Android doze
+  cycle (OPPO / Realme / Xiaomi devices suspend background coroutines aggressively)" and that "15 minutes is
+  the sweet spot". The code was tighter than the value its own comment REJECTS. Every doze on the handsets
+  field staff actually carry → HEARTBEAT_MISSED tamper event + isOnline=false + trackingSession patched. That
+  is the offline-while-online report AND the timeline break at that exact point. Restored to 15 min.
+  BUG 2 — the HEARTBEAT_MISSED event recorded only {lastSeen, gapMs, lastBatteryPct}: NO cause. Yet
+  geoHeartbeats carries airplaneMode/locationEnabled and geoLiveStatus carries isAirplaneModeOn/
+  isNetworkAvailable/isLocationEnabled, and the schema comment literally says they exist "to attribute a
+  heartbeat gap to flight mode / location-off tampering rather than a bare heartbeat missed" — nothing ever
+  read them. New attributeHeartbeatGap() checks EXPLICIT tamper events first, most-specific first
+  (DEVICE_SHUTDOWN > DEVICE_REBOOT > AIRPLANE_MODE_ON > LOCATION_DISABLED > GPS_DISABLED > PERMISSION_* >
+  APP_FORCE_KILLED > NETWORK_OFFLINE — a phone switched off explains the gap better than the network drop that
+  necessarily followed), then the last known flags, then battery <=5%, then honestly returns UNEXPLAINED
+  rather than asserting "doze". Stored as reasonCode (filter/colour) + reason (human sentence) + the three
+  last-known flags.
+  iOS PARITY (standing rule: mobile changes = BOTH platforms) — GeoTrackAPIService.heartbeat was sending
+  `airplaneMode: nil, locationEnabled: nil` HARDCODED, so every iPhone gap was unexplainable by construction.
+  Now sends real location state via authorizationStatus (NOT locationServicesEnabled(), which blocks the
+  thread and is deprecated on the main actor). airplaneMode DELIBERATELY stays nil: iOS has NO public
+  flight-mode API, and inferring it from "no interfaces" would mislabel a phone merely out of signal —
+  GeoTrackTamperMonitor already infers it via NWPathMonitor and raises AIRPLANE_MODE_ON, which the new
+  attribution prefers over the fallback flags anyway.
+  WHY IT FAILS ON SOME DEVICES AND NOT OTHERS: aggressive OEM battery managers (OPPO ColorOS / Realme /
+  Xiaomi MIUI / Vivo FuntouchOS / Samsung "Deep sleeping apps") suspend background work far harder than stock
+  Android, so those handsets blew a 2-minute budget while a Pixel/stock device would not — same network, same
+  app, different outcome.
+  TESTS: new convex/geotrackHeartbeatGap.test.ts, 8 passing — 6-min silence does NOT go offline (the
+  complaint), 40-min silence still IS caught (loosening must not blind us), flight mode / location-off /
+  battery named, an explicit DEVICE_SHUTDOWN beats a NETWORK_OFFLINE flag, a healthy-looking gap says
+  UNEXPLAINED, and non-tracking staff are untouched. tsc clean. Full convex suite: 9 failing FILES, the same
+  pre-existing set (accountsLedger, aiPresalesCustomer, autoDialRequests, cpVisitAudit, projectSimulation,
+  siteVisitFollowupOutcome, siteVisitManagementIssues, telecallerMissions, travelDeskAgencyStaffAccess) —
+  NONE of which I touched; autoDialRequests fails 11/14 identically with and without my changes, and the
+  exact failed-count wobbles run to run in those suites. NEEDS CONVEX DEPLOY + iOS Mac build.
+
+- 2026-08-27 (main-chat) — CP address: (a) pincode edits didn't refresh the other fields, (b) how a CP exists
+  with no pincode.
+  (a) components/unified-address-fields.tsx — the India Post lookup filled district/locality ONLY when they
+  were blank (`current.city.trim() ? current.city : district`), while state WAS corrected unconditionally.
+  Blank-only is correct on FIRST load (don't clobber text saved with the record) but wrong when the user
+  EDITS the pincode — they are saying the place changed. Result was the screenshot: pincode 600116 (Chennai),
+  District "India", Address Line 2 "Chittorgarh", coords 24.86/74.61 (Rajasthan) all on screen together.
+  FIX: `isPincodeEdit = /^\d{6}$/.test(lastFetchedPinRef.current)` — i.e. we had already resolved a DIFFERENT
+  valid pin, so this is an edit → overwrite district + locality; first resolution keeps blank-only behaviour.
+  (b) WHY A PINCODE-LESS CP IS POSSIBLE — it was never created through a form. `pincode` is
+  `v.optional(v.string())` in EVERY backend path (clientPlaces.create/update, clientPlaceVisits args), so the
+  required-asterisk lives only in the two manual forms. CPs raised from a LEAD go through
+  ensureClientPlaceForLead, which inserted a clientPlaces row with `address` = free-text
+  locationPreferred/clientCity and NO pincode / district / doorNo / state at all — even though the lead's
+  `manualProfile` object carries exactly pincode/district/state/doorNo/landmark. Three internal auto-spawns
+  (spawnBookingCpFromSource, spawnSvCumCpFromSiteVisit, spawnNewClientCpFromAster) plus legacyImport and
+  hr/fieldVisits also create places outside any form. FIX: carry the lead's structured address into the place.
+  DELIBERATELY NOT A THROW — CP visits are auto-spawned by backend automation and rejecting an address-less
+  lead there would break that path (same lesson as the CP-telecaller throw that broke 3 tests). Note
+  spawnNewClientCpFromAster ALREADY gates on a resolvable address and skips cleanly, so it was never the
+  culprit.
+  TESTS: new convex/cpPlaceAddressCarry.test.ts, 3 passing — profile pincode/district/state/doorNo reach the
+  place, a profile-less lead STILL yields a place (automation must not break) with city falling back to
+  clientCity, and whitespace-only profile values are stored as undefined rather than masquerading as filled.
+  tsc clean; convex/marketing suites 47/47. NEEDS CONVEX DEPLOY (b) + web deploy (a).
+
+- 2026-08-27 (main-chat) — "unrelated tasks showing to Dhivagar (super-admin dev); only his own should show".
+  Evidence was decisive: Task Manager read My Tasks 0 / My Team Tasks 200, yet the Home banner said
+  "You have 82 pending tasks".
+  ROOT CAUSE — MainActivity.scopeToOwnTasks() opened with
+  `val isSuper = session.isAdmin || role == "super-admin"; if (isSuper) return tasks`. The Home nudge is a
+  PERSONAL reminder, and the exemption handed a super-admin EVERY staff member's open tasks. Being an admin
+  does not mean you personally owe 82 CP visits. Exemption deleted — everyone is scoped to
+  `assignedTo == me`. Covers both call sites (cached paint + live fetch).
+  MADE TESTABLE: extracted to ui/tasks/PendingTaskScope.kt (ownTasks / openOnly) instead of leaving the rule
+  buried in a 3000-line Activity. 5 tests: only my tasks counted, an admin gets NOTHING extra (the function
+  takes no role at all now — there is no branch left to regress), an unknown/blank staffId yields NOTHING
+  rather than everything (fail CLOSED — failing open would leak the company's tasks to an unidentifiable
+  session), an unassigned task is never "mine", and only pending/in-progress count as a reminder.
+  TASK MANAGER DEFAULT → MY TASKS: the screen opened on the whole visible pool, which for an admin/manager is
+  hundreds of other people's rows. Now opens on the My Tasks card (the assignment filter added earlier);
+  other cards are one tap away.
+  TASK → REAL SCREEN: a client_place_visit task routed to CpVisitsFragment, i.e. a LIST of hundreds the user
+  then had to search. Added CpVisitsFragment.newInstance(focusCpVisitId) + consumeFocusVisit(), and
+  TaskNavRouter now passes task.sourceReferenceId, so the task opens THAT visit's TripNavigationFragment
+  (start/route/complete). Falls back to the plain list when the visit isn't in the loaded scope — better than
+  erroring about a row they can still scroll to.
+  BUG I INTRODUCED AND CAUGHT: first cut gave focusCpVisitId a getter falling back to arguments, so after
+  consuming it the argument re-supplied the id and the trip re-opened on EVERY list reload — exactly the
+  bounce my own comment warned about. Fixed by reading the arg ONCE at onViewCreated (focusArgApplied) and
+  removing it from the Bundle on consume.
+  assembleDebug + full Android unit suite green. iOS: this is Android-only UI (the nudge, task manager and
+  router have no iOS counterpart yet) — flagged, not silently skipped.
+
+- 2026-08-27 (main-chat) — High-priority notifications: peach rows + phone tray. BOTH PLATFORMS (standing rule).
+  RULE (new, shared + testable): ui/notifications/NotificationPriority.kt and the Swift mirror
+  Services/NotificationPriority.swift. Actionable = something the staff must DO or DECIDE. Matches on TYPE
+  first (backend-set, stable): task-, approval, approve, leave-, permission-, attendance-, cp-approval, wfh-.
+  DELIBERATE EXCLUSIONS: task-status-update and task-extension-reviewed match a marker but arrive AFTER the
+  work is done — nothing left to act on, so they must not buzz. And a RECOGNISED type is never promoted by
+  its title (a "chat-message" titled "Approval needed" stays a chat); the title fallback applies ONLY to
+  legacy rows with no type at all.
+  ANDROID UI: 4 new colour tokens (notif_priority_unread #FFEDD5 / _read #FFF7ED + dark counterparts
+  #3D2A17/#2E2116 — dark mode needed its own pair or the peach would glow). Unread keeps the STRONGER tint so
+  the read/unread distinction survives inside the peach family; non-priority rows are untouched.
+  ANDROID TRAY: new notifications/PriorityInboxNotification.kt on its own "Approvals & Tasks" channel
+  (IMPORTANCE_HIGH). NOT ongoing — unlike TasksNotification this is news, not a standing state, so it can be
+  dismissed. Dedup by id in SharedPreferences (bounded to 200) so the same approval doesn't re-post on every
+  poll — re-posting is how people learn to swipe the tray without reading. Marks EVERYTHING currently
+  actionable as seen, not just what it posted, so an item read on another device never re-announces here.
+  Guards POST_NOTIFICATIONS on API 33+. Hooked into the existing getNotifications fetch — no backend deploy
+  needed for the tray.
+  iOS: same rule file + peach row tint in Views/Notifications/NotificationsListView.swift. NO tray work on
+  iOS — its pushes are server-driven (APNs), so a local re-raise would duplicate what the backend already
+  sends; flagged rather than half-built.
+  TESTS: NotificationPriorityTest, 7 passing — tasks/approvals in, chats/announcements out, already-decided
+  types out, a recognised type never promoted by title, legacy no-type rows fall back to title, case/padding
+  ignored, and only UNREAD actionable items reach the tray.
+  assembleDebug + full Android unit suite green. iOS NOT COMPILED (no Swift toolchain) — brace-balanced,
+  needs a Mac build.
+  NOTE FOR THE USER: the screenshot's "SOUNDARARAJAN.S's task ... passed the deadline" rows are the OLD
+  third-person overdue notifications that shouldn't reach him at all — that's the assignee-scoping fix from
+  earlier today, still awaiting the Convex deploy.
+
+- 2026-08-27 (main-chat) — SVs visible on MOBILE but not on WEB for a GM (KAMALAKANNAN C, all tabs 0).
+  ROOT CAUSE — the two platforms ask DIFFERENT questions:
+    MOBILE (siteVisits.listForViewerAsMobileVisits) fans out over the slots the viewer PERSONALLY occupies:
+      telecallerId, inchargeStaffId, convertedByStaffId → finds the GM's visits.
+    WEB (listPending/list/stats → resolveSiteVisitViewerScope) for a `marketing.siteVisits.view`-only holder
+      returned `{ staffIds: {me}, includeManagementSlots: FALSE }`, and siteVisitDirectlyInvolvesStaff bails
+      at `if (!scope.includeManagementSlots) return false` BEFORE it ever checks inchargeStaffId / gmStaffId /
+      avpStaffId / hodStaffId / seniorManagerStaffId. A GM is never in the OWNER slots (telecaller / bdo /
+      assignedTelecaller / convertedBy), so the web matched nothing → every tab 0.
+  FIX: includeManagementSlots: true on the view-only branch. SAFE BY CONSTRUCTION — the slot check is
+  evaluated against `staffIds`, which on that branch contains ONLY the requester, so this can add nothing
+  except visits the person is themselves named on. It cannot widen anyone to a colleague's visits, and a test
+  pins exactly that (another manager's visit stays invisible).
+  NOTE: getPrimaryMarketingReportingTeamStaffIds already includes the root staff, so the viewTeam branch was
+  never the problem — I checked before changing it.
+  TESTS: new convex/siteVisitManagementSlotScope.test.ts, 4 passing — GM sees the visit they are INCHARGE on
+  (the reported bug), GM sees the visit they are named GM on, a COLLEAGUE's visit stays invisible (no
+  widening), and the owner-slot case is unchanged. Targeted at listPending because that is what the web
+  "Fixed" tab actually calls — confirmed in site-visits-list-page.tsx rather than assumed.
+  REGRESSION CHECK (user asked explicitly): resolveSiteVisitViewerScope is shared by 4 call sites, so ran the
+  full convex suite — 9 failed FILES / 21 failed tests, IDENTICAL to the known pre-existing set;
+  siteVisitManagementIssues' "Confirm SV is rejected when the caller is not the assigned GM" fails 1/4
+  with AND without my change (verified by stashing). marketingVisitScope 12/12 green — that suite guards SV
+  leakage to a source-CP owner, the exact class this change could have broken. tsc clean.
+  NEEDS CONVEX DEPLOY.
+
+- 2026-08-27 (main-chat) — CP visibility by hierarchy + task notifications by reporting line. (Request relayed
+  from the team WhatsApp; user confirmed CONFIG is another dev's job and asked for the CODE side only.)
+  (1) CP LEAK — REAL CODE HOLE FOUND on the MOBILE route /api/marketing/clientPlaceVisits/my:
+      `canViewAllCp = callerHasAnyPermission([... "marketing.cpVisits.viewAll", "vpDashboard.view"])`.
+      vpDashboard.view was there so the Home dashboard TILE could count all of today's CPs — but the CP LIST
+      SCREEN calls the same endpoint, so any GM holding it browsed EVERY CP in the company. Counting and
+      browsing are different needs sharing one flag. Removed vpDashboard.view; company-wide now needs
+      marketing.cpVisits.viewAll (or admin) and everyone else falls through to requesterStaffId →
+      resolveCpVisitViewerScope → the SAME own/team hierarchy the web uses. Dashboard unaffected:
+      /api/mobile/dashboard aggregates server-side under its own gate; only the rarely-used client-side
+      fallback now counts a scoped pool for a VP without cpVisits.viewAll (noted, acceptable).
+      ALSO NOTED: the Android app sends `scope=all` on this endpoint but the ROUTE NEVER READS IT — the param
+      is decorative, permissions decide everything. Left as-is (reading it would change old-APK behaviour);
+      worth cleaning up later.
+      VERIFIED NO OTHER HOLE: all four CP list paths (list, listMobileCompact, listPaginated, stats) already
+      call the scope resolver — checked before concluding.
+  (2) TASK NOTIFICATIONS — ADJUSTED TODAY'S EARLIER CHANGE per the user's clarification. This morning I cut
+      recipients to the assignee ALONE (the complaint was unrelated managers being spammed). The user now
+      wants managers to see THEIR OWN team's overdue work, just not other people's. New rule: assignee +
+      reportingTo + explicitly linked staffReportingOfficers. Still NOT super-admins, still NOT the
+      department-wide fallback that caused the original noise. Message wording is now per-recipient —
+      "Your task ..." to the assignee, "<name>'s task ..." to the manager (a single wording is wrong for one
+      of them).
+  TESTS: taskOverdueRecipients 5 passing (rewritten to the new rule: assignee+manager notified, super-admin
+  NOT, linked officer included, no duplicates on repeat opens, and a NEW case pinning that an UNRELATED
+  manager is never notified — the actual complaint). Existing dailyTasks dedup test needed BOTH recipients
+  pre-seeded now that the manager is back; fixture updated faithfully, assertion unchanged. 6/6.
+  REGRESSION: full convex suite 9 failed FILES / 21 tests — IDENTICAL to the known pre-existing baseline.
+  tsc clean. NEEDS CONVEX DEPLOY. No app-side change was required for either fix — both are backend scoping,
+  so mobile AND web pick them up from the same deploy.
+
+- 2026-08-27 (main-chat) — Trip Details didn't show WHO the CP is assigned to (a GM opened a trip and couldn't
+  tell whose visit it was). BOTH PLATFORMS.
+  ROOT CAUSE: TodayVisit already HAS `bdoName` ("the field officer ASSIGNED to this visit"), but
+  CpVisitsFragment.toCpListVisitOrNull() never mapped it — it set lmoName (telecaller) only, even though
+  CpVisitDetail.assignedStaff was right there. So the trip screen had no name to show for CP rows.
+  ANDROID: mapper now sets bdoName = assignedStaff.name; new rowTripFieldStaff / tvTripFieldStaff row in
+  fragment_trip_navigation.xml mirroring the existing LMO row; TripNavigationFragment.forVisit gains
+  fieldStaffName (defaulted null) and bindTripMeta renders it, HIDING the row when unknown rather than showing
+  a dash — an empty labelled row is worse than no row. Wired at ALL THREE entry points (CpVisitsFragment,
+  HomeFragment, MyTripsFragment) — checked for callers rather than assuming one.
+  iOS: TripNavigationView gains `fieldStaffName` (optional, so the other 4+ call sites keep compiling and just
+  hide the row) + a "Field Staff" tripMetric above LMO; wired at both CpVisitsView call sites from
+  visit.bdoName, which the iOS model already decodes. ALSO fixed the vertical divider — its height was
+  hardcoded for at most 3 rows, so adding a 4th made it stop short; now derived from whichever column is
+  taller.
+  MISTAKE CAUGHT: my scripted edit's second pattern matched inside the text the first had just inserted,
+  producing a DUPLICATE fieldStaffName line at the wrong indent in CpVisitsView. Spotted by grepping the
+  result instead of trusting the replace count; removed.
+  Also re-ran the Android compile with --rerun-tasks (incremental compilation hid a signature break earlier
+  this session) — clean. assembleDebug + full unit suite green. iOS NOT COMPILED (no Swift toolchain);
+  brace/paren balanced, needs a Mac build.
+
+- 2026-08-27 (main-chat) — NEW FEATURE: "client won't give the OTP" → Request GM.
+  BACKEND: new convex/marketing/cpOtpAssist.ts → requestOtpAssist mutation + POST
+  /api/marketing/cp-visits/otp-assist. Gathers client name (client → lead → place → mobile), staff name, IST
+  timestamp, CP location, where the trip ENDED (args.lat/lng → arrivalLat/Lng → endLat/Lng), the distance
+  between those two points (haversineMeters against the place, falling back to the stored
+  arrivalDistanceFromPlaceMeters), the optional remark, and THE OTP — read from
+  fieldVisits.arrivalOtpAssistCode, which already existed for exactly this purpose. Delivered over the chat
+  module: chat.conversations.findOrCreateDm(staff, gm) then chat.messages.send.
+  GUARDS: only the ASSIGNED staff may ask (not any viewer); refuses when no OTP has been sent yet ("send the
+  OTP first"), and when no reporting manager resolves (points at HR rather than failing silently). The GM is
+  the SAME approver resolveHandoffManagerStaffId picks for out-of-geofence completions, so a staff member's
+  requests all land with one manager. The code goes ONLY to that approver, never echoed back to the requester.
+  AUDIT: new clientPlaceVisits.otpAssistRequest object (requestedAt/by, gmStaffId, lat/lng, distance, remark)
+  so the ask survives outside a chat thread. VERIFIED the field landed in clientPlaceVisits — completionApproval
+  appears in more than one table, so I checked the enclosing table by line number rather than trusting the regex.
+  BOLD: the spec asked for the OTP in bold. Web chat renders markdown (react-markdown) so `**` works there, but
+  ANDROID CHAT HAS NO MARKDOWN RENDERER — it would have shown literal asterisks on the GM's phone. Added
+  ui/chat/ChatTextFormat: handles ONLY `**bold**`, returns the input untouched when there is no matched pair,
+  applied to both bubble variants. Benefits every markdown message written from web, not just this one.
+  TEST-DESIGN NOTE: first version built the span inline and 3 tests died on "SpannableStringBuilder not
+  mocked". Split the pure parsing (parse → text + bold ranges) from the span application so the logic that can
+  actually be wrong is what's under test. 7 tests green, incl. "2**3" and a trailing "**" staying literal.
+  ANDROID UI: "Client not sharing the OTP? Request GM" link BELOW the OTP entry (deliberately not an equal
+  first choice), hidden when the sheet has no cpVisitId; optional-remark dialog; cpVisitId threaded from both
+  TripNavigationFragment launch sites. Re-ran with --rerun-tasks since incremental compilation has masked a
+  signature break before. assembleDebug + full unit suite green; tsc clean; marketing+chat suites 38/38.
+  CODEGEN LAG: hand-registered marketing/cpOtpAssist in _generated/api.d.ts (npx convex codegen still fails on
+  the stale token) — real codegen reproduces it at deploy.
+  NOT DONE — iOS: its arrival-OTP sheet needs the same button. Flagged, not silently skipped; the backend
+  route is platform-neutral so iOS only needs the UI.
+  NEEDS CONVEX DEPLOY + a new APK.
+
+- 2026-08-27 (main-chat) — Logged-out phone still showed tracking + task notifications. BOTH PLATFORMS.
+  ANDROID ROOT CAUSE: LogoutBottomSheet cleared session + LocalCache + OfflineHttpCache and NOTHING ELSE —
+  it never stopped GeoTrackService (whose ONGOING foreground notification cannot be dismissed by
+  cancelAll(), only by stopping the service), never cancelled TasksNotification / chat / permission-alert
+  notifications, and never cancelled the WorkManager jobs that would happily re-post them. The FORCED
+  sign-out path (MainActivity's SessionInvalidationBus 401 handler) did even less — just clearSession().
+  FIX: new auth/SessionTeardown.run(context) — stops GeoTrackService, NotificationManagerCompat.cancelAll()
+  (a catch-all rather than a list, so a channel added later can't be forgotten) + TasksNotification.clear()
+  for its own state, cancels the three unique works (tracking_check_periodic, geotrack_flush_leftovers,
+  attendance-punch-sync), then clears LocalCache + OfflineHttpCache. EVERY step in its own runCatching — a
+  teardown that throws halfway leaves the app worse than before it ran. Wired into BOTH paths.
+  SECOND HALF — a push landing AFTER logout would put notifications straight back. The deliberate logout
+  already unregisters the push token, but that is a network call that can fail, never run (phone offline at
+  logout), or be impossible (expired session = invalid token). Added a guard at the top of
+  MconnectFirebaseMessagingService.onMessageReceived: no signed-in session → drop the push. So a stale push
+  can never resurrect a notification regardless of what happened to the token.
+  iOS: already stopped GeoTrack, unregistered the token and cleared LocalCache on BOTH logout() and
+  expireSession() — better shape than Android — but never cleared DELIVERED notifications, which sit in
+  Notification Center after sign-out. Added clearDeliveredNotifications() (removeAllDelivered +
+  removeAllPending + badge 0) to both paths. Note an app-side push guard is not applicable on iOS: the system
+  displays pushes, not the app.
+  VERIFICATION LIMIT — BE HONEST: this is integration-level Android/iOS behaviour (services, WorkManager,
+  NotificationManager) that plain JVM unit tests cannot exercise, and reproducing it needs a signed-in
+  session on a device, which I do not have credentials for. So: clean --rerun-tasks assembleDebug + full unit
+  suite green, code paths traced end to end, but the logged-out-tray behaviour itself is NOT empirically
+  verified. Worth a manual check: sign in, start tracking, sign out, confirm the tray is empty and stays
+  empty. iOS NOT COMPILED (no Swift toolchain).
+
+- 2026-08-27 (main-chat) — CP IAM: My CP / Team CP / ALL CP + CP-approval permission + mobile approval entry.
+  CRITICAL FINDING: `marketing.cpVisits.viewAll` is a LEGACY ALIAS in lib/iam-model.ts
+  (LEGACY_PERMISSION_ALIASES: viewAll → viewTeam). sanitizeIamGrantList rewrites it on save, so NOBODY CAN
+  HOLD IT — which means yesterday's mobile-route gate on `viewAll` effectively read "admins only", and there
+  was no true company-wide CP permission at all.
+  DID NOT UN-ALIAS IT — that was the tempting one-line fix and it is dangerous: any staff record still
+  carrying the literal "marketing.cpVisits.viewAll" string would have jumped from team-scoped to COMPANY-WIDE
+  the instant it became real, which is precisely the leak Safeer reported. I cannot query prod to see who
+  holds it. Added a BRAND-NEW key instead — `marketing.cpVisits.viewCompany` — which no existing grant can
+  contain, so access only ever widens when an admin deliberately ticks it.
+  ALSO NEW: `marketing.cpVisits.approve` for the CP Approval queue. Relabelled the existing two so the IAM
+  screen states the actual scope ("My CP visits — only the visits assigned to me" / "Team CP visits — my
+  reporting hierarchy"). All added to PERMISSIONS + the grouped index + the permission-matrix module (the
+  taxonomy test enforces all three, and stays green at 16).
+  BACKEND: resolveCpVisitViewerScope returns undefined (unrestricted) for viewCompany, ABOVE the viewTeam
+  branch; the mobile /clientPlaceVisits/my route now gates on viewCompany instead of the unholdable viewAll.
+  APPROVAL QUEUE is now IAM-aware and STRICTLY ADDITIVE: approve + viewCompany ⇒ sees every queue; the
+  stamped-approver + reporting-subtree rule is untouched for everyone else, so no current approver loses
+  anything. Pinned by 2 new tests INCLUDING the important negative — `approve` ALONE must NOT widen the queue,
+  or granting the approval right would quietly hand over the whole company.
+  MOBILE: the approvals entry was `visibility = if (count > 0) VISIBLE else GONE`, i.e. undiscoverable until
+  work happened to be waiting — a GM had no way to check. Now permanent for anyone holding
+  cpVisits.approve (with a "nothing waiting" state); everyone else keeps the EXACT old behaviour, so nobody
+  who relied on it loses it and nobody new is shown an empty queue.
+  REGRESSION DILIGENCE (user said "should never affect any working features"): first full run showed 10
+  failing FILES vs the known 9 — transcriptionQueue.test.ts was new. Did NOT hand-wave it: ran it in
+  isolation twice (4/4 both times), grepped it for cpVisits/iam/permission/clientPlaceVisit (ZERO matches, so
+  it cannot be affected), stashed my changes and re-ran the full suite (9 files — transcriptionQueue absent),
+  then re-ran WITH my changes (9 files / 21 tests — matches baseline exactly). Conclusion: flaky under
+  full-suite load, not mine. cpApprovalScope 8/8, marketing suites 44/44, tsc clean, assembleDebug + Android
+  unit suite green. NEEDS CONVEX DEPLOY + new APK.
+
+- 2026-08-27 (main-chat) — "tasks/task manager should show only their reporting persons (VP→AVP, AVP→HOD…)".
+  INVESTIGATED BEFORE BUILDING: the rule is ALREADY what the code does. getTeamIds() resolves via
+  `by_reportingTo` = DIRECT reports only (plus explicitly linked staffReportingOfficers) — NOT a transitive
+  subtree — and it backs both listForTaskManager's team scope AND (through today's earlier fix) the overdue
+  notification recipients (assignee + their reportingTo). So a VP hears about AVPs, an AVP about HODs, and no
+  further. The screenshot is PRE-DEPLOY production behaviour: the old rule CC'd every super-admin on every
+  overdue task, which is why Dhivagar's list is full of other people's work.
+  Rather than invent work, added 2 tests to pin the rule so it cannot drift.
+  TEST CAUGHT A DESIGN POINT I HAD ASSUMED WRONG: my first version expected a VP's app-open to notify the
+  field staff + HOD for a task 3 levels down. It produced NOTHING — because syncOverdueTaskEscalationsForStaff
+  only processes tasks the VIEWER can see (canSeeTask), and a task 3 levels down is outside a VP's direct-report
+  scope entirely. Corrected the test to assert BOTH halves: running as the VP raises nothing (no leak upward),
+  and running as the staff's ACTUAL manager raises exactly two notifications (the assignee + that manager).
+  That is correct-by-design, not a bug — notifications are surfaced by whoever can see the task.
+  STILL TRUE BY DESIGN, FLAGGED NOT CHANGED: a SUPER-ADMIN viewer keeps company-wide sight in Task Manager
+  (scope "all") and their app-open still processes every overdue task company-wide to raise ITS recipients'
+  notifications — the recipients are now correct so no super-admin receives them, but the scan is broad. The
+  practical complaint was already handled by the Home nudge being own-only and the mobile Task Manager
+  defaulting to My Tasks.
+  22 task-suite tests green; tsc clean. NEEDS CONVEX DEPLOY — none of this is live yet, which is exactly why
+  the screenshot still looks wrong.
+
+- 2026-08-27 (main-chat) — NEW FEATURE: staff Device & Access security on MOBILE (web Security tab parity),
+  IAM-gated.
+  BACKEND ALREADY HAD the hard parts — staffDeviceBinding.resetDeviceBinding (gated on
+  staff.resetDeviceBinding, also ends mobile sessions) and getDeviceBindingStatus — but NO HTTP routes, so
+  mobile had nothing. Added 3: GET /api/hr/staff/security, POST /api/hr/staff/device-reset,
+  POST /api/hr/staff/force-logout. The routes add NO permission logic of their own — the mutations/queries
+  keep enforcing it, so the gate cannot drift between surfaces.
+  NEW MUTATION forceMobileLogout — DELIBERATELY SEPARATE from resetDeviceBinding, and this is the whole
+  design point: resetting the lock FREES the account for a NEW phone, while forcing a logout kills the
+  session and KEEPS the account pinned to the old handset. A lost/stolen phone needs the second; conflating
+  them would mean every "log them out" quietly let any new phone claim the account. Web sessions untouched by
+  both, matching the existing behaviour.
+  ANDROID: new ui/hr/StaffSecurityBottomSheet (code-built, same style as CpApprovalQueueBottomSheet) showing
+  the bound device — model, id, battery, IP, bound-at, last-seen — plus the two actions, each behind a
+  confirm dialog that spells out which one to use when. Re-reads state after acting rather than guessing it;
+  an inFlight flag serialises the two so a double-tap can't fire both. Entry is a header button on
+  StaffDetailFragment, hidden unless the viewer holds staff.resetDeviceBinding AND is not looking at their
+  OWN record — resetting your own device from this screen would just lock you out mid-task.
+  NOTE: staff.resetDeviceBinding was one of the two IAM ORPHANS I adopted into the taxonomy earlier today —
+  until then it was defined and enforced but could not be granted from the IAM screen at all, so this feature
+  would have been ungrantable.
+  TEST: added one pinning the distinction — after a forced logout the binding row still holds the original
+  deviceId while every session is inactive. staffDeviceBinding suites 9/9, iam+taxonomy 25/25 combined, tsc
+  clean, assembleDebug (--rerun-tasks) + full Android unit suite green.
+  NOT DONE — iOS: same three routes are platform-neutral, so iOS needs only the UI. Flagged, not silently
+  skipped. Password reset (the "Reset Password" / "Don't ask to change password" half of the web card) is
+  also NOT included — it is a separate mutation with its own policy and was not part of "logout and device
+  reset". NEEDS CONVEX DEPLOY + new APK.
+
+## 2026-08-27 — Overdue task notifications reaching non-reporting officers
+
+Reported: a super-admin who is nobody's reporting officer sees 41 task rows in
+their inbox.
+
+Traced every creation path for `task-overdue`: exactly one insert
+(`convex/dailyTasks.ts:3009`), one dedup reader, one type check in
+`notifications.ts`, and no cron. The recipient rule at that insert is already
+correct (assignee + `reportingTo` + linked `staffReportingOfficers`, no
+super-admins) -- that fix is committed but NOT deployed, so the backend the app
+talks to still runs the old rule.
+
+Two consequences, both needing the Convex deploy:
+1. New rows keep being CC'd to super-admins until deploy.
+2. Rows already written stay forever -- they are database records, not derived
+   from the current code.
+
+Added `convex/taskOverdueCleanup.ts` for (2):
+`internal.taskOverdueCleanup.purgeStrayOverdueNotifications({ staffId })`.
+Dry run by default; `confirm: "DELETE_STRAY_TASK_OVERDUE"` to delete. Deletes
+only `task-overdue` rows addressed to someone who is neither the assignee nor
+one of the assignee's reporting officers; keeps manager escalations and the
+assignee's own copy. Scoped per-staff because there is no `by_type` index on
+notifications and wide scans have caused 502s here.
+
+6 new tests pass. Full convex suite: 1110 passed / 21 failed across the same 9
+files that fail on a clean tree (verified by stashing).
+
+## 2026-08-27 — CP Approvals promoted to its own Marketing row
+
+Requested: a separate entry in the mobile Marketing module, below CP Visits and
+above Site Visits.
+
+Android (`fragment_app_library.xml` + `AppLibraryFragment.kt`):
+- New row `itemMarketingCpApprovals` with a pending-count badge, plus new
+  drawables `ic_apps_cp_approvals.xml` and `bg_cp_approvals_count.xml` (amber,
+  matching the approvals banner). Did not reuse `ic_apps_verified_outline`,
+  which already means Post Sales Verification in Accounts.
+- Gated on `marketing.cpVisits.approve`; `refreshCpApprovalsEntry()` also
+  reveals it when the pending count is non-zero, mirroring the banner's
+  `count > 0 || isApprover`. Count is fetched after the synchronous bind, and a
+  failed fetch leaves the permission-based state untouched.
+- Registered in `sectionTileMap` so the existing divider-pruning and
+  empty-section sweeps cover it. Refresh runs on first paint, IAM bus updates,
+  onResume, and the queue's RESULT_KEY.
+- The banner inside CP Visits is unchanged; this is an extra entry.
+
+iOS (`AppLibraryView.swift`): same position and amber treatment, new
+`.cpApprovals` destination resolving to the existing `CpApprovalQueueView`.
+The checkmark.seal toolbar button in CpVisitsView is untouched.
+
+`:app:assembleDebug --rerun-tasks` passes. iOS NOT compiled (no Swift toolchain
+here) -- inspection and brace balance only.
+
+## 2026-08-27 - CP create now requires mobile, name and pincode
+
+Rules centralised in convex/marketing/lib/cpClientDetails.ts so web, Android,
+iOS and the server agree:
+- mobile: 10 digits starting 6-9 (the arrival OTP goes to this number)
+- name: non-empty AND not the phone number; resolved after the lead /
+  existing-client lookup so a repeat client need not retype a known name
+- pincode: explicit field or parsed from the address; leading zero rejected,
+  and a longer digit run is never mistaken for one
+
+Server returns every problem at once. Pincode is now persisted as a real
+clientPlaces column (both ensureClientPlaceForLead and ...ForClient) instead of
+living only inside the free-text address, and is sent as its own field by all
+three clients.
+
+Scope decision: system-spawned CPs (booking CP, SV-cum-CP, collection
+follow-ups, Aster new-client CP) are NOT gated. They continue an existing
+workflow from a record that already exists, and blocking them over a legacy
+place with no pincode would strand real work. The in-repo note in
+ensureClientPlaceForLead already identified that path as the source of the
+pincode-less CPs.
+
+Client forms already required name/phone/pincode; the three cases that still
+reached the server (landline, name-is-number, pincode starting 0) now fail
+inline instead.
+
+20 new tests; convex suite back to its pre-existing baseline. The intermittent
+files (asterCalls, marketingReportData, postSalesLoan, transcriptionQueue) were
+verified to fail identically on a stashed clean tree. Android
+:app:assembleDebug --rerun-tasks passes. iOS NOT compiled.

@@ -260,6 +260,12 @@ interface ApiService {
         // only the newest ~750 rows company-wide (≈ a few days), so client-side
         // filtering silently missed a person's older records.
         @Query("search") search: String? = null,
+        // Scroll pagination. The company-wide range is far too large to return
+        // in one response — attempting it exceeded the backend's read budget
+        // and the request failed outright, which the All tab rendered as every
+        // day being "Absent". Omit for the first page.
+        @Query("cursor") cursor: String? = null,
+        @Query("pageSize") pageSize: Int? = null,
     ): AttendanceApprovalsResponse
 
     // Whether the caller has a team (direct reports) — drives which attendance
@@ -270,6 +276,58 @@ interface ApiService {
     suspend fun holdAttendance(
         @Header("Authorization") token: String,
         @Body body: RejectRequest,
+    ): SimpleResponse
+
+    // Direct punch-time correction (web parity). The backend gates this on
+    // `attendance.correctPunchTimes` and separately refuses to let anyone
+    // correct their OWN clock, so the app only decides whether to SHOW the
+    // action — it never decides whether it is allowed.
+    // ── Staff security (mobile parity with the web Security tab) ──
+    // All three are gated server-side by `staff.resetDeviceBinding`; the app
+    // only decides whether to SHOW the section.
+    @GET("api/hr/staff/security")
+    suspend fun getStaffSecurity(
+        @Header("Authorization") token: String,
+        @Query("staffId") staffId: String,
+    ): StaffSecurityResponse
+
+    @POST("api/hr/staff/device-reset")
+    suspend fun resetStaffDevice(
+        @Header("Authorization") token: String,
+        @Body body: StaffIdRequest,
+    ): StaffSecurityActionResponse
+
+    @POST("api/hr/staff/force-logout")
+    suspend fun forceStaffMobileLogout(
+        @Header("Authorization") token: String,
+        @Body body: StaffIdRequest,
+    ): StaffSecurityActionResponse
+
+    // Password half of the Security screen. Gated server-side by
+    // `staff.password` - a separate right from the device actions above, so a
+    // user may hold one without the other.
+    @GET("api/hr/staff/password-status")
+    suspend fun getStaffPasswordStatus(
+        @Header("Authorization") token: String,
+        @Query("staffId") staffId: String,
+    ): StaffPasswordStatusResponse
+
+    @POST("api/hr/staff/set-password")
+    suspend fun setStaffPassword(
+        @Header("Authorization") token: String,
+        @Body body: SetStaffPasswordRequest,
+    ): StaffSecurityActionResponse
+
+    @POST("api/hr/staff/password-expiry-exempt")
+    suspend fun setStaffPasswordExpiryExempt(
+        @Header("Authorization") token: String,
+        @Body body: PasswordExpiryExemptRequest,
+    ): StaffSecurityActionResponse
+
+    @POST("api/hr/attendance/correct-punch-times")
+    suspend fun correctAttendancePunchTimes(
+        @Header("Authorization") token: String,
+        @Body body: CorrectPunchTimesRequest,
     ): SimpleResponse
 
     @GET("api/hr/attendance/team-scope")
@@ -1633,6 +1691,73 @@ data class AttendanceApprovalsResponse(
     // backend that doesn't return the field yet yields null — a non-null
     // declaration would NPE at first use.
     val requests: List<AttendanceApprovalRecord>? = null,
+    // Scroll pagination for the All tab. Absent on endpoints/backends that
+    // don't paginate, which reads as "that was the whole list" — the
+    // pre-pagination behaviour.
+    val nextCursor: String? = null,
+    val hasMore: Boolean = false,
+)
+
+/** Times are full ISO instants built from the row's own date + the picked
+ *  clock time, matching what the web sends. */
+data class StaffIdRequest(val staffId: String)
+
+data class SetStaffPasswordRequest(
+    val staffId: String,
+    val newPassword: String,
+    /** When true the staff must change it at next login. */
+    val mustChangePassword: Boolean = true,
+)
+
+data class PasswordExpiryExemptRequest(
+    val staffId: String,
+    val exempt: Boolean,
+)
+
+/** Mirrors the web Security tab's password card. */
+data class StaffPasswordStatus(
+    val hasPassword: Boolean = false,
+    val mustChangePassword: Boolean = false,
+    val passwordExpiryExempt: Boolean = false,
+    val passwordUpdatedAt: Double? = null,
+)
+
+data class StaffPasswordStatusResponse(
+    val success: Boolean = false,
+    val status: StaffPasswordStatus? = null,
+    val error: String? = null,
+)
+
+data class StaffSecurityActionResponse(
+    val success: Boolean = false,
+    val cleared: Int? = null,
+    val signedOut: Int? = null,
+    val error: String? = null,
+)
+
+/** Mirrors getDeviceBindingStatus: `bound=false` when no device is locked. */
+data class StaffBoundDevice(
+    val bound: Boolean = false,
+    val deviceId: String? = null,
+    val platform: String? = null,
+    val deviceModel: String? = null,
+    val batteryPct: Double? = null,
+    val ip: String? = null,
+    val boundAt: Double? = null,
+    val lastSeenAt: Double? = null,
+)
+
+data class StaffSecurityResponse(
+    val success: Boolean = false,
+    val binding: StaffBoundDevice? = null,
+    val error: String? = null,
+)
+
+data class CorrectPunchTimesRequest(
+    val id: String,
+    val correctedPunchIn: String? = null,
+    val correctedPunchOut: String? = null,
+    val reason: String? = null,
 )
 
 data class AttendanceApprovalRecord(
@@ -1796,7 +1921,14 @@ data class CompOffCreditsResponse(
     val credits: List<CompOffCredit> = emptyList(),
     val error: String? = null
 )
-data class ApplyCompOffRequest(val creditId: String, val date: String)
+data class ApplyCompOffRequest(
+    val creditId: String,
+    val date: String,
+    // Half-day comp off — the web has always supported taking a credit as
+    // 0.5 day; the app used to spend the whole credit either way.
+    val isHalfDay: Boolean? = null,
+    val halfDaySession: String? = null,
+)
 data class ApplyCompOffResponse(val success: Boolean, val leaveId: String? = null, val error: String? = null)
 
 // IAM models
@@ -2045,7 +2177,13 @@ data class PushRegisterRequest(
     val bundleId: String,
     val appId: String,
     val appName: String,
-    val deviceId: String
+    // Empty when the device can't be identified — the backend then binds
+    // nothing rather than binding a placeholder the login path would never
+    // send back (which locked staff out of their own phone).
+    val deviceId: String,
+    // Carried so a binding created from this channel records the real phone
+    // instead of showing as "Unknown · android" in the Security tab.
+    val deviceModel: String? = null
 )
 data class PushRegisterResponse(val success: Boolean, val deviceTokenId: String? = null, val error: String? = null)
 data class PushUnregisterRequest(val token: String)
@@ -4107,6 +4245,15 @@ data class MobileDashboardResponse(
     val prevHot: Int? = null,
     val prevWarm: Int? = null,
     val prevCold: Int? = null,
+    // Day's commercial totals. NULLABLE on purpose, same reasoning as the
+    // prev* fields above: a backend that predates them returns nothing (Gson
+    // → null) and the tiles keep showing "–". Null also means "you don't hold
+    // the permission" — which must not render as a company that booked
+    // nothing, so do NOT give these defaults.
+    val bookingCount: Int? = null,
+    val bookingValue: Double? = null,
+    val collectionAmount: Double? = null,
+    val pendingCollectionAmount: Double? = null,
     val error: String? = null,
 )
 

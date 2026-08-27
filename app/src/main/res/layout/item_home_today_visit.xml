@@ -339,6 +339,50 @@
         android:textSize="12sp"
         android:visibility="gone" />
 
+    <!-- Joint CP: both staff on one line. The row is assigned to the LEAD
+         (the senior of the two), so without this the card names only one of
+         the people actually going. Hidden for every other CP type. -->
+    <LinearLayout
+        android:id="@+id/rowVisitItemJoint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <ImageView
+            android:layout_width="14dp"
+            android:layout_height="14dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_auth_user"
+            app:tint="#7F56D9" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:fontFamily="@font/inter_regular"
+            android:includeFontPadding="false"
+            android:text="Joint"
+            android:textColor="#7F56D9"
+            android:textSize="10sp" />
+
+        <TextView
+            android:id="@+id/tvVisitItemJointNames"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:fontFamily="@font/inter_semibold"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:text=""
+            android:textColor="#1A1A1A"
+            android:textSize="12sp" />
+    </LinearLayout>
+
     <!-- LMO (Lead Management Officer — the visit's telecaller/creator) -->
     <LinearLayout
         android:id="@+id/rowVisitItemLmo"

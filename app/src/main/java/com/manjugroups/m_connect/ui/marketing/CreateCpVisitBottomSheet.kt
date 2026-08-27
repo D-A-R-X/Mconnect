@@ -57,6 +57,10 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
     // means no type was picked and the server stores the row without it.
     private var selectedCpType: CpTypeOption? = null
 
+    // Joint CP only: the SECOND staff. Cleared whenever the type moves away
+    // from Joint CP so a stale partner can never ride along on another type.
+    private var selectedJointPartner: StaffData? = null
+
     /** CP visit intent enum shared with the web form. The `id` is the
      *  wire value sent to convex; `label` is what the picker shows. */
     private data class CpTypeOption(
@@ -75,6 +79,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         CpTypeOption("old_client", "Old Client", "Re-engagement touch"),
         CpTypeOption("gift_distribution", "Gift Distribution", "Loyalty drop-off"),
         CpTypeOption("other_cp", "Other CP", "Miscellaneous client work"),
+        CpTypeOption("joint_cp", "Joint CP", "Two staff visit the same client"),
     )
 
     // Caches for fast display
@@ -217,6 +222,9 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
 
         // Setup click listeners for spinners
         etStaff.setOnClickListener { pickStaff(etStaff) }
+        view.findViewById<EditText>(R.id.etJointPartner)?.let { etPartner ->
+            etPartner.setOnClickListener { pickJointPartner(etPartner) }
+        }
         etProj.setOnClickListener { pickProject(etProj) }
         etLmo.setOnClickListener { pickLmo(etLmo) }
         etCpType.setOnClickListener { pickCpType(etCpType) }
@@ -368,16 +376,28 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         btnSubmit.setOnClickListener {
             // Validation
             val phone = etPhone.text.toString().filter { it.isDigit() }.takeLast(10)
-            if (phone.length != 10) {
-                toast("Enter a valid 10-digit phone number")
+            // Must be a real mobile: the arrival OTP is sent to this number, so
+            // a landline would make the CP impossible to complete. Matches the
+            // server rule so a rejection surfaces here rather than on submit.
+            if (phone.length != 10 || phone.first() !in '6'..'9') {
+                toast("Enter a valid 10-digit mobile number")
                 return@setOnClickListener
             }
 
             // Client name is required. For an existing client/lead it auto-fills
             // from the phone lookup; for a new number the staff must type it, so
             // the CP always stores a named client (never a phone-named one).
-            if (etClientName.text.toString().trim().isBlank()) {
+            val clientNameInput = etClientName.text.toString().trim()
+            if (clientNameInput.isBlank()) {
                 toast("Client name is required")
+                return@setOnClickListener
+            }
+            // A "name" that is really the number is how nameless clients used
+            // to reach the Clients tab.
+            if (clientNameInput.filter { it.isDigit() }.takeLast(10) == phone ||
+                clientNameInput.all { it.isDigit() || it.isWhitespace() }
+            ) {
+                toast("Enter the client's name, not their number")
                 return@setOnClickListener
             }
 
@@ -385,6 +405,28 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             if (staff == null || staff.id.isNullOrBlank()) {
                 toast("Select field staff")
                 return@setOnClickListener
+            }
+
+            // CP Type drives the whole post-arrival branch below (gift /
+            // old-client / collection finalise straight from the photo; the
+            // rest open the booking-outcome sheet). An untyped CP also shows
+            // as a bare dash in every list. The server rejects it too.
+            if (selectedCpType == null) {
+                toast("Select the CP type")
+                return@setOnClickListener
+            }
+
+            // A Joint CP is meaningless with one person on it.
+            val jointPartnerId = selectedJointPartner?.id
+            if (selectedCpType?.id == "joint_cp") {
+                if (jointPartnerId.isNullOrBlank()) {
+                    toast("Select the second staff for this Joint CP")
+                    return@setOnClickListener
+                }
+                if (jointPartnerId == staff.id) {
+                    toast("Pick two different staff for a Joint CP")
+                    return@setOnClickListener
+                }
             }
 
             val project = selectedProject
@@ -420,8 +462,10 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                 toast("District is required")
                 return@setOnClickListener
             }
-            if (pincode.isBlank() || pincode.length != 6) {
-                toast("Pincode must be 6 digits")
+            if (pincode.length != 6 || !pincode.all { it.isDigit() } ||
+                pincode.first() == '0'
+            ) {
+                toast("Enter a valid 6-digit pincode")
                 return@setOnClickListener
             }
 
@@ -500,10 +544,22 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                             return@launch
                         }
                     }
+                    // One open CP per client. Creating a second while one is
+                    // still scheduled/in-progress produced duplicate visits for
+                    // the same person, which then had to be cancelled by hand.
+                    // Checked here rather than server-side on purpose: CP visits
+                    // are also auto-spawned by backend automation, and a throw
+                    // in the mutation would break that path too.
+                    val duplicate = findOpenCpVisitFor(phone)
+                    if (duplicate != null) {
+                        btnSubmit.isEnabled = true
+                        toast(duplicate)
+                        return@launch
+                    }
                     val resp = geoApi.createCpVisit(
                         session.bearerToken,
                         CreateCpVisitRequest(
-                            clientName = etClientName.text.toString().trim().takeIf { it.isNotBlank() },
+                            clientName = clientNameInput,
                             mobileNumber = phone,
                             assignedStaffId = staff.id,
                             lmoStaffId = lmo.id,
@@ -516,6 +572,14 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                             notes = notesVal.takeIf { it.isNotBlank() },
                             projectId = project.id,
                             cpType = selectedCpType?.id,
+                            pincode = pincode,
+                            // Only sent for a Joint CP; the server ignores it
+                            // for every other type.
+                            jointStaffIds = if (selectedCpType?.id == "joint_cp") {
+                                listOfNotNull(jointPartnerId)
+                            } else {
+                                null
+                            },
                         )
                     )
                     btnSubmit.isEnabled = true
@@ -718,6 +782,54 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
+    /**
+     * Second participant for a Joint CP. Excludes the staff already picked
+     * above - the same person twice would leave the visit permanently
+     * "pending for" someone who has already completed it, and the server
+     * rejects it anyway.
+     */
+    private fun pickJointPartner(label: EditText) {
+        val show = { items: List<StaffData> ->
+            val primaryId = selectedStaff?.id
+            val eligible = items.filter { it.id != null && it.id != primaryId }
+            SearchableSelectionDialog.show(
+                context = requireContext(),
+                title = "Select the second staff",
+                options = eligible.map { st ->
+                    SearchableOption(
+                        item = st,
+                        title = st.name ?: "Unnamed Staff",
+                        subtitle = listOfNotNull(st.employeeId, st.role).joinToString(" - "),
+                        keywords = listOfNotNull(
+                            st.id, st.name, st.employeeId, st.role, st.department,
+                        ).joinToString(" "),
+                    )
+                },
+                emptyMessage = if (primaryId == null) "No staff found" else "No other staff available",
+            ) { staff ->
+                selectedJointPartner = staff
+                label.setText(staff.name ?: "Selected")
+            }
+        }
+        if (staffCache.isNotEmpty()) {
+            show(staffCache)
+            return
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = api.getStaff(session.bearerToken)
+                if (!resp.success) {
+                    toast("Failed to load staff list")
+                    return@launch
+                }
+                staffCache = resp.staff
+                show(resp.staff)
+            } catch (e: Exception) {
+                toast("Network error: ${e.message}")
+            }
+        }
+    }
+
     private fun showStaffPicker(label: EditText, items: List<StaffData>) {
         SearchableSelectionDialog.show(
             context = requireContext(),
@@ -902,6 +1014,23 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             }
             selectedCpType = picked
             label.setText(picked.label)
+            applyJointPartnerVisibility()
+        }
+    }
+
+    /**
+     * Shows the partner field only for a Joint CP, and clears the choice when
+     * the type moves away. Without the clear, picking Joint CP, choosing a
+     * partner, then switching type would still submit a second participant.
+     */
+    private fun applyJointPartnerVisibility() {
+        val root = view ?: return
+        val isJoint = selectedCpType?.id == "joint_cp"
+        root.findViewById<View>(R.id.blockJointPartner)?.visibility =
+            if (isJoint) View.VISIBLE else View.GONE
+        if (!isJoint) {
+            selectedJointPartner = null
+            root.findViewById<EditText>(R.id.etJointPartner)?.setText("")
         }
     }
 
@@ -953,6 +1082,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                 collectionCasesCache = resp.cases
                 selectedCpType = picked
                 label.setText(picked.label)
+                applyJointPartnerVisibility()
             } catch (e: Exception) {
                 toast("Network error: ${e.message}")
             }
@@ -1015,4 +1145,29 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
 
         fun newInstance(): CreateCpVisitBottomSheet = CreateCpVisitBottomSheet()
     }
+
+    /**
+     * Returns a message when this client already has an OPEN CP visit, or null
+     * when they don't and the create may proceed.
+     *
+     * Fails OPEN: if the lookup itself errors (offline, backend hiccup) we
+     * return null and let the create through. A guard that blocked on a
+     * transient network failure would break CP creation in the field, which is
+     * a worse outcome than an occasional duplicate.
+     */
+    private suspend fun findOpenCpVisitFor(phone: String): String? {
+        if (OpenCpVisitGuard.normalizePhone(phone).length < 10) return null
+        val existing = try {
+            geoApi.getMyMarketingCpVisits(
+                token = session.bearerToken,
+                search = OpenCpVisitGuard.normalizePhone(phone),
+                limit = 50,
+            )
+        } catch (_: Exception) {
+            return null
+        }
+        if (!existing.success) return null
+        return OpenCpVisitGuard.blockReason(existing.visits, phone)
+    }
+
 }

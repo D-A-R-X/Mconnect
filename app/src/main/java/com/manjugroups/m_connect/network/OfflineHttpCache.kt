@@ -4,6 +4,7 @@ import android.content.Context
 import okhttp3.Cache
 import okhttp3.CacheControl
 import okhttp3.Interceptor
+import okhttp3.ResponseBody.Companion.toResponseBody
 import java.io.File
 import java.util.concurrent.TimeUnit
 
@@ -23,6 +24,10 @@ import java.util.concurrent.TimeUnit
  *  - OFFLINE → [serveStaleWhenOffline] rewrites the request to `only-if-cached`
  *              with a long max-stale, so the last-known response is replayed
  *              instead of throwing.
+ *  - 5xx     → treated the same way. A failing backend empties a screen just as
+ *              thoroughly as no network does, and on Attendance an empty screen
+ *              is rendered as a month of "Absent" — showing the last-known data
+ *              is strictly better than showing something untrue.
  *
  * Safety:
  *  - Responses carry `Vary: Authorization`, so a cached entry is only ever
@@ -81,10 +86,8 @@ object OfflineHttpCache {
         if (request.method != "GET") {
             chain.proceed(request)
         } else {
-            try {
-                chain.proceed(request)
-            } catch (io: java.io.IOException) {
-                val cached = runCatching {
+            val replay = {
+                runCatching {
                     chain.proceed(
                         request.newBuilder()
                             .cacheControl(
@@ -95,18 +98,39 @@ object OfflineHttpCache {
                             )
                             .build(),
                     )
-                }.getOrNull()
+                }.getOrNull()?.takeIf { it.isSuccessful }
+            }
+            try {
+                val response = chain.proceed(request)
+                // A backend failure is indistinguishable from being offline as
+                // far as the screen is concerned: the fetch yields nothing and
+                // the list renders empty — on Attendance that means a whole
+                // month of synthesized "Absent" days. So replay the last-known
+                // response for a SERVER error too, not just a transport one.
+                // Only 5xx: a 401/403/404 is a real answer about this request
+                // and must reach the caller (auth watchdog, empty states).
+                if (response.code in 500..599) {
+                    // OkHttp refuses to start a new request while the previous
+                    // response body is still open, so drain the (small) error
+                    // payload and close it BEFORE asking the cache — otherwise
+                    // the replay always fails with an IllegalStateException and
+                    // the error is handed back as if nothing were cached.
+                    val errorBody = runCatching { response.body?.bytes() }.getOrNull() ?: ByteArray(0)
+                    val errorType = response.body?.contentType()
+                    response.close()
+                    replay() ?: response.newBuilder()
+                        .body(errorBody.toResponseBody(errorType))
+                        .build()
+                } else {
+                    response
+                }
+            } catch (io: java.io.IOException) {
                 // A cache MISS is not an exception — OkHttp answers
                 // `only-if-cached` with a synthetic 504. Handing that back would
                 // turn a "you are offline" failure into a confusing HTTP error,
                 // so discard it and rethrow the original IOException: screens
                 // then behave exactly as they did before this cache existed.
-                if (cached != null && cached.isSuccessful) {
-                    cached
-                } else {
-                    cached?.close()
-                    throw io
-                }
+                replay() ?: throw io
             }
         }
     }

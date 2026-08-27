@@ -19,10 +19,10 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.view.setPadding
-import androidx.fragment.app.FragmentManager
+import androidx.fragment.app.Fragment
+import com.manjugroups.m_connect.ui.common.navigateUp
 import androidx.lifecycle.lifecycleScope
 import coil.load
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.CpApprovalActionRequest
@@ -39,7 +39,7 @@ import kotlin.math.roundToInt
  * the recorded outcome, and the arrival photo. Approve → the visit completes;
  * Reject (with a remark) → the visit reopens for the same staff.
  */
-class CpApprovalQueueBottomSheet : BottomSheetDialogFragment() {
+class CpApprovalQueueFragment : Fragment() {
 
     private val api = GeoTrackApi.create()
     private lateinit var session: SessionManager
@@ -65,22 +65,8 @@ class CpApprovalQueueBottomSheet : BottomSheetDialogFragment() {
         session = SessionManager(requireContext())
         val root = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(12), dp(20), dp(24))
-            background = ResourcesCompat.getDrawable(
-                resources, R.drawable.bg_bottom_sheet_white_rounded, null,
-            )
+            setPadding(dp(20), dp(4), dp(20), dp(24))
         }
-
-        // Drag handle
-        root.addView(View(requireContext()).apply {
-            layoutParams = LinearLayout.LayoutParams(dp(40), dp(4)).apply {
-                gravity = Gravity.CENTER_HORIZONTAL
-                bottomMargin = dp(16)
-            }
-            background = ResourcesCompat.getDrawable(
-                resources, R.drawable.bg_grey_rounded, null,
-            )
-        })
 
         root.addView(TextView(requireContext()).apply {
             text = "CP completions to approve"
@@ -121,7 +107,72 @@ class CpApprovalQueueBottomSheet : BottomSheetDialogFragment() {
         root.addView(emptyView)
         root.addView(container)
 
-        return ScrollView(requireContext()).apply { addView(root) }
+        // A full page, not a sheet: an approver reviews photos, distances and
+        // remarks here, which a half-height sheet made cramped.
+        val page = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.WHITE)
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            )
+        }
+        page.addView(buildTopBar())
+        page.addView(
+            ScrollView(requireContext()).apply {
+                isFillViewport = true
+                addView(root)
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    0,
+                ).apply { weight = 1f }
+            },
+        )
+        return page
+    }
+
+    /** Back bar matching the other pushed detail screens. */
+    private fun buildTopBar(): View {
+        val bar = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(8), dp(8), dp(16), dp(8))
+            setBackgroundColor(Color.WHITE)
+        }
+        bar.addView(ImageView(requireContext()).apply {
+            setImageResource(R.drawable.ic_arrow_left)
+            imageTintList = android.content.res.ColorStateList.valueOf(
+                Color.parseColor("#0B61CA"),
+            )
+            layoutParams = LinearLayout.LayoutParams(dp(40), dp(40))
+            setPadding(dp(8))
+            isClickable = true
+            isFocusable = true
+            contentDescription = "Back"
+            setOnClickListener { navigateUp() }
+        })
+        bar.addView(TextView(requireContext()).apply {
+            text = "CP Approvals"
+            textSize = 17f
+            setTextColor(Color.parseColor("#101828"))
+            includeFontPadding = false
+            typeface = font(R.font.inter_semibold) ?: typeface
+            setPadding(dp(4), 0, 0, 0)
+        })
+        return bar
+    }
+
+    override fun onResume() {
+        super.onResume()
+        (activity as? com.manjugroups.m_connect.MainActivity)?.let {
+            it.setTopBarAppearance(Color.WHITE, true)
+            it.setTabBarVisible(false)
+        }
+    }
+
+    override fun onPause() {
+        (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(true)
+        super.onPause()
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -391,9 +442,11 @@ class CpApprovalQueueBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
-    override fun onDismiss(dialog: android.content.DialogInterface) {
+    override fun onDestroyView() {
+        // Tell the opener an approval may have changed, the same way the sheet
+        // did on dismiss, so the CP list and the library count refresh.
         notifyChanged()
-        super.onDismiss(dialog)
+        super.onDestroyView()
     }
 
     private fun roundedBg(fill: String, stroke: String) =
@@ -405,12 +458,9 @@ class CpApprovalQueueBottomSheet : BottomSheetDialogFragment() {
 
     companion object {
         // Emitted to the hosting FragmentManager whenever an approval changes or
-        // the sheet is dismissed, so the CP Visits banner + list refresh.
+        // the page is left, so the CP Visits banner + list refresh.
         const val RESULT_KEY = "cp_approval_changed"
 
-        fun show(fm: FragmentManager) {
-            if (fm.findFragmentByTag("cp_approval_queue") != null) return
-            CpApprovalQueueBottomSheet().show(fm, "cp_approval_queue")
-        }
+        fun newInstance(): CpApprovalQueueFragment = CpApprovalQueueFragment()
     }
 }
