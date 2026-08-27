@@ -1984,6 +1984,9 @@ data class TodayVisit(
     val leadName: String? = null,
     val leadPhone: String? = null,
     val cpVisit: CpVisitState? = null,
+    // Joint CP participants, carried onto the list row so a card can name BOTH
+    // staff. Null for every other cpType.
+    val joint: JointCpSummary? = null,
     // Out-of-geofence completion approval (top-level in the compact list shape).
     // approvalGmName is the GM the staff is waiting on; rejectRemark +
     // reassignedFromRejection surface a bounced-back completion.

@@ -605,6 +605,8 @@ class CpVisitsFragment : Fragment() {
             clientPlaceId = this.clientPlaceId ?: cpId,
             scheduledDate = scheduled,
             status = effectiveStatus,
+            // Both participants, so the card can name them.
+            joint = this.joint,
             approvalGmName = this.approvalGmName,
             rejectRemark = this.rejectRemark,
             reassignedFromRejection = this.reassignedFromRejection,
@@ -742,6 +744,25 @@ class CpVisitsFragment : Fragment() {
         val actionLabel = itemView.findViewById<TextView>(R.id.tvVisitItemActionLabel)
         val actionIcon = itemView.findViewById<ImageView>(R.id.ivVisitItemActionIcon)
         val lead = itemView.findViewById<TextView>(R.id.tvVisitItemLead)
+
+        // Joint CP: name BOTH staff. The row is assigned to the lead, so a
+        // single name would hide the other person who is also going. Lead
+        // first, matching the trip screen and the web detail.
+        val jointRow = itemView.findViewById<View>(R.id.rowVisitItemJoint)
+        val jointNames = itemView.findViewById<TextView>(R.id.tvVisitItemJointNames)
+        val joint = visit.joint
+        val jointLabel = joint?.let { j ->
+            listOfNotNull(
+                j.leadStaffName?.takeIf { it.isNotBlank() },
+                *j.companionNames.orEmpty().filter { it.isNotBlank() }.toTypedArray(),
+            ).joinToString(" & ").takeIf { it.isNotBlank() }
+        }
+        if (jointLabel != null) {
+            jointNames.text = jointLabel
+            jointRow.visibility = View.VISIBLE
+        } else {
+            jointRow.visibility = View.GONE
+        }
 
         // LMO (telecaller/creator) — shown only when the mapping supplied it.
         val lmoRow = itemView.findViewById<View>(R.id.rowVisitItemLmo)
