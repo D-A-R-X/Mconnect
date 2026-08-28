@@ -47,7 +47,14 @@ interface ApiService {
     @GET("api/hr/staff/search")
     suspend fun searchStaff(
         @Header("Authorization") token: String,
-        @Query("query") query: String
+        @Query("query") query: String,
+        /**
+         * "1" skips the reporting-column and device-health enrichment. Those
+         * cost hundreds of extra reads per search and pushed this endpoint past
+         * the 30s client timeout, so search never returned. Callers that only
+         * need the staff rows should send it.
+         */
+        @Query("lite") lite: String? = null,
     ): StaffListResponse
 
     // Fines & Deductions

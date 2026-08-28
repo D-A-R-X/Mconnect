@@ -251,7 +251,11 @@ class SecurityFragment : Fragment() {
         renderLoadingState()
         searchJob = viewLifecycleOwner.lifecycleScope.launch {
             kotlinx.coroutines.delay(SEARCH_DEBOUNCE_MS)
-            val resp = runCatching { api.searchStaff(session.bearerToken, q) }.getOrNull()
+            // lite: this screen needs the staff rows only. The enriched
+            // response costs hundreds of extra reads and timed out.
+            val resp = runCatching {
+                api.searchStaff(session.bearerToken, q, lite = "1")
+            }.getOrNull()
             if (!isAdded || _binding == null) return@launch
             isLoading = false
             if (resp?.success == true) {
