@@ -11587,3 +11587,195 @@ inline instead.
 files (asterCalls, marketingReportData, postSalesLoan, transcriptionQueue) were
 verified to fail identically on a stashed clean tree. Android
 :app:assembleDebug --rerun-tasks passes. iOS NOT compiled.
+
+## 2026-08-27 — CP type required; stranded GM approvals
+
+Two fixes.
+
+CP type is now required on every form-created visit. An untyped CP renders as a
+bare dash in the list, and cpType decides the whole post-arrival branch in the
+field app. Enforced at the single human-facing create path so web and both apps
+share one rule, and deliberately NOT in the validator, so system-spawned CPs and
+legacy untyped rows are untouched. Web marks the label required (it was sending
+`cpType || undefined`); Android likewise; iOS literally displayed "Optional" as
+the picker subtitle.
+
+Stranded GM approvals — a REGRESSION I introduced earlier the same day. The
+approval queue required the field staff to sit inside the approver's reporting
+subtree ON TOP of matching the stamp. When the field staff is themselves a GM,
+the row was hidden from the very person the UI named as approver, and from
+everyone else: the visit page said "Awaiting GM approval: X" while X's queue was
+empty. The stamp IS the assignment, so the stamp now wins; narrowing belongs at
+stamp time, since hiding at read time can only make work unreachable. Rows
+outside the approver's team are surfaced with an `outsideMyTeam` flag instead.
+Also bounded that query — it collect()ed every pending row.
+
+## 2026-08-27 — Joint CP reworked: one outcome by the senior staff
+
+REPLACES the two-outcome model built earlier the same day, per a corrected spec.
+Both staff are assigned and travel independently, but the SENIOR of the two
+enters the arrival OTP and records the SINGLE outcome.
+
+Implemented by promoting the senior staff onto clientPlaceVisits.assignedStaffId
+at creation, so a Joint CP becomes the ordinary single-staff flow as far as OTP,
+completion, approval routing, scoping, stats and exports are concerned. That let
+recordJointLegOutcome, rollUpJointVisit, the setOutcome early-return branch and
+pendingForLabel be deleted outright rather than left half-used. The companion
+keeps a participant leg — it is what puts the visit in THEIR list and records
+their separate trip — but never drives the visit's status.
+
+Approvals now escalate by rank (convex/marketing/lib/cpSeniority.ts): the
+nearest manager strictly senior to the completer AND at least GM. Field exec →
+GM, GM → AVP, AVP → VP. Seniority reads `designation`, not roleLevel, which is
+the coarse app role and cannot tell a GM from an AVP. Assistant titles are
+matched before the titles they contain, so AGM is not read as GM.
+
+joint_cp was missing from the web union, picker and label map; added, with a
+partner picker. Caught two bugs mid-build: promoting the lead made the leg
+builder's dedup collapse both staff into ONE leg (a test caught it), and on web
+the partner-clear sat after an early return so it could never run (tsc caught
+it).
+
+## 2026-08-27/28 — offline attendance, and four real defects in it
+
+The pipeline already existed (queue with the real tap time, WorkManager replay,
+backend honouring the device timestamp). Four things were broken:
+
+1. The selfie was stored RAW — compression only ran on the online upload path,
+   so the offline branch queued a multi-MB original that then had to replay over
+   a weak connection. Compression moved into OfflinePunchQueue.enqueue, the
+   chokepoint.
+2. HomeViewModel had a private COPY of the queue logic — the drift the shared
+   helper's own doc says it exists to prevent, and it had already drifted (raw
+   selfie, always-null address). Now calls the shared queue, and the
+   reverse-geocoded address is resolved before the try so the offline branch
+   carries it.
+3. A punch older than 24h silently lost its real time: the backend rewrote it to
+   the SYNC time, so a Monday 9am clock-in synced Wednesday landed as Wednesday.
+   Second-order effect — the replay then looked live and lost the no-GPS
+   exemption, so it could be rejected outright. Window widened to 7 days, moved
+   into lib/attendanceTime.ts with serverNow injectable.
+4. A queued punch was not bound to its staff, so it could replay under whoever
+   signed in next. PendingPunchEntity now carries staffId (Room v6, additive
+   ALTER); pre-upgrade rows carry null and still flush.
+
+## 2026-08-28 — CP Approvals as a page; Security screen; and its pagination
+
+CP Approvals converted from a bottom sheet to a full page (an approver reviews a
+photo, a distance and a remark — a half sheet made that cramped). Converted the
+class rather than duplicating ~400 lines. All FOUR entry points moved to
+pushDetail, and the result key now lands on the PARENT manager — miss that and
+the CP list silently stops refreshing after an approval. Icon and count badge
+repainted from amber to the Marketing group's lilac.
+
+New HR › Security screen: Device Reset / Staff Login / Password Reset over one
+staff directory, with search and designation/department filters. The tab decides
+which action the sheet offers, so a tab is a real choice rather than a label.
+Each tab is gated by its OWN permission (staff.resetDeviceBinding and
+staff.password are separate rights). Acting on your own account is blocked — it
+would lock you out mid-task. Password routes added server-side; the Convex
+functions already existed.
+
+The first cut sat blank and read as "stuck": it pulled the ENTIRE directory in
+one call with NO loading state. Rebuilt with scroll pagination (25/page, guarded
+against overlapping requests), a skeleton for the first page, a spinner for later
+ones, and an explicit Retry on first-page failure.
+
+## 2026-08-28 — verified on a real device over wireless adb
+
+Drove the connected OPPO CPH2363 directly rather than asking for screenshots.
+Confirmed Security loads 25 staff, pages 25 → 50 on scroll, tabs and filters
+render, CP Approvals shows its violet badge (19 pending), and logcat is clean —
+no FATAL/ANR.
+
+Search was still broken, and the network log gave the real reason: GET
+/api/hr/staff/search hung 30s, hit the client read timeout, and the offline-cache
+replay returned 504. api.staff.search scans up to 2000 rows, then for each of 50
+results queries staffReportingOfficers and walks the chain up to 8 levels, and
+the route then runs deviceHealthForStaffList. Added ?lite=1: an INDEXED path over
+the search_name / search_employeeId / search_phone indexes the table already
+carried, with no enrichment. Additive — without the flag both query and route
+behave exactly as before, so the web staff table is untouched.
+
+## 2026-08-28 — two client-side bugs found by tracing, not guessing
+
+Home said "Clock In First" while Attendance said clocked in. Home derives the
+gate from two calls that swallow failure to null, then wrote hasOpenSession =
+FALSE — so one flaky refresh silently downgraded a clocked-in staff member and
+locked every trip. Now: if the summary call fails but sessions answers, derive
+from sessions; if neither answers, KEEP the previous values. Clock-out is
+unaffected because that path returns a real "no open session" response — only
+silence stopped being treated as "no". Verified pre-existing: my only prior
+commit in that file changed punch() alone.
+
+A completed CP showed "Enroute" with a Start action forever. The card's status
+preferred the FIELD VISIT, which is right while a trip is live (only it tracks
+"arrived") but wrong once the CP is finished: the app closes the field visit in a
+SECOND call, and when that fails the CP is completed server-side while its trip
+row is stuck in-progress. A terminal CP status now wins. Fixed in ONE shared
+helper because the two screens had drifted — CP Visits honoured
+pending_gm_approval but not completion; Home honoured neither.
+
+## 2026-08-28 — collection timestamps showed UTC, not local time
+
+Reported as "showing 5 am". 05:35 + 5:30 = 11:05 — exactly the IST offset.
+
+The server stores createdAt as new Date().toISOString(), a UTC instant. The
+Android parser's Z is QUOTED in the pattern, so it matches the LETTER Z rather
+than meaning UTC, and with no timeZone set SimpleDateFormat parses in the
+device's zone. The UTC wall clock was read as if it were already local.
+
+Parsers now read UTC; the display formatter stays local. dateOnlyFormat is
+deliberately left local — a bare yyyy-MM-dd is a calendar date, not an instant.
+Same defect fixed in LoanData. The two attendance sheets already set UTC
+correctly, so the right pattern was already in the codebase.
+
+It also shifted DATES, not just times: anything after 18:30 IST falls on the
+previous UTC day, so an evening collection could show yesterday. Display-only —
+the stored data was always correct, so it fixes retroactively.
+
+## 2026-08-28 — "client not met" follow-up rewritten
+
+Both reported problems had one cause: the 48h cron PATCHED the closed visit back
+to "scheduled" and cleared its outcome, completedAt and clientMet.
+
+- "the closed CP is not showing" — the only record of the close was the row it
+  had just overwritten, so the failed attempt disappeared.
+- "the follow-up date is not appropriate" — the reactivated row carried the
+  ORIGINAL visit's identity, and its date came from whenever the cron swept.
+
+Now it creates a NEW visit and leaves the closed one closed. The retry is
+anchored on the CLOSE (lastNotMetAt + 48h), not on "now", and is never dated in
+the past — a backlog close would otherwise produce a visit created already
+overdue, so those land today. The original is stamped handled even when the spawn
+is refused, because retrying a rejected spawn hourly would just repeat the
+failure. Each retry is a normal CP, so missing it again closes THAT row and
+spawns the next — a visible chain instead of one row rewritten repeatedly.
+
+Only affects FUTURE closes; CPs already erased by the old behaviour cannot be
+recovered.
+
+## 2026-08-28 — PR #1172 conflict resolved
+
+max → development-testing. Two conflicts, both in the attendance clock code, both
+sides kept: theirs resolveEffectiveDepartureIso (the early-departure fine no
+longer trusting in/out labels), ours resolveClientPunchTime /
+isOfflinePunchReplay. Verified both sides were PURE APPENDS on the merge base and
+rebuilt the file as base + theirs + ours — a first attempt at hand-splicing the
+conflict region silently dropped their function's closing brace, because the
+comment opener above the marker was shared context. Also picked up
+@convex-dev/rate-limiter, a new dependency from their side.
+
+## Standing items (as of 2026-08-28)
+
+- CONVEX DEPLOY still pending, and now gates a large queue: CP approval routing,
+  the collection lookup, CP create validation, Joint CP, the staff-search lite
+  path, the password routes, and the not-met follow-up.
+- iOS is NOT COMPILED — no Swift toolchain on this machine. Everything iOS this
+  session is inspection + brace balance only and needs a Mac build.
+- iOS has no Security screen at all.
+- Android lint fails with 94 errors, IDENTICAL on a clean tree (pre-existing).
+- The Kotlin daemon OOMed once (GC overhead limit, org.gradle.jvmargs=-Xmx2048m);
+  it passed after gradlew --stop. Worth raising if it recurs.
+- A teammate's stash (analyze-git-repo-branches WIP) is still unapplied in the
+  Mconnect stash list — see stash@{0}.

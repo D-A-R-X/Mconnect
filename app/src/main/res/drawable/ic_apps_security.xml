@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  HR > Security item icon: pale blue circle with a shield and a keyhole,
+  matching the rest of the HR group (ic_apps_fines et al) rather than
+  introducing a new accent for one row.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="32dp"
+    android:height="32dp"
+    android:viewportWidth="32"
+    android:viewportHeight="32">
+
+    <!-- Group background circle -->
+    <path
+        android:fillColor="#EFF6FF"
+        android:pathData="M16,0 a16,16 0 1,1 0,32 a16,16 0 1,1 0,-32 Z" />
+
+    <!-- Shield -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#0B61CA"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M16,7.5 L22.5,10 v5.2 c0,4 -2.7,7.1 -6.5,8.3 c-3.8,-1.2 -6.5,-4.3 -6.5,-8.3 V10 Z" />
+
+    <!-- Keyhole: a lock reads as "access", which is what this screen controls -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#0B61CA"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:pathData="M16,14.4 m-1.6,0 a1.6,1.6 0 1,0 3.2,0 a1.6,1.6 0 1,0 -3.2,0" />
+
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#0B61CA"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:pathData="M16,16 v3" />
+</vector>

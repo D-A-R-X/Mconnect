@@ -423,6 +423,14 @@ class AppLibraryFragment : Fragment() {
             row = binding.itemHrLoans,
             allowed = hasAny(listOf("loans.view", "loans.manage", "loans.approve")),
         ) { openScreen(com.manjugroups.m_connect.ui.library.loans.LoansFragment()) }
+        // Security - device reset / staff login / password reset over the staff
+        // directory, the mobile counterpart of the web staff Security tab. Shown
+        // when the user holds EITHER right; the screen hides the tabs they
+        // cannot use, and the server enforces both regardless.
+        bindIamEntry(
+            row = binding.itemHrSecurity,
+            allowed = com.manjugroups.m_connect.ui.hr.SecurityFragment.isAvailable(session),
+        ) { openScreen(com.manjugroups.m_connect.ui.hr.SecurityFragment.newInstance()) }
 
         // ── Marketing ─────────────────────────────────────────────────────
         bindIamEntry(
@@ -780,6 +788,7 @@ class AppLibraryFragment : Fragment() {
                     R.id.itemHrLeave,
                     R.id.itemHrPermissions,
                     R.id.itemHrLoans,
+                    R.id.itemHrSecurity,
                 ),
             ),
             Triple(

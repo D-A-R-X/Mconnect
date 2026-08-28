@@ -18,6 +18,8 @@ import com.manjugroups.m_connect.network.CpVisitDetail
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.ui.home.CompleteCpVisitBottomSheet
 import com.manjugroups.m_connect.ui.common.navigateUp
+import com.manjugroups.m_connect.ui.common.preferredCpClientName
+import com.manjugroups.m_connect.ui.common.preferredCpClientPhone
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -510,15 +512,13 @@ class CompletedVisitDetailFragment : Fragment() {
         // Upgrade client info — prefer the fully-resolved name + phone from
         // the joined lead/client docs over the placeholders captured at list time.
         val displayName = formatPersonName(
-            visit.client?.clientName
-                ?: visit.lead?.contactName
-                ?: visit.clientPlace?.name
+            visit.preferredCpClientName()
                 ?: "Client"
         )
         root.findViewById<TextView>(R.id.tvCvdClientName).text = displayName
         root.findViewById<TextView>(R.id.tvCvdClientInitial).text =
             displayName.firstOrNull()?.uppercase() ?: "C"
-        val phone = visit.client?.mobileNumber ?: visit.lead?.mobileNumber
+        val phone = visit.preferredCpClientPhone()
         if (!phone.isNullOrBlank()) {
             val phoneView = root.findViewById<TextView>(R.id.tvCvdClientPhone)
             phoneView.text = phone
