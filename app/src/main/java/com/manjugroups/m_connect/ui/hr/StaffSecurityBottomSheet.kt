@@ -9,7 +9,9 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
+import android.graphics.drawable.GradientDrawable
 import android.widget.ProgressBar
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.fragment.app.FragmentManager
@@ -74,27 +76,73 @@ class StaffSecurityBottomSheet : BottomSheetDialogFragment() {
 
         val root = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(18), dp(20), dp(24))
+            setPadding(dp(20), dp(12), dp(20), dp(24))
+            setBackgroundColor(Color.WHITE)
         }
-        root.addView(TextView(requireContext()).apply {
-            text = "Device & Access"
+
+        // Drag handle — the app's other sheets have one; without it this read
+        // as a page that had been dropped in rather than a sheet.
+        root.addView(View(requireContext()).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(40), dp(4)).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                bottomMargin = dp(16)
+            }
+            background = GradientDrawable().apply {
+                cornerRadius = dp(2).toFloat()
+                setColor(Color.parseColor("#E4E7EC"))
+            }
+        })
+
+        // Avatar + name header, matching the staff rows this sheet opens from,
+        // so it is obvious WHOSE access is about to change.
+        val header = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 0, 0, dp(4))
+        }
+        header.addView(TextView(requireContext()).apply {
+            text = initials(staffName)
+            textSize = 15f
+            gravity = Gravity.CENTER
             setTypeface(typeface, Typeface.BOLD)
-            textSize = 18f
-            setTextColor(Color.parseColor("#101828"))
+            setTextColor(Color.parseColor("#0B61CA"))
+            layoutParams = LinearLayout.LayoutParams(dp(44), dp(44))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(14).toFloat()
+                setColor(Color.parseColor("#EAF4FF"))
+            }
         })
-        root.addView(TextView(requireContext()).apply {
-            text = staffName.ifBlank { "This employee" }
-            textSize = 13f
-            setTextColor(Color.parseColor("#667085"))
-            setPadding(0, dp(2), 0, dp(14))
-        })
+        header.addView(
+            LinearLayout(requireContext()).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(
+                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f,
+                ).apply { marginStart = dp(12) }
+                addView(TextView(context).apply {
+                    text = staffName.ifBlank { "This employee" }
+                    setTypeface(typeface, Typeface.BOLD)
+                    textSize = 17f
+                    setTextColor(Color.parseColor("#101828"))
+                    maxLines = 1
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                })
+                addView(TextView(context).apply {
+                    text = "Device & access"
+                    textSize = 12f
+                    setTextColor(Color.parseColor("#667085"))
+                    setPadding(0, dp(2), 0, 0)
+                })
+            },
+        )
+        root.addView(header)
 
         progress = ProgressBar(requireContext()).apply {
             isIndeterminate = true
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-            ).apply { gravity = Gravity.CENTER_HORIZONTAL }
+            layoutParams = LinearLayout.LayoutParams(dp(28), dp(28)).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                topMargin = dp(28)
+                bottomMargin = dp(28)
+            }
         }
         root.addView(progress)
 
@@ -102,9 +150,21 @@ class StaffSecurityBottomSheet : BottomSheetDialogFragment() {
             orientation = LinearLayout.VERTICAL
             visibility = View.GONE
         }
-        root.addView(container)
+        // Scrollable: the password section plus a full device card can exceed
+        // the sheet's height on a short screen.
+        root.addView(
+            ScrollView(requireContext()).apply {
+                isVerticalScrollBarEnabled = false
+                addView(container)
+            },
+        )
         return root
     }
+
+    private fun initials(name: String): String =
+        name.trim().split(" ").filter { it.isNotBlank() }
+            .take(2).joinToString("") { it.first().uppercase() }
+            .ifBlank { "?" }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -127,7 +187,15 @@ class StaffSecurityBottomSheet : BottomSheetDialogFragment() {
             container.removeAllViews()
 
             if (binding?.success != true) {
-                container.addView(label(binding?.error ?: "Couldn't load device details"))
+                container.addView(
+                    noticeCard(
+                        title = "Couldn't load device details",
+                        body = binding?.error ?: "Check your connection and try again.",
+                        accent = "#B42318",
+                        fill = "#FEF3F2",
+                        stroke = "#FDA29B",
+                    ),
+                )
             } else {
                 renderBinding(binding.binding)
             }
@@ -140,47 +208,117 @@ class StaffSecurityBottomSheet : BottomSheetDialogFragment() {
 
     private fun renderBinding(device: StaffBoundDevice?) {
         if (device == null || !device.bound) {
-            container.addView(label("No device is locked to this account."))
             container.addView(
-                label("The next mobile sign-in will bind whichever phone is used."),
+                noticeCard(
+                    title = "No device locked",
+                    body = "The next mobile sign-in will bind whichever phone is used.",
+                    accent = "#667085",
+                    fill = "#F9FAFB",
+                    stroke = "#EAECF0",
+                ),
             )
             // Sessions can still exist without a lock, so the logout action
             // stays available here.
-            if (showsForceLogout) container.addView(actionButton("Force mobile logout", "#B42318") {
-                confirm(
-                    "Force mobile logout?",
-                    "Signs ${staffName.ifBlank { "this employee" }} out of the app on " +
-                        "every phone. Web sessions are unaffected.",
-                ) { forceLogout() }
-            })
+            if (showsForceLogout) {
+                container.addView(
+                    pillButton("Force mobile logout", Style.DANGER) {
+                        confirm(
+                            "Force mobile logout?",
+                            "Signs ${staffName.ifBlank { "this employee" }} out of the app on " +
+                                "every phone. Web sessions are unaffected.",
+                        ) { forceLogout() }
+                    },
+                )
+            }
             return
         }
 
-        container.addView(row("Device", listOfNotNull(
-            device.deviceModel?.takeIf { it.isNotBlank() },
-            device.platform?.takeIf { it.isNotBlank() },
-        ).joinToString(" · ").ifBlank { "Unknown device" }))
-        device.deviceId?.let { container.addView(row("Device ID", it)) }
-        device.batteryPct?.let { container.addView(row("Battery", "${it.toInt()}%")) }
-        device.ip?.let { container.addView(row("IP address", it)) }
-        device.boundAt?.let { container.addView(row("Bound at", formatTime(it))) }
-        device.lastSeenAt?.let { container.addView(row("Last seen", formatTime(it))) }
+        // One card for the device rather than a flat run of label/value pairs —
+        // these belong together, and the loose stack read as debug output.
+        val card = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(16), dp(16), dp(16))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(16).toFloat()
+                setColor(Color.parseColor("#F9FAFB"))
+                setStroke(dp(1), Color.parseColor("#EAECF0"))
+            }
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(16) }
+        }
 
-        if (showsDeviceReset) container.addView(actionButton("Reset device lock", "#B54708") {
-            confirm(
-                "Reset device lock?",
-                "Clears the lock so the next mobile sign-in binds a new phone, " +
-                    "and signs the current phone out. Use this when the staff has " +
-                    "changed handset.",
-            ) { resetDevice() }
-        })
-        if (showsForceLogout) container.addView(actionButton("Force mobile logout", "#B42318") {
-            confirm(
-                "Force mobile logout?",
-                "Signs them out of the app but KEEPS the account locked to this " +
-                    "phone. Use this for a lost or handed-over device.",
-            ) { forceLogout() }
-        })
+        // Headline: the handset itself, with a live "locked" chip.
+        val top = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        top.addView(
+            LinearLayout(requireContext()).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(
+                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f,
+                )
+                addView(TextView(context).apply {
+                    text = listOfNotNull(
+                        device.deviceModel?.takeIf { it.isNotBlank() },
+                        device.platform?.takeIf { it.isNotBlank() },
+                    ).joinToString(" · ").ifBlank { "Unknown device" }
+                    setTypeface(typeface, Typeface.BOLD)
+                    textSize = 15f
+                    setTextColor(Color.parseColor("#101828"))
+                })
+                device.batteryPct?.let { pct ->
+                    addView(TextView(context).apply {
+                        text = "Battery ${pct.toInt()}%"
+                        textSize = 12f
+                        setTextColor(Color.parseColor("#667085"))
+                        setPadding(0, dp(2), 0, 0)
+                    })
+                }
+            },
+        )
+        top.addView(chip("Locked", "#067647", "#ECFDF3"))
+        card.addView(top)
+
+        card.addView(cardDivider())
+
+        // Details, two per line where they fit — a full-width row each made the
+        // card twice as tall as it needed to be.
+        device.deviceId?.let { card.addView(detailRow("Device ID", it, mono = true)) }
+        card.addView(
+            detailPair(
+                "IP address", device.ip?.takeIf { it.isNotBlank() } ?: "—",
+                "Bound", device.boundAt?.let { shortTime(it) } ?: "—",
+            ),
+        )
+        device.lastSeenAt?.let { card.addView(detailRow("Last seen", formatTime(it))) }
+        container.addView(card)
+
+        if (showsDeviceReset) {
+            container.addView(
+                pillButton("Reset device lock", Style.WARN) {
+                    confirm(
+                        "Reset device lock?",
+                        "Clears the lock so the next mobile sign-in binds a new phone, " +
+                            "and signs the current phone out. Use this when the staff has " +
+                            "changed handset.",
+                    ) { resetDevice() }
+                },
+            )
+        }
+        if (showsForceLogout) {
+            container.addView(
+                pillButton("Force mobile logout", Style.DANGER) {
+                    confirm(
+                        "Force mobile logout?",
+                        "Signs them out of the app but KEEPS the account locked to this " +
+                            "phone. Use this for a lost or handed-over device.",
+                    ) { forceLogout() }
+                },
+            )
+        }
     }
 
     /**
@@ -192,32 +330,93 @@ class StaffSecurityBottomSheet : BottomSheetDialogFragment() {
      * rather than an error).
      */
     private fun renderPassword(status: StaffPasswordStatus?) {
-        if (status == null || !showsPassword) return
+        if (!showsPassword) return
+        if (status == null) {
+            // Opened FROM the Password tab but the status did not load — say so.
+            // Otherwise the sheet shows a device card and no actions at all,
+            // which reads as a dead end rather than a failure.
+            if (focus == FOCUS_PASSWORD) {
+                container.addView(
+                    noticeCard(
+                        title = "Password details unavailable",
+                        body = "You may not have the password permission, or the " +
+                            "request failed. Pull to refresh the list and try again.",
+                        accent = "#B54708",
+                        fill = "#FFFAEB",
+                        stroke = "#FEC84B",
+                    ),
+                )
+            }
+            return
+        }
         container.addView(divider())
         container.addView(sectionTitle("Password"))
-        container.addView(
-            row(
-                "Status",
-                if (status.hasPassword) "Password is set" else "No password set",
-            ),
+
+        val card = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(16).toFloat()
+                setColor(Color.parseColor("#F9FAFB"))
+                setStroke(dp(1), Color.parseColor("#EAECF0"))
+            }
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(4) }
+        }
+
+        val head = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        head.addView(TextView(requireContext()).apply {
+            text = if (status.hasPassword) "Password is set" else "No password set"
+            setTypeface(typeface, Typeface.BOLD)
+            textSize = 14f
+            setTextColor(Color.parseColor("#101828"))
+            layoutParams = LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f,
+            )
+        })
+        head.addView(
+            if (status.hasPassword) chip("Set", "#067647", "#ECFDF3")
+            else chip("Not set", "#B54708", "#FFFAEB"),
         )
+        card.addView(head)
+
         if (status.mustChangePassword) {
-            container.addView(label("Must change at next login."))
+            card.addView(TextView(requireContext()).apply {
+                text = "Must change at next login"
+                textSize = 12f
+                setTextColor(Color.parseColor("#B54708"))
+                setPadding(0, dp(6), 0, 0)
+            })
         }
         status.passwordUpdatedAt?.let {
-            container.addView(row("Last changed", formatTime(it)))
+            card.addView(detailRow("Last changed", formatTime(it)))
         }
+        if (status.passwordExpiryExempt) {
+            card.addView(TextView(requireContext()).apply {
+                text = "Exempt from password expiry"
+                textSize = 12f
+                setTextColor(Color.parseColor("#667085"))
+                setPadding(0, dp(6), 0, 0)
+            })
+        }
+        container.addView(card)
 
-        container.addView(actionButton("Set a new password", "#0B61CA") {
-            promptSetPassword()
-        })
+        container.addView(
+            pillButton("Set a new password", Style.PRIMARY) { promptSetPassword() },
+        )
 
-        // "Don't ask to change password" — same switch the web tab has.
+        // "Don't ask to change password" — same switch the web tab has. Neutral
+        // styling: it is a setting, not a destructive action.
         val exempt = status.passwordExpiryExempt
         container.addView(
-            actionButton(
+            pillButton(
                 if (exempt) "Re-enable password expiry" else "Exempt from password expiry",
-                "#475467",
+                Style.WARN,
             ) {
                 confirm(
                     if (exempt) "Re-enable expiry?" else "Exempt from expiry?",
@@ -242,36 +441,105 @@ class StaffSecurityBottomSheet : BottomSheetDialogFragment() {
         val ctx = requireContext()
         val wrapper = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(8), dp(20), 0)
+            setPadding(dp(22), dp(16), dp(22), 0)
+        }
+
+        wrapper.addView(TextView(ctx).apply {
+            text = "NEW PASSWORD"
+            textSize = 10f
+            letterSpacing = 0.04f
+            setTextColor(Color.parseColor("#98A2B3"))
+            setPadding(0, 0, 0, dp(6))
+        })
+
+        // Boxed field with a show/hide toggle. A bare EditText gave no sense of
+        // a form, and an admin typing a password they must then read out to the
+        // staff has to be able to SEE it.
+        val fieldRow = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(14), 0, dp(12), 0)
+            background = GradientDrawable().apply {
+                cornerRadius = dp(12).toFloat()
+                setColor(Color.WHITE)
+                setStroke(dp(1), Color.parseColor("#D0D5DD"))
+            }
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(52),
+            )
         }
         val input = android.widget.EditText(ctx).apply {
-            hint = "New password"
+            hint = "Enter a new password"
+            setHintTextColor(Color.parseColor("#9CA3AF"))
+            setTextColor(Color.parseColor("#101828"))
+            background = null
+            textSize = 15f
             inputType = android.text.InputType.TYPE_CLASS_TEXT or
                 android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-            textSize = 15f
+            layoutParams = LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.MATCH_PARENT, 1f,
+            )
         }
-        wrapper.addView(input)
-        val hint = TextView(ctx).apply {
-            text = "At least 8 characters with upper, lower, a number and a symbol."
+        fieldRow.addView(input)
+        fieldRow.addView(TextView(ctx).apply {
+            text = "Show"
+            textSize = 12f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.parseColor("#0B61CA"))
+            setPadding(dp(8), dp(6), dp(4), dp(6))
+            isClickable = true
+            setOnClickListener {
+                val hidden = input.inputType and
+                    android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD != 0
+                input.inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                    if (hidden) {
+                        android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+                    } else {
+                        android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+                    }
+                text = if (hidden) "Hide" else "Show"
+                input.setSelection(input.text?.length ?: 0)
+            }
+        })
+        wrapper.addView(fieldRow)
+
+        wrapper.addView(TextView(ctx).apply {
+            text = "At least 8 characters, with an upper and lower case letter, " +
+                "a number and a symbol."
             textSize = 11f
             setTextColor(Color.parseColor("#667085"))
-            setPadding(0, dp(8), 0, 0)
-        }
-        wrapper.addView(hint)
+            setPadding(0, dp(8), 0, dp(2))
+        })
+        wrapper.addView(TextView(ctx).apply {
+            text = "They will be asked to change it at their next login."
+            textSize = 11f
+            setTextColor(Color.parseColor("#B54708"))
+            setPadding(0, dp(4), 0, 0)
+        })
 
-        AlertDialog.Builder(ctx)
+        val dialog = AlertDialog.Builder(ctx)
             .setTitle("Set a new password")
             .setView(wrapper)
-            .setPositiveButton("Save") { _, _ ->
+            .setPositiveButton("Save", null)
+            .setNegativeButton("Cancel", null)
+            .create()
+        dialog.show()
+        // Bound manually so a blank entry does not dismiss the dialog and lose
+        // what was typed — setPositiveButton's own listener always closes.
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.apply {
+            setTextColor(Color.parseColor("#0B61CA"))
+            setOnClickListener {
                 val value = input.text?.toString().orEmpty()
                 if (value.isBlank()) {
                     Toast.makeText(ctx, "Enter a password", Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
+                    return@setOnClickListener
                 }
+                dialog.dismiss()
                 savePassword(value)
             }
-            .setNegativeButton("Cancel", null)
-            .show()
+        }
+        dialog.getButton(AlertDialog.BUTTON_NEGATIVE)
+            ?.setTextColor(Color.parseColor("#667085"))
     }
 
     private fun savePassword(newPassword: String) = runAction {
@@ -362,44 +630,155 @@ class StaffSecurityBottomSheet : BottomSheetDialogFragment() {
 
     // ── small view helpers (this sheet is built in code, like the CP queue) ──
 
-    private fun row(label: String, value: String): View =
+    /** Visual weight of an action. Destructive actions must not look alike. */
+    private enum class Style { PRIMARY, WARN, DANGER }
+
+    /**
+     * A real, full-width pill button.
+     *
+     * These were bare coloured TextViews — the same mistake as the collections
+     * "Not Collected" control: a destructive action that reads as a caption and
+     * gives no press feedback. Same 54dp / 27dp geometry as every other footer
+     * action in the app.
+     */
+    private fun pillButton(text: String, style: Style, onClick: () -> Unit): View {
+        val (fg, fill, stroke) = when (style) {
+            Style.PRIMARY -> Triple("#FFFFFF", "#0B61CA", "#0B61CA")
+            Style.WARN -> Triple("#B54708", "#FFFAEB", "#FEC84B")
+            Style.DANGER -> Triple("#B42318", "#FEF3F2", "#FDA29B")
+        }
+        return TextView(requireContext()).apply {
+            this.text = text
+            textSize = 15f
+            gravity = Gravity.CENTER
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.parseColor(fg))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(27).toFloat()
+                setColor(Color.parseColor(fill))
+                setStroke(dp(1), Color.parseColor(stroke))
+            }
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(54),
+            ).apply { topMargin = dp(12) }
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { onClick() }
+        }
+    }
+
+    /** Small status pill (Locked / Password set / …). */
+    private fun chip(text: String, fg: String, fill: String): View =
+        TextView(requireContext()).apply {
+            this.text = text
+            textSize = 11f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.parseColor(fg))
+            setPadding(dp(10), dp(4), dp(10), dp(4))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(12).toFloat()
+                setColor(Color.parseColor(fill))
+            }
+        }
+
+    private fun noticeCard(
+        title: String,
+        body: String,
+        accent: String,
+        fill: String,
+        stroke: String,
+    ): View = LinearLayout(requireContext()).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(16), dp(14), dp(16), dp(14))
+        background = GradientDrawable().apply {
+            cornerRadius = dp(16).toFloat()
+            setColor(Color.parseColor(fill))
+            setStroke(dp(1), Color.parseColor(stroke))
+        }
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply { topMargin = dp(16) }
+        addView(TextView(context).apply {
+            text = title
+            setTypeface(typeface, Typeface.BOLD)
+            textSize = 14f
+            setTextColor(Color.parseColor(accent))
+        })
+        addView(TextView(context).apply {
+            text = body
+            textSize = 12f
+            setTextColor(Color.parseColor("#667085"))
+            setPadding(0, dp(4), 0, 0)
+        })
+    }
+
+    private fun cardDivider(): View = View(requireContext()).apply {
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(1),
+        ).apply { topMargin = dp(14); bottomMargin = dp(12) }
+        setBackgroundColor(Color.parseColor("#EAECF0"))
+    }
+
+    private fun detailLabel(text: String) = TextView(requireContext()).apply {
+        this.text = text.uppercase(Locale.US)
+        textSize = 10f
+        letterSpacing = 0.04f
+        setTextColor(Color.parseColor("#98A2B3"))
+    }
+
+    private fun detailValue(text: String, mono: Boolean) = TextView(requireContext()).apply {
+        this.text = text
+        textSize = 13f
+        setTextColor(Color.parseColor("#101828"))
+        // A device id is a token to compare, not prose — monospace makes
+        // checking it against another screen actually possible.
+        if (mono) typeface = android.graphics.Typeface.MONOSPACE
+        setPadding(0, dp(2), 0, 0)
+    }
+
+    private fun detailRow(label: String, value: String, mono: Boolean = false): View =
         LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(0, dp(6), 0, dp(6))
-            addView(TextView(context).apply {
-                text = label.uppercase(Locale.US)
-                textSize = 10f
-                setTextColor(Color.parseColor("#98A2B3"))
-            })
-            addView(TextView(context).apply {
-                text = value
-                textSize = 14f
-                setTextColor(Color.parseColor("#101828"))
-            })
+            addView(detailLabel(label))
+            addView(detailValue(value, mono))
         }
 
-    private fun label(text: String): View = TextView(requireContext()).apply {
-        this.text = text
-        textSize = 13f
-        setTextColor(Color.parseColor("#475467"))
-        setPadding(0, dp(4), 0, dp(4))
+    /** Two short fields side by side, so the card does not run twice as tall. */
+    private fun detailPair(
+        leftLabel: String,
+        leftValue: String,
+        rightLabel: String,
+        rightValue: String,
+    ): View = LinearLayout(requireContext()).apply {
+        orientation = LinearLayout.HORIZONTAL
+        setPadding(0, dp(6), 0, dp(6))
+        addView(
+            LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(
+                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f,
+                )
+                addView(detailLabel(leftLabel))
+                addView(detailValue(leftValue, mono = false).apply { maxLines = 1 })
+            },
+        )
+        addView(
+            LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(
+                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f,
+                ).apply { marginStart = dp(12) }
+                addView(detailLabel(rightLabel))
+                addView(detailValue(rightValue, mono = false).apply { maxLines = 1 })
+            },
+        )
     }
 
-    private fun actionButton(text: String, colorHex: String, onClick: () -> Unit): View =
-        TextView(requireContext()).apply {
-            this.text = text
-            textSize = 14f
-            setTypeface(typeface, Typeface.BOLD)
-            gravity = Gravity.CENTER
-            setTextColor(Color.parseColor(colorHex))
-            setPadding(dp(14), dp(14), dp(14), dp(14))
-            isClickable = true
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-            ).apply { topMargin = dp(12) }
-            setOnClickListener { onClick() }
-        }
+    /** "21 Aug, 12:36 pm" — the year is noise next to a full timestamp. */
+    private fun shortTime(ms: Double): String =
+        SimpleDateFormat("d MMM, h:mm a", Locale.US).format(Date(ms.toLong()))
 
     private fun formatTime(ms: Double): String =
         SimpleDateFormat("d MMM yyyy, h:mm a", Locale.US).format(Date(ms.toLong()))
