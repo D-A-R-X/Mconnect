@@ -518,14 +518,10 @@ class CpVisitsFragment : Fragment() {
     private fun com.manjugroups.m_connect.network.CpVisitDetail.toCpListVisitOrNull(): TodayVisit? {
         val cpId = this.id ?: return null
         val scheduled = this.scheduledDate ?: return null
-        // The CP-level "pending_gm_approval" hold must win over the fieldVisit
-        // lifecycle: the app calls completeVisit after every outcome, so the
-        // fieldVisit reads "completed" while the CP is actually held. Without
-        // this the card would show "Completed" instead of "Pending Approval".
-        val effectiveStatus = this.status?.takeIf { it == "pending_gm_approval" }
-            ?: this.fieldVisit?.status?.takeIf { it.isNotBlank() }
-            ?: this.status?.takeIf { it.isNotBlank() }
-            ?: "scheduled"
+        // Shared with Home so both screens agree. A terminal CP status wins
+        // over the trip row; a live one still defers to it. See
+        // resolveCpEffectiveStatus for why.
+        val effectiveStatus = resolveCpEffectiveStatus(this.status, this.fieldVisit?.status)
         val proposedHasFields = this.proposedSiteVisit?.let { p ->
             !p.projectId.isNullOrBlank() ||
                 !p.scheduledDate.isNullOrBlank() ||

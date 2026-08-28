@@ -611,16 +611,15 @@ class HomeViewModel : ViewModel() {
         // keeps this merge minimal — no extra lookups to find the
         // companion fieldVisits id when one exists.
         //
-        // Status precedence: the spawned fieldVisits row carries the
-        // authoritative trip status ("in-progress" / "arrived" /
-        // "completed"), while the CP visit's own status only tracks the
-        // CP lifecycle ("scheduled" / "in_progress" / "completed"). If
-        // a fieldVisits row exists we prefer its status so the trip
-        // nav screen doesn't drop the user back on "Start Trip" after
-        // they've already verified arrival.
-        val effectiveStatus = this.fieldVisit?.status?.takeIf { it.isNotBlank() }
-            ?: this.status?.takeIf { it.isNotBlank() }
-            ?: "scheduled"
+        // Status precedence, shared with the CP Visits list so the two screens
+        // can never disagree: while the trip is live the fieldVisits row is
+        // authoritative (only it tracks "arrived", so the user isn't dropped
+        // back on "Start Trip" after verifying arrival), but a TERMINAL CP
+        // status wins over it. Home previously always preferred the trip row,
+        // so a completed CP whose field visit was left open showed as Enroute
+        // with a Start action and never closed.
+        val effectiveStatus = com.manjugroups.m_connect.ui.marketing
+            .resolveCpEffectiveStatus(this.status, this.fieldVisit?.status)
         // Detect "this CP was an SV-fix routed through CP first" using
         // the same three signals the outcome sheet uses for its locked
         // mode. Any one of these is enough: an explicit proposed SV
