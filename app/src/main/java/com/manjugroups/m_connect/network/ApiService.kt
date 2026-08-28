@@ -611,7 +611,14 @@ interface ApiService {
         @Header("Authorization") token: String,
         @Query("numItems") numItems: Int = 25,
         @Query("cursor") cursor: String? = null,
-        @Query("status") status: String? = null
+        @Query("status") status: String? = null,
+        /**
+         * "1" skips the reporting-column and device-health enrichment. Those
+         * made every page cost thousands of reads and the request hung, so the
+         * staff list never filled. Callers needing only the staff rows should
+         * send it.
+         */
+        @Query("lite") lite: String? = null,
     ): StaffPaginatedResponse
 
     @GET("api/hr/staff/count")

@@ -24,6 +24,7 @@ import com.manjugroups.m_connect.network.PasswordExpiryExemptRequest
 import com.manjugroups.m_connect.network.SetStaffPasswordRequest
 import com.manjugroups.m_connect.network.StaffIdRequest
 import com.manjugroups.m_connect.network.StaffPasswordStatus
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -171,21 +172,33 @@ class StaffSecurityBottomSheet : BottomSheetDialogFragment() {
         load()
     }
 
+    /**
+     * Loads the device binding and the password status.
+     *
+     * The two calls are INDEPENDENT and are fired together. Awaiting them one
+     * after the other meant a spinner for the sum of both — measured at 9.0s +
+     * 7.1s on a real device, which reads as a hung sheet rather than a slow
+     * one. They now overlap, and the device card is painted the moment its own
+     * response lands instead of waiting on the password call.
+     */
     private fun load() {
         progress.visibility = View.VISIBLE
         container.visibility = View.GONE
+        container.removeAllViews()
         viewLifecycleOwner.lifecycleScope.launch {
-            val binding = runCatching {
-                api.getStaffSecurity(session.bearerToken, staffId)
-            }.getOrNull()
-            val passwordStatus = runCatching {
-                api.getStaffPasswordStatus(session.bearerToken, staffId)
-            }.getOrNull()
-            if (!isAdded) return@launch
+            val bindingDeferred = async {
+                runCatching { api.getStaffSecurity(session.bearerToken, staffId) }
+                    .getOrNull()
+            }
+            val passwordDeferred = async {
+                runCatching { api.getStaffPasswordStatus(session.bearerToken, staffId) }
+                    .getOrNull()
+            }
+
+            val binding = bindingDeferred.await()
+            if (!isAdded || view == null) return@launch
             progress.visibility = View.GONE
             container.visibility = View.VISIBLE
-            container.removeAllViews()
-
             if (binding?.success != true) {
                 container.addView(
                     noticeCard(
@@ -199,9 +212,12 @@ class StaffSecurityBottomSheet : BottomSheetDialogFragment() {
             } else {
                 renderBinding(binding.binding)
             }
-            // Separate permission (staff.password) - a caller may hold the
-            // device rights without it, so a failure here just omits the
-            // section instead of failing the whole screen.
+
+            // Appended when it arrives. A separate permission (staff.password),
+            // so a failure here just omits the section rather than failing the
+            // whole sheet.
+            val passwordStatus = passwordDeferred.await()
+            if (!isAdded || view == null) return@launch
             renderPassword(passwordStatus?.takeIf { it.success }?.status)
         }
     }

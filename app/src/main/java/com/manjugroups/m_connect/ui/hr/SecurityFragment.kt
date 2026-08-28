@@ -201,6 +201,9 @@ class SecurityFragment : Fragment() {
                     token = session.bearerToken,
                     numItems = PAGE_SIZE,
                     cursor = cursor,
+                    // This screen needs the staff rows only; the enriched
+                    // response hung the request.
+                    lite = "1",
                 )
             }.getOrNull()
 
