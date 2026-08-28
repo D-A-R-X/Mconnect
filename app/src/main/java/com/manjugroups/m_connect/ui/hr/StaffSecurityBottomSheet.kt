@@ -51,6 +51,14 @@ class StaffSecurityBottomSheet : BottomSheetDialogFragment() {
     private var staffName: String = ""
     private var inFlight = false
 
+    /**
+     * Which action the caller wants. The Security screen's tabs pass this so a
+     * tab is a real choice rather than a label - "Device Reset" must not also
+     * offer Force Logout, or the tab means nothing. Null (the staff-detail
+     * entry point) shows everything, as before.
+     */
+    private var focus: String? = null
+
     private lateinit var container: LinearLayout
     private lateinit var progress: ProgressBar
 
@@ -62,6 +70,7 @@ class StaffSecurityBottomSheet : BottomSheetDialogFragment() {
         session = SessionManager(requireContext())
         staffId = arguments?.getString(ARG_STAFF_ID).orEmpty()
         staffName = arguments?.getString(ARG_STAFF_NAME).orEmpty()
+        focus = arguments?.getString(ARG_FOCUS)
 
         val root = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
@@ -137,7 +146,7 @@ class StaffSecurityBottomSheet : BottomSheetDialogFragment() {
             )
             // Sessions can still exist without a lock, so the logout action
             // stays available here.
-            container.addView(actionButton("Force mobile logout", "#B42318") {
+            if (showsForceLogout) container.addView(actionButton("Force mobile logout", "#B42318") {
                 confirm(
                     "Force mobile logout?",
                     "Signs ${staffName.ifBlank { "this employee" }} out of the app on " +
@@ -157,7 +166,7 @@ class StaffSecurityBottomSheet : BottomSheetDialogFragment() {
         device.boundAt?.let { container.addView(row("Bound at", formatTime(it))) }
         device.lastSeenAt?.let { container.addView(row("Last seen", formatTime(it))) }
 
-        container.addView(actionButton("Reset device lock", "#B54708") {
+        if (showsDeviceReset) container.addView(actionButton("Reset device lock", "#B54708") {
             confirm(
                 "Reset device lock?",
                 "Clears the lock so the next mobile sign-in binds a new phone, " +
@@ -165,7 +174,7 @@ class StaffSecurityBottomSheet : BottomSheetDialogFragment() {
                     "changed handset.",
             ) { resetDevice() }
         })
-        container.addView(actionButton("Force mobile logout", "#B42318") {
+        if (showsForceLogout) container.addView(actionButton("Force mobile logout", "#B42318") {
             confirm(
                 "Force mobile logout?",
                 "Signs them out of the app but KEEPS the account locked to this " +
@@ -183,7 +192,7 @@ class StaffSecurityBottomSheet : BottomSheetDialogFragment() {
      * rather than an error).
      */
     private fun renderPassword(status: StaffPasswordStatus?) {
-        if (status == null) return
+        if (status == null || !showsPassword) return
         container.addView(divider())
         container.addView(sectionTitle("Password"))
         container.addView(
@@ -398,17 +407,32 @@ class StaffSecurityBottomSheet : BottomSheetDialogFragment() {
     private fun dp(value: Int): Int =
         (value * resources.displayMetrics.density).toInt()
 
+    private val showsDeviceReset get() = focus == null || focus == FOCUS_DEVICE_RESET
+    private val showsForceLogout get() = focus == null || focus == FOCUS_STAFF_LOGIN
+    private val showsPassword get() = focus == null || focus == FOCUS_PASSWORD
+
     companion object {
         const val RESULT_KEY = "staff_security_changed"
+        const val FOCUS_DEVICE_RESET = "device_reset"
+        const val FOCUS_STAFF_LOGIN = "staff_login"
+        const val FOCUS_PASSWORD = "password"
         private const val ARG_STAFF_ID = "arg_staff_id"
         private const val ARG_STAFF_NAME = "arg_staff_name"
+        private const val ARG_FOCUS = "arg_focus"
 
-        fun show(fm: FragmentManager, staffId: String, staffName: String?) {
+        fun show(
+            fm: FragmentManager,
+            staffId: String,
+            staffName: String?,
+            /** One of the FOCUS_* keys, or null to show every action. */
+            focus: String? = null,
+        ) {
             if (fm.findFragmentByTag("staff_security") != null) return
             StaffSecurityBottomSheet().apply {
                 arguments = Bundle().apply {
                     putString(ARG_STAFF_ID, staffId)
                     putString(ARG_STAFF_NAME, staffName.orEmpty())
+                    focus?.let { putString(ARG_FOCUS, it) }
                 }
             }.show(fm, "staff_security")
         }
