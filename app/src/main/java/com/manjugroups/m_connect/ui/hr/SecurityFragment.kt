@@ -51,8 +51,20 @@ class SecurityFragment : Fragment() {
     private val api = ApiService.create()
     private lateinit var session: SessionManager
 
-    private var allStaff: List<StaffData> = emptyList()
+    // Loaded pages, appended as the user scrolls. Never the whole directory at
+    // once — an org with hundreds of staff made a single call slow enough that
+    // the screen sat blank and read as stuck.
+    private val loaded = mutableListOf<StaffData>()
+    private var cursor: String? = null
+    private var isDone = false
+    private var isLoading = false
+    private var loadFailed = false
+
     private var searchQuery: String = ""
+    private var searchJob: kotlinx.coroutines.Job? = null
+    /** Search is served by the server so it reaches staff not yet paged in. */
+    private var isSearching = false
+
     private var designationFilter: String? = null
     private var departmentFilter: String? = null
 
@@ -112,7 +124,22 @@ class SecurityFragment : Fragment() {
         buildTabs()
         setupSearch()
         binding.btnSecurityFilter.setOnClickListener { openFilters() }
-        binding.securityRefresh.setupPullToRefresh { load() }
+        binding.securityRefresh.setupPullToRefresh {
+            if (isSearching) runSearch(searchQuery) else resetAndLoad()
+        }
+        binding.btnSecurityRetry.setOnClickListener {
+            if (isSearching) runSearch(searchQuery) else resetAndLoad()
+        }
+
+        // Scroll-based paging: pull the next page once the user is within a
+        // screen of the bottom, so rows are already there when they arrive.
+        binding.securityScroll.viewTreeObserver.addOnScrollChangedListener {
+            if (_binding == null) return@addOnScrollChangedListener
+            val scroll = binding.securityScroll
+            val child = scroll.getChildAt(0) ?: return@addOnScrollChangedListener
+            val remaining = child.height - (scroll.height + scroll.scrollY)
+            if (remaining < scroll.height) loadNextPage()
+        }
 
         // A staff action taken in the sheet can change what the list shows.
         parentFragmentManager.setFragmentResultListener(
@@ -122,7 +149,7 @@ class SecurityFragment : Fragment() {
             StaffSecurityBottomSheet.RESULT_KEY, viewLifecycleOwner,
         ) { _, _ -> render() }
 
-        load()
+        resetAndLoad()
     }
 
     override fun onResume() {
@@ -139,86 +166,188 @@ class SecurityFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        searchJob?.cancel()
         _binding = null
         super.onDestroyView()
     }
 
     // ---------- data ----------
 
-    private fun load() {
+    private fun resetAndLoad() {
+        loaded.clear()
+        cursor = null
+        isDone = false
+        loadFailed = false
+        render()
+        loadNextPage(first = true)
+    }
+
+    /**
+     * Pulls one page. Called for the first page and again from the scroll
+     * listener as the user nears the bottom.
+     *
+     * Guarded by [isLoading] so a fast scroll cannot fire several overlapping
+     * requests for the same cursor and append the same page twice.
+     */
+    private fun loadNextPage(first: Boolean = false) {
+        if (isLoading || isDone || isSearching) return
+        if (!first && cursor == null) return
+        isLoading = true
+        renderLoadingState()
+
         viewLifecycleOwner.lifecycleScope.launch {
-            val resp = runCatching { api.getStaff(session.bearerToken) }.getOrNull()
+            val resp = runCatching {
+                api.getStaffPaginated(
+                    token = session.bearerToken,
+                    numItems = PAGE_SIZE,
+                    cursor = cursor,
+                )
+            }.getOrNull()
+
             if (!isAdded || _binding == null) return@launch
+            isLoading = false
             binding.securityRefresh.dismissRefresh()
+
             if (resp?.success != true) {
-                // Keep whatever is already on screen; a failed refresh must not
-                // empty a directory the user is working through.
-                if (allStaff.isEmpty()) {
-                    Toast.makeText(
-                        requireContext(),
-                        resp?.let { "Couldn't load staff" } ?: "Network error",
-                        Toast.LENGTH_SHORT,
-                    ).show()
-                }
+                // Keep the pages already on screen; only a FIRST-page failure
+                // has nothing to show, and that gets an explicit retry rather
+                // than a blank rectangle.
+                loadFailed = loaded.isEmpty()
                 render()
                 return@launch
             }
-            allStaff = resp.staff
-                .filter { !it.id.isNullOrBlank() }
-                // Active first, then by name, so the people most likely to need
-                // an action are at the top.
-                .sortedWith(
-                    compareBy<StaffData> { if (it.status == "active") 0 else 1 }
-                        .thenBy { it.name?.lowercase(Locale.US) ?: "" },
-                )
+
+            loaded.addAll(resp.page.filter { !it.id.isNullOrBlank() })
+            cursor = resp.continueCursor
+            isDone = resp.isDone || resp.continueCursor == null
+            loadFailed = false
+            render()
+
+            // With a filter on, one page may contain few (or no) matches. Keep
+            // pulling so the user is not left staring at an empty list while
+            // hundreds of unloaded staff would have matched.
+            if (hasActiveFilters() && !isDone && visibleStaff().size < PAGE_SIZE) {
+                loadNextPage()
+            }
+        }
+    }
+
+    /**
+     * Server-side search, so a name is found even when their page has not been
+     * scrolled to yet. Debounced — a keystroke per request would hammer the
+     * backend and the results would race.
+     */
+    private fun runSearch(query: String) {
+        searchJob?.cancel()
+        val q = query.trim()
+        if (q.isEmpty()) {
+            isSearching = false
+            resetAndLoad()
+            return
+        }
+        isSearching = true
+        loadFailed = false
+        isLoading = true
+        renderLoadingState()
+        searchJob = viewLifecycleOwner.lifecycleScope.launch {
+            kotlinx.coroutines.delay(SEARCH_DEBOUNCE_MS)
+            val resp = runCatching { api.searchStaff(session.bearerToken, q) }.getOrNull()
+            if (!isAdded || _binding == null) return@launch
+            isLoading = false
+            if (resp?.success == true) {
+                loaded.clear()
+                loaded.addAll(resp.staff.filter { !it.id.isNullOrBlank() })
+                // A search result set is complete in itself — no paging.
+                isDone = true
+                cursor = null
+            } else {
+                loadFailed = loaded.isEmpty()
+            }
             render()
         }
     }
 
-    private fun visibleStaff(): List<StaffData> {
-        val q = searchQuery.trim().lowercase(Locale.US)
-        return allStaff.filter { s ->
-            val matchesQuery = q.isEmpty() || listOfNotNull(
-                s.name, s.employeeId, s.phone, s.designation, s.department,
-            ).any { it.lowercase(Locale.US).contains(q) }
+    private fun hasActiveFilters() =
+        designationFilter != null || departmentFilter != null
+
+    private fun visibleStaff(): List<StaffData> = loaded
+        .filter { s ->
             val matchesDesignation =
                 designationFilter == null || s.designation.equals(designationFilter, true)
             val matchesDepartment =
                 departmentFilter == null || s.department.equals(departmentFilter, true)
-            matchesQuery && matchesDesignation && matchesDepartment
+            matchesDesignation && matchesDepartment
         }
-    }
+        // Active first, then by name, so whoever most likely needs an action is
+        // at the top. Sorted at render time because pages arrive incrementally.
+        .sortedWith(
+            compareBy<StaffData> { if (it.status == "active") 0 else 1 }
+                .thenBy { it.name?.lowercase(Locale.US) ?: "" },
+        )
 
     // ---------- rendering ----------
 
+    /** Skeleton only while the FIRST page is in flight; a spinner for later pages. */
+    private fun renderLoadingState() {
+        if (_binding == null) return
+        val firstLoad = isLoading && loaded.isEmpty()
+        binding.securitySkeleton.visibility = if (firstLoad) View.VISIBLE else View.GONE
+        if (firstLoad && binding.securitySkeleton.childCount == 0) {
+            repeat(6) { binding.securitySkeleton.addView(skeletonRow()) }
+        }
+        binding.securityLoadingMore.visibility =
+            if (isLoading && loaded.isNotEmpty()) View.VISIBLE else View.GONE
+    }
+
     private fun render() {
         if (_binding == null) return
-        val rows = visibleStaff()
-        binding.tvSecurityCount.text =
-            if (rows.size == allStaff.size) "${rows.size} staff"
-            else "${rows.size} of ${allStaff.size}"
+        renderLoadingState()
 
+        val rows = visibleStaff()
+        binding.tvSecurityCount.text = when {
+            isSearching -> "${rows.size} found"
+            isDone -> "${rows.size} staff"
+            // Honest while paging: more exist that have not been pulled yet.
+            else -> "${rows.size} loaded"
+        }
         binding.tvSecurityTabHint.text =
             tabs.firstOrNull { it.action == selectedTab }?.hint.orEmpty()
-
         renderChips()
 
         binding.securityList.removeAllViews()
         rows.forEach { binding.securityList.addView(staffRow(it)) }
+        binding.securityList.visibility = if (rows.isEmpty()) View.GONE else View.VISIBLE
 
-        val empty = rows.isEmpty()
-        binding.securityEmpty.visibility = if (empty) View.VISIBLE else View.GONE
-        binding.securityList.visibility = if (empty) View.GONE else View.VISIBLE
-        if (empty) {
-            val filtered = searchQuery.isNotBlank() ||
-                designationFilter != null || departmentFilter != null
+        // Nothing at all AND the first load failed -> an explicit retry, never a
+        // blank screen the user has to guess about.
+        val showError = loadFailed && rows.isEmpty()
+        binding.securityError.visibility = if (showError) View.VISIBLE else View.GONE
+        binding.tvSecurityErrorText.text =
+            "Couldn't load the staff directory. Check your connection and try again."
+
+        val showEmpty = !showError && rows.isEmpty() && !isLoading
+        binding.securityEmpty.visibility = if (showEmpty) View.VISIBLE else View.GONE
+        if (showEmpty) {
+            val narrowed = searchQuery.isNotBlank() || hasActiveFilters()
             binding.tvSecurityEmptyTitle.text =
-                if (filtered) "No matches" else "No staff found"
-            binding.tvSecurityEmptySubtitle.text = if (filtered) {
+                if (narrowed) "No matches" else "No staff found"
+            binding.tvSecurityEmptySubtitle.text = if (narrowed) {
                 "Try a different search term or clear the filters."
             } else {
                 "The staff directory came back empty."
             }
+        }
+    }
+
+    /** A grey card the size of a real row, so the wait looks like loading. */
+    private fun skeletonRow(): View = View(requireContext()).apply {
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            dp(72),
+        ).apply { bottomMargin = dp(10) }
+        background = android.graphics.drawable.GradientDrawable().apply {
+            cornerRadius = dp(14).toFloat()
+            setColor(Color.parseColor("#E9EDF3"))
         }
     }
 
@@ -320,8 +449,10 @@ class SecurityFragment : Fragment() {
             override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) = Unit
             override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) = Unit
             override fun afterTextChanged(s: Editable?) {
-                searchQuery = s?.toString().orEmpty()
-                render()
+                val next = s?.toString().orEmpty()
+                if (next == searchQuery) return
+                searchQuery = next
+                runSearch(next)
             }
         })
     }
@@ -329,9 +460,12 @@ class SecurityFragment : Fragment() {
     private fun openFilters() {
         SecurityFilterSheet.show(
             fm = childFragmentManager,
-            designations = allStaff.mapNotNull { it.designation?.takeIf { d -> d.isNotBlank() } }
+            // Options come from the pages loaded so far. They grow as the user
+            // scrolls, which is honest: offering a designation from a page that
+            // was never fetched would filter to an empty list.
+            designations = loaded.mapNotNull { it.designation?.takeIf { d -> d.isNotBlank() } }
                 .distinct().sorted(),
-            departments = allStaff.mapNotNull { it.department?.takeIf { d -> d.isNotBlank() } }
+            departments = loaded.mapNotNull { it.department?.takeIf { d -> d.isNotBlank() } }
                 .distinct().sorted(),
             selectedDesignation = designationFilter,
             selectedDepartment = departmentFilter,
@@ -393,6 +527,10 @@ class SecurityFragment : Fragment() {
         (value * resources.displayMetrics.density).toInt()
 
     companion object {
+        private const val PAGE_SIZE = 25
+        /** Long enough that typing a name is one request, not eight. */
+        private const val SEARCH_DEBOUNCE_MS = 300L
+
         /** Whether this user can reach Security at all. */
         fun isAvailable(session: SessionManager): Boolean =
             session.hasPermission("staff.resetDeviceBinding") ||
