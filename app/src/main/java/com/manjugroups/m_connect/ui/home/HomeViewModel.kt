@@ -22,6 +22,8 @@ import com.manjugroups.m_connect.network.TrackingBootstrapData
 import com.manjugroups.m_connect.network.StartVisitRequest
 import com.manjugroups.m_connect.network.AssignedPlace
 import com.manjugroups.m_connect.network.TodayVisit
+import com.manjugroups.m_connect.ui.common.preferredCpClientName
+import com.manjugroups.m_connect.ui.common.preferredCpClientPhone
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -658,24 +660,8 @@ class HomeViewModel : ViewModel() {
         } else {
             "direct_cp"
         }
-        // Prefer the canonical client name (manualProfile.clientName on
-        // the server, surfaced as `client.clientName`) over the typed-in
-        // dialer name (`lead.contactName`). The web Client Profile card
-        // already shows the canonical form ("Abhi") — mobile was falling
-        // back to the dialer string ("abi") because clientPlace.name was
-        // blank for fresh CPs. Same ordering applied to `leadName` so
-        // downstream surfaces that fall back to leadName stay aligned.
-        val profileClient = this.lead?.manualProfile?.clientName.asClientNameOrNull()
-        val canonicalClient = this.client?.clientName.asClientNameOrNull()
-        val typedContact = this.lead?.contactName.asClientNameOrNull()
-        val placeLabel = this.clientPlace?.name.asClientNameOrNull()
-        val phoneLabel = this.lead?.mobileNumber?.takeIf { it.isNotBlank() }
-            ?: this.client?.mobileNumber?.takeIf { it.isNotBlank() }
-            ?: this.clientPlace?.contactPhone?.takeIf { it.isNotBlank() }
-        val resolvedClientName = profileClient
-            ?: canonicalClient
-            ?: typedContact
-            ?: placeLabel
+        val resolvedClientName = preferredCpClientName()
+        val phoneLabel = preferredCpClientPhone()
         val displayName = resolvedClientName
             ?: phoneLabel
             ?: "CP visit"
@@ -717,6 +703,7 @@ class HomeViewModel : ViewModel() {
                 outcome = this.outcome,
                 postponeReasons = this.postponeReasons,
                 cpType = this.cpType,
+                jointCpCategory = this.jointCpCategory,
             ),
         )
     }

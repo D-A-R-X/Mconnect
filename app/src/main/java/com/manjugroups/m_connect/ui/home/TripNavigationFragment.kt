@@ -41,6 +41,8 @@ import com.google.android.gms.maps.model.MarkerOptions
 import com.google.android.gms.maps.model.Polyline
 import com.google.android.gms.maps.model.PolylineOptions
 import com.google.android.gms.tasks.CancellationTokenSource
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.textfield.TextInputEditText
 import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
@@ -70,6 +72,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.asRequestBody
 import java.io.File
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlin.math.atan2
@@ -119,8 +122,6 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     private var pendingArrivalPhoto: File? = null
     private var pendingArrivalPhotoUri: Uri? = null
     private var pendingArrivalOtpPhoneMasked: String? = null
-    private var pendingArrivalOtpExpiresInSeconds: Int = 600
-    private var pendingArrivalOtpResendCooldownSeconds: Int = 60
     private var pendingArrivalLat: Double? = null
     private var pendingArrivalLng: Double? = null
     // KOS-37: CP-visit context — set from fragment args. The decision flag
@@ -1804,8 +1805,6 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 }
 
                 pendingArrivalOtpPhoneMasked = resp.contactPhoneMasked
-                pendingArrivalOtpExpiresInSeconds = resp.otpExpiresInSeconds ?: 600
-                pendingArrivalOtpResendCooldownSeconds = resp.resendCooldownSeconds ?: 60
                 pendingArrivalLat = effLat
                 pendingArrivalLng = effLng
                 // Gift Distribution shortcut: skip the pre-OTP photo
@@ -1822,8 +1821,6 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                         visitId = id,
                         cpVisitId = cpVisitId,
                         phoneMasked = pendingArrivalOtpPhoneMasked,
-                        expiresInSeconds = pendingArrivalOtpExpiresInSeconds,
-                        resendCooldownSeconds = pendingArrivalOtpResendCooldownSeconds,
                         lat = effLat,
                         lng = effLng,
                         arrivalPhotoStorageId = null,
@@ -1930,8 +1927,6 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 visitId = id,
                 cpVisitId = cpVisitId,
                 phoneMasked = pendingArrivalOtpPhoneMasked,
-                expiresInSeconds = pendingArrivalOtpExpiresInSeconds,
-                resendCooldownSeconds = pendingArrivalOtpResendCooldownSeconds,
                 lat = otpLat,
                 lng = otpLng,
                 // Hand the already-uploaded photo's storage id to the
@@ -1996,15 +1991,16 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             return
         }
 
-        // Collection CP shortcut: photo + OTP, then the Payment Entry
-        // sheet (Customer / Amount / Mode / Reference / Proof / Notes).
+        // Collection CP shortcut: photo + OTP, then ask whether collection
+        // happened. Yes opens Payment Entry; No asks only for the next
+        // follow-up date and optional reason.
         // On submit we write a customerCollections row in
         // pending_accounts and close the visit with
         // outcome="collection_done". Same booking-outcome-sheet bypass
         // as gift_distribution / old_client.
         if (isCpVisit && isCollectionCp && !cpVisitDecisionCaptured) {
             renderArrivalPhase(alreadyArrived = true)
-            promptCollectionPayment()
+            promptCollectionDecision()
             return
         }
 
@@ -2324,6 +2320,96 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 ).show()
             }
         }
+    }
+
+    /**
+     * Collection CPs branch before the payment form so a zero-collection visit
+     * does not fetch bookings or expose irrelevant payment fields.
+     */
+    private fun promptCollectionDecision() {
+        if (isOpeningOutcomeSheet) return
+        val cpId = cpVisitId ?: run {
+            finalizeCompleteVisit()
+            return
+        }
+        isOpeningOutcomeSheet = true
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Collection done?")
+            .setMessage("Choose Yes only when an amount was collected from the client.")
+            .setNegativeButton("No") { _, _ -> showNotCollectedDialog(cpId) }
+            .setPositiveButton("Yes") { _, _ ->
+                isOpeningOutcomeSheet = false
+                promptCollectionPayment()
+            }
+            .setOnCancelListener {
+                isOpeningOutcomeSheet = false
+                swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+            }
+            .show()
+    }
+
+    /** No-path form: follow-up date is required; reason is optional. */
+    private fun showNotCollectedDialog(cpId: String) {
+        val content = layoutInflater.inflate(R.layout.dialog_collection_not_collected, null)
+        val dateInput = content.findViewById<TextInputEditText>(R.id.etCollectionFollowUpDate)
+        val reasonInput = content.findViewById<TextInputEditText>(R.id.etCollectionNotCollectedReason)
+        val calendar = Calendar.getInstance().apply { add(Calendar.DAY_OF_MONTH, 1) }
+        val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        dateInput.setText(formatter.format(calendar.time))
+        dateInput.setOnClickListener {
+            val picker = android.app.DatePickerDialog(
+                requireContext(),
+                { _, year, month, day ->
+                    calendar.set(year, month, day, 0, 0, 0)
+                    dateInput.setText(formatter.format(calendar.time))
+                },
+                calendar.get(Calendar.YEAR),
+                calendar.get(Calendar.MONTH),
+                calendar.get(Calendar.DAY_OF_MONTH),
+            )
+            val today = Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            picker.datePicker.minDate = today.timeInMillis
+            picker.datePicker.maxDate = today.timeInMillis + 5L * 24 * 60 * 60 * 1000
+            picker.show()
+        }
+
+        val dialog = MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Collection not done")
+            .setMessage("Choose the follow-up date. This visit will close as Not Collected with amount ₹0.")
+            .setView(content)
+            .setNegativeButton("Back") { _, _ ->
+                isOpeningOutcomeSheet = false
+                promptCollectionDecision()
+            }
+            .setPositiveButton("Close visit", null)
+            .setOnCancelListener {
+                isOpeningOutcomeSheet = false
+                swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+            }
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val followUpDate = dateInput.text?.toString()?.trim().orEmpty()
+                if (followUpDate.isBlank()) {
+                    dateInput.error = "Follow-up date is required"
+                    return@setOnClickListener
+                }
+                val result = Bundle().apply {
+                    putBoolean(CollectionPaymentEntryBottomSheet.KEY_NOT_COLLECTED, true)
+                    putString(CollectionPaymentEntryBottomSheet.KEY_NOTES, reasonInput.text?.toString()?.trim().orEmpty())
+                    putString(CollectionPaymentEntryBottomSheet.KEY_FOLLOWUP_DATE, followUpDate)
+                }
+                dialog.dismiss()
+                isOpeningOutcomeSheet = false
+                completeNotCollectedVisit(cpId, result)
+            }
+        }
+        dialog.show()
     }
 
     /** Auto-closes a Collection CP visit when no confirmed booking
@@ -2807,7 +2893,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             // the three special types.
             btnCompleteCpDetails?.text = when {
                 cpIsSvFixed -> "Complete SV details"
-                isCollectionCp -> "Submit Payment Entry"
+                isCollectionCp -> "Complete Collection"
                 isOldClient -> "Add Visit Remarks"
                 isGiftDistribution -> "Confirm Gift Distribution"
                 else -> "Complete CP details"
@@ -2841,6 +2927,12 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
      *  outcomeSheetGuardResetDelayMs so a silent open-failure doesn't
      *  permanently brick the button. */
     private fun onCompleteCpDetailsClicked() {
+        // Collection owns its own two-stage dialog guard. Route it before the
+        // generic sheet guard so repeated taps cannot stack decision dialogs.
+        if (!cpIsSvFixed && isCollectionCp && cpVisitId != null) {
+            promptCollectionDecision()
+            return
+        }
         if (isOpeningOutcomeSheet) return
         isOpeningOutcomeSheet = true
         btnCompleteCpDetails?.postDelayed(
@@ -2853,7 +2945,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             // SV-fixed CPs still go through the outcome sheet (in
             // locked SV mode), so leave that path alone.
             cpIsSvFixed -> showCpCompletionSheet()
-            isCollectionCp -> promptCollectionPayment()
+            isCollectionCp -> promptCollectionDecision()
             isOldClient -> promptOldClientOutcome()
             isGiftDistribution -> promptGiftDistributionOutcome()
             else -> showCpCompletionSheet()
@@ -2870,7 +2962,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         // Interested) is wrong UI for these flows.
         if (!cpIsSvFixed) {
             when {
-                isCollectionCp -> { promptCollectionPayment(); return }
+                isCollectionCp -> { promptCollectionDecision(); return }
                 isOldClient -> { promptOldClientOutcome(); return }
                 isGiftDistribution -> { promptGiftDistributionOutcome(); return }
             }

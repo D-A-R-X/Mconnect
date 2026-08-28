@@ -12,6 +12,7 @@ import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.fragment.app.Fragment
@@ -25,6 +26,15 @@ import com.manjugroups.m_connect.ui.common.navigateUp
 import com.manjugroups.m_connect.ui.common.dismissRefresh
 import com.manjugroups.m_connect.ui.common.setupPullToRefresh
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import android.app.AlertDialog
+import android.graphics.drawable.GradientDrawable
+import com.manjugroups.m_connect.network.ActiveStaffLogin
+import com.manjugroups.m_connect.network.StaffLoginSession
+import com.manjugroups.m_connect.network.StaffIdRequest
+import com.manjugroups.m_connect.network.ActiveStaffSession
+import com.manjugroups.m_connect.network.LogoutStaffDeviceRequest
 import java.util.Locale
 
 /**
@@ -68,6 +78,12 @@ class SecurityFragment : Fragment() {
     private var designationFilter: String? = null
     private var departmentFilter: String? = null
 
+    // Staff Login shows a different dataset: who currently HAS a session, not
+    // the staff directory. Loaded once (the endpoint returns the whole set) and
+    // filtered client-side like the other tabs.
+    private var logins: List<com.manjugroups.m_connect.network.ActiveStaffLogin> = emptyList()
+    private var loginsLoaded = false
+
     private enum class Action { DEVICE_RESET, STAFF_LOGIN, PASSWORD_RESET }
 
     private data class Tab(
@@ -87,8 +103,8 @@ class SecurityFragment : Fragment() {
         Tab(
             Action.STAFF_LOGIN,
             "Staff Login",
-            "Shows the phone an account is locked to, and signs it out of the app without freeing the lock.",
-            "staff.resetDeviceBinding",
+            "Shows active web and mobile sessions. Open a staff member to review or end individual device sessions.",
+            "settings.staffLogin.view",
         ),
         Tab(
             Action.PASSWORD_RESET,
@@ -98,9 +114,16 @@ class SecurityFragment : Fragment() {
         ),
     )
 
-    /** Only the tabs this user may actually act on. */
+    /**
+     * Only the tabs this user may actually act on.
+     *
+     * Deliberately NOT hasPermission(): that is `isAdmin || key`, and mobile's
+     * isAdmin flag is set for many non-admin roles — the phantom-key leak
+     * documented on SessionManager.canViewVpDashboard. A super-admin is granted
+     * explicitly instead, and everyone else needs the real IAM key.
+     */
     private val tabs: List<Tab> by lazy {
-        allTabs.filter { session.hasPermission(it.permission) }
+        allTabs.filter { holdsSecurityKey(session, it.permission) }
     }
 
     private var selectedTab: Action = Action.DEVICE_RESET
@@ -174,6 +197,12 @@ class SecurityFragment : Fragment() {
     // ---------- data ----------
 
     private fun resetAndLoad() {
+        if (selectedTab == Action.STAFF_LOGIN) {
+            loginsLoaded = false
+            loadFailed = false
+            loadLogins()
+            return
+        }
         loaded.clear()
         cursor = null
         isDone = false
@@ -274,6 +303,355 @@ class SecurityFragment : Fragment() {
         }
     }
 
+    /**
+     * Live sessions for the Staff Login tab.
+     *
+     * A DIFFERENT dataset from the other two tabs: who currently has a session,
+     * not the staff directory. A staff can be bound to a phone and not logged
+     * in, or logged in on web only — showing the device binding here (as this
+     * tab used to) answered the wrong question.
+     *
+     * The endpoint returns the whole set in one response, exactly as the web
+     * table does, so there is no paging — the list is filtered client-side like
+     * the other tabs.
+     */
+    private fun loadLogins() {
+        if (isLoading) return
+        isLoading = true
+        renderLoadingState()
+        viewLifecycleOwner.lifecycleScope.launch {
+            val resp = runCatching {
+                api.getActiveStaffLogins(session.bearerToken)
+            }.getOrNull()
+            if (!isAdded || _binding == null) return@launch
+            isLoading = false
+            binding.securityRefresh.dismissRefresh()
+            if (resp?.success == true) {
+                logins = resp.rows.filter { !it.staffId.isNullOrBlank() }
+                loginsLoaded = true
+                loadFailed = false
+            } else {
+                loadFailed = logins.isEmpty()
+            }
+            render()
+        }
+    }
+
+    private fun visibleLogins(): List<ActiveStaffLogin> {
+        val q = searchQuery.trim().lowercase(Locale.US)
+        return logins.filter { r ->
+            val matchesQuery = q.isEmpty() || listOfNotNull(
+                r.name, r.employeeId, r.phone, r.designation, r.department,
+            ).any { it.lowercase(Locale.US).contains(q) }
+            val matchesDesignation =
+                designationFilter == null || r.designation.equals(designationFilter, true)
+            val matchesDepartment =
+                departmentFilter == null || r.department.equals(departmentFilter, true)
+            matchesQuery && matchesDesignation && matchesDepartment
+        }.sortedBy { it.name?.lowercase(Locale.US) ?: "" }
+    }
+
+    /** One session row: web and mobile state side by side, as on the web table. */
+    private fun loginRow(r: ActiveStaffLogin): View {
+        val name = r.name?.takeIf { it.isNotBlank() } ?: "Unnamed staff"
+        val card = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), dp(14), dp(14), dp(14))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(16).toFloat()
+                setColor(Color.WHITE)
+                setStroke(dp(1), Color.parseColor("#EAECF0"))
+            }
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { bottomMargin = dp(10) }
+        }
+
+        card.addView(TextView(requireContext()).apply {
+            text = name
+            textSize = 14f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.parseColor("#101828"))
+        })
+
+        card.isClickable = true
+        card.isFocusable = true
+        card.setOnClickListener {
+            r.staffId?.let { showLoggedInDevices(it, name) }
+        }
+        card.addView(TextView(requireContext()).apply {
+            text = listOfNotNull(
+                r.employeeId?.takeIf { it.isNotBlank() },
+                r.designation?.takeIf { it.isNotBlank() },
+                r.department?.takeIf { it.isNotBlank() },
+            ).joinToString(" - ")
+            textSize = 12f
+            setTextColor(Color.parseColor("#667085"))
+            setPadding(0, dp(2), 0, dp(10))
+        })
+
+        card.addView(sessionLine("Web", r.webSession))
+        card.addView(sessionLine("Mobile", r.mobileSession))
+
+        card.addView(TextView(requireContext()).apply {
+            text = if (r.deviceCount == 1) "1 device" else "${r.deviceCount} devices"
+            textSize = 11f
+            setTextColor(Color.parseColor("#98A2B3"))
+            setPadding(0, dp(8), 0, 0)
+        })
+
+        // Opens the same grouped device list as web. Keep the row-level action
+        // explicit for accessibility while allowing the whole card to open it.
+        card.addView(TextView(requireContext()).apply {
+            text = "View logged-in devices"
+            textSize = 13f
+            gravity = Gravity.CENTER
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.parseColor("#0B61CA"))
+            setPadding(dp(14), dp(10), dp(14), dp(10))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(22).toFloat()
+                setColor(Color.parseColor("#EFF8FF"))
+                setStroke(dp(1), Color.parseColor("#B2DDFF"))
+            }
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(12) }
+            isClickable = true
+            setOnClickListener { r.staffId?.let { id -> showLoggedInDevices(id, name) } }
+        })
+        return card
+    }
+
+    /** "Web  Logged in  since 28 Aug, 12:21 pm", or a muted "Not logged in". */
+    private fun sessionLine(label: String, info: StaffLoginSession?): View =
+        LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(3), 0, dp(3))
+            val active = info?.createdAt != null
+            addView(TextView(context).apply {
+                text = label
+                textSize = 12f
+                setTextColor(Color.parseColor("#667085"))
+                layoutParams = LinearLayout.LayoutParams(
+                    dp(56), LinearLayout.LayoutParams.WRAP_CONTENT,
+                )
+            })
+            addView(TextView(context).apply {
+                text = if (active) "Logged in" else "Not logged in"
+                textSize = 11f
+                setTypeface(typeface, Typeface.BOLD)
+                setTextColor(Color.parseColor(if (active) "#067647" else "#98A2B3"))
+                setPadding(dp(8), dp(3), dp(8), dp(3))
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(10).toFloat()
+                    setColor(Color.parseColor(if (active) "#ECFDF3" else "#F2F4F7"))
+                }
+            })
+            if (active) {
+                addView(TextView(context).apply {
+                    text = "since " + SimpleDateFormat("d MMM, h:mm a", Locale.US)
+                        .format(Date(info!!.createdAt!!.toLong()))
+                    textSize = 11f
+                    setTextColor(Color.parseColor("#667085"))
+                    setPadding(dp(8), 0, 0, 0)
+                })
+            }
+        }
+
+    private fun showLoggedInDevices(staffId: String, name: String) {
+        val canLogout = holdsSecurityKey(session, "settings.staffLogin.create")
+        val list = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(4), dp(6), dp(4), dp(6))
+            addView(TextView(context).apply {
+                text = "Loading devices..."
+                textSize = 13f
+                gravity = Gravity.CENTER
+                setTextColor(Color.parseColor("#667085"))
+                setPadding(dp(12), dp(28), dp(12), dp(28))
+            })
+        }
+        val scroll = ScrollView(requireContext()).apply {
+            addView(list)
+        }
+        val builder = AlertDialog.Builder(requireContext())
+            .setTitle("Logged-in devices")
+            .setMessage(
+                "$name is signed in on the devices below. " +
+                    if (canLogout) "Sign out one device or all devices." else "You have view-only access.",
+            )
+            .setView(scroll)
+            .setNegativeButton("Close", null)
+        if (canLogout) {
+            builder.setPositiveButton("Logout all devices", null)
+        }
+        val dialog = builder.create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.apply {
+                setTextColor(Color.parseColor("#D92D20"))
+                setOnClickListener {
+                    dialog.dismiss()
+                    confirmLogout(staffId, name)
+                }
+            }
+        }
+        dialog.show()
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            val response = runCatching {
+                api.getActiveStaffSessions(session.bearerToken, staffId)
+            }.getOrNull()
+            if (!isAdded || !dialog.isShowing) return@launch
+            list.removeAllViews()
+            if (response?.success != true) {
+                list.addView(sessionSheetMessage(response?.error ?: "Couldn't load active devices"))
+                return@launch
+            }
+            if (response.sessions.isEmpty()) {
+                list.addView(sessionSheetMessage("No active devices."))
+                return@launch
+            }
+            response.sessions.forEach { activeSession ->
+                list.addView(sessionDeviceCard(activeSession, staffId, name, dialog, canLogout))
+            }
+        }
+    }
+
+    private fun sessionSheetMessage(message: String) = TextView(requireContext()).apply {
+        text = message
+        textSize = 13f
+        gravity = Gravity.CENTER
+        setTextColor(Color.parseColor("#667085"))
+        setPadding(dp(12), dp(28), dp(12), dp(28))
+    }
+
+    private fun sessionDeviceCard(
+        activeSession: ActiveStaffSession,
+        staffId: String,
+        staffName: String,
+        dialog: AlertDialog,
+        canLogout: Boolean,
+    ): View {
+        val label = describeSessionDevice(activeSession)
+        return LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(12).toFloat()
+                setColor(Color.WHITE)
+                setStroke(dp(1), Color.parseColor("#EAECF0"))
+            }
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { bottomMargin = dp(10) }
+
+            addView(TextView(context).apply {
+                val kind = if (activeSession.deviceType == "mobile") "Mobile" else "Web"
+                text = "$kind  $label" + if (activeSession.isCurrent) "  This device" else ""
+                textSize = 13f
+                setTypeface(typeface, Typeface.BOLD)
+                setTextColor(Color.parseColor("#101828"))
+            })
+            addView(TextView(context).apply {
+                val signedIn = activeSession.createdAt?.let {
+                    SimpleDateFormat("d MMM, h:mm a", Locale.US).format(Date(it.toLong()))
+                } ?: "Unknown"
+                text = "Signed in $signedIn" + activeSession.ip.takeIf { it.isNotBlank() }
+                    .let { ip -> if (ip == null) "" else " · $ip" }
+                textSize = 11f
+                setTextColor(Color.parseColor("#667085"))
+                setPadding(0, dp(4), 0, 0)
+            })
+            if (canLogout) {
+                addView(TextView(context).apply {
+                    text = "Logout this device"
+                    textSize = 12f
+                    gravity = Gravity.CENTER
+                    setTypeface(typeface, Typeface.BOLD)
+                    setTextColor(Color.parseColor("#B42318"))
+                    setPadding(dp(10), dp(8), dp(10), dp(8))
+                    background = GradientDrawable().apply {
+                        cornerRadius = dp(18).toFloat()
+                        setColor(Color.parseColor("#FEF3F2"))
+                        setStroke(dp(1), Color.parseColor("#FDA29B"))
+                    }
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                    ).apply { topMargin = dp(10) }
+                    setOnClickListener {
+                        isEnabled = false
+                        text = "Signing out..."
+                        viewLifecycleOwner.lifecycleScope.launch {
+                            val response = runCatching {
+                                api.logoutStaffDevice(
+                                    session.bearerToken,
+                                    LogoutStaffDeviceRequest(staffId, activeSession.sessionIds),
+                                )
+                            }.getOrNull()
+                            if (!isAdded) return@launch
+                            dialog.dismiss()
+                            Toast.makeText(
+                                requireContext(),
+                                if (response?.success == true) "$staffName signed out of $label"
+                                else response?.error ?: "Couldn't sign out device",
+                                Toast.LENGTH_LONG,
+                            ).show()
+                            loginsLoaded = false
+                            loadLogins()
+                            if (response?.success != true) showLoggedInDevices(staffId, staffName)
+                        }
+                    }
+                })
+            }
+        }
+    }
+
+    private fun describeSessionDevice(activeSession: ActiveStaffSession): String {
+        if (activeSession.deviceType == "mobile") {
+            val model = activeSession.model.ifBlank { activeSession.device }
+            val platform = activeSession.os.ifBlank { "Android" }
+            return if (model.isBlank()) "Mobile app on $platform" else "$model · $platform"
+        }
+        val browser = activeSession.browser.ifBlank { "Web browser" }
+        return if (activeSession.os.isBlank()) browser else "$browser on ${activeSession.os}"
+    }
+
+    private fun confirmLogout(staffId: String, name: String) {
+        AlertDialog.Builder(requireContext())
+            .setTitle("Log out everywhere?")
+            .setMessage(
+                "Ends " + name + "'s web AND mobile sessions. They will need to sign in again.",
+            )
+            .setPositiveButton("Log out") { _, _ ->
+                viewLifecycleOwner.lifecycleScope.launch {
+                    val resp = runCatching {
+                        api.logoutStaffEverywhere(
+                            session.bearerToken,
+                            StaffIdRequest(staffId),
+                        )
+                    }.getOrNull()
+                    if (!isAdded) return@launch
+                    Toast.makeText(
+                        requireContext(),
+                        if (resp?.success == true) "Signed out everywhere"
+                        else resp?.error ?: "Couldn't sign them out",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    // Re-read rather than guessing the new state.
+                    loginsLoaded = false
+                    loadLogins()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
     private fun hasActiveFilters() =
         designationFilter != null || departmentFilter != null
 
@@ -297,7 +675,11 @@ class SecurityFragment : Fragment() {
     /** Skeleton only while the FIRST page is in flight; a spinner for later pages. */
     private fun renderLoadingState() {
         if (_binding == null) return
-        val firstLoad = isLoading && loaded.isEmpty()
+        val firstLoad = isLoading && if (selectedTab == Action.STAFF_LOGIN) {
+            logins.isEmpty()
+        } else {
+            loaded.isEmpty()
+        }
         binding.securitySkeleton.visibility = if (firstLoad) View.VISIBLE else View.GONE
         if (firstLoad && binding.securitySkeleton.childCount == 0) {
             repeat(6) { binding.securitySkeleton.addView(skeletonRow()) }
@@ -310,29 +692,44 @@ class SecurityFragment : Fragment() {
         if (_binding == null) return
         renderLoadingState()
 
-        val rows = visibleStaff()
+        val staffRows = visibleStaff()
+        val loginRows = visibleLogins()
         binding.tvSecurityCount.text = when {
-            isSearching -> "${rows.size} found"
-            isDone -> "${rows.size} staff"
+            selectedTab == Action.STAFF_LOGIN -> if (searchQuery.isBlank()) {
+                "${loginRows.size} active"
+            } else {
+                "${loginRows.size} found"
+            }
+            isSearching -> "${staffRows.size} found"
+            isDone -> "${staffRows.size} staff"
             // Honest while paging: more exist that have not been pulled yet.
-            else -> "${rows.size} loaded"
+            else -> "${staffRows.size} loaded"
         }
         binding.tvSecurityTabHint.text =
             tabs.firstOrNull { it.action == selectedTab }?.hint.orEmpty()
         renderChips()
 
         binding.securityList.removeAllViews()
-        rows.forEach { binding.securityList.addView(staffRow(it)) }
-        binding.securityList.visibility = if (rows.isEmpty()) View.GONE else View.VISIBLE
+        if (selectedTab == Action.STAFF_LOGIN) {
+            loginRows.forEach { binding.securityList.addView(loginRow(it)) }
+        } else {
+            staffRows.forEach { binding.securityList.addView(staffRow(it)) }
+        }
+        val hasRows = if (selectedTab == Action.STAFF_LOGIN) loginRows.isNotEmpty()
+        else staffRows.isNotEmpty()
+        binding.securityList.visibility = if (hasRows) View.VISIBLE else View.GONE
 
         // Nothing at all AND the first load failed -> an explicit retry, never a
         // blank screen the user has to guess about.
-        val showError = loadFailed && rows.isEmpty()
+        val showError = loadFailed && !hasRows
         binding.securityError.visibility = if (showError) View.VISIBLE else View.GONE
-        binding.tvSecurityErrorText.text =
+        binding.tvSecurityErrorText.text = if (selectedTab == Action.STAFF_LOGIN) {
+            "Couldn't load active sessions. Check your connection and try again."
+        } else {
             "Couldn't load the staff directory. Check your connection and try again."
+        }
 
-        val showEmpty = !showError && rows.isEmpty() && !isLoading
+        val showEmpty = !showError && !hasRows && !isLoading
         binding.securityEmpty.visibility = if (showEmpty) View.VISIBLE else View.GONE
         if (showEmpty) {
             val narrowed = searchQuery.isNotBlank() || hasActiveFilters()
@@ -440,8 +837,13 @@ class SecurityFragment : Fragment() {
                         LinearLayout.LayoutParams.WRAP_CONTENT,
                     ).apply { marginEnd = dp(8) }
                     setOnClickListener {
+                        searchJob?.cancel()
+                        isSearching = false
                         selectedTab = tab.action
                         buildTabs()
+                        if (tab.action == Action.STAFF_LOGIN && !loginsLoaded) {
+                            loadLogins()
+                        }
                         render()
                     }
                 },
@@ -459,7 +861,7 @@ class SecurityFragment : Fragment() {
                 val next = s?.toString().orEmpty()
                 if (next == searchQuery) return
                 searchQuery = next
-                runSearch(next)
+                if (selectedTab == Action.STAFF_LOGIN) render() else runSearch(next)
             }
         })
     }
@@ -538,10 +940,26 @@ class SecurityFragment : Fragment() {
         /** Long enough that typing a name is one request, not eight. */
         private const val SEARCH_DEBOUNCE_MS = 300L
 
+        /**
+         * Super-admins always hold Security; everyone else needs the explicit
+         * IAM key. Reading the EXPLICIT permission set rather than
+         * hasPermission() keeps the blanket isAdmin flag — which mobile sets
+         * for many non-admin roles — from handing out device resets and
+         * password changes.
+         */
+        private fun holdsSecurityKey(session: SessionManager, key: String): Boolean =
+            (session.role ?: "").trim().equals("super-admin", ignoreCase = true) ||
+                session.iamPermissions.contains(key)
+
         /** Whether this user can reach Security at all. */
         fun isAvailable(session: SessionManager): Boolean =
-            session.hasPermission("staff.resetDeviceBinding") ||
-                session.hasPermission("staff.password")
+            SECURITY_KEYS.any { holdsSecurityKey(session, it) }
+
+        private val SECURITY_KEYS = listOf(
+            "staff.resetDeviceBinding",
+            "staff.password",
+            "settings.staffLogin.view",
+        )
 
         fun newInstance() = SecurityFragment()
     }

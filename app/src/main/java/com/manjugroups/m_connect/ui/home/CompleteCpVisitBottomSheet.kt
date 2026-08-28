@@ -59,6 +59,8 @@ import com.manjugroups.m_connect.network.StaffData
 import com.manjugroups.m_connect.ui.common.SearchableOption
 import com.manjugroups.m_connect.ui.common.SearchableSelectionDialog
 import com.manjugroups.m_connect.ui.common.BookingUploadFieldView
+import com.manjugroups.m_connect.ui.common.preferredCpClientName
+import com.manjugroups.m_connect.ui.common.preferredCpClientPhone
 import com.manjugroups.m_connect.ui.marketing.bookings.BookingCalc
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -6853,16 +6855,12 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         if (!isAdded) return
 
         // Client display name → first visitor name + "Self" relation.
-        cachedLeadDisplayName = visit.client?.clientName?.takeIf { it.isNotBlank() }
-            ?: visit.lead?.contactName?.takeIf { it.isNotBlank() }
-            ?: visit.clientPlace?.name?.takeIf { it.isNotBlank() }
+        cachedLeadDisplayName = visit.preferredCpClientName()
 
         // Known contact for this CP — lets the Booking outcome open the client
-        // form pre-filled (skip the "enter mobile" step). Client master first,
-        // then the telecaller lead, then the place's contact number.
-        cpClientPhone = visit.client?.mobileNumber?.takeIf { it.isNotBlank() }
-            ?: visit.lead?.mobileNumber?.takeIf { it.isNotBlank() }
-            ?: visit.clientPlace?.contactPhone?.takeIf { it.isNotBlank() }
+        // form pre-filled (skip the "enter mobile" step). The visit lead is
+        // authoritative; reconciled client/place data remains a fallback.
+        cpClientPhone = visit.preferredCpClientPhone()
         cpClientName = cachedLeadDisplayName
 
         // Telecaller-pre-set attendees (rare on a pure manual CP,
@@ -6936,15 +6934,12 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         )
 
         // Cache lead + attendee context for the visitor-row auto-fill.
-        // Order: client.clientName (canonical, manually entered) →
-        // lead.contactName (telecaller-typed during dialer flow) →
-        // clientPlace.name (fallback). renderVisitorRows reads this
+        // Order: visit lead → lead manual profile → reconciled client → place.
+        // renderVisitorRows reads this
         // cache when expanding cards so the first row is pre-filled
         // with the lead's name + Self relation — the common case for
         // 1-visitor meetings.
-        cachedLeadDisplayName = visit.client?.clientName?.takeIf { it.isNotBlank() }
-            ?: visit.lead?.contactName?.takeIf { it.isNotBlank() }
-            ?: visit.clientPlace?.name?.takeIf { it.isNotBlank() }
+        cachedLeadDisplayName = visit.preferredCpClientName()
         cachedPrefilledAttendees = visit.attendees
 
         val visitorCount = visit.expectedAttendeeCount ?: visit.attendees?.size ?: 0

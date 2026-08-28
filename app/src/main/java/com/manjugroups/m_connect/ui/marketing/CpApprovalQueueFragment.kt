@@ -30,6 +30,9 @@ import com.manjugroups.m_connect.network.CpApprovalItem
 import com.manjugroups.m_connect.network.CpApprovalRejectRequest
 import com.manjugroups.m_connect.network.GeoTrackApi
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlin.math.roundToInt
 
 /**
@@ -236,6 +239,27 @@ class CpApprovalQueueFragment : Fragment() {
             includeFontPadding = false
             typeface = font(R.font.inter_semibold) ?: typeface
         })
+
+        val visitFacts = listOf(
+            "Date & time" to scheduledDateTime(item),
+            "Start time" to formatEpoch(item.startedAt),
+            "End time" to formatEpoch(item.completedAt ?: item.requestedAt),
+            "CP type" to friendlyCpType(item.cpType),
+        )
+        card.addView(LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(10), 0, dp(4))
+            visitFacts.forEach { (label, value) ->
+                addView(TextView(requireContext()).apply {
+                    text = "$label: $value"
+                    textSize = 12f
+                    setTextColor(Color.parseColor("#344054"))
+                    includeFontPadding = false
+                    typeface = font(R.font.inter_regular) ?: typeface
+                    setPadding(0, dp(2), 0, dp(2))
+                })
+            }
+        })
         card.addView(TextView(requireContext()).apply {
             text = "by ${item.staffName ?: "Field staff"}"
             textSize = 12f
@@ -296,6 +320,16 @@ class CpApprovalQueueFragment : Fragment() {
             })
         }
 
+        card.addView(actionButton("View trip & travelled route", "#0B61CA", "#EFF6FF") {
+            CpApprovalTripDetailDialog.newInstance(item)
+                .show(parentFragmentManager, CpApprovalTripDetailDialog.TAG)
+        }.also {
+            it.layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(10) }
+        })
+
         // Approve / Reject row
         val actions = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -315,6 +349,34 @@ class CpApprovalQueueFragment : Fragment() {
         })
         card.addView(actions)
         return card
+    }
+
+    private fun friendlyCpType(value: String?): String = value
+        ?.takeIf { it.isNotBlank() }
+        ?.replace('_', ' ')
+        ?.split(' ')
+        ?.joinToString(" ") { word ->
+            word.lowercase(Locale.US).replaceFirstChar { it.titlecase(Locale.US) }
+        }
+        ?: "Not recorded"
+
+    private fun scheduledDateTime(item: CpApprovalItem): String {
+        val date = item.scheduledDate?.takeIf { it.isNotBlank() } ?: "Not recorded"
+        val time = item.scheduledTime?.takeIf { it.isNotBlank() }?.let(::formatClock)
+        return listOfNotNull(date, time).joinToString(" · ")
+    }
+
+    private fun formatClock(value: String): String {
+        val parsed = listOf("HH:mm", "HH:mm:ss").firstNotNullOfOrNull { pattern ->
+            runCatching { SimpleDateFormat(pattern, Locale.US).parse(value) }.getOrNull()
+        } ?: return value
+        return SimpleDateFormat("h:mm a", Locale.US).format(parsed)
+    }
+
+    private fun formatEpoch(value: Double?): String {
+        if (value == null || value <= 0.0) return "Not recorded"
+        return SimpleDateFormat("dd MMM yyyy, h:mm a", Locale.US)
+            .format(Date(value.toLong()))
     }
 
     private fun actionButton(

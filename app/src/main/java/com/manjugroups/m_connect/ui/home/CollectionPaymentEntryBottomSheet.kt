@@ -271,29 +271,9 @@ class CollectionPaymentEntryBottomSheet : BottomSheetDialogFragment() {
             dismissAllowingStateLoss()
         }
 
-        // Nothing collected — close the CP visit as "Not Collected" (₹0)
-        // with the optional remarks. No amount / mode / reference / proof
-        // required; no customerCollections row is written.
-        btnNotCollected.setOnClickListener {
-            val notes = etNotes.text?.toString()?.trim().orEmpty()
-            // Nothing collected → the staff picks when to return, and the backend
-            // spawns a fresh collection CP for that slot.
-            promptFollowUp { date, time ->
-                setFragmentResult(
-                    RESULT_KEY,
-                    bundleOf(
-                        KEY_SUBMITTED to false,
-                        KEY_NOT_COLLECTED to true,
-                        KEY_NOTES to notes,
-                        KEY_CASE_ID to (selectedBooking?.caseId.orEmpty()),
-                        KEY_CLIENT_NAME to (selectedBooking?.clientName.orEmpty()),
-                        KEY_FOLLOWUP_DATE to date,
-                        KEY_FOLLOWUP_TIME to time,
-                    ),
-                )
-                dismissAllowingStateLoss()
-            }
-        }
+        // The Collected / Not Collected choice now happens before this sheet.
+        // Payment Entry is the Yes-only form, so keep the legacy button hidden.
+        btnNotCollected.visibility = View.GONE
 
         btnSubmit.setOnClickListener {
             val booking = selectedBooking

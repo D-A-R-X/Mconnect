@@ -220,6 +220,12 @@ interface GeoTrackApi {
         @Header("Authorization") token: String,
     ): CpApprovalsResponse
 
+    @GET("api/marketing/cp-visits/approval-route")
+    suspend fun getCpApprovalRoute(
+        @Header("Authorization") token: String,
+        @Query("id") id: String,
+    ): CpApprovalRouteResponse
+
     @POST("api/marketing/cp-visits/approve")
     suspend fun approveCpCompletion(
         @Header("Authorization") token: String,
@@ -952,10 +958,6 @@ data class ArrivalOtpRequestResponse(
     val success: Boolean,
     val error: String? = null,
     val contactPhoneMasked: String? = null,
-    val otpExpiresInSeconds: Int? = null,
-    val resendCooldownSeconds: Int? = null,
-    val maxResends: Int? = null,
-    val attemptsRemaining: Int? = null,
     val distance: Int? = null,
     val radius: Int? = null
 )
@@ -1016,6 +1018,7 @@ data class CreateCpVisitRequest(
     // collection_cp, old_client, gift_distribution. Optional so older
     // builds without the picker still create successfully.
     val cpType: String? = null,
+    val jointCpCategory: String? = null,
     // Explicit 6-digit pincode. The compiled visitAddress already carries it
     // as a "Pincode: NNNNNN" segment, but sending it separately means the
     // server stores it as a real column instead of re-parsing free text.
@@ -1078,6 +1081,41 @@ data class CpApprovalItem(
     val photoUrl: String? = null,
     val requestedAt: Double? = null,
     val scheduledDate: String? = null,
+    val scheduledTime: String? = null,
+    val startedAt: Double? = null,
+    val completedAt: Double? = null,
+    val arrivalVerifiedAt: Double? = null,
+    val startLat: Double? = null,
+    val startLng: Double? = null,
+    val endLat: Double? = null,
+    val endLng: Double? = null,
+    val arrivalLat: Double? = null,
+    val arrivalLng: Double? = null,
+    val placeLat: Double? = null,
+    val placeLng: Double? = null,
+)
+
+data class CpApprovalRouteResponse(
+    val success: Boolean = false,
+    val error: String? = null,
+    val data: CpApprovalRouteData? = null,
+)
+
+data class CpApprovalRouteData(
+    val id: String,
+    val startedAt: Double? = null,
+    val endedAt: Double? = null,
+    val startLat: Double? = null,
+    val startLng: Double? = null,
+    val endLat: Double? = null,
+    val endLng: Double? = null,
+    val routePoints: List<CpApprovalRoutePoint>? = emptyList(),
+)
+
+data class CpApprovalRoutePoint(
+    val lat: Double,
+    val lng: Double,
+    val recordedAt: Double,
 )
 
 data class ConvertCpVisitToSiteVisitRequest(
@@ -1657,6 +1695,8 @@ data class CpVisitDetail(
     // drops it without this field, leaving every merged CP row
     // looking like a generic Direct CP downstream.
     val cpType: String? = null,
+    // The visit purpose selected under Joint CP. Null for ordinary CP types.
+    val jointCpCategory: String? = null,
     // Joint CP participants. Null for every other cpType.
     val joint: JointCpSummary? = null,
     val convertedSiteVisitId: String? = null,
@@ -2078,6 +2118,8 @@ data class CpVisitState(
     // tells the trip flow to skip the booking-outcome sheet after
     // arrival and finalise directly with outcome=gift_distributed.
     val cpType: String? = null,
+    // Underlying purpose for a Joint CP. Null for ordinary and legacy visits.
+    val jointCpCategory: String? = null,
     // "The trip is over but no outcome was recorded." Computed by the CP list
     // mapper, which can see BOTH the CP row's status and its field visit's.
     // The card's merged status prefers fieldVisit.status, so a response that
