@@ -144,6 +144,24 @@ class HomeViewModel : ViewModel() {
                 var firstPunchInMillis = 0L
                 var totalMin = 0
 
+                // Did EITHER attendance source answer? When both fail (a network
+                // blip, a slow backend) we must not conclude "not clocked in" —
+                // see the copy below.
+                val attendanceKnown = att != null || daySessions != null
+
+                if (att == null && daySessions != null) {
+                    // The today-summary call failed but the sessions call
+                    // answered. Sessions alone still prove an open session, so
+                    // derive from them rather than falling through as "not
+                    // clocked in".
+                    openNow = daySessions.hasOpenSession == true
+                    hasOpen = AttendanceTrackingGate.isClockedInForToday(
+                        firstPunchIn = daySessions.firstPunchIn,
+                        hasOpenSession = openNow,
+                    )
+                    firstPunchInMillis = daySessions.firstPunchIn?.let { parseMillis(it) } ?: 0L
+                }
+
                 if (att != null) {
                     val firstPunchIn = daySessions?.firstPunchIn ?: att.firstPunchIn
                     // Raw "open session right now" — kept separately from the
@@ -183,14 +201,22 @@ class HomeViewModel : ViewModel() {
                 // home card flash: trips → empty → skeleton → trips. The
                 // copy keeps the current trips on screen until the fresh
                 // ones land.
+                //
+                // When NEITHER attendance call answered, keep what we already
+                // had. Writing `false` here is what made Home show "Clock In
+                // First" to a staff member who was clocked in: one failed
+                // refresh silently downgraded them, while the Attendance tab
+                // (a different call) still showed the open session. A transient
+                // failure must not change what the app believes about
+                // attendance — same rule the visit list already follows above.
                 val loaded = (cachedState ?: HomeUiState.Loaded()).copy(
-                    hasOpenSession = hasOpen,
-                    hasOpenSessionNow = openNow,
-                    completedMinutes = completedMin,
-                    openSessionStartMillis = openSessionStartMillis,
-                    firstPunchInMillis = firstPunchInMillis,
-                    totalMinutes = totalMin,
-                    sessions = sessions,
+                    hasOpenSession = if (attendanceKnown) hasOpen else (cachedState?.hasOpenSession ?: false),
+                    hasOpenSessionNow = if (attendanceKnown) openNow else (cachedState?.hasOpenSessionNow ?: false),
+                    completedMinutes = if (attendanceKnown) completedMin else (cachedState?.completedMinutes ?: 0),
+                    openSessionStartMillis = if (attendanceKnown) openSessionStartMillis else (cachedState?.openSessionStartMillis ?: 0L),
+                    firstPunchInMillis = if (attendanceKnown) firstPunchInMillis else (cachedState?.firstPunchInMillis ?: 0L),
+                    totalMinutes = if (attendanceKnown) totalMin else (cachedState?.totalMinutes ?: 0),
+                    sessions = if (attendanceKnown) sessions else (cachedState?.sessions ?: sessions),
                     daysPresent = daysPresent,
                     permissionsLeftHrs = permLeft,
                     isPunching = false,
