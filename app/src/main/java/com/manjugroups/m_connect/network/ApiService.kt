@@ -47,7 +47,14 @@ interface ApiService {
     @GET("api/hr/staff/search")
     suspend fun searchStaff(
         @Header("Authorization") token: String,
-        @Query("query") query: String
+        @Query("query") query: String,
+        /**
+         * "1" skips the reporting-column and device-health enrichment. Those
+         * cost hundreds of extra reads per search and pushed this endpoint past
+         * the 30s client timeout, so search never returned. Callers that only
+         * need the staff rows should send it.
+         */
+        @Query("lite") lite: String? = null,
     ): StaffListResponse
 
     // Fines & Deductions
@@ -311,6 +318,31 @@ interface ApiService {
         @Header("Authorization") token: String,
         @Query("staffId") staffId: String,
     ): StaffPasswordStatusResponse
+
+    // Staff Login tab: who currently has a live session, split web vs mobile.
+    // Distinct from the device BINDING the other Security tabs show.
+    @GET("api/hr/staff/active-logins")
+    suspend fun getActiveStaffLogins(
+        @Header("Authorization") token: String,
+    ): ActiveStaffLoginsResponse
+
+    @GET("api/hr/staff/active-sessions")
+    suspend fun getActiveStaffSessions(
+        @Header("Authorization") token: String,
+        @Query("staffId") staffId: String,
+    ): ActiveStaffSessionsResponse
+
+    @POST("api/hr/staff/logout-device")
+    suspend fun logoutStaffDevice(
+        @Header("Authorization") token: String,
+        @Body body: LogoutStaffDeviceRequest,
+    ): StaffSecurityActionResponse
+
+    @POST("api/hr/staff/logout-everywhere")
+    suspend fun logoutStaffEverywhere(
+        @Header("Authorization") token: String,
+        @Body body: StaffIdRequest,
+    ): StaffSecurityActionResponse
 
     @POST("api/hr/staff/set-password")
     suspend fun setStaffPassword(
@@ -604,7 +636,14 @@ interface ApiService {
         @Header("Authorization") token: String,
         @Query("numItems") numItems: Int = 25,
         @Query("cursor") cursor: String? = null,
-        @Query("status") status: String? = null
+        @Query("status") status: String? = null,
+        /**
+         * "1" skips the reporting-column and device-health enrichment. Those
+         * made every page cost thousands of reads and the request hung, so the
+         * staff list never filled. Callers needing only the staff rows should
+         * send it.
+         */
+        @Query("lite") lite: String? = null,
     ): StaffPaginatedResponse
 
     @GET("api/hr/staff/count")
@@ -1722,6 +1761,57 @@ data class StaffPasswordStatus(
     val passwordUpdatedAt: Double? = null,
 )
 
+/** One live session, as the web Staff Login table shows it. */
+data class StaffLoginSession(
+    val createdAt: Double? = null,
+    val expiresAt: Double? = null,
+)
+
+data class ActiveStaffLogin(
+    val staffId: String? = null,
+    val employeeId: String? = null,
+    val name: String? = null,
+    val phone: String? = null,
+    val designation: String? = null,
+    val department: String? = null,
+    val webSession: StaffLoginSession? = null,
+    val mobileSession: StaffLoginSession? = null,
+    val deviceCount: Int = 0,
+)
+
+data class ActiveStaffLoginsResponse(
+    val success: Boolean = false,
+    val rows: List<ActiveStaffLogin> = emptyList(),
+    val error: String? = null,
+)
+
+/** A physical device with all active session ids grouped exactly as on web. */
+data class ActiveStaffSession(
+    val deviceKey: String = "",
+    val sessionId: String? = null,
+    val sessionIds: List<String> = emptyList(),
+    val deviceType: String = "web",
+    val browser: String = "",
+    val os: String = "",
+    val device: String = "",
+    val model: String = "",
+    val ip: String = "",
+    val createdAt: Double? = null,
+    val expiresAt: Double? = null,
+    val isCurrent: Boolean = false,
+)
+
+data class ActiveStaffSessionsResponse(
+    val success: Boolean = false,
+    val sessions: List<ActiveStaffSession> = emptyList(),
+    val error: String? = null,
+)
+
+data class LogoutStaffDeviceRequest(
+    val staffId: String,
+    val sessionIds: List<String>,
+)
+
 data class StaffPasswordStatusResponse(
     val success: Boolean = false,
     val status: StaffPasswordStatus? = null,
@@ -1732,6 +1822,7 @@ data class StaffSecurityActionResponse(
     val success: Boolean = false,
     val cleared: Int? = null,
     val signedOut: Int? = null,
+    val loggedOut: Int? = null,
     val error: String? = null,
 )
 

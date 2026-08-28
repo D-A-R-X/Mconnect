@@ -1,30 +1,22 @@
 package com.manjugroups.m_connect.ui.marketing
 
-import com.manjugroups.m_connect.network.CpVisitDetail
 import com.manjugroups.m_connect.network.CpVisitClient
+import com.manjugroups.m_connect.network.CpVisitDetail
 import com.manjugroups.m_connect.network.CpVisitLead
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * "Do not allow a new CP request if one is already pending."
- *
- * The two things that quietly break this rule are phone formatting (+91 vs
- * plain) and the several spellings the backend uses for in-progress, so both
- * are pinned here.
- */
 class OpenCpVisitGuardTest {
 
     private fun visit(
         phone: String?,
         status: String?,
-        scheduledDate: String? = "2026-08-27",
+        scheduledDate: String = "2026-08-27",
         onClient: Boolean = false,
     ) = CpVisitDetail(
-        id = "v-$phone-$status",
+        id = "v-$phone-$status-$scheduledDate",
         status = status,
         scheduledDate = scheduledDate,
         lead = if (onClient) null else CpVisitLead(mobileNumber = phone),
@@ -32,91 +24,68 @@ class OpenCpVisitGuardTest {
     )
 
     @Test
-    fun `a scheduled visit for the same client blocks a new one`() {
-        val reason = OpenCpVisitGuard.blockReason(
-            listOf(visit("9876543210", "scheduled")),
-            "9876543210",
-        )
-        assertNotNull(reason)
-        assertTrue(reason!!.contains("2026-08-27"))
-    }
-
-    @Test
-    fun `a completed or cancelled visit does not block a new one`() {
-        for (status in listOf("completed", "cancelled")) {
-            assertNull(
-                "status=$status must not block",
-                OpenCpVisitGuard.blockReason(listOf(visit("9876543210", status)), "9876543210"),
+    fun `scheduled and completed visits block the same client on the same day`() {
+        for (status in listOf("scheduled", "in_progress", "completed")) {
+            val reason = OpenCpVisitGuard.blockReason(
+                listOf(visit("9876543210", status)),
+                "9876543210",
+                "2026-08-27",
             )
+            assertNotNull("status=$status must block", reason)
+            assertTrue(reason!!.contains("Only one CP visit per client is allowed per day"))
         }
     }
 
     @Test
-    fun `every in-progress spelling counts as open`() {
-        for (status in listOf(
-            "scheduled", "in-progress", "in_progress", "ongoing", "started", "active", "arrived",
-        )) {
-            assertTrue("status=$status must count as open", OpenCpVisitGuard.isOpen(status))
-        }
-        assertTrue(OpenCpVisitGuard.isOpen("SCHEDULED"))
-        assertTrue(OpenCpVisitGuard.isOpen("  Scheduled  "))
-    }
-
-    @Test
-    fun `country code and formatting do not hide an existing visit`() {
-        // Same person, written four ways — all must match.
-        for (stored in listOf("9876543210", "+919876543210", "91 98765 43210", "098765-43210")) {
-            assertNotNull(
-                "stored=$stored should match",
-                OpenCpVisitGuard.findOpenVisit(listOf(visit(stored, "scheduled")), "+91 98765 43210"),
-            )
-        }
-    }
-
-    @Test
-    fun `a different client never blocks`() {
+    fun `cancelled same-day visit can be replaced`() {
         assertNull(
             OpenCpVisitGuard.blockReason(
-                listOf(visit("9876543210", "scheduled")),
-                "9000000001",
-            ),
-        )
-    }
-
-    @Test
-    fun `a visit carrying the number on the client record is matched too`() {
-        assertNotNull(
-            OpenCpVisitGuard.findOpenVisit(
-                listOf(visit("9876543210", "scheduled", onClient = true)),
+                listOf(visit("9876543210", "cancelled")),
                 "9876543210",
+                "2026-08-27",
             ),
         )
     }
 
     @Test
-    fun `an empty list or an incomplete number never blocks`() {
-        assertNull(OpenCpVisitGuard.blockReason(emptyList(), "9876543210"))
-        // Half-typed numbers must not match anyone.
+    fun `same client on another day is allowed`() {
         assertNull(
-            OpenCpVisitGuard.blockReason(listOf(visit("9876543210", "scheduled")), "98765"),
-        )
-    }
-
-    @Test
-    fun `the open visit is preferred over closed ones for the same client`() {
-        val found = OpenCpVisitGuard.findOpenVisit(
-            listOf(
-                visit("9876543210", "completed", scheduledDate = "2026-08-01"),
-                visit("9876543210", "cancelled", scheduledDate = "2026-08-02"),
-                visit("9876543210", "scheduled", scheduledDate = "2026-08-27"),
+            OpenCpVisitGuard.blockReason(
+                listOf(visit("9876543210", "scheduled", "2026-08-26")),
+                "9876543210",
+                "2026-08-27",
             ),
-            "9876543210",
         )
-        assertEquals("2026-08-27", found?.scheduledDate)
     }
 
     @Test
-    fun `a missing status is not treated as open`() {
-        assertNull(OpenCpVisitGuard.blockReason(listOf(visit("9876543210", null)), "9876543210"))
+    fun `country code formatting and client record cannot hide a duplicate`() {
+        for (stored in listOf("9876543210", "+919876543210", "91 98765 43210", "098765-43210")) {
+            assertNotNull(
+                OpenCpVisitGuard.findSameDayVisit(
+                    listOf(visit(stored, "completed", onClient = true)),
+                    "+91 98765 43210",
+                    "2026-08-27",
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun `different client and incomplete phone never block`() {
+        val visits = listOf(visit("9876543210", "scheduled"))
+        assertNull(OpenCpVisitGuard.blockReason(visits, "9000000001", "2026-08-27"))
+        assertNull(OpenCpVisitGuard.blockReason(visits, "98765", "2026-08-27"))
+    }
+
+    @Test
+    fun `legacy missing status is treated as non-cancelled`() {
+        assertNotNull(
+            OpenCpVisitGuard.blockReason(
+                listOf(visit("9876543210", null)),
+                "9876543210",
+                "2026-08-27",
+            ),
+        )
     }
 }

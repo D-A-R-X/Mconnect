@@ -5,6 +5,7 @@ import com.manjugroups.m_connect.network.LoanRepaymentData as RemoteRepayment
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import java.util.TimeZone
 
 /**
  * UI-side loan model. Built from the server's `/api/hr/loans/my` payload.
@@ -55,7 +56,11 @@ object LoanMapper {
 
     private val isoDayFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
     private val monthFormat = SimpleDateFormat("yyyy-MM", Locale.US)
+    // Same UTC instant the server writes with toISOString(). The quoted 'Z'
+    // matches the letter, not the zone, so without this the value is read in
+    // the device's timezone and lands 5:30 early in IST.
     private val isoDateTimeFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
+        .apply { timeZone = TimeZone.getTimeZone("UTC") }
 
     fun fromRemote(remote: RemoteLoan, mappedStatus: LoanStatus): Loan {
         val type = inferType(remote.purpose)

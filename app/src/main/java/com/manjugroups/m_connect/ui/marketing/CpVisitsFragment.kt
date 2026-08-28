@@ -32,6 +32,8 @@ import com.manjugroups.m_connect.network.CreateCpVisitRequest
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.TodayVisit
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
+import com.manjugroups.m_connect.ui.common.preferredCpClientName
+import com.manjugroups.m_connect.ui.common.preferredCpClientPhone
 import com.manjugroups.m_connect.ui.home.CompleteCpVisitBottomSheet
 import com.manjugroups.m_connect.ui.home.TripNavigationFragment
 import com.manjugroups.m_connect.ui.hr.AttendanceFlowViewModel
@@ -518,14 +520,10 @@ class CpVisitsFragment : Fragment() {
     private fun com.manjugroups.m_connect.network.CpVisitDetail.toCpListVisitOrNull(): TodayVisit? {
         val cpId = this.id ?: return null
         val scheduled = this.scheduledDate ?: return null
-        // The CP-level "pending_gm_approval" hold must win over the fieldVisit
-        // lifecycle: the app calls completeVisit after every outcome, so the
-        // fieldVisit reads "completed" while the CP is actually held. Without
-        // this the card would show "Completed" instead of "Pending Approval".
-        val effectiveStatus = this.status?.takeIf { it == "pending_gm_approval" }
-            ?: this.fieldVisit?.status?.takeIf { it.isNotBlank() }
-            ?: this.status?.takeIf { it.isNotBlank() }
-            ?: "scheduled"
+        // Shared with Home so both screens agree. A terminal CP status wins
+        // over the trip row; a live one still defers to it. See
+        // resolveCpEffectiveStatus for why.
+        val effectiveStatus = resolveCpEffectiveStatus(this.status, this.fieldVisit?.status)
         val proposedHasFields = this.proposedSiteVisit?.let { p ->
             !p.projectId.isNullOrBlank() ||
                 !p.scheduledDate.isNullOrBlank() ||
@@ -550,21 +548,8 @@ class CpVisitsFragment : Fragment() {
         } else {
             "direct_cp"
         }
-        // Prefer the canonical client name (client.clientName from
-        // manualProfile) over the dialer-typed lead.contactName so the
-        // header reads "Abhi" — matching the web Client profile card —
-        // rather than the lower-case typed string "abi".
-        val profileClient = this.lead?.manualProfile?.clientName.asClientNameOrNull()
-        val canonicalClient = this.client?.clientName.asClientNameOrNull()
-        val typedContact = this.lead?.contactName.asClientNameOrNull()
-        val placeLabel = this.clientPlace?.name.asClientNameOrNull()
-        val phoneLabel = this.lead?.mobileNumber?.takeIf { it.isNotBlank() }
-            ?: this.client?.mobileNumber?.takeIf { it.isNotBlank() }
-            ?: this.clientPlace?.contactPhone?.takeIf { it.isNotBlank() }
-        val resolvedClientName = profileClient
-            ?: canonicalClient
-            ?: typedContact
-            ?: placeLabel
+        val resolvedClientName = preferredCpClientName()
+        val phoneLabel = preferredCpClientPhone()
         val displayName = resolvedClientName ?: phoneLabel ?: "CP visit"
         // Carry the CP outcome onto the mapped TodayVisit so the card
         // renderer can detect a "completed but no decision yet" state

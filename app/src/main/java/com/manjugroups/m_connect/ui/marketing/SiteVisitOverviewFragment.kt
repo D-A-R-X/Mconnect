@@ -32,6 +32,8 @@ import com.manjugroups.m_connect.network.SetSiteVisitOutcomeRequest
 // Trip-state advancement is web-only now (see wireStepperReadOnlyHint).
 import com.manjugroups.m_connect.network.TodayVisit
 import com.manjugroups.m_connect.ui.home.CompleteCpVisitBottomSheet
+import com.manjugroups.m_connect.ui.common.preferredCpClientName
+import com.manjugroups.m_connect.ui.common.preferredCpClientPhone
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -1154,15 +1156,13 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         // from the PROJECT, so clientPlace.name is the project name; using it
         // here leaked the project ("GS - TMZ 4.0 Phase II") into the client
         // field. "—" is correct when the backend has no client/lead name.
-        val rawDisplayName = visit.client?.clientName?.takeIf { it.isNotBlank() }
-            ?: visit.lead?.contactName?.takeIf { it.isNotBlank() }
+        val rawDisplayName = visit.preferredCpClientName(includePlaceFallback = false)
         val displayName = rawDisplayName?.let { formatPersonName(it) } ?: "—"
         clientDisplayName = displayName
         tvClientName?.text = displayName
         tvVisitorName?.text = displayName
 
-        val phone = visit.client?.mobileNumber?.takeIf { it.isNotBlank() }
-            ?: visit.lead?.mobileNumber?.takeIf { it.isNotBlank() }
+        val phone = visit.preferredCpClientPhone()
         tvPhone?.text = phone ?: "—"
         clientPhone = phone
         // CP-linked SVs carry driver contact in proposedSiteVisit; pure-SV

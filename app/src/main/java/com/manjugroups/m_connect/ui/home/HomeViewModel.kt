@@ -22,6 +22,8 @@ import com.manjugroups.m_connect.network.TrackingBootstrapData
 import com.manjugroups.m_connect.network.StartVisitRequest
 import com.manjugroups.m_connect.network.AssignedPlace
 import com.manjugroups.m_connect.network.TodayVisit
+import com.manjugroups.m_connect.ui.common.preferredCpClientName
+import com.manjugroups.m_connect.ui.common.preferredCpClientPhone
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -144,6 +146,24 @@ class HomeViewModel : ViewModel() {
                 var firstPunchInMillis = 0L
                 var totalMin = 0
 
+                // Did EITHER attendance source answer? When both fail (a network
+                // blip, a slow backend) we must not conclude "not clocked in" —
+                // see the copy below.
+                val attendanceKnown = att != null || daySessions != null
+
+                if (att == null && daySessions != null) {
+                    // The today-summary call failed but the sessions call
+                    // answered. Sessions alone still prove an open session, so
+                    // derive from them rather than falling through as "not
+                    // clocked in".
+                    openNow = daySessions.hasOpenSession == true
+                    hasOpen = AttendanceTrackingGate.isClockedInForToday(
+                        firstPunchIn = daySessions.firstPunchIn,
+                        hasOpenSession = openNow,
+                    )
+                    firstPunchInMillis = daySessions.firstPunchIn?.let { parseMillis(it) } ?: 0L
+                }
+
                 if (att != null) {
                     val firstPunchIn = daySessions?.firstPunchIn ?: att.firstPunchIn
                     // Raw "open session right now" — kept separately from the
@@ -183,14 +203,22 @@ class HomeViewModel : ViewModel() {
                 // home card flash: trips → empty → skeleton → trips. The
                 // copy keeps the current trips on screen until the fresh
                 // ones land.
+                //
+                // When NEITHER attendance call answered, keep what we already
+                // had. Writing `false` here is what made Home show "Clock In
+                // First" to a staff member who was clocked in: one failed
+                // refresh silently downgraded them, while the Attendance tab
+                // (a different call) still showed the open session. A transient
+                // failure must not change what the app believes about
+                // attendance — same rule the visit list already follows above.
                 val loaded = (cachedState ?: HomeUiState.Loaded()).copy(
-                    hasOpenSession = hasOpen,
-                    hasOpenSessionNow = openNow,
-                    completedMinutes = completedMin,
-                    openSessionStartMillis = openSessionStartMillis,
-                    firstPunchInMillis = firstPunchInMillis,
-                    totalMinutes = totalMin,
-                    sessions = sessions,
+                    hasOpenSession = if (attendanceKnown) hasOpen else (cachedState?.hasOpenSession ?: false),
+                    hasOpenSessionNow = if (attendanceKnown) openNow else (cachedState?.hasOpenSessionNow ?: false),
+                    completedMinutes = if (attendanceKnown) completedMin else (cachedState?.completedMinutes ?: 0),
+                    openSessionStartMillis = if (attendanceKnown) openSessionStartMillis else (cachedState?.openSessionStartMillis ?: 0L),
+                    firstPunchInMillis = if (attendanceKnown) firstPunchInMillis else (cachedState?.firstPunchInMillis ?: 0L),
+                    totalMinutes = if (attendanceKnown) totalMin else (cachedState?.totalMinutes ?: 0),
+                    sessions = if (attendanceKnown) sessions else (cachedState?.sessions ?: sessions),
                     daysPresent = daysPresent,
                     permissionsLeftHrs = permLeft,
                     isPunching = false,
@@ -585,16 +613,15 @@ class HomeViewModel : ViewModel() {
         // keeps this merge minimal — no extra lookups to find the
         // companion fieldVisits id when one exists.
         //
-        // Status precedence: the spawned fieldVisits row carries the
-        // authoritative trip status ("in-progress" / "arrived" /
-        // "completed"), while the CP visit's own status only tracks the
-        // CP lifecycle ("scheduled" / "in_progress" / "completed"). If
-        // a fieldVisits row exists we prefer its status so the trip
-        // nav screen doesn't drop the user back on "Start Trip" after
-        // they've already verified arrival.
-        val effectiveStatus = this.fieldVisit?.status?.takeIf { it.isNotBlank() }
-            ?: this.status?.takeIf { it.isNotBlank() }
-            ?: "scheduled"
+        // Status precedence, shared with the CP Visits list so the two screens
+        // can never disagree: while the trip is live the fieldVisits row is
+        // authoritative (only it tracks "arrived", so the user isn't dropped
+        // back on "Start Trip" after verifying arrival), but a TERMINAL CP
+        // status wins over it. Home previously always preferred the trip row,
+        // so a completed CP whose field visit was left open showed as Enroute
+        // with a Start action and never closed.
+        val effectiveStatus = com.manjugroups.m_connect.ui.marketing
+            .resolveCpEffectiveStatus(this.status, this.fieldVisit?.status)
         // Detect "this CP was an SV-fix routed through CP first" using
         // the same three signals the outcome sheet uses for its locked
         // mode. Any one of these is enough: an explicit proposed SV
@@ -633,24 +660,8 @@ class HomeViewModel : ViewModel() {
         } else {
             "direct_cp"
         }
-        // Prefer the canonical client name (manualProfile.clientName on
-        // the server, surfaced as `client.clientName`) over the typed-in
-        // dialer name (`lead.contactName`). The web Client Profile card
-        // already shows the canonical form ("Abhi") — mobile was falling
-        // back to the dialer string ("abi") because clientPlace.name was
-        // blank for fresh CPs. Same ordering applied to `leadName` so
-        // downstream surfaces that fall back to leadName stay aligned.
-        val profileClient = this.lead?.manualProfile?.clientName.asClientNameOrNull()
-        val canonicalClient = this.client?.clientName.asClientNameOrNull()
-        val typedContact = this.lead?.contactName.asClientNameOrNull()
-        val placeLabel = this.clientPlace?.name.asClientNameOrNull()
-        val phoneLabel = this.lead?.mobileNumber?.takeIf { it.isNotBlank() }
-            ?: this.client?.mobileNumber?.takeIf { it.isNotBlank() }
-            ?: this.clientPlace?.contactPhone?.takeIf { it.isNotBlank() }
-        val resolvedClientName = profileClient
-            ?: canonicalClient
-            ?: typedContact
-            ?: placeLabel
+        val resolvedClientName = preferredCpClientName()
+        val phoneLabel = preferredCpClientPhone()
         val displayName = resolvedClientName
             ?: phoneLabel
             ?: "CP visit"
@@ -692,6 +703,7 @@ class HomeViewModel : ViewModel() {
                 outcome = this.outcome,
                 postponeReasons = this.postponeReasons,
                 cpType = this.cpType,
+                jointCpCategory = this.jointCpCategory,
             ),
         )
     }
