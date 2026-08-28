@@ -4,6 +4,7 @@ import com.manjugroups.m_connect.network.CustomerCollectionRow
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 /**
  * Maps a server `CustomerCollectionRow` onto the UI `CollectionItem`
@@ -32,9 +33,24 @@ import java.util.Locale
  */
 object CollectionMapper {
 
+    /** Rendered in the device's own timezone, which is what the user reads. */
     private val displayDateFormat = SimpleDateFormat("MMM dd, yyyy • hh:mm a", Locale.US)
+
+    // The server stores these as new Date().toISOString() — a UTC instant. The
+    // 'Z' in the pattern is QUOTED, so it matches the letter Z rather than
+    // meaning "UTC", and without an explicit timeZone SimpleDateFormat parses
+    // in the device's zone. That read 05:35 UTC as 05:35 IST and displayed it
+    // as 05:35 AM, when the collection was actually made at 11:05 AM — the
+    // 5:30 shift field staff reported. Parsing as UTC and formatting locally
+    // gives the real local time.
     private val isoNoMillisFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
+        .apply { timeZone = TimeZone.getTimeZone("UTC") }
     private val isoMillisFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
+        .apply { timeZone = TimeZone.getTimeZone("UTC") }
+
+    // Deliberately NOT UTC: a bare "yyyy-MM-dd" is a calendar date, not an
+    // instant. Parsing it as UTC would render it as 5:30 AM local instead of
+    // midnight on the day it names.
     private val dateOnlyFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
 
     fun map(row: CustomerCollectionRow): CollectionItem {
