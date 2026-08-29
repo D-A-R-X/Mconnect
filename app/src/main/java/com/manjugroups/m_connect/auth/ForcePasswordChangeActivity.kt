@@ -138,7 +138,7 @@ class ForcePasswordChangeActivity : AppCompatActivity() {
                 api.changeOwnPassword(
                     token = session.bearerToken,
                     body = ChangeOwnPasswordRequest(
-                        currentPassword = null,
+                        currentPassword = PendingPasswordChangeCredential.peek(),
                         newPassword = newPassword
                     )
                 )
@@ -149,14 +149,15 @@ class ForcePasswordChangeActivity : AppCompatActivity() {
                         redirectToLoginSessionExpired()
                         return@onSuccess
                     }
-                    if (isStaleForceFlagMessage(clean)) {
-                        continuePastStaleForceFlag()
+                    if (isReauthenticationRequiredMessage(clean)) {
+                        restartPasswordLogin()
                         return@onSuccess
                     }
                     showError(clean ?: "Failed to change password")
                     setLoading(false)
                     return@onSuccess
                 }
+                PendingPasswordChangeCredential.clear()
                 session.mustChangePassword = false
                 requestNotificationAccessThenContinue()
             }.onFailure {
@@ -175,15 +176,11 @@ class ForcePasswordChangeActivity : AppCompatActivity() {
                     redirectToLoginSessionExpired()
                     return@onFailure
                 }
-                // "Current password is required" here means the server does NOT
-                // consider this account force-flagged (the password was already
-                // changed — via web, or a previous submit whose local flag-clear
-                // was lost). The local mustChangePassword flag is stale and this
-                // screen has no current-password field and blocks back — without
-                // this branch the user is permanently trapped. Clear the stale
-                // flag and continue into the app.
-                if (isStaleForceFlagMessage(message)) {
-                    continuePastStaleForceFlag()
+                // A process-restored force-change screen may not have the
+                // one-time credential captured by EmployeePasswordLoginActivity.
+                // Re-authenticate instead of bypassing the password change.
+                if (isReauthenticationRequiredMessage(message)) {
+                    restartPasswordLogin()
                     return@onFailure
                 }
                 // The backend returns HTTP 400 with a {error:"…"} body when it
@@ -209,22 +206,25 @@ class ForcePasswordChangeActivity : AppCompatActivity() {
             message.contains("Session expired", ignoreCase = true)
     }
 
-    /** The server demanding a current password on THIS screen means the account
-     *  is not actually force-flagged any more — the local mustChangePassword is
-     *  stale (changed via web, or a prior submit whose flag-clear was lost). */
-    private fun isStaleForceFlagMessage(message: String?): Boolean =
-        message?.contains("Current password is required", ignoreCase = true) == true
+    /** The server requires the current credential when its force-change state
+     *  changed after login or this Activity was restored after process death. */
+    private fun isReauthenticationRequiredMessage(message: String?): Boolean =
+        message?.contains("Current password is required", ignoreCase = true) == true ||
+            message?.contains("Current password is incorrect", ignoreCase = true) == true
 
-    /** Clear the stale force flag and continue into the app — the password is
-     *  already set; there is nothing for the user to do here. */
-    private fun continuePastStaleForceFlag() {
-        session.mustChangePassword = false
+    private fun restartPasswordLogin() {
+        PendingPasswordChangeCredential.clear()
+        runCatching { com.manjugroups.m_connect.ui.common.LocalCache.clearAll(this) }
+        session.clearSession()
         android.widget.Toast.makeText(
             this,
-            "Your password is already up to date.",
+            "Please sign in with your current password, then set the new password again.",
             android.widget.Toast.LENGTH_LONG,
         ).show()
-        requestNotificationAccessThenContinue()
+        startActivity(Intent(this, EmployeePasswordLoginActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        })
+        finish()
     }
 
     /** The self-hosted Convex backend wraps thrown errors as
@@ -243,6 +243,7 @@ class ForcePasswordChangeActivity : AppCompatActivity() {
     /** Wipe the dead session (and per-user disk cache) and restart at login
      *  with a message the user can actually act on. */
     private fun redirectToLoginSessionExpired() {
+        PendingPasswordChangeCredential.clear()
         runCatching { com.manjugroups.m_connect.ui.common.LocalCache.clearAll(this) }
         session.clearSession()
         android.widget.Toast.makeText(
@@ -315,5 +316,25 @@ class ForcePasswordChangeActivity : AppCompatActivity() {
 
     override fun onBackPressed() {
         // Force-change flow blocks navigation until the password is updated.
+    }
+}
+
+/**
+ * Holds the password that was just verified by Employee ID login long enough
+ * to complete the mandatory password change. It is never persisted or placed
+ * in an Intent, and is erased as soon as the handoff succeeds or is abandoned.
+ */
+internal object PendingPasswordChangeCredential {
+    @Volatile
+    private var value: String? = null
+
+    fun set(password: String) {
+        value = password
+    }
+
+    fun peek(): String? = value
+
+    fun clear() {
+        value = null
     }
 }

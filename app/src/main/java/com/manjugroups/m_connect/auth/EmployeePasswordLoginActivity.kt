@@ -21,6 +21,10 @@ import com.manjugroups.m_connect.notifications.PushTokenManager
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
+import java.net.ConnectException
+import java.net.NoRouteToHostException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 
 class EmployeePasswordLoginActivity : AppCompatActivity() {
 
@@ -124,7 +128,7 @@ class EmployeePasswordLoginActivity : AppCompatActivity() {
                     setLoading(false)
                     return@onSuccess
                 }
-                bootstrapSession(response)
+                bootstrapSession(response, password)
             }.onFailure {
                 showError(parseErrorMessage(it, "Unable to sign in"))
                 setLoading(false)
@@ -132,7 +136,7 @@ class EmployeePasswordLoginActivity : AppCompatActivity() {
         }
     }
 
-    private fun bootstrapSession(response: EmployeePasswordLoginResponse) {
+    private fun bootstrapSession(response: EmployeePasswordLoginResponse, verifiedPassword: String) {
         lifecycleScope.launch {
             val user = response.user!!
             session.saveSession(
@@ -143,6 +147,11 @@ class EmployeePasswordLoginActivity : AppCompatActivity() {
             session.staffId = user.staffId
             session.employeeId = user.employeeId
             session.mustChangePassword = response.mustChangePassword || user.mustChangePassword
+            if (session.mustChangePassword) {
+                PendingPasswordChangeCredential.set(verifiedPassword)
+            } else {
+                PendingPasswordChangeCredential.clear()
+            }
             session.geoTrackingEnabled = user.geoTrackingEnabled
             session.geoConsentGiven = false
             session.geoConsentDeclined = false
@@ -266,6 +275,19 @@ class EmployeePasswordLoginActivity : AppCompatActivity() {
     }
 
     private fun parseErrorMessage(error: Throwable, fallback: String): String {
+        when {
+            error.hasCause<UnknownHostException>() ||
+                error.hasCause<ConnectException>() ||
+                error.hasCause<NoRouteToHostException>() -> {
+                return "No network connection. Check your internet and try again."
+            }
+            error.hasCause<SocketTimeoutException>() -> {
+                return "Network connection timed out. Check your internet and try again."
+            }
+            error.hasCause<java.io.IOException>() -> {
+                return "Unable to connect. Check your internet and try again."
+            }
+        }
         if (error is HttpException) {
             val body = error.response()?.errorBody()?.string()
             if (!body.isNullOrBlank()) {
@@ -278,6 +300,15 @@ class EmployeePasswordLoginActivity : AppCompatActivity() {
             }
         }
         return error.message ?: fallback
+    }
+
+    private inline fun <reified T : Throwable> Throwable.hasCause(): Boolean {
+        var current: Throwable? = this
+        while (current != null) {
+            if (current is T) return true
+            current = current.cause
+        }
+        return false
     }
 
     private data class EmployeeLoginErrorResponse(

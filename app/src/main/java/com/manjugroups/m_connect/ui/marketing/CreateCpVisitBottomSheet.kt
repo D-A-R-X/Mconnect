@@ -595,7 +595,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                     )
                     btnSubmit.isEnabled = true
                     if (!resp.success) {
-                        toast(resp.error ?: "Failed to create CP visit")
+                        toast(cleanServerErrorMessage(resp.error ?: "Failed to create CP visit"))
                         return@launch
                     }
                     toast("CP visit created successfully")
@@ -604,9 +604,9 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                 } catch (e: Exception) {
                     btnSubmit.isEnabled = true
                     // The create route returns real reasons (staff busy, duplicate
-                    // slot, "Collection CP requires a booking", etc.) as a 500 with
-                    // a JSON { error } body. Retrofit throws on the 500, so read the
-                    // body — otherwise the user only ever sees a bare "HTTP 500".
+                    // slot, "Collection CP requires a booking", etc.) in a JSON
+                    // { error } body. Read it for current 4xx responses and older
+                    // deployments that still return HTTP 500.
                     toast(serverErrorMessage(e) ?: e.message ?: "Failed to create CP visit")
                 }
             }
@@ -1189,11 +1189,8 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
     }
 
-    /** Pull the backend's real error out of an HTTP failure body. The CP-create
-     *  route returns business errors (staff busy, duplicate slot, "Collection CP
-     *  requires a booking", invalid staff, etc.) as a 500 with a JSON { error }
-     *  body; Retrofit throws on the non-2xx, so without this the toast only shows
-     *  a bare "HTTP 500". */
+    /** Pull the backend's real error out of an HTTP failure body. Business errors
+     *  use a JSON { error } body; Retrofit otherwise exposes only the status. */
     private fun serverErrorMessage(e: Throwable): String? {
         val httpEx = e as? retrofit2.HttpException ?: return null
         val raw = runCatching { httpEx.response()?.errorBody()?.string() }.getOrNull()
@@ -1201,8 +1198,16 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         return runCatching {
             val obj = com.google.gson.JsonParser.parseString(raw).asJsonObject
             (obj.get("error")?.asString ?: obj.get("message")?.asString)
+                ?.let(::cleanServerErrorMessage)
                 ?.takeIf { it.isNotBlank() }
         }.getOrNull()
+    }
+
+    private fun cleanServerErrorMessage(raw: String): String {
+        val marker = Regex("Uncaught (?:Convex)?Error:\\s*", RegexOption.IGNORE_CASE)
+            .find(raw)
+        val actionable = marker?.let { raw.substring(it.range.last + 1) } ?: raw
+        return actionable.lineSequence().firstOrNull()?.trim().orEmpty()
     }
 
     companion object {

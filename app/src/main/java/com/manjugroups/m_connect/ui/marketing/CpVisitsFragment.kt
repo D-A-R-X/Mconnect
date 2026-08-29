@@ -35,6 +35,7 @@ import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.common.preferredCpClientName
 import com.manjugroups.m_connect.ui.common.preferredCpClientPhone
 import com.manjugroups.m_connect.ui.home.CompleteCpVisitBottomSheet
+import com.manjugroups.m_connect.ui.home.CpRevisitConfirmation
 import com.manjugroups.m_connect.ui.home.TripNavigationFragment
 import com.manjugroups.m_connect.ui.hr.AttendanceFlowViewModel
 import com.manjugroups.m_connect.ui.common.navigateUp
@@ -129,6 +130,12 @@ class CpVisitsFragment : Fragment() {
         setupFilterPills(view)
         setupDateFilter(view)
         observeAttendanceState()
+        setFragmentResultListener(CompleteCpVisitBottomSheet.RESULT_KEY) { _, bundle ->
+            CpRevisitConfirmation.fromResult(bundle)?.let { revisit ->
+                CpRevisitConfirmation.show(this@CpVisitsFragment, revisit) {}
+            }
+            loadVisits()
+        }
 
         // Infinite scroll: render the next 20 rows as the user nears the end.
         view.findViewById<androidx.core.widget.NestedScrollView>(R.id.cpvScroll)?.let { scroll ->
@@ -323,7 +330,7 @@ class CpVisitsFragment : Fragment() {
         return SimpleDateFormat("dd MMM", Locale.getDefault()).format(parsed)
     }
 
-    /** Keep only visits whose scheduledDate falls in the active range. */
+    /** Completed rows carry their completion day; active rows carry schedule day. */
     private fun inDateRange(v: TodayVisit): Boolean {
         val from = filterFromDate ?: return true
         val to = filterToDate ?: return true
@@ -519,11 +526,16 @@ class CpVisitsFragment : Fragment() {
      */
     private fun com.manjugroups.m_connect.network.CpVisitDetail.toCpListVisitOrNull(): TodayVisit? {
         val cpId = this.id ?: return null
-        val scheduled = this.scheduledDate ?: return null
+        val assignedDate = this.scheduledDate ?: return null
         // Shared with Home so both screens agree. A terminal CP status wins
         // over the trip row; a live one still defers to it. See
         // resolveCpEffectiveStatus for why.
         val effectiveStatus = resolveCpEffectiveStatus(this.status, this.fieldVisit?.status)
+        val activityDate = if (isCompleted(effectiveStatus.lowercase(Locale.US))) {
+            this.activityDate ?: assignedDate
+        } else {
+            assignedDate
+        }
         val proposedHasFields = this.proposedSiteVisit?.let { p ->
             !p.projectId.isNullOrBlank() ||
                 !p.scheduledDate.isNullOrBlank() ||
@@ -589,7 +601,7 @@ class CpVisitsFragment : Fragment() {
         return TodayVisit(
             id = cpId,
             clientPlaceId = this.clientPlaceId ?: cpId,
-            scheduledDate = scheduled,
+            scheduledDate = activityDate,
             status = effectiveStatus,
             // Both participants, so the card can name them.
             joint = this.joint,
