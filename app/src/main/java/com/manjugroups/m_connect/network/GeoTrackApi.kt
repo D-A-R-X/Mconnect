@@ -1085,6 +1085,7 @@ data class CpApprovalItem(
     val placeName: String? = null,
     val placeAddress: String? = null,
     val distanceMeters: Double? = null,
+    val travelledDistanceMeters: Double? = null,
     val completionLat: Double? = null,
     val completionLng: Double? = null,
     val staffRemark: String? = null,

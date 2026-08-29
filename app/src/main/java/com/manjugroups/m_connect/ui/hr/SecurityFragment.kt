@@ -17,6 +17,10 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.ListAdapter
+import androidx.recyclerview.widget.RecyclerView
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentSecurityBinding
@@ -26,6 +30,8 @@ import com.manjugroups.m_connect.network.StaffPaginatedResponse
 import com.manjugroups.m_connect.ui.common.navigateUp
 import com.manjugroups.m_connect.ui.common.dismissRefresh
 import com.manjugroups.m_connect.ui.common.setupPullToRefresh
+import com.manjugroups.m_connect.ui.common.AvatarUtils.loadUserAvatar
+import com.manjugroups.m_connect.ui.common.ProfilePhotos
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -77,7 +83,9 @@ class SecurityFragment : Fragment() {
     private var loadMoreFailed = false
     private var loadFailed = false
     private var pageRetryJob: Job? = null
+    private var dataLoadJob: Job? = null
     private var pageRetryRound = 0
+    private lateinit var securityAdapter: SecurityAdapter
 
     private var searchQuery: String = ""
     private var searchJob: kotlinx.coroutines.Job? = null
@@ -155,6 +163,17 @@ class SecurityFragment : Fragment() {
 
         buildTabs()
         setupSearch()
+        securityAdapter = SecurityAdapter()
+        binding.securityList.apply {
+            layoutManager = LinearLayoutManager(requireContext())
+            adapter = securityAdapter
+            itemAnimator = null
+            addOnScrollListener(object : RecyclerView.OnScrollListener() {
+                override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                    if (dy >= 0) maybeLoadNextPage()
+                }
+            })
+        }
         binding.btnSecurityFilter.setOnClickListener { openFilters() }
         binding.securityRefresh.setupPullToRefresh {
             if (isSearching) runSearch(searchQuery) else resetAndLoad()
@@ -166,12 +185,6 @@ class SecurityFragment : Fragment() {
             pageRetryJob?.cancel()
             pageRetryRound = 0
             loadNextPage(first = loaded.isEmpty())
-        }
-
-        // Scroll-based paging: pull the next page once the user is within a
-        // screen of the bottom, so rows are already there when they arrive.
-        binding.securityScroll.setOnScrollChangeListener { _, _, _, _, _ ->
-            maybeLoadNextPage()
         }
 
         // A staff action taken in the sheet can change what the list shows.
@@ -200,6 +213,7 @@ class SecurityFragment : Fragment() {
 
     override fun onDestroyView() {
         searchJob?.cancel()
+        dataLoadJob?.cancel()
         pageRetryJob?.cancel()
         pageRetryJob = null
         _binding = null
@@ -209,6 +223,9 @@ class SecurityFragment : Fragment() {
     // ---------- data ----------
 
     private fun resetAndLoad() {
+        dataLoadJob?.cancel()
+        dataLoadJob = null
+        isLoading = false
         if (selectedTab == Action.STAFF_LOGIN) {
             loginsLoaded = false
             loadFailed = false
@@ -241,7 +258,7 @@ class SecurityFragment : Fragment() {
         loadMoreFailed = false
         renderLoadingState()
 
-        viewLifecycleOwner.lifecycleScope.launch {
+        dataLoadJob = viewLifecycleOwner.lifecycleScope.launch {
             val resp = getStaffPageWithRetry(requestedCursor)
 
             if (!isAdded || _binding == null) return@launch
@@ -325,18 +342,16 @@ class SecurityFragment : Fragment() {
         }
     }
 
-    /**
-     * Checks after both user scrolling and list re-layout. A ScrollView whose
-     * children are rebuilt can finish laying out at the bottom without
-     * emitting another scroll event, which previously left the directory at
-     * exactly two pages (50 rows).
-     */
+    /** Pull the next page shortly before the final recycled row is visible. */
     private fun maybeLoadNextPage() {
         if (_binding == null || selectedTab == Action.STAFF_LOGIN || loadMoreFailed) return
-        val scroll = binding.securityScroll
-        val child = scroll.getChildAt(0) ?: return
-        val remaining = child.height - (scroll.height + scroll.scrollY)
-        if (remaining <= scroll.height) loadNextPage()
+        val manager = binding.securityList.layoutManager as? LinearLayoutManager ?: return
+        val lastVisible = manager.findLastVisibleItemPosition()
+        if (securityAdapter.itemCount == 0 ||
+            lastVisible >= securityAdapter.itemCount - PAGE_PREFETCH_ROWS
+        ) {
+            loadNextPage()
+        }
     }
 
     /**
@@ -346,6 +361,9 @@ class SecurityFragment : Fragment() {
      */
     private fun runSearch(query: String) {
         searchJob?.cancel()
+        dataLoadJob?.cancel()
+        dataLoadJob = null
+        isLoading = false
         val q = query.trim()
         if (q.isEmpty()) {
             isSearching = false
@@ -413,7 +431,7 @@ class SecurityFragment : Fragment() {
         if (isLoading) return
         isLoading = true
         renderLoadingState()
-        viewLifecycleOwner.lifecycleScope.launch {
+        dataLoadJob = viewLifecycleOwner.lifecycleScope.launch {
             val resp = runCatching {
                 api.getActiveStaffLogins(session.bearerToken)
             }.getOrNull()
@@ -462,11 +480,40 @@ class SecurityFragment : Fragment() {
             ).apply { bottomMargin = dp(10) }
         }
 
-        card.addView(TextView(requireContext()).apply {
-            text = name
-            textSize = 14f
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(Color.parseColor("#101828"))
+        card.addView(LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(ImageView(context).apply {
+                layoutParams = LinearLayout.LayoutParams(dp(42), dp(42)).apply {
+                    marginEnd = dp(10)
+                }
+                contentDescription = "$name profile photo"
+                loadUserAvatar(ProfilePhotos.resolve(r.photo), name)
+            })
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(
+                    0,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    1f,
+                )
+                addView(TextView(context).apply {
+                    text = name
+                    textSize = 14f
+                    setTypeface(typeface, Typeface.BOLD)
+                    setTextColor(Color.parseColor("#101828"))
+                })
+                addView(TextView(context).apply {
+                    text = listOfNotNull(
+                        r.employeeId?.takeIf { it.isNotBlank() },
+                        r.designation?.takeIf { it.isNotBlank() },
+                        r.department?.takeIf { it.isNotBlank() },
+                    ).joinToString(" - ")
+                    textSize = 12f
+                    setTextColor(Color.parseColor("#667085"))
+                    setPadding(0, dp(2), 0, 0)
+                })
+            })
         })
 
         card.isClickable = true
@@ -474,15 +521,8 @@ class SecurityFragment : Fragment() {
         card.setOnClickListener {
             r.staffId?.let { showLoggedInDevices(it, name) }
         }
-        card.addView(TextView(requireContext()).apply {
-            text = listOfNotNull(
-                r.employeeId?.takeIf { it.isNotBlank() },
-                r.designation?.takeIf { it.isNotBlank() },
-                r.department?.takeIf { it.isNotBlank() },
-            ).joinToString(" - ")
-            textSize = 12f
-            setTextColor(Color.parseColor("#667085"))
-            setPadding(0, dp(2), 0, dp(10))
+        card.addView(View(requireContext()).apply {
+            layoutParams = LinearLayout.LayoutParams(1, dp(10))
         })
 
         card.addView(sessionLine("Web", r.webSession))
@@ -805,19 +845,16 @@ class SecurityFragment : Fragment() {
             tabs.firstOrNull { it.action == selectedTab }?.hint.orEmpty()
         renderChips()
 
-        binding.securityList.removeAllViews()
-        if (selectedTab == Action.STAFF_LOGIN) {
-            loginRows.forEach { binding.securityList.addView(loginRow(it)) }
-        } else {
-            staffRows.forEach { binding.securityList.addView(staffRow(it)) }
-        }
+        securityAdapter.submitList(
+            if (selectedTab == Action.STAFF_LOGIN) {
+                loginRows.map(SecurityListRow::Login)
+            } else {
+                staffRows.map(SecurityListRow::Staff)
+            },
+        )
         val hasRows = if (selectedTab == Action.STAFF_LOGIN) loginRows.isNotEmpty()
         else staffRows.isNotEmpty()
         binding.securityList.visibility = if (hasRows) View.VISIBLE else View.GONE
-
-        // Re-evaluate once the newly appended rows have their final height.
-        // This also fills short screens without requiring a pointless scroll.
-        binding.securityScroll.post { maybeLoadNextPage() }
 
         // Nothing at all AND the first load failed -> an explicit retry, never a
         // blank screen the user has to guess about.
@@ -858,7 +895,11 @@ class SecurityFragment : Fragment() {
     private fun staffRow(staff: StaffData): View {
         val row = layoutInflater.inflate(R.layout.item_staff, binding.securityList, false)
         val name = staff.name?.takeIf { it.isNotBlank() } ?: "Unnamed staff"
-        row.findViewById<TextView>(R.id.tvStaffInitials).text = initials(name)
+        val initials = row.findViewById<TextView>(R.id.tvStaffInitials)
+        val avatar = row.findViewById<ImageView>(R.id.ivStaffAvatar)
+        initials.visibility = View.GONE
+        avatar.visibility = View.VISIBLE
+        avatar.loadUserAvatar(ProfilePhotos.resolve(staff.photo), name)
         row.findViewById<TextView>(R.id.tvStaffName).text = name
         row.findViewById<TextView>(R.id.tvStaffRole).text =
             listOfNotNull(
@@ -903,11 +944,6 @@ class SecurityFragment : Fragment() {
         return row
     }
 
-    private fun initials(name: String): String =
-        name.trim().split(" ").filter { it.isNotBlank() }
-            .take(2).joinToString("") { it.first().uppercase() }
-            .ifBlank { "?" }
-
     // ---------- tabs ----------
 
     private fun buildTabs() {
@@ -938,11 +974,16 @@ class SecurityFragment : Fragment() {
                     ).apply { marginEnd = dp(8) }
                     setOnClickListener {
                         searchJob?.cancel()
+                        dataLoadJob?.cancel()
+                        dataLoadJob = null
+                        isLoading = false
                         isSearching = false
                         selectedTab = tab.action
                         buildTabs()
                         if (tab.action == Action.STAFF_LOGIN && !loginsLoaded) {
                             loadLogins()
+                        } else if (tab.action != Action.STAFF_LOGIN && loaded.isEmpty()) {
+                            resetAndLoad()
                         }
                         render()
                     }
@@ -1035,8 +1076,60 @@ class SecurityFragment : Fragment() {
     private fun dp(value: Int): Int =
         (value * resources.displayMetrics.density).toInt()
 
+    private sealed interface SecurityListRow {
+        val stableId: String
+
+        data class Staff(val value: StaffData) : SecurityListRow {
+            override val stableId = "staff:${value.id}"
+        }
+
+        data class Login(val value: ActiveStaffLogin) : SecurityListRow {
+            override val stableId = "login:${value.staffId}"
+        }
+    }
+
+    /** Keeps only visible cards alive while preserving the existing row actions. */
+    private inner class SecurityAdapter :
+        ListAdapter<SecurityListRow, SecurityAdapter.RowHolder>(ROW_DIFF) {
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RowHolder {
+            val container = android.widget.FrameLayout(parent.context).apply {
+                layoutParams = RecyclerView.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                )
+            }
+            return RowHolder(container)
+        }
+
+        override fun onBindViewHolder(holder: RowHolder, position: Int) {
+            holder.container.removeAllViews()
+            val view = when (val row = getItem(position)) {
+                is SecurityListRow.Staff -> staffRow(row.value)
+                is SecurityListRow.Login -> loginRow(row.value)
+            }
+            holder.container.addView(view)
+        }
+
+        inner class RowHolder(val container: android.widget.FrameLayout) :
+            RecyclerView.ViewHolder(container)
+    }
+
     companion object {
+        private val ROW_DIFF = object : DiffUtil.ItemCallback<SecurityListRow>() {
+            override fun areItemsTheSame(
+                oldItem: SecurityListRow,
+                newItem: SecurityListRow,
+            ) = oldItem.stableId == newItem.stableId
+
+            override fun areContentsTheSame(
+                oldItem: SecurityListRow,
+                newItem: SecurityListRow,
+            ) = oldItem == newItem
+        }
+
         private const val PAGE_SIZE = 25
+        private const val PAGE_PREFETCH_ROWS = 8
         private const val PAGE_LOAD_ATTEMPTS = 3
         private val PAGE_RETRY_DELAYS_MS = longArrayOf(300L, 900L)
         private val AUTO_PAGE_RETRY_DELAYS_MS = longArrayOf(4_000L, 10_000L, 20_000L, 30_000L)

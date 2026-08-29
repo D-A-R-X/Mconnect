@@ -1772,6 +1772,7 @@ data class ActiveStaffLogin(
     val employeeId: String? = null,
     val name: String? = null,
     val phone: String? = null,
+    val photo: String? = null,
     val designation: String? = null,
     val department: String? = null,
     val webSession: StaffLoginSession? = null,

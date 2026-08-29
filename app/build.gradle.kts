@@ -67,10 +67,10 @@ val googleMapsApiKey = envOrDefault(
 )
 // Point the Android client at the same Convex deployment the web admin uses.
 // Build-time overrides still apply (env NEXT_PUBLIC_CONVEX_SITE_URL or
-// MCONNECT_BASE_URL), so a release pipeline can swap in the prod URL without   
+// MCONNECT_BASE_URL), so a release pipeline can swap in the prod URL without
 // touching this file.
 val defaultBaseUrl = ensureTrailingSlash(
-    envOrDefault("NEXT_PUBLIC_CONVEX_SITE_URL", "https://savory-condor-749.convex.site/")
+    envOrDefault("NEXT_PUBLIC_CONVEX_SITE_URL", "https://api-mfpl.theairix.com/")
 )
 val baseUrl = ensureTrailingSlash(
     envOrDefault("MCONNECT_BASE_URL", defaultBaseUrl)

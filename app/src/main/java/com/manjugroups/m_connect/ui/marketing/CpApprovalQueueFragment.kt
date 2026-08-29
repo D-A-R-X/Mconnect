@@ -298,13 +298,18 @@ class CpApprovalQueueFragment : Fragment() {
             }
         })
 
+        card.addView(factTile(
+            "Distance travelled",
+            formatDistance(item.travelledDistanceMeters),
+        ).also {
+            it.layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(8) }
+        })
+
         val distance = item.distanceMeters?.let { m ->
-            val label = if (m >= 1000.0) {
-                String.format(java.util.Locale.US, "%.1f km", m / 1000.0)
-            } else {
-                "${m.roundToInt()} m"
-            }
-            "$label out of geofence"
+            "${formatDistance(m)} out of geofence"
         }
         val place = listOfNotNull(item.placeName, distance).joinToString(" · ")
         val evidence = listOfNotNull(
@@ -397,6 +402,12 @@ class CpApprovalQueueFragment : Fragment() {
             word.lowercase(Locale.US).replaceFirstChar { it.titlecase(Locale.US) }
         }
         ?: "Not recorded"
+
+    private fun formatDistance(value: Double?): String = when {
+        value == null || !value.isFinite() || value < 0.0 -> "Not recorded"
+        value >= 1000.0 -> String.format(Locale.US, "%.1f km", value / 1000.0)
+        else -> "${value.roundToInt()} m"
+    }
 
     private fun scheduledDateTime(item: CpApprovalItem): String {
         val date = item.scheduledDate?.takeIf { it.isNotBlank() } ?: "Not recorded"

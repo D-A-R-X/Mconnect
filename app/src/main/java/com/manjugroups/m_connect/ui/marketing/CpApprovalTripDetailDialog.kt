@@ -100,6 +100,7 @@ class CpApprovalTripDetailDialog : DialogFragment() {
             "Start time" to formatEpoch(item.startedAt),
             "End time" to formatEpoch(item.completedAt ?: item.requestedAt),
             "CP type" to friendlyCpType(item.cpType),
+            "Distance travelled" to formatDistance(item.travelledDistanceMeters),
         )
         content.addView(LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
@@ -296,6 +297,12 @@ class CpApprovalTripDetailDialog : DialogFragment() {
     private fun formatEpoch(value: Double?): String =
         if (value == null || value <= 0.0) "Not recorded"
         else SimpleDateFormat("dd MMM yyyy, h:mm a", Locale.US).format(Date(value.toLong()))
+
+    private fun formatDistance(value: Double?): String = when {
+        value == null || !value.isFinite() || value < 0.0 -> "Not recorded"
+        value >= 1000.0 -> String.format(Locale.US, "%.1f km", value / 1000.0)
+        else -> "${value.roundToInt()} m"
+    }
 
     override fun onStart() { super.onStart(); mapView.onStart() }
     override fun onResume() { super.onResume(); mapView.onResume() }
