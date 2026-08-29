@@ -714,6 +714,7 @@ data class TrackingConsentResponse(
 data class GeoTrackResponse(
     val success: Boolean,
     val error: String? = null,
+    val revisit: CpRevisitInfo? = null,
     val inserted: Int? = null,
     val tamperDetected: Boolean? = null,
     // Server-side rejection diagnostics for a batch: how many points were
@@ -721,6 +722,15 @@ data class GeoTrackResponse(
     // Makes a "Live but zero GPS stored" day attributable from logcat.
     val rejectedAccuracy: Int? = null,
     val rejectedWindow: Int? = null,
+)
+
+data class CpRevisitInfo(
+    val creationStatus: String,
+    val reason: String,
+    val scheduledDate: String,
+    val scheduledTime: String? = null,
+    val visitId: String? = null,
+    val error: String? = null,
 )
 
 data class ConsentStatusResponse(
@@ -1075,6 +1085,7 @@ data class CpApprovalItem(
     val placeName: String? = null,
     val placeAddress: String? = null,
     val distanceMeters: Double? = null,
+    val travelledDistanceMeters: Double? = null,
     val completionLat: Double? = null,
     val completionLng: Double? = null,
     val staffRemark: String? = null,
@@ -1110,6 +1121,7 @@ data class CpApprovalRouteData(
     val endLat: Double? = null,
     val endLng: Double? = null,
     val routePoints: List<CpApprovalRoutePoint>? = emptyList(),
+    val routeSource: String? = null,
 )
 
 data class CpApprovalRoutePoint(
@@ -1681,6 +1693,7 @@ data class CpVisitDetail(
     val assignedStaffId: String? = null,
     val assignedAt: Long? = null,
     val scheduledDate: String? = null,
+    val activityDate: String? = null,
     val scheduledTime: String? = null,
     val status: String? = null,
     val clientMet: Boolean? = null,

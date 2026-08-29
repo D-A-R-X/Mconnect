@@ -167,8 +167,11 @@ class HomeFragment : Fragment() {
         // When the CP/SV outcome sheet (opened straight from the home
         // card) saves an outcome, refresh today's trips so the card flips
         // to its Completed state without the user re-entering the screen.
-        setFragmentResultListener(CompleteCpVisitBottomSheet.RESULT_KEY) { _, _ ->
+        setFragmentResultListener(CompleteCpVisitBottomSheet.RESULT_KEY) { _, bundle ->
             viewModel.loadHomeData(session.bearerToken, requireContext().applicationContext)
+            CpRevisitConfirmation.fromResult(bundle)?.let { revisit ->
+                CpRevisitConfirmation.show(this@HomeFragment, revisit) {}
+            }
         }
         // The edge-drag QR panel opens the Front-Desk check-in scanner —
         // only wire it for staff who hold a frontdesk permission (web

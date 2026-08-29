@@ -17,15 +17,27 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.ListAdapter
+import androidx.recyclerview.widget.RecyclerView
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentSecurityBinding
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.StaffData
+import com.manjugroups.m_connect.network.StaffPaginatedResponse
 import com.manjugroups.m_connect.ui.common.navigateUp
 import com.manjugroups.m_connect.ui.common.dismissRefresh
 import com.manjugroups.m_connect.ui.common.setupPullToRefresh
+import com.manjugroups.m_connect.ui.common.AvatarUtils.loadUserAvatar
+import com.manjugroups.m_connect.ui.common.ProfilePhotos
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import retrofit2.HttpException
+import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import android.app.AlertDialog
@@ -68,7 +80,12 @@ class SecurityFragment : Fragment() {
     private var cursor: String? = null
     private var isDone = false
     private var isLoading = false
+    private var loadMoreFailed = false
     private var loadFailed = false
+    private var pageRetryJob: Job? = null
+    private var dataLoadJob: Job? = null
+    private var pageRetryRound = 0
+    private lateinit var securityAdapter: SecurityAdapter
 
     private var searchQuery: String = ""
     private var searchJob: kotlinx.coroutines.Job? = null
@@ -146,6 +163,17 @@ class SecurityFragment : Fragment() {
 
         buildTabs()
         setupSearch()
+        securityAdapter = SecurityAdapter()
+        binding.securityList.apply {
+            layoutManager = LinearLayoutManager(requireContext())
+            adapter = securityAdapter
+            itemAnimator = null
+            addOnScrollListener(object : RecyclerView.OnScrollListener() {
+                override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                    if (dy >= 0) maybeLoadNextPage()
+                }
+            })
+        }
         binding.btnSecurityFilter.setOnClickListener { openFilters() }
         binding.securityRefresh.setupPullToRefresh {
             if (isSearching) runSearch(searchQuery) else resetAndLoad()
@@ -153,15 +181,10 @@ class SecurityFragment : Fragment() {
         binding.btnSecurityRetry.setOnClickListener {
             if (isSearching) runSearch(searchQuery) else resetAndLoad()
         }
-
-        // Scroll-based paging: pull the next page once the user is within a
-        // screen of the bottom, so rows are already there when they arrive.
-        binding.securityScroll.viewTreeObserver.addOnScrollChangedListener {
-            if (_binding == null) return@addOnScrollChangedListener
-            val scroll = binding.securityScroll
-            val child = scroll.getChildAt(0) ?: return@addOnScrollChangedListener
-            val remaining = child.height - (scroll.height + scroll.scrollY)
-            if (remaining < scroll.height) loadNextPage()
+        binding.btnSecurityLoadMoreRetry.setOnClickListener {
+            pageRetryJob?.cancel()
+            pageRetryRound = 0
+            loadNextPage(first = loaded.isEmpty())
         }
 
         // A staff action taken in the sheet can change what the list shows.
@@ -190,6 +213,9 @@ class SecurityFragment : Fragment() {
 
     override fun onDestroyView() {
         searchJob?.cancel()
+        dataLoadJob?.cancel()
+        pageRetryJob?.cancel()
+        pageRetryJob = null
         _binding = null
         super.onDestroyView()
     }
@@ -197,6 +223,9 @@ class SecurityFragment : Fragment() {
     // ---------- data ----------
 
     private fun resetAndLoad() {
+        dataLoadJob?.cancel()
+        dataLoadJob = null
+        isLoading = false
         if (selectedTab == Action.STAFF_LOGIN) {
             loginsLoaded = false
             loadFailed = false
@@ -207,6 +236,9 @@ class SecurityFragment : Fragment() {
         cursor = null
         isDone = false
         loadFailed = false
+        loadMoreFailed = false
+        pageRetryJob?.cancel()
+        pageRetryRound = 0
         render()
         loadNextPage(first = true)
     }
@@ -221,20 +253,13 @@ class SecurityFragment : Fragment() {
     private fun loadNextPage(first: Boolean = false) {
         if (isLoading || isDone || isSearching) return
         if (!first && cursor == null) return
+        val requestedCursor = cursor
         isLoading = true
+        loadMoreFailed = false
         renderLoadingState()
 
-        viewLifecycleOwner.lifecycleScope.launch {
-            val resp = runCatching {
-                api.getStaffPaginated(
-                    token = session.bearerToken,
-                    numItems = PAGE_SIZE,
-                    cursor = cursor,
-                    // This screen needs the staff rows only; the enriched
-                    // response hung the request.
-                    lite = "1",
-                )
-            }.getOrNull()
+        dataLoadJob = viewLifecycleOwner.lifecycleScope.launch {
+            val resp = getStaffPageWithRetry(requestedCursor)
 
             if (!isAdded || _binding == null) return@launch
             isLoading = false
@@ -245,14 +270,21 @@ class SecurityFragment : Fragment() {
                 // has nothing to show, and that gets an explicit retry rather
                 // than a blank rectangle.
                 loadFailed = loaded.isEmpty()
+                loadMoreFailed = loaded.isNotEmpty() && !isDone
                 render()
+                schedulePageRetry(first = loaded.isEmpty())
                 return@launch
             }
 
-            loaded.addAll(resp.page.filter { !it.id.isNullOrBlank() })
-            cursor = resp.continueCursor
-            isDone = resp.isDone || resp.continueCursor == null
+            val knownIds = loaded.mapNotNullTo(mutableSetOf()) { it.id }
+            loaded.addAll(resp.page.filter { !it.id.isNullOrBlank() && knownIds.add(it.id!!) })
+            val nextCursor = resp.continueCursor?.takeIf { it.isNotBlank() }
+            cursor = nextCursor
+            isDone = resp.isDone || nextCursor == null ||
+                (!first && nextCursor == requestedCursor)
             loadFailed = false
+            pageRetryJob?.cancel()
+            pageRetryRound = 0
             render()
 
             // With a filter on, one page may contain few (or no) matches. Keep
@@ -265,12 +297,73 @@ class SecurityFragment : Fragment() {
     }
 
     /**
+     * The field network can briefly lose DNS while remaining connected. The
+     * same API host commonly resolves again a few hundred milliseconds later,
+     * so retry this idempotent GET with the exact same cursor before exposing
+     * a manual retry state. Never retry auth/client errors or cancelled jobs.
+     */
+    private suspend fun getStaffPageWithRetry(
+        requestedCursor: String?,
+    ): StaffPaginatedResponse? {
+        repeat(PAGE_LOAD_ATTEMPTS) { attempt ->
+            try {
+                return api.getStaffPaginated(
+                    token = session.bearerToken,
+                    numItems = PAGE_SIZE,
+                    cursor = requestedCursor,
+                    // This screen needs the staff rows only; the enriched
+                    // response hung the request.
+                    lite = "1",
+                )
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                val retryable = error is IOException ||
+                    (error is HttpException && (error.code() == 408 ||
+                        error.code() == 429 || error.code() >= 500))
+                if (!retryable || attempt == PAGE_LOAD_ATTEMPTS - 1) return null
+                delay(PAGE_RETRY_DELAYS_MS[attempt])
+            }
+        }
+        return null
+    }
+
+    /** Keep a failed cursor alive and resume paging when DNS/network returns. */
+    private fun schedulePageRetry(first: Boolean) {
+        pageRetryJob?.cancel()
+        val waitMs = AUTO_PAGE_RETRY_DELAYS_MS[
+            pageRetryRound.coerceAtMost(AUTO_PAGE_RETRY_DELAYS_MS.lastIndex)
+        ]
+        pageRetryRound += 1
+        pageRetryJob = viewLifecycleOwner.lifecycleScope.launch {
+            delay(waitMs)
+            if (_binding == null || isDone || isSearching) return@launch
+            loadNextPage(first = first)
+        }
+    }
+
+    /** Pull the next page shortly before the final recycled row is visible. */
+    private fun maybeLoadNextPage() {
+        if (_binding == null || selectedTab == Action.STAFF_LOGIN || loadMoreFailed) return
+        val manager = binding.securityList.layoutManager as? LinearLayoutManager ?: return
+        val lastVisible = manager.findLastVisibleItemPosition()
+        if (securityAdapter.itemCount == 0 ||
+            lastVisible >= securityAdapter.itemCount - PAGE_PREFETCH_ROWS
+        ) {
+            loadNextPage()
+        }
+    }
+
+    /**
      * Server-side search, so a name is found even when their page has not been
      * scrolled to yet. Debounced — a keystroke per request would hammer the
      * backend and the results would race.
      */
     private fun runSearch(query: String) {
         searchJob?.cancel()
+        dataLoadJob?.cancel()
+        dataLoadJob = null
+        isLoading = false
         val q = query.trim()
         if (q.isEmpty()) {
             isSearching = false
@@ -292,7 +385,9 @@ class SecurityFragment : Fragment() {
             isLoading = false
             if (resp?.success == true) {
                 loaded.clear()
-                loaded.addAll(resp.staff.filter { !it.id.isNullOrBlank() })
+                loaded.addAll(resp.staff.filter {
+                    !it.id.isNullOrBlank() && matchesSecuritySearch(it, q)
+                })
                 // A search result set is complete in itself — no paging.
                 isDone = true
                 cursor = null
@@ -301,6 +396,23 @@ class SecurityFragment : Fragment() {
             }
             render()
         }
+    }
+
+    private fun matchesSecuritySearch(staff: StaffData, query: String): Boolean {
+        val q = query.trim().lowercase(Locale.US)
+        if (q.isBlank()) return true
+        val digitsOnly = q.all(Char::isDigit)
+        if (digitsOnly && q.length <= 6) {
+            return staff.employeeId.orEmpty()
+                .filter(Char::isLetterOrDigit)
+                .lowercase(Locale.US)
+                .contains(q)
+        }
+        val queryDigits = q.filter(Char::isDigit)
+        return staff.name.orEmpty().lowercase(Locale.US).contains(q) ||
+            staff.employeeId.orEmpty().lowercase(Locale.US).contains(q) ||
+            (queryDigits.isNotEmpty() &&
+                staff.phone.orEmpty().filter(Char::isDigit).contains(queryDigits))
     }
 
     /**
@@ -319,7 +431,7 @@ class SecurityFragment : Fragment() {
         if (isLoading) return
         isLoading = true
         renderLoadingState()
-        viewLifecycleOwner.lifecycleScope.launch {
+        dataLoadJob = viewLifecycleOwner.lifecycleScope.launch {
             val resp = runCatching {
                 api.getActiveStaffLogins(session.bearerToken)
             }.getOrNull()
@@ -368,11 +480,40 @@ class SecurityFragment : Fragment() {
             ).apply { bottomMargin = dp(10) }
         }
 
-        card.addView(TextView(requireContext()).apply {
-            text = name
-            textSize = 14f
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(Color.parseColor("#101828"))
+        card.addView(LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(ImageView(context).apply {
+                layoutParams = LinearLayout.LayoutParams(dp(42), dp(42)).apply {
+                    marginEnd = dp(10)
+                }
+                contentDescription = "$name profile photo"
+                loadUserAvatar(ProfilePhotos.resolve(r.photo), name)
+            })
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(
+                    0,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    1f,
+                )
+                addView(TextView(context).apply {
+                    text = name
+                    textSize = 14f
+                    setTypeface(typeface, Typeface.BOLD)
+                    setTextColor(Color.parseColor("#101828"))
+                })
+                addView(TextView(context).apply {
+                    text = listOfNotNull(
+                        r.employeeId?.takeIf { it.isNotBlank() },
+                        r.designation?.takeIf { it.isNotBlank() },
+                        r.department?.takeIf { it.isNotBlank() },
+                    ).joinToString(" - ")
+                    textSize = 12f
+                    setTextColor(Color.parseColor("#667085"))
+                    setPadding(0, dp(2), 0, 0)
+                })
+            })
         })
 
         card.isClickable = true
@@ -380,15 +521,8 @@ class SecurityFragment : Fragment() {
         card.setOnClickListener {
             r.staffId?.let { showLoggedInDevices(it, name) }
         }
-        card.addView(TextView(requireContext()).apply {
-            text = listOfNotNull(
-                r.employeeId?.takeIf { it.isNotBlank() },
-                r.designation?.takeIf { it.isNotBlank() },
-                r.department?.takeIf { it.isNotBlank() },
-            ).joinToString(" - ")
-            textSize = 12f
-            setTextColor(Color.parseColor("#667085"))
-            setPadding(0, dp(2), 0, dp(10))
+        card.addView(View(requireContext()).apply {
+            layoutParams = LinearLayout.LayoutParams(1, dp(10))
         })
 
         card.addView(sessionLine("Web", r.webSession))
@@ -686,6 +820,8 @@ class SecurityFragment : Fragment() {
         }
         binding.securityLoadingMore.visibility =
             if (isLoading && loaded.isNotEmpty()) View.VISIBLE else View.GONE
+        binding.btnSecurityLoadMoreRetry.visibility =
+            if (loadMoreFailed && !isLoading) View.VISIBLE else View.GONE
     }
 
     private fun render() {
@@ -709,12 +845,13 @@ class SecurityFragment : Fragment() {
             tabs.firstOrNull { it.action == selectedTab }?.hint.orEmpty()
         renderChips()
 
-        binding.securityList.removeAllViews()
-        if (selectedTab == Action.STAFF_LOGIN) {
-            loginRows.forEach { binding.securityList.addView(loginRow(it)) }
-        } else {
-            staffRows.forEach { binding.securityList.addView(staffRow(it)) }
-        }
+        securityAdapter.submitList(
+            if (selectedTab == Action.STAFF_LOGIN) {
+                loginRows.map(SecurityListRow::Login)
+            } else {
+                staffRows.map(SecurityListRow::Staff)
+            },
+        )
         val hasRows = if (selectedTab == Action.STAFF_LOGIN) loginRows.isNotEmpty()
         else staffRows.isNotEmpty()
         binding.securityList.visibility = if (hasRows) View.VISIBLE else View.GONE
@@ -758,7 +895,11 @@ class SecurityFragment : Fragment() {
     private fun staffRow(staff: StaffData): View {
         val row = layoutInflater.inflate(R.layout.item_staff, binding.securityList, false)
         val name = staff.name?.takeIf { it.isNotBlank() } ?: "Unnamed staff"
-        row.findViewById<TextView>(R.id.tvStaffInitials).text = initials(name)
+        val initials = row.findViewById<TextView>(R.id.tvStaffInitials)
+        val avatar = row.findViewById<ImageView>(R.id.ivStaffAvatar)
+        initials.visibility = View.GONE
+        avatar.visibility = View.VISIBLE
+        avatar.loadUserAvatar(ProfilePhotos.resolve(staff.photo), name)
         row.findViewById<TextView>(R.id.tvStaffName).text = name
         row.findViewById<TextView>(R.id.tvStaffRole).text =
             listOfNotNull(
@@ -803,11 +944,6 @@ class SecurityFragment : Fragment() {
         return row
     }
 
-    private fun initials(name: String): String =
-        name.trim().split(" ").filter { it.isNotBlank() }
-            .take(2).joinToString("") { it.first().uppercase() }
-            .ifBlank { "?" }
-
     // ---------- tabs ----------
 
     private fun buildTabs() {
@@ -838,11 +974,16 @@ class SecurityFragment : Fragment() {
                     ).apply { marginEnd = dp(8) }
                     setOnClickListener {
                         searchJob?.cancel()
+                        dataLoadJob?.cancel()
+                        dataLoadJob = null
+                        isLoading = false
                         isSearching = false
                         selectedTab = tab.action
                         buildTabs()
                         if (tab.action == Action.STAFF_LOGIN && !loginsLoaded) {
                             loadLogins()
+                        } else if (tab.action != Action.STAFF_LOGIN && loaded.isEmpty()) {
+                            resetAndLoad()
                         }
                         render()
                     }
@@ -935,8 +1076,63 @@ class SecurityFragment : Fragment() {
     private fun dp(value: Int): Int =
         (value * resources.displayMetrics.density).toInt()
 
+    private sealed interface SecurityListRow {
+        val stableId: String
+
+        data class Staff(val value: StaffData) : SecurityListRow {
+            override val stableId = "staff:${value.id}"
+        }
+
+        data class Login(val value: ActiveStaffLogin) : SecurityListRow {
+            override val stableId = "login:${value.staffId}"
+        }
+    }
+
+    /** Keeps only visible cards alive while preserving the existing row actions. */
+    private inner class SecurityAdapter :
+        ListAdapter<SecurityListRow, SecurityAdapter.RowHolder>(ROW_DIFF) {
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RowHolder {
+            val container = android.widget.FrameLayout(parent.context).apply {
+                layoutParams = RecyclerView.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                )
+            }
+            return RowHolder(container)
+        }
+
+        override fun onBindViewHolder(holder: RowHolder, position: Int) {
+            holder.container.removeAllViews()
+            val view = when (val row = getItem(position)) {
+                is SecurityListRow.Staff -> staffRow(row.value)
+                is SecurityListRow.Login -> loginRow(row.value)
+            }
+            holder.container.addView(view)
+        }
+
+        inner class RowHolder(val container: android.widget.FrameLayout) :
+            RecyclerView.ViewHolder(container)
+    }
+
     companion object {
+        private val ROW_DIFF = object : DiffUtil.ItemCallback<SecurityListRow>() {
+            override fun areItemsTheSame(
+                oldItem: SecurityListRow,
+                newItem: SecurityListRow,
+            ) = oldItem.stableId == newItem.stableId
+
+            override fun areContentsTheSame(
+                oldItem: SecurityListRow,
+                newItem: SecurityListRow,
+            ) = oldItem == newItem
+        }
+
         private const val PAGE_SIZE = 25
+        private const val PAGE_PREFETCH_ROWS = 8
+        private const val PAGE_LOAD_ATTEMPTS = 3
+        private val PAGE_RETRY_DELAYS_MS = longArrayOf(300L, 900L)
+        private val AUTO_PAGE_RETRY_DELAYS_MS = longArrayOf(4_000L, 10_000L, 20_000L, 30_000L)
         /** Long enough that typing a name is one request, not eight. */
         private const val SEARCH_DEBOUNCE_MS = 300L
 
