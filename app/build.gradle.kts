@@ -70,7 +70,7 @@ val googleMapsApiKey = envOrDefault(
 // MCONNECT_BASE_URL), so a release pipeline can swap in the prod URL without   
 // touching this file.
 val defaultBaseUrl = ensureTrailingSlash(
-    envOrDefault("NEXT_PUBLIC_CONVEX_SITE_URL", "https://api-mfpl.theairix.com/")
+    envOrDefault("NEXT_PUBLIC_CONVEX_SITE_URL", "https://savory-condor-749.convex.site/")
 )
 val baseUrl = ensureTrailingSlash(
     envOrDefault("MCONNECT_BASE_URL", defaultBaseUrl)

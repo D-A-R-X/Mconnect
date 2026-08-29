@@ -52,6 +52,7 @@ import com.manjugroups.m_connect.geotrack.service.GeoTrackService
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.ArrivalOtpRequestBody
 import com.manjugroups.m_connect.network.CompleteVisitRequest
+import com.manjugroups.m_connect.network.CpRevisitInfo
 import com.manjugroups.m_connect.network.CreateVisitRequest
 import com.manjugroups.m_connect.network.DirectionsClient
 import com.manjugroups.m_connect.network.GeoTrackApi
@@ -168,6 +169,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     // directly and record the outcome.
     private var isPureSiteVisit: Boolean = false
     private var showClientNotSeenCompletion = false
+    private var pendingCpRevisit: CpRevisitInfo? = null
     // KOS-52: Set when the user picked "No, didn't see client" on the Yes/No
     // sheet. We still capture an arrival photo for proof but skip the OTP
     // request and the outcome form, then mark the visit as not-met.
@@ -456,9 +458,10 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
 
         // KOS-37: CP-visit only — listen for the Client Met / Outcome sheet
         // result and finalize completion afterward.
-        setFragmentResultListener(CompleteCpVisitBottomSheet.RESULT_KEY) { _, _ ->
+        setFragmentResultListener(CompleteCpVisitBottomSheet.RESULT_KEY) { _, bundle ->
             isOpeningOutcomeSheet = false
             cpVisitDecisionCaptured = true
+            pendingCpRevisit = CpRevisitConfirmation.fromResult(bundle)
             finalizeCompleteVisit()
         }
         setFragmentResultListener(CpClientSeenBottomSheet.RESULT_KEY) { _, bundle ->
@@ -2155,6 +2158,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     ).show()
                     return@launch
                 }
+                pendingCpRevisit = outcomeResp.revisit
                 cpClientMet = true
                 cpOutcome = "other"
                 cpVisitDecisionCaptured = true
@@ -2211,6 +2215,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     ).show()
                     return@launch
                 }
+                pendingCpRevisit = outcomeResp.revisit
                 cpClientMet = true
                 cpOutcome = "old_client_visited"
                 cpVisitDecisionCaptured = true
@@ -2459,6 +2464,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     ).show()
                     return@launch
                 }
+                pendingCpRevisit = outcomeResp.revisit
                 cpClientMet = true
                 cpOutcome = "rejected"
                 cpVisitDecisionCaptured = true
@@ -2578,6 +2584,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     ).show()
                     return@launch
                 }
+                pendingCpRevisit = outcomeResp.revisit
                 cpClientMet = true
                 cpOutcome = "collection_done"
                 cpVisitDecisionCaptured = true
@@ -2651,6 +2658,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     ).show()
                     return@launch
                 }
+                pendingCpRevisit = outcomeResp.revisit
                 cpClientMet = true
                 cpOutcome = "not_collected"
                 cpVisitDecisionCaptured = true
@@ -2792,6 +2800,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     ).show()
                     return@launch
                 }
+                pendingCpRevisit = outcomeResp.revisit
                 cpClientMet = true
                 cpOutcome = "gift_distributed"
                 cpVisitDecisionCaptured = true
@@ -3133,6 +3142,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     Toast.makeText(requireContext(), outcomeResp.error ?: "Failed to set outcome", Toast.LENGTH_LONG).show()
                     return@launch
                 }
+                pendingCpRevisit = outcomeResp.revisit
                 cpClientMet = false
                 cpOutcome = terminalOutcome
                 cpVisitDecisionCaptured = true
@@ -3215,7 +3225,14 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                         AttendanceTrackingGate.isClockedInForToday(session.bearerToken, api)
                     }.getOrDefault(false),
                 )
-                if (showClientNotSeenCompletion) {
+                val revisit = pendingCpRevisit
+                if (revisit != null) {
+                    showClientNotSeenCompletion = false
+                    CpRevisitConfirmation.show(this@TripNavigationFragment, revisit) {
+                        pendingCpRevisit = null
+                        navigateUp()
+                    }
+                } else if (showClientNotSeenCompletion) {
                     showClientNotSeenCompletion = false
                     CpTripCompletedBottomSheet().showOnce(parentFragmentManager, "cp_trip_completed")
                 } else {

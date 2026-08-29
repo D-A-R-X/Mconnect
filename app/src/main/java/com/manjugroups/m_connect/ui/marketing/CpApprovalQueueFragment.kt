@@ -232,12 +232,37 @@ class CpApprovalQueueFragment : Fragment() {
             ).apply { bottomMargin = dp(12) }
         }
 
-        card.addView(TextView(requireContext()).apply {
-            text = item.clientName ?: "Client"
-            textSize = 15f
-            setTextColor(Color.parseColor("#101828"))
-            includeFontPadding = false
-            typeface = font(R.font.inter_semibold) ?: typeface
+        card.addView(LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.TOP
+            addView(LinearLayout(requireContext()).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                addView(TextView(requireContext()).apply {
+                    text = item.clientName ?: "Client"
+                    textSize = 16f
+                    setTextColor(Color.parseColor("#101828"))
+                    includeFontPadding = false
+                    typeface = font(R.font.inter_semibold) ?: typeface
+                })
+                addView(TextView(requireContext()).apply {
+                    text = item.staffName ?: "Field staff"
+                    textSize = 12f
+                    setTextColor(Color.parseColor("#667085"))
+                    includeFontPadding = false
+                    typeface = font(R.font.inter_regular) ?: typeface
+                    setPadding(0, dp(3), dp(8), 0)
+                })
+            })
+            addView(TextView(requireContext()).apply {
+                text = "Pending review"
+                textSize = 11f
+                setTextColor(Color.parseColor("#B54708"))
+                includeFontPadding = false
+                typeface = font(R.font.inter_semibold) ?: typeface
+                setPadding(dp(10), dp(6), dp(10), dp(6))
+                background = roundedBg("#FFFAEB", "#FEDF89", 14)
+            })
         })
 
         val visitFacts = listOf(
@@ -248,25 +273,29 @@ class CpApprovalQueueFragment : Fragment() {
         )
         card.addView(LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(0, dp(10), 0, dp(4))
-            visitFacts.forEach { (label, value) ->
-                addView(TextView(requireContext()).apply {
-                    text = "$label: $value"
-                    textSize = 12f
-                    setTextColor(Color.parseColor("#344054"))
-                    includeFontPadding = false
-                    typeface = font(R.font.inter_regular) ?: typeface
-                    setPadding(0, dp(2), 0, dp(2))
+            setPadding(0, dp(12), 0, 0)
+            visitFacts.chunked(2).forEachIndexed { rowIndex, rowFacts ->
+                addView(LinearLayout(requireContext()).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    rowFacts.forEachIndexed { columnIndex, fact ->
+                        addView(factTile(fact.first, fact.second).also {
+                            it.layoutParams = LinearLayout.LayoutParams(
+                                0,
+                                ViewGroup.LayoutParams.WRAP_CONTENT,
+                                1f,
+                            ).apply {
+                                if (columnIndex == 0) rightMargin = dp(8)
+                            }
+                        })
+                    }
+                    layoutParams = LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ).apply {
+                        if (rowIndex > 0) topMargin = dp(8)
+                    }
                 })
             }
-        })
-        card.addView(TextView(requireContext()).apply {
-            text = "by ${item.staffName ?: "Field staff"}"
-            textSize = 12f
-            setTextColor(Color.parseColor("#475467"))
-            includeFontPadding = false
-            typeface = font(R.font.inter_regular) ?: typeface
-            setPadding(0, dp(2), 0, 0)
         })
 
         val distance = item.distanceMeters?.let { m ->
@@ -278,35 +307,42 @@ class CpApprovalQueueFragment : Fragment() {
             "$label out of geofence"
         }
         val place = listOfNotNull(item.placeName, distance).joinToString(" · ")
-        if (place.isNotBlank()) {
-            card.addView(TextView(requireContext()).apply {
-                text = place
-                textSize = 12f
-                setTextColor(Color.parseColor("#B54708"))
-                includeFontPadding = false
-                typeface = font(R.font.inter_medium) ?: typeface
-                setPadding(0, dp(6), 0, 0)
-            })
-        }
-        item.outcome?.takeIf { it.isNotBlank() }?.let { outcome ->
-            card.addView(TextView(requireContext()).apply {
-                text = "Outcome: ${outcome.replace('_', ' ')}"
-                textSize = 12f
-                setTextColor(Color.parseColor("#475467"))
-                includeFontPadding = false
-                typeface = font(R.font.inter_regular) ?: typeface
-                setPadding(0, dp(2), 0, 0)
-            })
-        }
-        // The staff's reason for completing away from the client location.
-        item.staffRemark?.takeIf { it.isNotBlank() }?.let { remark ->
-            card.addView(TextView(requireContext()).apply {
-                text = "Staff reason: $remark"
-                textSize = 12f
-                setTextColor(Color.parseColor("#101828"))
-                includeFontPadding = false
-                typeface = font(R.font.inter_regular) ?: typeface
-                setPadding(0, dp(4), 0, 0)
+        val evidence = listOfNotNull(
+            place.takeIf { it.isNotBlank() }?.let { "Location" to it },
+            item.outcome?.takeIf { it.isNotBlank() }
+                ?.let { "Outcome" to friendlyCpType(it) },
+            item.staffRemark?.takeIf { it.isNotBlank() }
+                ?.let { "Staff reason" to it },
+        )
+        if (evidence.isNotEmpty()) {
+            card.addView(LinearLayout(requireContext()).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(12), dp(8), dp(12), dp(8))
+                background = roundedBg("#F8FAFC", "#EAECF0", 10)
+                evidence.forEach { (label, value) ->
+                    addView(TextView(requireContext()).apply {
+                        text = label
+                        textSize = 11f
+                        setTextColor(Color.parseColor("#667085"))
+                        includeFontPadding = false
+                        typeface = font(R.font.inter_medium) ?: typeface
+                        setPadding(0, dp(3), 0, 0)
+                    })
+                    addView(TextView(requireContext()).apply {
+                        text = value
+                        textSize = 12f
+                        setTextColor(
+                            Color.parseColor(if (label == "Location") "#B54708" else "#101828"),
+                        )
+                        includeFontPadding = false
+                        typeface = font(R.font.inter_regular) ?: typeface
+                        setPadding(0, dp(2), 0, dp(3))
+                    })
+                }
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { topMargin = dp(10) }
             })
         }
 
@@ -316,11 +352,13 @@ class CpApprovalQueueFragment : Fragment() {
                     topMargin = dp(10)
                 }
                 scaleType = ImageView.ScaleType.CENTER_CROP
+                background = roundedBg("#F2F4F7", "#E4E7EC", 8)
+                clipToOutline = true
                 load(url)
             })
         }
 
-        card.addView(actionButton("View trip & travelled route", "#0B61CA", "#EFF6FF") {
+        card.addView(actionButton("View travelled path", "#0B61CA", "#EFF6FF") {
             CpApprovalTripDetailDialog.newInstance(item)
                 .show(parentFragmentManager, CpApprovalTripDetailDialog.TAG)
         }.also {
@@ -397,6 +435,28 @@ class CpApprovalQueueFragment : Fragment() {
         setOnClickListener { onClick() }
         layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT)
     }
+
+    private fun factTile(label: String, value: String) =
+        LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(10), dp(9), dp(10), dp(9))
+            background = roundedBg("#F8FAFC", "#EAECF0", 10)
+            addView(TextView(requireContext()).apply {
+                text = label
+                textSize = 10f
+                setTextColor(Color.parseColor("#667085"))
+                includeFontPadding = false
+                typeface = font(R.font.inter_medium) ?: typeface
+            })
+            addView(TextView(requireContext()).apply {
+                text = value
+                textSize = 12f
+                setTextColor(Color.parseColor("#101828"))
+                includeFontPadding = false
+                typeface = font(R.font.inter_semibold) ?: typeface
+                setPadding(0, dp(3), 0, 0)
+            })
+        }
 
     private fun approve(item: CpApprovalItem) {
         if (submitting) return
@@ -511,9 +571,9 @@ class CpApprovalQueueFragment : Fragment() {
         super.onDestroyView()
     }
 
-    private fun roundedBg(fill: String, stroke: String) =
+    private fun roundedBg(fill: String, stroke: String, radiusDp: Int = 12) =
         android.graphics.drawable.GradientDrawable().apply {
-            cornerRadius = dp(12).toFloat()
+            cornerRadius = dp(radiusDp).toFloat()
             setColor(Color.parseColor(fill))
             setStroke(dp(1), Color.parseColor(stroke))
         }

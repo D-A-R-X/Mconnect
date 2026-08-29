@@ -231,6 +231,26 @@
                     android:layout_marginBottom="12dp"
                     android:visibility="gone" />
 
+                <TextView
+                    android:id="@+id/btnSecurityLoadMoreRetry"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginTop="10dp"
+                    android:layout_marginBottom="16dp"
+                    android:background="@drawable/bg_security_filter_chip"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:fontFamily="@font/inter_semibold"
+                    android:paddingStart="18dp"
+                    android:paddingTop="10dp"
+                    android:paddingEnd="18dp"
+                    android:paddingBottom="10dp"
+                    android:text="Reconnecting automatically. Tap to retry now"
+                    android:textColor="#0B61CA"
+                    android:textSize="13sp"
+                    android:visibility="gone" />
+
                 <LinearLayout
                     android:id="@+id/securityError"
                     android:layout_width="match_parent"

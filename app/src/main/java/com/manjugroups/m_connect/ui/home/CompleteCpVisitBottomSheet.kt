@@ -5386,10 +5386,19 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     finishCtaSave(outcomeResp.error ?: "Failed to save outcome")
                     return@launch
                 }
-                setFragmentResult(
-                    RESULT_KEY,
-                    bundleOf(KEY_CLIENT_MET to true, KEY_OUTCOME to outcomeEnum),
+                val result = bundleOf(
+                    KEY_CLIENT_MET to true,
+                    KEY_OUTCOME to outcomeEnum,
                 )
+                outcomeResp.revisit?.let { revisit ->
+                    result.putString(KEY_REVISIT_STATUS, revisit.creationStatus)
+                    result.putString(KEY_REVISIT_REASON, revisit.reason)
+                    result.putString(KEY_REVISIT_DATE, revisit.scheduledDate)
+                    result.putString(KEY_REVISIT_TIME, revisit.scheduledTime)
+                    result.putString(KEY_REVISIT_VISIT_ID, revisit.visitId)
+                    result.putString(KEY_REVISIT_ERROR, revisit.error)
+                }
+                setFragmentResult(RESULT_KEY, result)
                 dismissAllowingStateLoss()
             } catch (e: Exception) {
                 // Retrofit throws HttpException on a 5xx before deserialising the
@@ -7240,6 +7249,12 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         const val RESULT_KEY = "cp_visit_complete_result"
         const val KEY_CLIENT_MET = "clientMet"
         const val KEY_OUTCOME = "outcome"
+        const val KEY_REVISIT_STATUS = "revisitStatus"
+        const val KEY_REVISIT_REASON = "revisitReason"
+        const val KEY_REVISIT_DATE = "revisitDate"
+        const val KEY_REVISIT_TIME = "revisitTime"
+        const val KEY_REVISIT_VISIT_ID = "revisitVisitId"
+        const val KEY_REVISIT_ERROR = "revisitError"
         private const val RESULT_KEY_GENERIC_DATE = "cp_visit_generic_date"
         private const val ARG_CP_VISIT_ID = "arg_cp_visit_id"
         private const val ARG_CP_CLIENT_MET = "arg_cp_client_met"

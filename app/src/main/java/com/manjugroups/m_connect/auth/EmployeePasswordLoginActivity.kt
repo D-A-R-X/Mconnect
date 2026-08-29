@@ -124,7 +124,7 @@ class EmployeePasswordLoginActivity : AppCompatActivity() {
                     setLoading(false)
                     return@onSuccess
                 }
-                bootstrapSession(response)
+                bootstrapSession(response, password)
             }.onFailure {
                 showError(parseErrorMessage(it, "Unable to sign in"))
                 setLoading(false)
@@ -132,7 +132,7 @@ class EmployeePasswordLoginActivity : AppCompatActivity() {
         }
     }
 
-    private fun bootstrapSession(response: EmployeePasswordLoginResponse) {
+    private fun bootstrapSession(response: EmployeePasswordLoginResponse, verifiedPassword: String) {
         lifecycleScope.launch {
             val user = response.user!!
             session.saveSession(
@@ -143,6 +143,11 @@ class EmployeePasswordLoginActivity : AppCompatActivity() {
             session.staffId = user.staffId
             session.employeeId = user.employeeId
             session.mustChangePassword = response.mustChangePassword || user.mustChangePassword
+            if (session.mustChangePassword) {
+                PendingPasswordChangeCredential.set(verifiedPassword)
+            } else {
+                PendingPasswordChangeCredential.clear()
+            }
             session.geoTrackingEnabled = user.geoTrackingEnabled
             session.geoConsentGiven = false
             session.geoConsentDeclined = false

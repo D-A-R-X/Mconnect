@@ -22,10 +22,16 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentSecurityBinding
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.StaffData
+import com.manjugroups.m_connect.network.StaffPaginatedResponse
 import com.manjugroups.m_connect.ui.common.navigateUp
 import com.manjugroups.m_connect.ui.common.dismissRefresh
 import com.manjugroups.m_connect.ui.common.setupPullToRefresh
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import retrofit2.HttpException
+import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import android.app.AlertDialog
@@ -68,7 +74,10 @@ class SecurityFragment : Fragment() {
     private var cursor: String? = null
     private var isDone = false
     private var isLoading = false
+    private var loadMoreFailed = false
     private var loadFailed = false
+    private var pageRetryJob: Job? = null
+    private var pageRetryRound = 0
 
     private var searchQuery: String = ""
     private var searchJob: kotlinx.coroutines.Job? = null
@@ -153,15 +162,16 @@ class SecurityFragment : Fragment() {
         binding.btnSecurityRetry.setOnClickListener {
             if (isSearching) runSearch(searchQuery) else resetAndLoad()
         }
+        binding.btnSecurityLoadMoreRetry.setOnClickListener {
+            pageRetryJob?.cancel()
+            pageRetryRound = 0
+            loadNextPage(first = loaded.isEmpty())
+        }
 
         // Scroll-based paging: pull the next page once the user is within a
         // screen of the bottom, so rows are already there when they arrive.
-        binding.securityScroll.viewTreeObserver.addOnScrollChangedListener {
-            if (_binding == null) return@addOnScrollChangedListener
-            val scroll = binding.securityScroll
-            val child = scroll.getChildAt(0) ?: return@addOnScrollChangedListener
-            val remaining = child.height - (scroll.height + scroll.scrollY)
-            if (remaining < scroll.height) loadNextPage()
+        binding.securityScroll.setOnScrollChangeListener { _, _, _, _, _ ->
+            maybeLoadNextPage()
         }
 
         // A staff action taken in the sheet can change what the list shows.
@@ -190,6 +200,8 @@ class SecurityFragment : Fragment() {
 
     override fun onDestroyView() {
         searchJob?.cancel()
+        pageRetryJob?.cancel()
+        pageRetryJob = null
         _binding = null
         super.onDestroyView()
     }
@@ -207,6 +219,9 @@ class SecurityFragment : Fragment() {
         cursor = null
         isDone = false
         loadFailed = false
+        loadMoreFailed = false
+        pageRetryJob?.cancel()
+        pageRetryRound = 0
         render()
         loadNextPage(first = true)
     }
@@ -221,20 +236,13 @@ class SecurityFragment : Fragment() {
     private fun loadNextPage(first: Boolean = false) {
         if (isLoading || isDone || isSearching) return
         if (!first && cursor == null) return
+        val requestedCursor = cursor
         isLoading = true
+        loadMoreFailed = false
         renderLoadingState()
 
         viewLifecycleOwner.lifecycleScope.launch {
-            val resp = runCatching {
-                api.getStaffPaginated(
-                    token = session.bearerToken,
-                    numItems = PAGE_SIZE,
-                    cursor = cursor,
-                    // This screen needs the staff rows only; the enriched
-                    // response hung the request.
-                    lite = "1",
-                )
-            }.getOrNull()
+            val resp = getStaffPageWithRetry(requestedCursor)
 
             if (!isAdded || _binding == null) return@launch
             isLoading = false
@@ -245,14 +253,21 @@ class SecurityFragment : Fragment() {
                 // has nothing to show, and that gets an explicit retry rather
                 // than a blank rectangle.
                 loadFailed = loaded.isEmpty()
+                loadMoreFailed = loaded.isNotEmpty() && !isDone
                 render()
+                schedulePageRetry(first = loaded.isEmpty())
                 return@launch
             }
 
-            loaded.addAll(resp.page.filter { !it.id.isNullOrBlank() })
-            cursor = resp.continueCursor
-            isDone = resp.isDone || resp.continueCursor == null
+            val knownIds = loaded.mapNotNullTo(mutableSetOf()) { it.id }
+            loaded.addAll(resp.page.filter { !it.id.isNullOrBlank() && knownIds.add(it.id!!) })
+            val nextCursor = resp.continueCursor?.takeIf { it.isNotBlank() }
+            cursor = nextCursor
+            isDone = resp.isDone || nextCursor == null ||
+                (!first && nextCursor == requestedCursor)
             loadFailed = false
+            pageRetryJob?.cancel()
+            pageRetryRound = 0
             render()
 
             // With a filter on, one page may contain few (or no) matches. Keep
@@ -262,6 +277,66 @@ class SecurityFragment : Fragment() {
                 loadNextPage()
             }
         }
+    }
+
+    /**
+     * The field network can briefly lose DNS while remaining connected. The
+     * same API host commonly resolves again a few hundred milliseconds later,
+     * so retry this idempotent GET with the exact same cursor before exposing
+     * a manual retry state. Never retry auth/client errors or cancelled jobs.
+     */
+    private suspend fun getStaffPageWithRetry(
+        requestedCursor: String?,
+    ): StaffPaginatedResponse? {
+        repeat(PAGE_LOAD_ATTEMPTS) { attempt ->
+            try {
+                return api.getStaffPaginated(
+                    token = session.bearerToken,
+                    numItems = PAGE_SIZE,
+                    cursor = requestedCursor,
+                    // This screen needs the staff rows only; the enriched
+                    // response hung the request.
+                    lite = "1",
+                )
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                val retryable = error is IOException ||
+                    (error is HttpException && (error.code() == 408 ||
+                        error.code() == 429 || error.code() >= 500))
+                if (!retryable || attempt == PAGE_LOAD_ATTEMPTS - 1) return null
+                delay(PAGE_RETRY_DELAYS_MS[attempt])
+            }
+        }
+        return null
+    }
+
+    /** Keep a failed cursor alive and resume paging when DNS/network returns. */
+    private fun schedulePageRetry(first: Boolean) {
+        pageRetryJob?.cancel()
+        val waitMs = AUTO_PAGE_RETRY_DELAYS_MS[
+            pageRetryRound.coerceAtMost(AUTO_PAGE_RETRY_DELAYS_MS.lastIndex)
+        ]
+        pageRetryRound += 1
+        pageRetryJob = viewLifecycleOwner.lifecycleScope.launch {
+            delay(waitMs)
+            if (_binding == null || isDone || isSearching) return@launch
+            loadNextPage(first = first)
+        }
+    }
+
+    /**
+     * Checks after both user scrolling and list re-layout. A ScrollView whose
+     * children are rebuilt can finish laying out at the bottom without
+     * emitting another scroll event, which previously left the directory at
+     * exactly two pages (50 rows).
+     */
+    private fun maybeLoadNextPage() {
+        if (_binding == null || selectedTab == Action.STAFF_LOGIN || loadMoreFailed) return
+        val scroll = binding.securityScroll
+        val child = scroll.getChildAt(0) ?: return
+        val remaining = child.height - (scroll.height + scroll.scrollY)
+        if (remaining <= scroll.height) loadNextPage()
     }
 
     /**
@@ -292,7 +367,9 @@ class SecurityFragment : Fragment() {
             isLoading = false
             if (resp?.success == true) {
                 loaded.clear()
-                loaded.addAll(resp.staff.filter { !it.id.isNullOrBlank() })
+                loaded.addAll(resp.staff.filter {
+                    !it.id.isNullOrBlank() && matchesSecuritySearch(it, q)
+                })
                 // A search result set is complete in itself — no paging.
                 isDone = true
                 cursor = null
@@ -301,6 +378,23 @@ class SecurityFragment : Fragment() {
             }
             render()
         }
+    }
+
+    private fun matchesSecuritySearch(staff: StaffData, query: String): Boolean {
+        val q = query.trim().lowercase(Locale.US)
+        if (q.isBlank()) return true
+        val digitsOnly = q.all(Char::isDigit)
+        if (digitsOnly && q.length <= 6) {
+            return staff.employeeId.orEmpty()
+                .filter(Char::isLetterOrDigit)
+                .lowercase(Locale.US)
+                .contains(q)
+        }
+        val queryDigits = q.filter(Char::isDigit)
+        return staff.name.orEmpty().lowercase(Locale.US).contains(q) ||
+            staff.employeeId.orEmpty().lowercase(Locale.US).contains(q) ||
+            (queryDigits.isNotEmpty() &&
+                staff.phone.orEmpty().filter(Char::isDigit).contains(queryDigits))
     }
 
     /**
@@ -686,6 +780,8 @@ class SecurityFragment : Fragment() {
         }
         binding.securityLoadingMore.visibility =
             if (isLoading && loaded.isNotEmpty()) View.VISIBLE else View.GONE
+        binding.btnSecurityLoadMoreRetry.visibility =
+            if (loadMoreFailed && !isLoading) View.VISIBLE else View.GONE
     }
 
     private fun render() {
@@ -718,6 +814,10 @@ class SecurityFragment : Fragment() {
         val hasRows = if (selectedTab == Action.STAFF_LOGIN) loginRows.isNotEmpty()
         else staffRows.isNotEmpty()
         binding.securityList.visibility = if (hasRows) View.VISIBLE else View.GONE
+
+        // Re-evaluate once the newly appended rows have their final height.
+        // This also fills short screens without requiring a pointless scroll.
+        binding.securityScroll.post { maybeLoadNextPage() }
 
         // Nothing at all AND the first load failed -> an explicit retry, never a
         // blank screen the user has to guess about.
@@ -937,6 +1037,9 @@ class SecurityFragment : Fragment() {
 
     companion object {
         private const val PAGE_SIZE = 25
+        private const val PAGE_LOAD_ATTEMPTS = 3
+        private val PAGE_RETRY_DELAYS_MS = longArrayOf(300L, 900L)
+        private val AUTO_PAGE_RETRY_DELAYS_MS = longArrayOf(4_000L, 10_000L, 20_000L, 30_000L)
         /** Long enough that typing a name is one request, not eight. */
         private const val SEARCH_DEBOUNCE_MS = 300L
 

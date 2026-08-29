@@ -19,6 +19,8 @@ import androidx.lifecycle.lifecycleScope
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.MapView
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
+import com.google.android.gms.maps.model.Dash
+import com.google.android.gms.maps.model.Gap
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
 import com.google.android.gms.maps.model.MarkerOptions
@@ -61,13 +63,28 @@ class CpApprovalTripDetailDialog : DialogFragment() {
         val content = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(18), dp(20), dp(20))
-            setBackgroundColor(Color.WHITE)
+            background = roundedBackground("#FFFFFF", 16)
         }
-        content.addView(TextView(requireContext()).apply {
-            text = item.clientName ?: "CP trip details"
-            textSize = 20f
-            setTextColor(Color.parseColor("#101828"))
-            typeface = font(R.font.inter_semibold) ?: typeface
+        content.addView(LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(TextView(requireContext()).apply {
+                text = item.clientName ?: "CP trip details"
+                textSize = 20f
+                setTextColor(Color.parseColor("#101828"))
+                typeface = font(R.font.inter_semibold) ?: typeface
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            })
+            addView(TextView(requireContext()).apply {
+                text = "×"
+                gravity = Gravity.CENTER
+                textSize = 24f
+                setTextColor(Color.parseColor("#475467"))
+                contentDescription = "Close"
+                background = roundedBackground("#F2F4F7", 20)
+                layoutParams = LinearLayout.LayoutParams(dp(40), dp(40))
+                setOnClickListener { dismiss() }
+            })
         })
         content.addView(TextView(requireContext()).apply {
             text = item.placeName ?: item.placeAddress ?: "Client place"
@@ -87,20 +104,32 @@ class CpApprovalTripDetailDialog : DialogFragment() {
         content.addView(LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(14), dp(10), dp(14), dp(10))
-            setBackgroundColor(Color.parseColor("#F8FAFC"))
+            background = roundedBackground("#F8FAFC", 10)
             facts.forEach { (label, value) ->
-                addView(TextView(requireContext()).apply {
-                    text = "$label\n$value"
-                    textSize = 13f
-                    setTextColor(Color.parseColor("#101828"))
-                    typeface = font(R.font.inter_medium) ?: typeface
-                    setPadding(0, dp(5), 0, dp(5))
+                addView(LinearLayout(requireContext()).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(0, dp(6), 0, dp(6))
+                    addView(TextView(requireContext()).apply {
+                        text = label
+                        textSize = 12f
+                        setTextColor(Color.parseColor("#667085"))
+                        typeface = font(R.font.inter_regular) ?: typeface
+                        layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.42f)
+                    })
+                    addView(TextView(requireContext()).apply {
+                        text = value
+                        textSize = 13f
+                        setTextColor(Color.parseColor("#101828"))
+                        typeface = font(R.font.inter_semibold) ?: typeface
+                        layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.58f)
+                    })
                 })
             }
         })
 
         content.addView(TextView(requireContext()).apply {
-            text = "Travelled route"
+            text = "Travelled path"
             textSize = 15f
             setTextColor(Color.parseColor("#101828"))
             typeface = font(R.font.inter_semibold) ?: typeface
@@ -109,7 +138,7 @@ class CpApprovalTripDetailDialog : DialogFragment() {
         content.addView(FrameLayout(requireContext()).apply {
             addView(mapView, FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(260),
+                dp(230),
             ))
             progress = ProgressBar(requireContext()).apply {
                 visibility = View.VISIBLE
@@ -124,26 +153,16 @@ class CpApprovalTripDetailDialog : DialogFragment() {
             setPadding(0, dp(8), 0, dp(8))
         }
         content.addView(mapStatus)
-        content.addView(TextView(requireContext()).apply {
-            text = "Close"
-            gravity = Gravity.CENTER
-            textSize = 14f
-            setTextColor(Color.WHITE)
-            typeface = font(R.font.inter_semibold) ?: typeface
-            setBackgroundColor(Color.parseColor("#0B61CA"))
-            setPadding(dp(14), dp(13), dp(14), dp(13))
-            setOnClickListener { dismiss() }
-        })
 
         val dialog = Dialog(requireContext())
         dialog.setContentView(ScrollView(requireContext()).apply { addView(content) })
         dialog.setOnShowListener {
+            dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
             dialog.window?.setLayout(
-                (resources.displayMetrics.widthPixels * 0.94).roundToInt(),
-                (resources.displayMetrics.heightPixels * 0.88).roundToInt(),
+                (resources.displayMetrics.widthPixels * 0.92).roundToInt(),
+                (resources.displayMetrics.heightPixels * 0.84).roundToInt(),
             )
         }
-        renderRoute(fallbackRoute(), isFallback = true)
         loadRoute()
         return dialog
     }
@@ -182,7 +201,7 @@ class CpApprovalTripDetailDialog : DialogFragment() {
         val hasFallback = coordinates(fallback.startLat, fallback.startLng) != null ||
             coordinates(fallback.endLat, fallback.endLng) != null
         if (hasFallback) {
-            renderRoute(fallback, isFallback = true)
+            renderRoute(fallback)
         } else {
             mapView.visibility = View.GONE
             mapStatus.text = "No GPS coordinates were recorded for this trip."
@@ -192,15 +211,18 @@ class CpApprovalTripDetailDialog : DialogFragment() {
         }
     }
 
-    private fun renderRoute(data: CpApprovalRouteData, isFallback: Boolean = false) {
+    private fun renderRoute(data: CpApprovalRouteData) {
         mapView.visibility = View.VISIBLE
         mapView.getMapAsync { map ->
             map.uiSettings.isMapToolbarEnabled = false
             map.clear()
             val recorded = data.routePoints.orEmpty().mapNotNull { coordinates(it.lat, it.lng) }
-            val start = recorded.firstOrNull() ?: coordinates(data.startLat, data.startLng)
-            val end = recorded.lastOrNull() ?: coordinates(data.endLat, data.endLng)
-            val displayPoints = if (recorded.size >= 2) recorded else listOfNotNull(start, end).distinct()
+            val hasRecordedTrail = recorded.size >= 2
+            val endpointStart = coordinates(data.startLat, data.startLng)
+            val endpointEnd = coordinates(data.endLat, data.endLng)
+            val start = if (hasRecordedTrail) recorded.first() else endpointStart ?: recorded.firstOrNull()
+            val end = if (hasRecordedTrail) recorded.last() else endpointEnd ?: recorded.lastOrNull()
+            val displayPoints = if (hasRecordedTrail) recorded else listOfNotNull(start, end).distinct()
 
             start?.let {
                 map.addMarker(MarkerOptions().position(it).title("Trip start")
@@ -210,8 +232,16 @@ class CpApprovalTripDetailDialog : DialogFragment() {
                 map.addMarker(MarkerOptions().position(it).title("Trip end")
                     .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)))
             }
-            if (displayPoints.size >= 2) {
-                map.addPolyline(PolylineOptions().addAll(displayPoints).color(Color.parseColor("#0B61CA")).width(10f))
+            if (hasRecordedTrail) {
+                map.addPolyline(PolylineOptions().addAll(recorded).color(Color.parseColor("#0B61CA")).width(10f))
+            } else if (displayPoints.size >= 2) {
+                map.addPolyline(
+                    PolylineOptions()
+                        .addAll(displayPoints)
+                        .color(Color.parseColor("#5B7FA3"))
+                        .width(8f)
+                        .pattern(listOf(Dash(24f), Gap(14f)))
+                )
             }
             if (displayPoints.isNotEmpty()) {
                 mapView.post {
@@ -226,15 +256,20 @@ class CpApprovalTripDetailDialog : DialogFragment() {
                 }
             }
             mapStatus.text = when {
-                recorded.size >= 2 -> "Recorded GPS trail · ${recorded.size} points"
-                isFallback && displayPoints.isNotEmpty() ->
-                    "The full GPS trail is unavailable; showing the recorded trip coordinates."
-                displayPoints.size >= 2 -> "Only start and end coordinates were recorded; the line is an endpoint connection."
+                hasRecordedTrail -> "Actual travelled path · ${recorded.size} GPS points"
+                displayPoints.size >= 2 ->
+                    "Recorded GPS trail unavailable. Dashed line connects the trip start and end."
                 displayPoints.size == 1 -> "Only one trip coordinate was recorded."
                 else -> "No GPS coordinates were recorded for this trip."
             }
         }
     }
+
+    private fun roundedBackground(fill: String, radiusDp: Int) =
+        android.graphics.drawable.GradientDrawable().apply {
+            cornerRadius = dp(radiusDp).toFloat()
+            setColor(Color.parseColor(fill))
+        }
 
     private fun coordinates(lat: Double?, lng: Double?): LatLng? =
         if (lat != null && lng != null && lat.isFinite() && lng.isFinite() &&
