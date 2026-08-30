@@ -1468,11 +1468,15 @@ class MainActivity : AppCompatActivity() {
         if (!::statusBarBackground.isInitialized) return
         val wasFullBleed = statusBarFullBleed
         statusBarFullBleed = fullBleed
+
+        // Paint first, then resize. A height change is applied on the next layout
+        // pass, so collapsing a white detail-screen strip for a blue root tab can
+        // otherwise expose one white frame during the switch.
+        statusBarBackground.setBackgroundColor(backgroundColor)
         if (fullBleed) {
             statusBarBackground.layoutParams = statusBarBackground.layoutParams.apply { height = 0 }
             window.statusBarColor = Color.TRANSPARENT
         } else {
-            statusBarBackground.setBackgroundColor(backgroundColor)
             statusBarBackground.layoutParams = statusBarBackground.layoutParams.apply {
                 height = resolveTopInset()
             }

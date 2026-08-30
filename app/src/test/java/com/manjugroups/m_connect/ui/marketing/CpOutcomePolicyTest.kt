@@ -46,4 +46,13 @@ class CpOutcomePolicyTest {
         }
     }
 
+    @Test
+    fun `only new client CP requires the post-outcome referral question`() {
+        assertTrue(isNewClientCpType("new_client_cp"))
+        assertTrue(isNewClientCpType(" NEW_CLIENT_CP "))
+        assertFalse(isNewClientCpType("referral"))
+        assertFalse(isNewClientCpType("old_client"))
+        assertFalse(isNewClientCpType(null))
+    }
+
 }

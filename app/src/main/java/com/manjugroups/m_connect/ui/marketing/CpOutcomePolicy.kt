@@ -28,3 +28,7 @@ fun cpTypeSupportsOtherOutcome(cpType: String?): Boolean =
  */
 fun shouldOfferOtherOutcome(isPureSiteVisit: Boolean, cpType: String?): Boolean =
     isPureSiteVisit || cpTypeSupportsOtherOutcome(cpType)
+
+/** New Client CP is the only category that asks the post-outcome referral question. */
+fun isNewClientCpType(cpType: String?): Boolean =
+    cpType?.trim()?.lowercase(Locale.ROOT) == "new_client_cp"

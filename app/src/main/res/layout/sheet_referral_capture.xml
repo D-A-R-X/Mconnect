@@ -106,6 +106,32 @@
                 android:textColorHint="#9CA3AF"
                 android:textSize="14sp" />
 
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="Referral address *"
+                android:textColor="#344054"
+                android:textSize="13sp" />
+
+            <EditText
+                android:id="@+id/etReferralAddress"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_cp_creation_input_box"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="top|start"
+                android:hint="Client address"
+                android:inputType="textPostalAddress|textCapSentences|textMultiLine"
+                android:minLines="3"
+                android:paddingHorizontal="14dp"
+                android:paddingVertical="14dp"
+                android:textColor="#101828"
+                android:textColorHint="#9CA3AF"
+                android:textSize="14sp" />
+
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 

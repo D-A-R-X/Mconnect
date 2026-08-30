@@ -19,8 +19,6 @@ import androidx.lifecycle.lifecycleScope
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.MapView
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
-import com.google.android.gms.maps.model.Dash
-import com.google.android.gms.maps.model.Gap
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
 import com.google.android.gms.maps.model.MarkerOptions
@@ -30,6 +28,7 @@ import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.CpApprovalItem
 import com.manjugroups.m_connect.network.CpApprovalRouteData
+import com.manjugroups.m_connect.network.DirectionsClient
 import com.manjugroups.m_connect.network.GeoTrackApi
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -172,15 +171,24 @@ class CpApprovalTripDetailDialog : DialogFragment() {
         lifecycleScope.launch {
             val result = runCatching { api.getCpApprovalRoute(session.bearerToken, item.id) }
             if (!isAdded) return@launch
-            progress.visibility = View.GONE
             result.onSuccess { response ->
                 val data = response.data
                 if (!response.success || data == null) {
+                    progress.visibility = View.GONE
                     showRouteFallback(response.error)
                 } else {
-                    renderRoute(data)
+                    val recorded = data.routePoints.orEmpty().mapNotNull { coordinates(it.lat, it.lng) }
+                    if (recorded.size >= 2) mapStatus.text = "Matching recorded trail to roads…"
+                    val roadMatchedTrail = DirectionsClient.fetchRoadMatchedTrail(
+                        session.bearerToken,
+                        recorded,
+                    )
+                    if (!isAdded) return@launch
+                    progress.visibility = View.GONE
+                    renderRoute(data, roadMatchedTrail)
                 }
             }.onFailure { error ->
+                progress.visibility = View.GONE
                 Log.w(TAG, "Unable to load detailed CP approval route for ${item.id}", error)
                 showRouteFallback(error.message)
             }
@@ -202,7 +210,7 @@ class CpApprovalTripDetailDialog : DialogFragment() {
         val hasFallback = coordinates(fallback.startLat, fallback.startLng) != null ||
             coordinates(fallback.endLat, fallback.endLng) != null
         if (hasFallback) {
-            renderRoute(fallback)
+            renderRoute(fallback, null)
         } else {
             mapView.visibility = View.GONE
             mapStatus.text = "No GPS coordinates were recorded for this trip."
@@ -212,7 +220,10 @@ class CpApprovalTripDetailDialog : DialogFragment() {
         }
     }
 
-    private fun renderRoute(data: CpApprovalRouteData) {
+    private fun renderRoute(
+        data: CpApprovalRouteData,
+        roadMatchedTrail: DirectionsClient.RoadMatchedTrail?,
+    ) {
         mapView.visibility = View.VISIBLE
         mapView.getMapAsync { map ->
             map.uiSettings.isMapToolbarEnabled = false
@@ -233,33 +244,53 @@ class CpApprovalTripDetailDialog : DialogFragment() {
                 map.addMarker(MarkerOptions().position(it).title("Trip end")
                     .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)))
             }
-            if (hasRecordedTrail) {
-                map.addPolyline(PolylineOptions().addAll(recorded).color(Color.parseColor("#0B61CA")).width(10f))
+            val routedDisplayPoints = roadMatchedTrail?.legs.orEmpty().flatMap { it.points }
+            if (hasRecordedTrail && roadMatchedTrail != null) {
+                roadMatchedTrail.legs.forEach { leg ->
+                    map.addPolyline(
+                        PolylineOptions()
+                            .addAll(leg.points)
+                            .color(Color.parseColor("#0B61CA"))
+                            .width(if (leg.isRoadMatched) 10f else 8f)
+                    )
+                }
+            } else if (hasRecordedTrail) {
+                map.addPolyline(
+                    PolylineOptions()
+                        .addAll(recorded)
+                        .color(Color.parseColor("#0B61CA"))
+                        .width(8f)
+                )
             } else if (displayPoints.size >= 2) {
                 map.addPolyline(
                     PolylineOptions()
                         .addAll(displayPoints)
-                        .color(Color.parseColor("#5B7FA3"))
+                        .color(Color.parseColor("#0B61CA"))
                         .width(8f)
-                        .pattern(listOf(Dash(24f), Gap(14f)))
                 )
             }
-            if (displayPoints.isNotEmpty()) {
+            val cameraPoints = routedDisplayPoints.ifEmpty { displayPoints }
+            if (cameraPoints.isNotEmpty()) {
                 mapView.post {
-                    if (displayPoints.size == 1) {
-                        map.moveCamera(CameraUpdateFactory.newLatLngZoom(displayPoints.first(), 16f))
+                    if (cameraPoints.size == 1) {
+                        map.moveCamera(CameraUpdateFactory.newLatLngZoom(cameraPoints.first(), 16f))
                     } else {
                         val bounds = LatLngBounds.builder().also { builder ->
-                            displayPoints.forEach(builder::include)
+                            cameraPoints.forEach(builder::include)
                         }.build()
                         map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, dp(40)))
                     }
                 }
             }
             mapStatus.text = when {
-                hasRecordedTrail -> "Actual travelled path · ${recorded.size} GPS points"
+                hasRecordedTrail && roadMatchedTrail?.isFullyMatched == true ->
+                    "Road-matched route based on ${recorded.size} recorded GPS points."
+                hasRecordedTrail && roadMatchedTrail != null && roadMatchedTrail.matchedLegCount > 0 ->
+                    "Road-matched route based on ${recorded.size} GPS points. Unmatched sections use recorded GPS geometry."
+                hasRecordedTrail ->
+                    "Recorded GPS trail shown because road matching is unavailable."
                 displayPoints.size >= 2 ->
-                    "Recorded GPS trail unavailable. Dashed line connects the trip start and end."
+                    "Recorded GPS trail unavailable. Line connects the recorded trip start and end."
                 displayPoints.size == 1 -> "Only one trip coordinate was recorded."
                 else -> "No GPS coordinates were recorded for this trip."
             }

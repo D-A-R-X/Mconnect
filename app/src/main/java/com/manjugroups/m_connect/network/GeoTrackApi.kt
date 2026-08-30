@@ -206,6 +206,17 @@ interface GeoTrackApi {
         @Body body: SetOutcomeRequest
     ): GeoTrackResponse
 
+    /**
+     * Idempotently creates/links a referred client discovered during a New
+     * Client CP. The server derives the referrer from the CP visit instead of
+     * trusting a client name supplied by the device.
+     */
+    @POST("api/marketing/clientPlaceVisits/referral")
+    suspend fun recordCpReferral(
+        @Header("Authorization") token: String,
+        @Body body: RecordCpReferralRequest,
+    ): GeoTrackResponse
+
     // Cancel an assigned CP visit (SV-cum-CP client no-show / withdrawal). The
     // backend closes the row, its spawned field visit and the daily task.
     @POST("api/marketing/clientPlaceVisits/cancel")
@@ -1024,8 +1035,8 @@ data class CreateCpVisitRequest(
     val googleMapsLink: String? = null,
     val notes: String? = null,
     val projectId: String? = null,
-    // CP Type — visit intent. One of: sv_cum_cp, follow_up, booking_cp,
-    // collection_cp, old_client, gift_distribution. Optional so older
+    // CP Type — visit intent. Includes new_client_cp for manually entered
+    // clients. Optional so older
     // builds without the picker still create successfully.
     val cpType: String? = null,
     val jointCpCategory: String? = null,
@@ -1045,6 +1056,13 @@ data class CreateCpVisitResponse(
     val followupId: String? = null,
     val clientPlaceId: String? = null,
     val error: String? = null,
+)
+
+data class RecordCpReferralRequest(
+    val id: String,
+    val clientName: String,
+    val mobileNumber: String,
+    val address: String,
 )
 
 data class SetOutcomeRequest(

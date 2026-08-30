@@ -17,11 +17,9 @@ import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.manjugroups.m_connect.R
 
 /**
- * Referral capture for the New-Client CP "Client Referral" outcome.
- * Collects the referred person's name + phone; the caller packs them into
- * the free-text visit notes ("Referral: <name> · <phone>") and closes the
- * visit with outcome="referral". Modelled on [OutcomeRemarksBottomSheet]
- * so it matches the rest of the CP trip flow.
+ * Captures an optional referral after a New Client CP outcome is filled.
+ * The caller sends these fields to the referral endpoint, which creates the
+ * Clients-tab record and derives the referring client from the CP visit.
  */
 class ReferralCaptureBottomSheet : BottomSheetDialogFragment() {
 
@@ -54,6 +52,7 @@ class ReferralCaptureBottomSheet : BottomSheetDialogFragment() {
         super.onViewCreated(view, savedInstanceState)
         val nameInput = view.findViewById<EditText>(R.id.etReferralName)
         val phoneInput = view.findViewById<EditText>(R.id.etReferralPhone)
+        val addressInput = view.findViewById<EditText>(R.id.etReferralAddress)
 
         view.findViewById<Button>(R.id.btnCancelReferral).setOnClickListener {
             sendResult(submitted = false)
@@ -62,6 +61,7 @@ class ReferralCaptureBottomSheet : BottomSheetDialogFragment() {
         view.findViewById<Button>(R.id.btnSubmitReferral).setOnClickListener {
             val name = nameInput.text?.toString()?.trim().orEmpty()
             val phone = phoneInput.text?.toString()?.trim().orEmpty()
+            val address = addressInput.text?.toString()?.trim().orEmpty()
             if (name.isBlank()) {
                 Toast.makeText(
                     requireContext(),
@@ -79,7 +79,15 @@ class ReferralCaptureBottomSheet : BottomSheetDialogFragment() {
                 ).show()
                 return@setOnClickListener
             }
-            sendResult(submitted = true, name = name, phone = phone)
+            if (address.isBlank()) {
+                Toast.makeText(
+                    requireContext(),
+                    "Referral address is required.",
+                    Toast.LENGTH_SHORT,
+                ).show()
+                return@setOnClickListener
+            }
+            sendResult(submitted = true, name = name, phone = digits.takeLast(10), address = address)
             dismissAllowingStateLoss()
         }
     }
@@ -93,10 +101,16 @@ class ReferralCaptureBottomSheet : BottomSheetDialogFragment() {
         submitted: Boolean,
         name: String? = null,
         phone: String? = null,
+        address: String? = null,
     ) {
         setFragmentResult(
             RESULT_KEY,
-            bundleOf(KEY_SUBMITTED to submitted, KEY_NAME to name, KEY_PHONE to phone),
+            bundleOf(
+                KEY_SUBMITTED to submitted,
+                KEY_NAME to name,
+                KEY_PHONE to phone,
+                KEY_ADDRESS to address,
+            ),
         )
     }
 
@@ -105,6 +119,7 @@ class ReferralCaptureBottomSheet : BottomSheetDialogFragment() {
         const val KEY_SUBMITTED = "submitted"
         const val KEY_NAME = "referral_name"
         const val KEY_PHONE = "referral_phone"
+        const val KEY_ADDRESS = "referral_address"
 
         fun newInstance() = ReferralCaptureBottomSheet()
     }

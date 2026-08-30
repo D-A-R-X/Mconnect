@@ -72,9 +72,10 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
 
     private val cpTypeOptions = listOf(
         CpTypeOption("sv_cum_cp", "SV cum CP", "Combo site visit + CP"),
-        // "Follow-up" retired as a creatable type (VP): postpone/cancel outcomes
-        // already spawn a same-type follow-up. New Client CP is auto-created from
-        // Aster, so it's not offered here either.
+        // "Follow-up" remains retired: postpone/cancel outcomes already spawn a
+        // same-type follow-up. New Client CP is now also creatable manually by
+        // field staff using the client identity and address fields in this form.
+        CpTypeOption("new_client_cp", "New Client CP", "First visit for a manually added client"),
         CpTypeOption("booking_cp", "Booking CP", "Paperwork run for an active booking"),
         CpTypeOption("collection_cp", "Collection CP", "Payment chase at client place"),
         CpTypeOption("old_client", "Old Client", "Re-engagement touch"),
