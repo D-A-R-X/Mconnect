@@ -555,7 +555,8 @@ class CpVisitsFragment : Fragment() {
             (this.attendees?.isNotEmpty() == true) ||
             !this.foodPreferences.isNullOrBlank() ||
             !this.vehiclePreference.isNullOrBlank()
-        val category = if (proposedHasFields || leadFlaggedSvFixed || hasSvFixParty) {
+        val isSvCumCpType = this.cpType?.trim()?.equals("sv_cum_cp", ignoreCase = true) == true
+        val category = if (isSvCumCpType || proposedHasFields || leadFlaggedSvFixed || hasSvFixParty) {
             "sv_cum_cp"
         } else {
             "direct_cp"

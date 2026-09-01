@@ -1,7 +1,9 @@
 package com.manjugroups.m_connect.network
 
 import com.manjugroups.m_connect.BuildConfig
+import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
+import okhttp3.RequestBody
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -197,8 +199,22 @@ interface GeoTrackApi {
     @POST("api/marketing/clientPlaceVisits/create")
     suspend fun createCpVisit(
         @Header("Authorization") token: String,
+        @Header("Idempotency-Key") requestId: String,
         @Body body: CreateCpVisitRequest
     ): CreateCpVisitResponse
+
+    /**
+     * Mobile-safe SV scheduler. The backend owns the multi-row transaction:
+     * Direct SV creates a visit, Same Area creates its verification CP + SV,
+     * and Outstation/Immediate creates the GM handoff. This must not be split
+     * into several phone-side requests because a dropped connection could
+     * otherwise leave an orphan lead, client, CP, or SV.
+     */
+    @POST("api/marketing/siteVisits/create")
+    suspend fun createSiteVisit(
+        @Header("Authorization") token: String,
+        @Body body: CreateSiteVisitRequest,
+    ): CreateSiteVisitResponse
 
     @POST("api/marketing/clientPlaceVisits/setOutcome")
     suspend fun setCpVisitOutcome(
@@ -383,6 +399,25 @@ interface GeoTrackApi {
         @Header("Authorization") token: String,
         @Body body: UploadLoanDocumentRequest,
     ): UploadLoanDocumentResponse
+
+    @Multipart
+    @POST("api/postsales/loans/upload-document")
+    suspend fun uploadLoanDocumentFile(
+        @Header("Authorization") token: String,
+        @Part("loanCaseId") loanCaseId: RequestBody?,
+        @Part("label") label: RequestBody,
+        @Part file: MultipartBody.Part,
+        @Part("fileName") fileName: RequestBody,
+        @Part("requestId") requestId: RequestBody?,
+    ): UploadLoanDocumentResponse
+
+    /** Removes one checklist attachment. The backend must update the loan
+     * case atomically and may delete the storage blob when it is unreferenced. */
+    @POST("api/postsales/loans/delete-document")
+    suspend fun deleteLoanDocument(
+        @Header("Authorization") token: String,
+        @Body body: DeleteLoanDocumentRequest,
+    ): LoanDocumentMutationResponse
 
     @GET("api/postsales/loans/forSales")
     suspend fun listLoanDeskForSales(
@@ -1040,6 +1075,10 @@ data class CreateCpVisitRequest(
     // builds without the picker still create successfully.
     val cpType: String? = null,
     val jointCpCategory: String? = null,
+    // New Client CP only. The server derives Own Referral's staff identity
+    // from the first authenticated attendance; mobile never sends a staff id.
+    val referralSourceType: String? = null,
+    val referringClientId: String? = null,
     // Explicit 6-digit pincode. The compiled visitAddress already carries it
     // as a "Pincode: NNNNNN" segment, but sending it separately means the
     // server stores it as a real column instead of re-parsing free text.
@@ -1052,10 +1091,53 @@ data class CreateCpVisitRequest(
 data class CreateCpVisitResponse(
     val success: Boolean,
     val id: String? = null,
+    val requestId: String? = null,
+    val alreadyCreated: Boolean? = null,
     val fieldVisitId: String? = null,
     val followupId: String? = null,
     val clientPlaceId: String? = null,
+    val clientId: String? = null,
     val error: String? = null,
+)
+
+data class CreateSiteVisitRequest(
+    val requestId: String,
+    val routing: String,
+    val origin: String,
+    val leadId: String? = null,
+    val clientName: String? = null,
+    val mobileNumber: String,
+    val projectId: String,
+    val scheduledDate: String,
+    val scheduledTime: String,
+    val pickupTime: String? = null,
+    val travelMode: String,
+    val telecallerId: String,
+    val bdoStaffId: String,
+    val inchargeStaffId: String,
+    val fieldStaffId: String? = null,
+    val hodStaffId: String,
+    val avpStaffId: String,
+    val gmStaffId: String,
+    val seniorManagerStaffId: String,
+    val pickupAddress: String,
+    val pickupLat: Double,
+    val pickupLng: Double,
+    val pickupGoogleMapsLink: String? = null,
+    val expectedAttendeeCount: Int? = null,
+    val attendees: List<SiteVisitAttendeeRequest>? = null,
+    val notes: String? = null,
+)
+
+data class CreateSiteVisitResponse(
+    val success: Boolean,
+    val siteVisitId: String? = null,
+    val handoffId: String? = null,
+    val clientPlaceVisitId: String? = null,
+    val mode: String? = null,
+    val message: String? = null,
+    val error: String? = null,
+    val code: String? = null,
 )
 
 data class RecordCpReferralRequest(
@@ -1404,6 +1486,31 @@ data class UploadLoanDocumentRequest(
 data class UploadLoanDocumentResponse(
     val success: Boolean = false,
     val error: String? = null,
+    val attached: Boolean = false,
+    val document: UploadedLoanDocument? = null,
+)
+
+data class UploadedLoanDocument(
+    val loanCaseId: String? = null,
+    val label: String = "",
+    val storageId: String = "",
+    val fileName: String = "",
+    val contentType: String? = null,
+    val size: Long? = null,
+    val url: String? = null,
+)
+
+data class DeleteLoanDocumentRequest(
+    val loanCaseId: String,
+    val label: String,
+    val storageId: String,
+)
+
+data class LoanDocumentMutationResponse(
+    val success: Boolean = false,
+    val deleted: Boolean = false,
+    val loanCase: LoanCaseRow? = null,
+    val error: String? = null,
 )
 
 data class LoanCaseDocument(
@@ -1703,6 +1810,9 @@ data class MyMarketingCpVisitsResponse(
 
 data class CpVisitDetail(
     @com.google.gson.annotations.SerializedName("_id") val id: String? = null,
+    // Returned by create and participant-aware list reads so mobile can
+    // reconcile a mutation whose HTTP response was lost after commit.
+    val requestId: String? = null,
     val leadId: String? = null,
     val clientId: String? = null,
     val clientPlaceId: String? = null,

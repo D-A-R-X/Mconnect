@@ -6,7 +6,7 @@
     android:background="#F1F3F8"
     android:orientation="vertical">
 
-    <!-- TOP BAR: back (circle) / centered title / calendar (circle) -->
+    <!-- TOP BAR: back / centered title / calendar + create -->
     <RelativeLayout
         android:id="@+id/cpvTopBar"
         android:layout_width="match_parent"
@@ -49,7 +49,8 @@
             android:id="@+id/btnFilterCalendar"
             android:layout_width="36dp"
             android:layout_height="36dp"
-            android:layout_alignParentEnd="true"
+            android:layout_marginEnd="8dp"
+            android:layout_toStartOf="@id/btnCreateCpVisit"
             android:layout_centerVertical="true"
             android:background="@drawable/bg_sv_header_button"
             android:clickable="true"
@@ -64,12 +65,25 @@
                 app:tint="#0B61CA" />
         </FrameLayout>
 
-        <!-- Dummy view to avoid breaking btnCreateCpVisit GONE calls -->
-        <View
+        <FrameLayout
             android:id="@+id/btnCreateCpVisit"
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:visibility="gone" />
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            android:background="@drawable/bg_sv_header_button"
+            android:clickable="true"
+            android:contentDescription="Schedule site visit"
+            android:focusable="true">
+
+            <ImageView
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_gravity="center"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_cpv_plus"
+                app:tint="#0B61CA" />
+        </FrameLayout>
     </RelativeLayout>
 
     <View

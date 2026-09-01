@@ -156,7 +156,10 @@ class HomeViewModel : ViewModel() {
                     // answered. Sessions alone still prove an open session, so
                     // derive from them rather than falling through as "not
                     // clocked in".
-                    openNow = daySessions.hasOpenSession == true
+                    openNow = AttendanceTrackingGate.hasOpenSession(
+                        daySessions.hasOpenSession,
+                        daySessions.sessions,
+                    )
                     hasOpen = AttendanceTrackingGate.isClockedInForToday(
                         firstPunchIn = daySessions.firstPunchIn,
                         hasOpenSession = openNow,
@@ -168,7 +171,13 @@ class HomeViewModel : ViewModel() {
                     val firstPunchIn = daySessions?.firstPunchIn ?: att.firstPunchIn
                     // Raw "open session right now" — kept separately from the
                     // lenient day gate so trip-start can require a live session.
-                    openNow = att.hasOpenSession == true || daySessions?.hasOpenSession == true
+                    openNow = AttendanceTrackingGate.hasOpenSession(
+                        att.hasOpenSession,
+                        att.sessions,
+                    ) || AttendanceTrackingGate.hasOpenSession(
+                        daySessions?.hasOpenSession,
+                        daySessions?.sessions,
+                    )
                     hasOpen = AttendanceTrackingGate.isClockedInForToday(
                         firstPunchIn = firstPunchIn,
                         hasOpenSession = openNow,

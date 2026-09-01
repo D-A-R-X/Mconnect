@@ -93,6 +93,34 @@ interface ApiService {
         @Header("Authorization") token: String,
     ): MobileDialerConfigResponse
 
+    @GET("api/mobile/dialer/calls/current")
+    suspend fun getMobileDialerCurrentCall(
+        @Header("Authorization") token: String,
+        @Query("callId") callId: String? = null,
+    ): MobileDialerCurrentCallResponse
+
+    @POST("api/mobile/dialer/calls/{callId}/action")
+    suspend fun performMobileDialerCallAction(
+        @Header("Authorization") token: String,
+        @Header("Idempotency-Key") idempotencyKey: String,
+        @Path("callId") callId: String,
+        @Body body: MobileDialerCallActionRequest,
+    ): MobileDialerCallActionResponse
+
+    @POST("api/mobile/dialer/calls/{callId}/media/restart")
+    suspend fun restartMobileDialerMedia(
+        @Header("Authorization") token: String,
+        @Header("Idempotency-Key") idempotencyKey: String,
+        @Path("callId") callId: String,
+        @Body body: MobileDialerMediaRestartRequest,
+    ): MobileDialerMediaRestartResponse
+
+    @GET("api/mobile/dialer/calls/{callId}/media")
+    suspend fun getMobileDialerMedia(
+        @Header("Authorization") token: String,
+        @Path("callId") callId: String,
+    ): MobileDialerMediaResponse
+
     @GET("api/dashboard/calls")
     suspend fun getDashboardCalls(
         @Header("Authorization") token: String,
@@ -1096,14 +1124,6 @@ interface ApiService {
         @Query("limit") limit: Int? = null
     ): MyLeadsResponse
 
-    // Doocti click-to-call. The endpoint lives on the Next.js admin host
-    // (mms.aivida.in/api/doocti-call), not Convex, so we pass the full URL.
-    @POST
-    suspend fun dialDoocti(
-        @Url url: String,
-        @Body body: DialDooctiRequest,
-    ): DialDooctiResponse
-
     // ── Marketing: Projects + Inventory Units (KOS-52) ──────────────────────
     @GET("api/marketing/projects")
     suspend fun getMarketingProjects(
@@ -1255,6 +1275,14 @@ interface ApiService {
         @Header("Authorization") token: String,
         @Query("phone") phone: String,
     ): ClientSearchResponse
+
+    @GET("api/clients/referral-candidates")
+    suspend fun searchReferralClientCandidates(
+        @Header("Authorization") token: String,
+        @Query("query") query: String,
+        @Query("limit") limit: Int = 25,
+        @Query("cursor") cursor: String? = null,
+    ): ReferralClientCandidatesResponse
 
     /**
      * Push edits made by the field staff on the prefilled client
@@ -3102,6 +3130,20 @@ data class ClientSearchResponse(
     val error: String? = null,
 )
 
+data class ReferralClientCandidatesResponse(
+    val success: Boolean,
+    val clients: List<ReferralClientCandidate> = emptyList(),
+    val nextCursor: String? = null,
+    val error: String? = null,
+)
+
+data class ReferralClientCandidate(
+    @SerializedName("_id", alternate = ["id"]) val id: String,
+    @SerializedName("clientName", alternate = ["name"]) val name: String,
+    val mobileNumber: String,
+    val formattedAddress: String? = null,
+)
+
 data class ClientProfile(
     @SerializedName("_id", alternate = ["id"]) val id: String? = null,
     val title: String? = null,
@@ -3288,21 +3330,6 @@ data class LeadPropertyInterest(
     val extentInSqft: String? = null,
 )
 
-data class DialDooctiRequest(
-    val phone_number: String,
-    val station: String? = null,
-    val cli_number: String? = null,
-    val agent: String? = null,
-)
-
-data class DialDooctiResponse(
-    val ok: Boolean? = null,
-    val data: Any? = null,
-    val error: String? = null,
-    val stage: String? = null,
-    val status: Int? = null,
-)
-
 data class MobileDialerConfigResponse(
     val success: Boolean,
     val configured: Boolean = false,
@@ -3337,7 +3364,82 @@ data class MobileDialerFeatures(
     val mute: Boolean = false,
     val hold: Boolean = false,
     val pushProvider: String? = null,
+    val pushProviders: List<String> = emptyList(),
     val pushConfigSource: String? = null,
+)
+
+data class MobileDialerCurrentCallResponse(
+    val success: Boolean,
+    val call: MobileDialerCurrentCall? = null,
+    val code: String? = null,
+    val error: String? = null,
+    val retryable: Boolean? = null,
+)
+
+data class MobileDialerCurrentCall(
+    val callId: String,
+    val stage: String? = null,
+    val direction: String? = null,
+    val fromNumber: String? = null,
+    val toNumber: String? = null,
+    val displayName: String? = null,
+    val extension: String? = null,
+    val requiresPickup: Boolean = false,
+    val muted: Boolean = false,
+    val held: Boolean = false,
+    val startedAt: String? = null,
+    val expiresAt: String? = null,
+)
+
+data class MobileDialerCallActionRequest(
+    val action: String,
+    val platform: String = "android",
+    val deviceId: String,
+    val eventId: String? = null,
+)
+
+data class MobileDialerCallActionResponse(
+    val success: Boolean,
+    val callId: String? = null,
+    val stage: String? = null,
+    val alreadyApplied: Boolean = false,
+    val code: String? = null,
+    val error: String? = null,
+    val retryable: Boolean? = null,
+)
+
+data class MobileDialerMediaRestartRequest(
+    val reason: String,
+    val platform: String = "android",
+    val deviceId: String,
+)
+
+data class MobileDialerMediaRestartResponse(
+    val success: Boolean,
+    val callId: String? = null,
+    val stage: String? = null,
+    val iceRestarted: Boolean = false,
+    val code: String? = null,
+    val error: String? = null,
+    val retryable: Boolean? = null,
+)
+
+data class MobileDialerMediaResponse(
+    val success: Boolean,
+    val callId: String? = null,
+    val extension: String? = null,
+    val media: MobileDialerMediaDiagnostics? = null,
+    val code: String? = null,
+    val error: String? = null,
+    val retryable: Boolean? = null,
+)
+
+data class MobileDialerMediaDiagnostics(
+    val iceConnectionState: String? = null,
+    val iceGatheringState: String? = null,
+    val signalingState: String? = null,
+    val candidateType: String? = null,
+    val lastRtpAt: String? = null,
 )
 
 // ── Marketing: Projects + Inventory Units (KOS-52) ──────────────────────────

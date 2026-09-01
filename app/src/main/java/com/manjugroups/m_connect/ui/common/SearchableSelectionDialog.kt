@@ -3,6 +3,7 @@ package com.manjugroups.m_connect.ui.common
 import android.content.Context
 import android.graphics.Color
 import android.text.Editable
+import android.text.InputType
 import android.text.TextWatcher
 import android.util.TypedValue
 import android.view.Gravity
@@ -12,6 +13,7 @@ import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.core.content.res.ResourcesCompat
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -20,6 +22,10 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.manjugroups.m_connect.R
 import java.util.Locale
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 data class SearchableOption<T>(
     val item: T,
@@ -37,6 +43,176 @@ data class SearchableOption<T>(
 }
 
 object SearchableSelectionDialog {
+    /**
+     * Server-backed variant used when the complete option list is too large to
+     * preload. Results update in the same sheet while the user types, so there
+     * is no separate Search action or second selection dialog.
+     */
+    fun <T> showRemote(
+        context: Context,
+        scope: CoroutineScope,
+        title: String,
+        subtitle: String,
+        searchHint: String,
+        minimumQueryLength: Int = 2,
+        idleMessage: String = "Type at least 2 characters to search",
+        emptyMessage: String = "No matching records",
+        searchRequest: suspend (String) -> List<SearchableOption<T>>,
+        errorMessage: (Throwable) -> String = { "Couldn't load results. Try again." },
+        onSelected: (T) -> Unit,
+    ) {
+        val dialog = BottomSheetDialog(context)
+        var searchJob: Job? = null
+        var requestSequence = 0
+
+        val adapter = RemoteRowAdapter<T> { item ->
+            onSelected(item)
+            dialog.dismiss()
+        }
+        val list = RecyclerView(context).apply {
+            layoutManager = LinearLayoutManager(context)
+            this.adapter = adapter
+            clipToPadding = false
+            setPadding(0, 0, 0, dp(context, 12))
+            visibility = View.GONE
+        }
+        val progress = ProgressBar(context).apply {
+            visibility = View.GONE
+        }
+        val status = TextView(context).apply {
+            text = idleMessage
+            gravity = Gravity.CENTER
+            setPadding(dp(context, 20), dp(context, 38), dp(context, 20), dp(context, 38))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            setTextColor(Color.parseColor("#667085"))
+        }
+        val search = EditText(context).apply {
+            hint = searchHint
+            isSingleLine = true
+            inputType = InputType.TYPE_CLASS_TEXT
+            importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            setPadding(dp(context, 16), dp(context, 12), dp(context, 16), dp(context, 12))
+            setBackgroundResource(R.drawable.bg_sheet_search_field)
+            setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_cpv_search, 0, 0, 0)
+            compoundDrawablePadding = dp(context, 10)
+        }
+        val content = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(context, 20), dp(context, 12), dp(context, 20), dp(context, 18))
+            setBackgroundColor(Color.WHITE)
+            addView(View(context).apply {
+                setBackgroundColor(Color.parseColor("#D0D5DD"))
+            }, LinearLayout.LayoutParams(dp(context, 42), dp(context, 4)).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                bottomMargin = dp(context, 18)
+            })
+            addView(TextView(context).apply {
+                text = title
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
+                setTextColor(Color.parseColor("#101828"))
+                typeface = ResourcesCompat.getFont(context, R.font.inter_bold)
+            })
+            addView(TextView(context).apply {
+                text = subtitle
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                setTextColor(Color.parseColor("#667085"))
+                setPadding(0, dp(context, 5), 0, 0)
+            })
+            addView(search, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(context, 52),
+            ).apply {
+                topMargin = dp(context, 16)
+                bottomMargin = dp(context, 8)
+            })
+            addView(progress, LinearLayout.LayoutParams(dp(context, 30), dp(context, 30)).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                topMargin = dp(context, 24)
+                bottomMargin = dp(context, 24)
+            })
+            addView(status, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ))
+            addView(list, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                0,
+                1f,
+            ))
+        }
+
+        fun showStatus(message: String) {
+            progress.visibility = View.GONE
+            list.visibility = View.GONE
+            status.text = message
+            status.visibility = View.VISIBLE
+            adapter.submit(emptyList())
+        }
+
+        search.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                searchJob?.cancel()
+                val query = s?.toString()?.trim().orEmpty()
+                if (query.length < minimumQueryLength) {
+                    requestSequence += 1
+                    showStatus(idleMessage)
+                    return
+                }
+                val sequence = ++requestSequence
+                progress.visibility = View.VISIBLE
+                status.visibility = View.GONE
+                list.visibility = View.GONE
+                searchJob = scope.launch {
+                    delay(300)
+                    try {
+                        val rows = searchRequest(query)
+                        if (sequence != requestSequence || !dialog.isShowing) return@launch
+                        progress.visibility = View.GONE
+                        if (rows.isEmpty()) {
+                            showStatus(emptyMessage)
+                        } else {
+                            status.visibility = View.GONE
+                            list.visibility = View.VISIBLE
+                            adapter.submit(rows)
+                        }
+                    } catch (error: Exception) {
+                        if (sequence != requestSequence || !dialog.isShowing) return@launch
+                        showStatus(errorMessage(error))
+                    }
+                }
+            }
+            override fun afterTextChanged(s: Editable?) = Unit
+        })
+
+        dialog.setContentView(content)
+        dialog.setOnDismissListener { searchJob?.cancel() }
+        dialog.setOnShowListener {
+            dialog.window?.setSoftInputMode(
+                WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE or
+                    WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE,
+            )
+            dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)?.let {
+                val behavior = BottomSheetBehavior.from(it)
+                behavior.state = BottomSheetBehavior.STATE_EXPANDED
+                behavior.skipCollapsed = true
+                behavior.peekHeight = dp(context, 620)
+            }
+            // Some keyboards restore their previous composing buffer when a
+            // fresh field takes focus. A referral search must always begin
+            // blank instead of inheriting digits typed in the CP form.
+            search.setText("")
+            search.clearComposingText()
+            search.requestFocus()
+            search.post {
+                (context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
+                    ?.showSoftInput(search, InputMethodManager.SHOW_IMPLICIT)
+            }
+        }
+        dialog.show()
+    }
+
     fun <T> show(
         context: Context,
         title: String,
@@ -274,6 +450,88 @@ object SearchableSelectionDialog {
                 root.setPadding(dp(context, 4), dp(context, 12), dp(context, 4), 0)
             }
         }
+    }
+
+    private class RemoteRowAdapter<T>(
+        private val onClick: (T) -> Unit,
+    ) : RecyclerView.Adapter<RemoteRowAdapter<T>.VH>() {
+        private var rows: List<SearchableOption<T>> = emptyList()
+
+        fun submit(next: List<SearchableOption<T>>) {
+            rows = next
+            notifyDataSetChanged()
+        }
+
+        override fun getItemCount(): Int = rows.size
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
+            val context = parent.context
+            val avatar = TextView(context).apply {
+                gravity = Gravity.CENTER
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                setTextColor(Color.parseColor("#0B61CA"))
+                typeface = ResourcesCompat.getFont(context, R.font.inter_semibold)
+                setBackgroundResource(R.drawable.bg_circle_blue_light)
+            }
+            val title = TextView(context).apply {
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+                setTextColor(Color.parseColor("#101828"))
+                typeface = ResourcesCompat.getFont(context, R.font.inter_semibold)
+                maxLines = 1
+            }
+            val subtitle = TextView(context).apply {
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                setTextColor(Color.parseColor("#667085"))
+                setPadding(0, dp(context, 4), 0, 0)
+                maxLines = 2
+            }
+            val textBlock = LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(title)
+                addView(subtitle)
+            }
+            val row = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                isClickable = true
+                isFocusable = true
+                setPadding(dp(context, 4), dp(context, 12), dp(context, 4), dp(context, 12))
+                addView(avatar, LinearLayout.LayoutParams(dp(context, 42), dp(context, 42)).apply {
+                    marginEnd = dp(context, 12)
+                })
+                addView(textBlock, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            }
+            val divider = View(context).apply { setBackgroundColor(Color.parseColor("#EAECF0")) }
+            val root = LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = RecyclerView.LayoutParams(
+                    RecyclerView.LayoutParams.MATCH_PARENT,
+                    RecyclerView.LayoutParams.WRAP_CONTENT,
+                )
+                addView(row)
+                addView(divider, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1))
+            }
+            return VH(root, row, avatar, title, subtitle, divider)
+        }
+
+        override fun onBindViewHolder(holder: VH, position: Int) {
+            val option = rows[position]
+            holder.avatar.text = option.title.trim().take(1).uppercase(Locale.US)
+            holder.title.text = option.title
+            holder.subtitle.text = option.subtitle.orEmpty()
+            holder.subtitle.visibility = if (option.subtitle.isNullOrBlank()) View.GONE else View.VISIBLE
+            holder.divider.visibility = if (position == rows.lastIndex) View.GONE else View.VISIBLE
+            holder.row.setOnClickListener { onClick(option.item) }
+        }
+
+        inner class VH(
+            root: View,
+            val row: View,
+            val avatar: TextView,
+            val title: TextView,
+            val subtitle: TextView,
+            val divider: View,
+        ) : RecyclerView.ViewHolder(root)
     }
 
     private fun dp(context: Context, value: Int): Int =

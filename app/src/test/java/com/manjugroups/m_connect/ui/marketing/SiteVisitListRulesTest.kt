@@ -1,0 +1,38 @@
+package com.manjugroups.m_connect.ui.marketing
+
+import com.manjugroups.m_connect.network.TodayVisit
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class SiteVisitListRulesTest {
+    @Test
+    fun `confirmed linked site visit remains in Site Visits`() {
+        val visit = visit(tripType = "site_visit", clientPlaceVisitId = "cp-123")
+
+        assertTrue(SiteVisitListRules.belongsInSiteVisits(visit))
+    }
+
+    @Test
+    fun `legacy linked site visit without trip type remains in Site Visits`() {
+        val visit = visit(tripType = null, clientPlaceVisitId = "cp-123")
+
+        assertTrue(SiteVisitListRules.belongsInSiteVisits(visit))
+    }
+
+    @Test
+    fun `client place trip remains only in CP Visits`() {
+        val visit = visit(tripType = "client_place", clientPlaceVisitId = "cp-123")
+
+        assertFalse(SiteVisitListRules.belongsInSiteVisits(visit))
+    }
+
+    private fun visit(tripType: String?, clientPlaceVisitId: String?) = TodayVisit(
+        id = "visit-1",
+        clientPlaceId = "place-1",
+        scheduledDate = "2026-09-01",
+        status = "scheduled",
+        tripType = tripType,
+        clientPlaceVisitId = clientPlaceVisitId,
+    )
+}

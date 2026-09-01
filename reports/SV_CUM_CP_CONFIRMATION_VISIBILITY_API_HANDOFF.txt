@@ -1,0 +1,62 @@
+MCONNECT - CONFIRMED SV-CUM-CP VISIBILITY
+API HANDOFF
+
+Mobile defect fixed
+-------------------
+Android previously removed every Site Visit list item whose
+clientPlaceVisitId was non-null. That condition was incorrect because an SV
+created or confirmed through SV-cum-CP intentionally retains the source CP id.
+Android now classifies by tripType and accepts linked Site Visit rows.
+
+Existing backend behavior required
+----------------------------------
+
+POST /api/marketing/clientPlaceVisits/setOutcome
+Authorization: Bearer <token>
+Content-Type: application/json
+
+Request
+{
+  "id": "<clientPlaceVisitId>",
+  "outcome": "interested",
+  "notes": "Confirmed by field staff"
+}
+
+For cpType = sv_cum_cp this mutation must atomically:
+1. Persist the CP outcome and client-met decision.
+2. If convertedSiteVisitId exists, set the linked siteVisits row's
+   confirmationStatus to `confirmed` and retain clientPlaceVisitId.
+3. If no linked SV exists but proposedSiteVisit is valid, either create/link
+   it atomically or return 409 SITE_VISIT_NOT_MATERIALIZED. Never return
+   success while leaving only a CP row.
+4. Return the final linked site visit id and confirmation state.
+
+Success response (additive fields are safe for current mobile)
+{
+  "success": true,
+  "clientPlaceVisitId": "<cpId>",
+  "siteVisitId": "<svId>",
+  "confirmationStatus": "confirmed"
+}
+
+GET /api/sitevisits/my?fromDate=YYYY-MM-DD&toDate=YYYY-MM-DD
+must return the confirmed linked SV to every authorized SV viewer with:
+{
+  "_id": "<svId>",
+  "tripType": "site_visit",
+  "clientPlaceVisitId": "<cpId>",
+  "scheduledDate": "<fixed-sv-date>",
+  "confirmationStatus": "confirmed"
+}
+
+Do not rewrite tripType to `client_place`; that value identifies the CP trip
+row and Android intentionally excludes it from the Site Visits list.
+
+Acceptance checks
+-----------------
+1. Pending SV-cum-CP appears in Site Visits > Fixed.
+2. Confirming it returns one linked siteVisitId.
+3. The same SV appears in Site Visits > Scheduled for its fixed date.
+4. The verification CP remains only as completed CP history, not an active CP.
+5. Reject/cancel still removes the SV from active Scheduled/Fixed lists.
+6. Direct CP rows never appear in Site Visits.

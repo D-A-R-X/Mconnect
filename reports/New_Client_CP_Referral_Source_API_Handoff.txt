@@ -1,0 +1,215 @@
+NEW CLIENT CP REFERRAL SOURCE - BACKEND AND WEB HANDOFF
+
+Scope
+- New Client CP must require one referral source: own_referral or client_referral.
+- own_referral displays the staff member who first attends the CP as the referrer.
+- client_referral requires an existing client selected by name or mobile number.
+- A mobile number already present in Clients must never create a New Client CP.
+- The existing post-outcome "Any referrals?" feature is separate and must remain unchanged.
+- CP outcome UI must display "Follow-up" instead of "Postpone". Keep the API/database outcome value "postponed" unchanged.
+
+Authentication
+- Every endpoint below requires Authorization: Bearer <session token>.
+- Apply existing CP-create IAM/company scoping.
+- Never accept a caller-supplied referredByStaffId for own_referral.
+
+1. EXISTING EXACT-PHONE LOOKUP - KEEP AND REUSE
+
+GET /api/clients/search-by-phone?phone=8056390424
+
+Success with a client:
+HTTP 200
+{
+  "success": true,
+  "client": {
+    "_id": "client_id",
+    "clientName": "Client Name",
+    "mobileNumber": "8056390424",
+    "formattedAddress": "...",
+    "doorNo": "...",
+    "addressLine1": "...",
+    "addressLine2": "...",
+    "district": "...",
+    "state": "...",
+    "pincode": "...",
+    "lat": 13.0,
+    "lng": 80.0,
+    "googleMapsLink": "..."
+  }
+}
+
+Success when no client exists:
+HTTP 200
+{
+  "success": true,
+  "client": null
+}
+
+Rules
+- Normalize to the last valid 10 Indian mobile digits before lookup.
+- This endpoint is already present. Do not change its response incompatibly.
+- Mobile uses it for immediate autofill and duplicate feedback.
+- The create mutation must repeat duplicate validation authoritatively.
+
+2. NEW REFERRING-CLIENT SEARCH ENDPOINT
+
+GET /api/clients/referral-candidates?query=<name-or-mobile>&limit=25&cursor=<optional>
+
+Query rules
+- query is required and must contain at least 2 trimmed characters.
+- Match clientName case-insensitively and normalized mobile digits.
+- Return active clients only and enforce company visibility if Clients are company-scoped.
+- Use cursor pagination. Maximum limit: 50.
+- Sort best matches first, then clientName ascending.
+- Add a Convex search index for clientName and use the existing normalized-mobile index for phone queries. Do not scan an unbounded Clients table.
+
+Success:
+HTTP 200
+{
+  "success": true,
+  "clients": [
+    {
+      "_id": "client_id",
+      "clientName": "Existing Client",
+      "mobileNumber": "9876543210",
+      "formattedAddress": "Chennai, Tamil Nadu"
+    }
+  ],
+  "nextCursor": null
+}
+
+Validation error:
+HTTP 400
+{
+  "success": false,
+  "code": "INVALID_QUERY",
+  "error": "Enter at least 2 characters"
+}
+
+3. EXTEND THE EXISTING CP CREATE ENDPOINT
+
+POST /api/marketing/clientPlaceVisits/create
+
+Add these optional wire fields without changing existing fields:
+{
+  "cpType": "new_client_cp",
+  "referralSourceType": "own_referral",
+  "referringClientId": null
+}
+
+Client Referral example:
+{
+  "cpType": "new_client_cp",
+  "referralSourceType": "client_referral",
+  "referringClientId": "existing_client_id"
+}
+
+Determine effective CP type as follows:
+- cpType != joint_cp: effective type is cpType.
+- cpType == joint_cp: effective type is jointCpCategory.
+
+Validation
+- If effective type is new_client_cp, referralSourceType is required.
+- Allowed values: own_referral, client_referral.
+- own_referral: referringClientId must be absent/null.
+- client_referral: referringClientId is required, must identify an active visible client, and cannot have the same normalized phone as the new client.
+- If effective type is not new_client_cp, ignore or reject referral fields consistently; never persist stale referral data.
+- Before creating anything, exact-match mobileNumber against Clients.
+- If the number already exists, do not create a CP, lead, client place, field visit, or task.
+
+Duplicate response:
+HTTP 409
+{
+  "success": false,
+  "code": "NEW_CLIENT_ALREADY_EXISTS",
+  "error": "This number already exists as a client. Convert to another type of CP.",
+  "client": {
+    "_id": "existing_client_id",
+    "clientName": "Existing Client",
+    "mobileNumber": "8056390424",
+    "formattedAddress": "..."
+  }
+}
+
+Successful create response remains backward-compatible:
+HTTP 200
+{
+  "success": true,
+  "id": "cp_visit_id",
+  "fieldVisitId": "field_visit_id",
+  "clientPlaceId": "client_place_id",
+  "clientId": "new_client_id"
+}
+
+4. DATA TO STORE
+
+Add optional fields to clientPlaceVisits:
+- referralSourceType: "own_referral" | "client_referral"
+- referringClientId: Id<"clients">, client_referral only
+
+Add optional fields to clients:
+- referralSourceType: "own_referral" | "client_referral"
+- referredByStaffId: Id<"staff">, own_referral only
+- referredByStaffName: string snapshot, own_referral only
+- referredByClientId: Id<"clients">, client_referral only
+- referredByClientName: string snapshot, client_referral only
+- referralSourceCpVisitId: Id<"clientPlaceVisits">
+- referralAttributedAt: number
+
+Client Referral attribution
+- Resolve referringClientId during CP creation.
+- Save referredByClientId and a referredByClientName snapshot on the new Clients row.
+- Do not trust a client name sent by mobile/web.
+
+Own Referral attribution
+- At CP creation, save referralSourceType and referralSourceCpVisitId, but do not accept or stamp a caller-provided staff ID.
+- Extend the existing POST /api/geotrack/visit/start backend flow. On the first successful authenticated start/attendance for the linked New Client CP, atomically stamp referredByStaffId, referredByStaffName, and referralAttributedAt on the new Clients row.
+- Use the authenticated staff who actually starts/attends the visit, after verifying that staff is an assigned CP participant.
+- Stamp once only. Retries, a second Joint CP participant, reassignment, or completion must not overwrite the first attendee.
+- If the CP is cancelled before anyone attends, leave staff attribution pending/null.
+
+5. WEB UI CHANGES
+
+CP Creation form
+- When effective type is New Client CP, show required Referral Source below CP Type.
+- Options: Own Referral and Client Referral.
+- Own Referral shows helper text: "Credited to the staff who first attends this CP."
+- Client Referral shows a required searchable Existing Client dropdown.
+- Search by client name or mobile through GET /api/clients/referral-candidates.
+- Show client name, mobile, and short address in each result.
+- Exclude the new client's entered mobile from results.
+- Clear referringClientId when source changes to Own Referral or CP type changes.
+
+Duplicate behavior
+- After a valid 10-digit mobile is entered, call GET /api/clients/search-by-phone.
+- If found, autofill the existing client details.
+- Show: "This number already exists as a client. Convert to another type of CP."
+- Clear New Client CP and reopen/focus CP Type.
+- Also handle NEW_CLIENT_ALREADY_EXISTS from create because two users may submit concurrently.
+
+Clients list/detail
+- Display "Referred by <staff name>" for own_referral.
+- Display "Referred by <client name>" for client_referral.
+- Link the client referrer to that client's detail page when permitted.
+- Existing web Convex list/detail queries must return the new referral fields. A separate HTTP detail endpoint is not required if web continues using Convex queries directly.
+
+6. FOLLOW-UP LABEL RULE - NO API CHANGE
+
+- In every CP outcome picker and CP completion form, display "Follow-up" instead of "Postpone".
+- Keep the existing outcome value "postponed".
+- Keep postponeReasons, followUpDate, followUpTime, revisit creation, date windows, reports, filters, and historical data unchanged.
+- Do not rename database fields, enums, mutations, or endpoint paths for this text-only change.
+
+7. REQUIRED TESTS
+
+- New Client CP rejects missing referralSourceType.
+- own_referral rejects referringClientId.
+- client_referral rejects missing/invalid/inactive referringClientId.
+- Self-referral by matching normalized phone is rejected.
+- Existing client phone returns HTTP 409 and creates no related records.
+- Concurrent creates for the same phone produce one client and at most one valid New Client CP.
+- Name and mobile candidate search both work beyond the first page.
+- Other CP types remain byte-for-byte compatible when referral fields are absent.
+- Own referral stamps the first authenticated attending staff once only.
+- Client referral displays the selected existing client's name.
+- UI says Follow-up while the request still sends outcome: "postponed".

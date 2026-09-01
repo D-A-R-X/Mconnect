@@ -89,9 +89,21 @@ class SiteVisitsFragment : Fragment() {
         view.findViewById<View>(R.id.btnCpVisitsBack).setOnClickListener {
             navigateUp()
         }
-        // No create flow yet — hide the + button (CP visits has its own create
-        // dialog; site visit creation flows through the conversion path).
-        view.findViewById<View>(R.id.btnCreateCpVisit)?.visibility = View.GONE
+        val createButton = view.findViewById<View>(R.id.btnCreateCpVisit)
+        createButton?.visibility = if (session.hasPermission("marketing.siteVisits.create")) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
+        createButton?.contentDescription = "Schedule site visit"
+        createButton?.setOnClickListener {
+            CreateSiteVisitBottomSheet.newInstance()
+                .showOnce(parentFragmentManager, "create_site_visit")
+        }
+        parentFragmentManager.setFragmentResultListener(
+            CreateSiteVisitBottomSheet.RESULT_CREATED,
+            viewLifecycleOwner,
+        ) { _, _ -> loadVisits() }
 
         setupSearch(view)
         setupFilterPills(view)
@@ -389,8 +401,10 @@ class SiteVisitsFragment : Fragment() {
                     showLoadError(resp.error ?: "Failed to load site visits")
                     return@launch
                 }
-                // Exclude CP visits (which live in CpVisitsFragment) — keep only
-                // proper site visits where tripType is null/"site_visit"/etc.
+                // Exclude CP trip rows, but retain real siteVisits rows that
+                // carry clientPlaceVisitId. A confirmed SV-cum-CP deliberately
+                // keeps that back-reference to its verification CP; filtering
+                // on the link id made every converted SV disappear here.
                 //
                 // Sort by creationTime descending so the most recently
                 // CREATED SV shows up at the top (matches the server's
@@ -401,7 +415,7 @@ class SiteVisitsFragment : Fragment() {
                 // scheduled entries. Fall back to scheduledDate when
                 // creationTime is missing (legacy rows).
                 allVisits = resp.visits
-                    .filter { it.tripType != "client_place" && it.clientPlaceVisitId == null }
+                    .filter(SiteVisitListRules::belongsInSiteVisits)
                     .sortedWith(
                         compareByDescending<TodayVisit> { it.creationTime ?: 0.0 }
                             .thenByDescending { it.scheduledDate }

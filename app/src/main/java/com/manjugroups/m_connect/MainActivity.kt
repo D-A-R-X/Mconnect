@@ -800,7 +800,10 @@ class MainActivity : AppCompatActivity() {
         navTasksPeek.visibility = android.view.View.GONE
         // Fill the nav bar behind the sheet so the page can't bleed through it.
         setNavBarSolid(true)
-        com.manjugroups.m_connect.ui.common.PendingTasksBottomSheet(pendingTasksList, taskNudgePendingCount)
+        com.manjugroups.m_connect.ui.common.PendingTasksBottomSheet.newInstance(
+            pendingTasksList,
+            taskNudgePendingCount,
+        )
             .showOnce(supportFragmentManager, TAG_PENDING_SHEET)
     }
 
@@ -1475,7 +1478,12 @@ class MainActivity : AppCompatActivity() {
         statusBarBackground.setBackgroundColor(backgroundColor)
         if (fullBleed) {
             statusBarBackground.layoutParams = statusBarBackground.layoutParams.apply { height = 0 }
-            window.statusBarColor = Color.TRANSPARENT
+            // The destination header still draws edge-to-edge, but keeping the
+            // system status-bar layer painted prevents a prior white detail
+            // screen from flashing through while root tabs are attached/shown.
+            // Transparent remains transparent for map/canvas callers that ask
+            // for it explicitly.
+            window.statusBarColor = backgroundColor
         } else {
             statusBarBackground.layoutParams = statusBarBackground.layoutParams.apply {
                 height = resolveTopInset()
@@ -1540,6 +1548,15 @@ class MainActivity : AppCompatActivity() {
             transaction.show(existingTarget)
         }
 
+        transaction.runOnCommit {
+            // Fragment visibility callbacks from the outgoing page can update
+            // system-bar chrome after selectTab's eager apply. Re-assert only
+            // once the transaction has finished so the visible root tab owns
+            // the final status-bar color and icon contrast.
+            if (currentTab == index && supportFragmentManager.backStackEntryCount == 0) {
+                applyTopBarForTab(index)
+            }
+        }
         transaction.commit()
         prewarmNeighbours()
     }

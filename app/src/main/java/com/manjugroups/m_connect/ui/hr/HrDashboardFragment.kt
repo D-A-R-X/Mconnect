@@ -375,6 +375,7 @@ class HrDashboardFragment : Fragment() {
     override fun onHiddenChanged(hidden: Boolean) {
         super.onHiddenChanged(hidden)
         if (!hidden && _binding != null) {
+            applyHrChrome()
             // Replay when returning to the Attendance tab.
             primeHeaderForEntryAnimation()
             binding.attendanceHeader.post { playHeaderEntryAnimation() }
@@ -450,8 +451,7 @@ class HrDashboardFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
-        (activity as? MainActivity)?.setTabBarVisible(true)
-        (activity as? MainActivity)?.setTopBarAppearance(Color.parseColor("#0B61CA"), false, fullBleed = true)
+        if (!isHidden) applyHrChrome()
         flowViewModel.loadTodayAttendance(session.bearerToken, requireContext())
         loadRecentHistoryCards()
         // Refresh the geofence policy each time the dashboard becomes
@@ -460,6 +460,13 @@ class HrDashboardFragment : Fragment() {
         loadHomeFence()
         startGeofenceWatcher()
         startClockStatusWatcher()
+    }
+
+    private fun applyHrChrome() {
+        (activity as? MainActivity)?.let { main ->
+            main.setTabBarVisible(true)
+            main.setTopBarAppearance(Color.parseColor("#0B61CA"), false, fullBleed = true)
+        }
     }
 
     override fun onPause() {

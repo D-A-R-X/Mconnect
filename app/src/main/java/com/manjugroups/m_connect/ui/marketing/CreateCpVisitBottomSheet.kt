@@ -27,16 +27,20 @@ import com.manjugroups.m_connect.util.EditableTimeFormat
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.CreateCpVisitRequest
+import com.manjugroups.m_connect.network.ClientProfile
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.MarketingProject
+import com.manjugroups.m_connect.network.ReferralClientCandidate
 import com.manjugroups.m_connect.network.StaffData
 import com.manjugroups.m_connect.ui.common.SearchableOption
 import com.manjugroups.m_connect.ui.common.SearchableSelectionDialog
 import com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import java.util.UUID
 import com.manjugroups.m_connect.ui.common.showOnce
 
 class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
@@ -44,6 +48,20 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
     private val api = ApiService.create()
     private val geoApi = GeoTrackApi.create()
     private lateinit var session: SessionManager
+    private var createRequestId = UUID.randomUUID().toString()
+    private var createRequestFingerprint: String? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        createRequestId = savedInstanceState?.getString(STATE_REQUEST_ID) ?: createRequestId
+        createRequestFingerprint = savedInstanceState?.getString(STATE_REQUEST_FINGERPRINT)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString(STATE_REQUEST_ID, createRequestId)
+        outState.putString(STATE_REQUEST_FINGERPRINT, createRequestFingerprint)
+        super.onSaveInstanceState(outState)
+    }
 
     // Selected variables
     private var selectedStaff: StaffData? = null
@@ -61,6 +79,8 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
     // from Joint CP so a stale partner can never ride along on another type.
     private var selectedJointPartner: StaffData? = null
     private var selectedJointCpCategory: CpTypeOption? = null
+    private var selectedReferralSource: ReferralSourceOption? = null
+    private var selectedReferringClient: ReferralClientCandidate? = null
 
     /** CP visit intent enum shared with the web form. The `id` is the
      *  wire value sent to convex; `label` is what the picker shows. */
@@ -68,6 +88,13 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         val id: String,
         val label: String,
         val sublabel: String,
+    )
+
+    private data class ReferralSourceOption(val id: String, val label: String)
+
+    private val referralSourceOptions = listOf(
+        ReferralSourceOption("own_referral", "Own Referral"),
+        ReferralSourceOption("client_referral", "Client Referral"),
     )
 
     private val cpTypeOptions = listOf(
@@ -105,6 +132,8 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
     // web's `createLastEnrichedPin` guard but keyed on the phone tail
     // rather than the pincode.
     private var lastAutofilledPhone: String? = null
+    private var existingClientProfile: ClientProfile? = null
+    private var existingClientPhone: String? = null
 
     // Pin-drop state — populated when the user picks a spot from the
     // (forthcoming) map widget. The web equivalent stores these on
@@ -182,6 +211,8 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         val etLmo = view.findViewById<EditText>(R.id.etLmo)
         val etCpType = view.findViewById<EditText>(R.id.etCpType)
         val etJointCpCategory = view.findViewById<EditText>(R.id.etJointCpCategory)
+        val etReferralSource = view.findViewById<EditText>(R.id.etReferralSource)
+        val etReferringClient = view.findViewById<EditText>(R.id.etReferringClient)
         val etDateTime = view.findViewById<EditText>(R.id.etDateTime)
 
         // ── Canonical address fields (7) ───────────────────────────
@@ -232,6 +263,10 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         etLmo.setOnClickListener { pickLmo(etLmo) }
         etCpType.setOnClickListener { pickCpType(etCpType) }
         etJointCpCategory.setOnClickListener { pickJointCpCategory(etJointCpCategory) }
+        etReferralSource.setOnClickListener { pickReferralSource(etReferralSource) }
+        etReferringClient.setOnClickListener {
+            pickReferringClient(etReferringClient, etPhone.text?.toString().orEmpty())
+        }
         etDateTime.setOnClickListener { pickDateTime(etDateTime) }
 
         // Lead-autofill — when the phone field hits 10 digits we hit
@@ -244,6 +279,10 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) {
                 val digits = s?.toString().orEmpty().filter { it.isDigit() }.takeLast(10)
+                if (digits != existingClientPhone) {
+                    existingClientProfile = null
+                    existingClientPhone = null
+                }
                 if (digits.length == 10 && digits != lastAutofilledPhone) {
                     lastAutofilledPhone = digits
                     autofillFromLead(
@@ -420,6 +459,26 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                 return@setOnClickListener
             }
 
+            if (isNewClientCpPurpose()) {
+                val source = selectedReferralSource
+                if (source == null) {
+                    toast("Select Own Referral or Client Referral")
+                    return@setOnClickListener
+                }
+                if (source.id == "client_referral") {
+                    val referrer = selectedReferringClient
+                    if (referrer == null) {
+                        toast("Select the referring client")
+                        return@setOnClickListener
+                    }
+                    val referrerPhone = referrer.mobileNumber.filter { it.isDigit() }.takeLast(10)
+                    if (referrerPhone == phone) {
+                        toast("A client cannot refer themselves")
+                        return@setOnClickListener
+                    }
+                }
+            }
+
             // A Joint CP is meaningless with one person on it.
             val jointPartnerId = selectedJointPartner?.id
             if (selectedCpType?.id == "joint_cp") {
@@ -530,6 +589,34 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             btnSubmit.isEnabled = false
             viewLifecycleOwner.lifecycleScope.launch {
                 try {
+                    if (isNewClientCpPurpose()) {
+                        val existingResponse = api.searchClientByPhone(
+                            session.bearerToken,
+                            phone,
+                        )
+                        if (!isAdded) return@launch
+                        existingResponse.client?.let { existing ->
+                            applyClientAutofill(view, existing)
+                            rememberExistingClient(existing, phone)
+                            blockNewClientCpForExistingClient(view)
+                            btnSubmit.isEnabled = true
+                            return@launch
+                        }
+                        if (!existingResponse.success &&
+                            !existingResponse.error.orEmpty().contains("not found", ignoreCase = true)
+                        ) {
+                            btnSubmit.isEnabled = true
+                            toast(existingResponse.error ?: "Couldn't verify whether this client already exists")
+                            return@launch
+                        }
+                    }
+                    // Start the duplicate read while resolving a missing pin.
+                    // These calls are independent and used to run serially,
+                    // making a normal create feel unnecessarily slow.
+                    val duplicateDeferred = async {
+                        findSameDayCpVisitFor(phone, selectedDate)
+                    }
+
                     // A CP MUST carry coordinates so the trip map can pin the
                     // client location (without them the trip screen tries to
                     // geocode the free-text address, and a vague/junk address
@@ -559,14 +646,25 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                     }
                     // Give immediate feedback for a duplicate on the selected
                     // day. The mutation repeats this authoritatively.
-                    val duplicate = findSameDayCpVisitFor(phone, selectedDate)
+                    val duplicate = duplicateDeferred.await()
                     if (duplicate != null) {
                         btnSubmit.isEnabled = true
                         toast(duplicate)
                         return@launch
                     }
+                    val requestFingerprint = listOf(
+                        phone, clientNameInput, staff.id, lmo.id, selectedDate,
+                        selectedTime, compiledAddress, project.id,
+                        selectedCpType?.id, selectedJointCpCategory?.id,
+                        jointPartnerId, resolvedLat, resolvedLng,
+                    ).joinToString("|")
+                    if (createRequestFingerprint != requestFingerprint) {
+                        createRequestId = UUID.randomUUID().toString()
+                        createRequestFingerprint = requestFingerprint
+                    }
                     val resp = geoApi.createCpVisit(
                         session.bearerToken,
+                        createRequestId,
                         CreateCpVisitRequest(
                             clientName = clientNameInput,
                             mobileNumber = phone,
@@ -584,6 +682,13 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                             jointCpCategory = if (selectedCpType?.id == "joint_cp") {
                                 selectedJointCpCategory?.id
                             } else null,
+                            referralSourceType = selectedReferralSource?.id
+                                ?.takeIf { isNewClientCpPurpose() },
+                            referringClientId = selectedReferringClient?.id
+                                ?.takeIf {
+                                    isNewClientCpPurpose() &&
+                                        selectedReferralSource?.id == "client_referral"
+                                },
                             pincode = pincode,
                             // Only sent for a Joint CP; the server ignores it
                             // for every other type.
@@ -600,15 +705,45 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                         return@launch
                     }
                     toast("CP visit created successfully")
-                    setFragmentResult(RESULT_KEY_CREATED, bundleOf("success" to true))
+                    setFragmentResult(
+                        RESULT_KEY_CREATED,
+                        bundleOf("success" to true, "visitId" to resp.id),
+                    )
+                    createRequestId = UUID.randomUUID().toString()
+                    createRequestFingerprint = null
                     dismissAllowingStateLoss()
                 } catch (e: Exception) {
                     btnSubmit.isEnabled = true
+                    duplicateClientFromException(e)?.let { existing ->
+                        applyClientAutofill(view, existing)
+                        rememberExistingClient(existing, phone)
+                        blockNewClientCpForExistingClient(view)
+                        return@launch
+                    }
+                    val recovered = if (isAmbiguousCreateFailure(e)) {
+                        findCreatedVisitByRequestId(createRequestId, selectedDate)
+                    } else null
+                    if (recovered != null) {
+                        toast("CP visit created successfully")
+                        setFragmentResult(
+                            RESULT_KEY_CREATED,
+                            bundleOf("success" to true, "visitId" to recovered.id),
+                        )
+                        createRequestId = UUID.randomUUID().toString()
+                        createRequestFingerprint = null
+                        dismissAllowingStateLoss()
+                        return@launch
+                    }
                     // The create route returns real reasons (staff busy, duplicate
                     // slot, "Collection CP requires a booking", etc.) in a JSON
                     // { error } body. Read it for current 4xx responses and older
                     // deployments that still return HTTP 500.
-                    toast(serverErrorMessage(e) ?: e.message ?: "Failed to create CP visit")
+                    val message = serverErrorMessage(e) ?: if (isAmbiguousCreateFailure(e)) {
+                        "Couldn't confirm creation. Check your network and tap Create visit again; the same request will be resumed safely."
+                    } else {
+                        e.message ?: "Failed to create CP visit"
+                    }
+                    toast(message)
                 }
             }
         }
@@ -637,6 +772,10 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                 val client = resp.client
                 if (isAdded && resp.success && client != null) {
                     applyClientAutofill(view, client)
+                    rememberExistingClient(client, phone)
+                    if (isNewClientCpPurpose()) {
+                        blockNewClientCpForExistingClient(view)
+                    }
                 }
             } catch (_: Exception) {
                 // Silent — fallback is opportunistic too.
@@ -1024,9 +1163,13 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                 gateBookingDependentCpSelection(picked, label)
                 return@show
             }
+            if (picked.id == "new_client_cp" && hasCurrentExistingClient()) {
+                blockNewClientCpForExistingClient(view ?: return@show)
+                return@show
+            }
             selectedCpType = picked
             label.setText(picked.label)
-            applyJointPartnerVisibility()
+            applyCpConditionalVisibility()
         }
     }
 
@@ -1050,8 +1193,13 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                 gateJointCpCategorySelection(picked, label)
                 return@show
             }
+            if (picked.id == "new_client_cp" && hasCurrentExistingClient()) {
+                blockNewClientCpForExistingClient(view ?: return@show)
+                return@show
+            }
             selectedJointCpCategory = picked
             label.setText(picked.label)
+            applyCpConditionalVisibility()
         }
     }
 
@@ -1060,7 +1208,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
      * the type moves away. Without the clear, picking Joint CP, choosing a
      * partner, then switching type would still submit a second participant.
      */
-    private fun applyJointPartnerVisibility() {
+    private fun applyCpConditionalVisibility() {
         val root = view ?: return
         val isJoint = selectedCpType?.id == "joint_cp"
         root.findViewById<View>(R.id.blockJointPartner)?.visibility =
@@ -1072,6 +1220,163 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             selectedJointCpCategory = null
             root.findViewById<EditText>(R.id.etJointPartner)?.setText("")
             root.findViewById<EditText>(R.id.etJointCpCategory)?.setText("")
+        }
+        val isNewClient = isNewClientCpPurpose()
+        root.findViewById<View>(R.id.blockNewClientReferralSource)?.visibility =
+            if (isNewClient) View.VISIBLE else View.GONE
+        if (!isNewClient) {
+            selectedReferralSource = null
+            selectedReferringClient = null
+            root.findViewById<EditText>(R.id.etReferralSource)?.setText("")
+            root.findViewById<EditText>(R.id.etReferringClient)?.setText("")
+        }
+        applyReferringClientVisibility()
+    }
+
+    private fun isNewClientCpPurpose(): Boolean =
+        selectedCpType?.id == "new_client_cp" ||
+            (selectedCpType?.id == "joint_cp" && selectedJointCpCategory?.id == "new_client_cp")
+
+    private fun rememberExistingClient(client: ClientProfile, phone: String) {
+        existingClientProfile = client
+        existingClientPhone = phone.filter { it.isDigit() }.takeLast(10)
+    }
+
+    private fun hasCurrentExistingClient(): Boolean {
+        val currentPhone = view?.findViewById<EditText>(R.id.etClientPhone)
+            ?.text?.toString().orEmpty().filter { it.isDigit() }.takeLast(10)
+        return existingClientProfile != null && currentPhone.length == 10 &&
+            currentPhone == existingClientPhone
+    }
+
+    private fun blockNewClientCpForExistingClient(root: View) {
+        val existing = existingClientProfile ?: return
+        applyClientAutofill(root, existing)
+        selectedCpType = null
+        selectedJointCpCategory = null
+        selectedJointPartner = null
+        root.findViewById<EditText>(R.id.etCpType)?.setText("")
+        root.findViewById<EditText>(R.id.etJointCpCategory)?.setText("")
+        root.findViewById<EditText>(R.id.etJointPartner)?.setText("")
+        applyCpConditionalVisibility()
+        AlertDialog.Builder(requireContext())
+            .setTitle("Client already exists")
+            .setMessage(
+                "This number already exists as a client. Convert to another type of CP. " +
+                    "The existing client details have been filled in."
+            )
+            .setCancelable(false)
+            .setPositiveButton("Choose CP type") { _, _ ->
+                root.findViewById<EditText>(R.id.etCpType)?.performClick()
+            }
+            .show()
+    }
+
+    private fun applyReferringClientVisibility() {
+        val showClient = isNewClientCpPurpose() &&
+            selectedReferralSource?.id == "client_referral"
+        view?.findViewById<View>(R.id.blockReferringClient)?.visibility =
+            if (showClient) View.VISIBLE else View.GONE
+        if (!showClient) {
+            selectedReferringClient = null
+            view?.findViewById<EditText>(R.id.etReferringClient)?.setText("")
+        }
+    }
+
+    private fun pickReferralSource(label: EditText) {
+        SearchableSelectionDialog.show(
+            context = requireContext(),
+            title = "Select referral source",
+            options = referralSourceOptions.map { option ->
+                SearchableOption(
+                    item = option,
+                    title = option.label,
+                    subtitle = if (option.id == "own_referral") {
+                        "Referred by the staff who first attends this CP"
+                    } else {
+                        "Referred by an existing client"
+                    },
+                    keywords = option.id,
+                )
+            },
+        ) { picked ->
+            selectedReferralSource = picked
+            label.setText(picked.label)
+            applyReferringClientVisibility()
+        }
+    }
+
+    private fun pickReferringClient(label: EditText, newClientPhoneInput: String) {
+        val newClientPhone = newClientPhoneInput.filter(Char::isDigit).takeLast(10)
+        SearchableSelectionDialog.showRemote(
+            context = requireContext(),
+            scope = viewLifecycleOwner.lifecycleScope,
+            title = "Select referring client",
+            subtitle = "Search existing clients by name or mobile number.",
+            searchHint = "Name or mobile number",
+            idleMessage = "Start typing a client name or mobile number",
+            emptyMessage = "No matching existing clients",
+            searchRequest = { query ->
+                val clients = try {
+                    val response = api.searchReferralClientCandidates(
+                        session.bearerToken,
+                        query,
+                    )
+                    if (!response.success) {
+                        throw IllegalStateException(response.error ?: "Failed to search clients")
+                    }
+                    response.clients
+                } catch (error: retrofit2.HttpException) {
+                    val digits = query.filter(Char::isDigit).takeLast(10)
+                    if (error.code() != 404 || digits.length != 10) throw error
+                    val exact = api.searchClientByPhone(session.bearerToken, digits)
+                    val client = exact.client
+                    if (!exact.success || client?.id.isNullOrBlank()) {
+                        emptyList()
+                    } else {
+                        listOf(
+                            ReferralClientCandidate(
+                                id = requireNotNull(client.id),
+                                name = client.clientName?.takeIf(String::isNotBlank) ?: "Client",
+                                mobileNumber = client.mobileNumber?.takeIf(String::isNotBlank) ?: digits,
+                                formattedAddress = client.formattedAddress
+                                    ?: client.homeAddress
+                                    ?: client.addressLine1,
+                            )
+                        )
+                    }
+                }
+                clients
+                    .filterNot { client ->
+                        client.mobileNumber.filter(Char::isDigit).takeLast(10) == newClientPhone
+                    }
+                    .map { client ->
+                        SearchableOption(
+                            item = client,
+                            title = client.name,
+                            subtitle = listOfNotNull(
+                                client.mobileNumber.takeIf(String::isNotBlank),
+                                client.formattedAddress?.takeIf(String::isNotBlank),
+                            ).joinToString(" • "),
+                            keywords = listOf(
+                                client.name,
+                                client.mobileNumber,
+                                client.formattedAddress.orEmpty(),
+                            ).joinToString(" "),
+                        )
+                    }
+            },
+            errorMessage = { error ->
+                when ((error as? retrofit2.HttpException)?.code()) {
+                    404 -> "Client name search is not available yet. Try a full mobile number."
+                    401 -> "Your session has expired. Sign in again."
+                    403 -> "You don't have permission to search clients."
+                    else -> serverErrorMessage(error) ?: "Couldn't search clients. Check your network and try again."
+                }
+            },
+        ) { client ->
+            selectedReferringClient = client
+            label.setText("${client.name} • ${client.mobileNumber}")
         }
     }
 
@@ -1149,7 +1454,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                 collectionCasesCache = resp.cases
                 selectedCpType = picked
                 label.setText(picked.label)
-                applyJointPartnerVisibility()
+                applyCpConditionalVisibility()
             } catch (e: Exception) {
                 toast("Network error: ${e.message}")
             }
@@ -1193,14 +1498,36 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
     /** Pull the backend's real error out of an HTTP failure body. Business errors
      *  use a JSON { error } body; Retrofit otherwise exposes only the status. */
     private fun serverErrorMessage(e: Throwable): String? {
-        val httpEx = e as? retrofit2.HttpException ?: return null
-        val raw = runCatching { httpEx.response()?.errorBody()?.string() }.getOrNull()
-            ?: return null
+        val raw = httpErrorBody(e) ?: return null
         return runCatching {
             val obj = com.google.gson.JsonParser.parseString(raw).asJsonObject
             (obj.get("error")?.asString ?: obj.get("message")?.asString)
                 ?.let(::cleanServerErrorMessage)
                 ?.takeIf { it.isNotBlank() }
+        }.getOrNull()
+    }
+
+    /** Handles the authoritative create-time duplicate guard. The pre-submit
+     * lookup catches the normal case, but another request may create the client
+     * between that lookup and this mutation. */
+    private fun duplicateClientFromException(e: Throwable): ClientProfile? {
+        val httpEx = e as? retrofit2.HttpException ?: return null
+        if (httpEx.code() != 409) return null
+        val raw = httpErrorBody(e) ?: return null
+        return runCatching {
+            val obj = com.google.gson.JsonParser.parseString(raw).asJsonObject
+            if (obj.get("code")?.asString != "NEW_CLIENT_ALREADY_EXISTS") return@runCatching null
+            obj.getAsJsonObject("client")?.let { client ->
+                com.google.gson.Gson().fromJson(client, ClientProfile::class.java)
+            }
+        }.getOrNull()
+    }
+
+    private fun httpErrorBody(e: Throwable): String? {
+        val body = (e as? retrofit2.HttpException)?.response()?.errorBody() ?: return null
+        return runCatching {
+            body.source().request(Long.MAX_VALUE)
+            body.source().buffer.clone().readUtf8()
         }.getOrNull()
     }
 
@@ -1214,6 +1541,8 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
     companion object {
         const val RESULT_KEY_CREATED = "cp_visit_created_result"
         private const val RESULT_KEY_DATE = "cp_visit_create_date_calendar"
+        private const val STATE_REQUEST_ID = "cp_visit_create_request_id"
+        private const val STATE_REQUEST_FINGERPRINT = "cp_visit_create_request_fingerprint"
 
         fun newInstance(): CreateCpVisitBottomSheet = CreateCpVisitBottomSheet()
     }
@@ -1242,6 +1571,27 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
         if (!existing.success) return null
         return OpenCpVisitGuard.blockReason(existing.visits, phone, scheduledDate)
+    }
+
+    private fun isAmbiguousCreateFailure(error: Throwable): Boolean {
+        val http = error as? retrofit2.HttpException
+        return http?.code()?.let { it >= 500 } ?: (error is java.io.IOException)
+    }
+
+    private suspend fun findCreatedVisitByRequestId(
+        requestId: String,
+        scheduledDate: String,
+    ) = try {
+        geoApi.getMyMarketingCpVisits(
+            token = session.bearerToken,
+            fromDate = scheduledDate,
+            toDate = scheduledDate,
+            limit = 50,
+        ).takeIf { it.success }
+            ?.visits
+            ?.firstOrNull { it.requestId == requestId }
+    } catch (_: Exception) {
+        null
     }
 
 }

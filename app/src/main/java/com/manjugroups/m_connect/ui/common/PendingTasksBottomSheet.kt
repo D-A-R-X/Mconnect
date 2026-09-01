@@ -19,11 +19,22 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.network.DailyTaskData
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 
-class PendingTasksBottomSheet(
-    private val tasks: List<DailyTaskData>,
+class PendingTasksBottomSheet : BottomSheetDialogFragment() {
+
+    private val tasks: List<DailyTaskData> by lazy {
+        val json = arguments?.getString(ARG_TASKS).orEmpty()
+        if (json.isBlank()) emptyList() else runCatching {
+            Gson().fromJson<List<DailyTaskData>>(
+                json,
+                object : TypeToken<List<DailyTaskData>>() {}.type,
+            )
+        }.getOrDefault(emptyList())
+    }
     private val totalPending: Int
-) : BottomSheetDialogFragment() {
+        get() = arguments?.getInt(ARG_TOTAL_PENDING) ?: tasks.size
 
     private lateinit var viewPager: ViewPager2
 
@@ -233,6 +244,18 @@ class PendingTasksBottomSheet(
                 }
             } else {
                 holder.tvCreatedOn.text = "Unknown"
+            }
+        }
+    }
+
+    companion object {
+        private const val ARG_TASKS = "pending_tasks"
+        private const val ARG_TOTAL_PENDING = "total_pending"
+
+        fun newInstance(tasks: List<DailyTaskData>, totalPending: Int) = PendingTasksBottomSheet().apply {
+            arguments = Bundle().apply {
+                putString(ARG_TASKS, Gson().toJson(tasks))
+                putInt(ARG_TOTAL_PENDING, totalPending)
             }
         }
     }

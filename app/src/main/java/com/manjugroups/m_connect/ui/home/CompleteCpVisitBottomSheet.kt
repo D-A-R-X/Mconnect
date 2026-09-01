@@ -250,6 +250,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var cpLockedFooter: View? = null
     private var btnCpLockedReject: TextView? = null
     private var btnCpLockedConfirm: TextView? = null
+    private var btnCpLockedCancel: TextView? = null
 
     // Cached CP visit detail captured when the locked-SV mode is engaged.
     // The Confirm button path uses `convertedSiteVisitId` to decide whether
@@ -839,6 +840,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         cpLockedFooter = view.findViewById(R.id.cpLockedFooter)
         btnCpLockedReject = view.findViewById(R.id.btnCpLockedReject)
         btnCpLockedConfirm = view.findViewById(R.id.btnCpLockedConfirm)
+        btnCpLockedCancel = view.findViewById(R.id.btnCpLockedCancel)
 
         // Whether TripNavigationFragment flagged this as an SV-fixed CP
         // (sv_cum_cp). For those we deliberately DO NOT pre-commit an outcome:
@@ -969,7 +971,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         if (isNewClientCpType(cpType)) {
             list.add(opt("BOOKING", "Booking", R.drawable.ic_outcome_booking))
             list.add(opt("SITE_VISIT", "Site Visit", R.drawable.ic_outcome_site_visit))
-            list.add(opt("POSTPONE", "Postpone", R.drawable.ic_outcome_postpone))
+            list.add(opt("POSTPONE", "Follow-up", R.drawable.ic_outcome_postpone))
             list.add(opt("NOT_INTERESTED", "Client Not Interested", R.drawable.ic_outcome_not_interested))
             return list
         }
@@ -981,13 +983,13 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         if (!svStyle) {
             list.add(opt("SITE_VISIT", "Site Visit", R.drawable.ic_outcome_site_visit))
         }
-        // SV-cum-CP labels the reschedule outcome explicitly as "Postpone" (VP);
-        // pure SV keeps "Follow up" (a follow-up call, not a reschedule).
+        // The wire value remains POSTPONE/postponed, but staff-facing CP text
+        // consistently says Follow-up across every CP category.
         list.add(opt("POSTPONE",
             when {
-                isSvCumCp -> "Postpone"
-                svStyle -> "Follow up"
-                else -> "Its Been Postponed"
+                isSvCumCp -> "Follow-up"
+                svStyle -> "Follow-up"
+                else -> "Follow-up"
             },
             R.drawable.ic_outcome_postpone))
         list.add(opt("NOT_INTERESTED", "Client Not Interested", R.drawable.ic_outcome_not_interested))
@@ -1021,7 +1023,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     false,
                 )
             ) {
-                dismissAllowingStateLoss()
+                if (!lockedFromProposedSv) dismissAllowingStateLoss()
                 return@setFragmentResultListener
             }
             val remarks = result.getString(
@@ -1146,14 +1148,22 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun finalizeCancel(cpVisitId: String, reason: String) {
+        if (reason.isBlank()) {
+            showError("Cancellation remarks are required")
+            return
+        }
         btnSubmit?.isClickable = false
         btnSubmit?.text = "Cancelling…"
+        btnCpLockedCancel?.isClickable = false
+        btnCpLockedCancel?.text = "Cancelling..."
+        btnCpLockedReject?.isClickable = false
+        btnCpLockedConfirm?.isClickable = false
         otherOutcomeSaving = true
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val resp = geoApi.cancelCpVisit(
                     session.bearerToken,
-                    CancelCpVisitRequest(id = cpVisitId, reason = reason.ifBlank { null }),
+                    CancelCpVisitRequest(id = cpVisitId, reason = reason),
                 )
                 if (!resp.success) {
                     finishCtaSave(resp.error ?: "Failed to cancel visit")
@@ -1223,7 +1233,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         // already a site visit — fade + disable it.
         tabSiteVisit.cell?.isClickable = false
         tabSiteVisit.cell?.alpha = 0.35f
-        tabPostpone.label?.text = "Follow up"
+        tabPostpone.label?.text = "Follow-up"
         view?.findViewById<TextView>(R.id.tvPostDateLabel)?.text = "Follow-up date"
         view?.findViewById<TextView>(R.id.tvPostDateHelp)?.text =
             "When should the client be followed up."
@@ -1241,7 +1251,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             view?.findViewById<View>(R.id.outcomeTopTabs)?.visibility = View.GONE
             view?.findViewById<TextView>(R.id.tvOutcomeTitle)?.text = when (lockedOutcome) {
                 Outcome.BOOKING -> "Converted as Booking"
-                Outcome.POSTPONE -> "Follow up"
+                Outcome.POSTPONE -> "Follow-up"
                 Outcome.NOT_INTERESTED -> "Client Not Interested"
                 Outcome.SITE_VISIT -> "Site Visit"
             }
@@ -2690,8 +2700,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             Outcome.BOOKING -> "Booking" to "Converted to booking"
             Outcome.SITE_VISIT -> "Site Visit" to "Site visit details"
             Outcome.POSTPONE ->
-                if (isSiteVisitMode) "Follow up" to "Follow-up details"
-                else "Postpone" to "Postpone this visit"
+                "Follow-up" to "Follow-up details"
             Outcome.NOT_INTERESTED -> "Not Interested" to "Client not interested"
         }
         view?.findViewById<TextView>(R.id.tvOutcomeTitle)?.text = title
@@ -2751,7 +2760,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         (bodyComingSoon as? ViewGroup)?.let { g ->
             (g.getChildAt(1) as? TextView)?.text = "What happened with the client?"
             (g.getChildAt(2) as? TextView)?.text =
-                "Choose an outcome above — Booking, Site visit, Postpone, or Not Interested — to open its form."
+                "Choose an outcome above — Booking, Site visit, Follow-up, or Not Interested — to open its form."
         }
         bodyComingSoon?.visibility = View.VISIBLE
     }
@@ -5158,7 +5167,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         if (reason.isBlank()) {
             showError(
                 if (isSiteVisitMode) "Enter a reason for follow up"
-                else "Enter a reason for postponement",
+                else "Enter a reason for follow-up",
             )
             return
         }
@@ -5510,6 +5519,14 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         if (otherOutcomeSaving) {
             otherOutcomeSaving = false
             Toast.makeText(requireContext(), error, Toast.LENGTH_LONG).show()
+            if (lockedFromProposedSv) {
+                btnCpLockedCancel?.isClickable = true
+                btnCpLockedCancel?.text = "Cancel SV"
+                btnCpLockedReject?.isClickable = true
+                btnCpLockedConfirm?.isClickable = true
+                showError(error)
+                return
+            }
             // The parent completion sheet remains intentionally hidden while
             // the compact remarks prompt is shown. On failure, close only the
             // UI flow so it cannot leave an invisible modal over the screen;
@@ -7032,6 +7049,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         cpLockedFooter?.visibility = View.VISIBLE
         btnCpLockedReject?.setOnClickListener { onLockedRejectTap() }
         btnCpLockedConfirm?.setOnClickListener { onLockedConfirmTap() }
+        btnCpLockedCancel?.setOnClickListener { showCancelReasonSheet() }
     }
 
     private suspend fun prefillProjectIfPossible(projectId: String?) {
@@ -7243,6 +7261,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         btnCpLockedConfirm?.isClickable = true
         btnCpLockedConfirm?.text = "Confirm"
         btnCpLockedReject?.isClickable = true
+        btnCpLockedCancel?.isClickable = true
+        btnCpLockedCancel?.text = "Cancel SV"
         showError(error)
     }
 

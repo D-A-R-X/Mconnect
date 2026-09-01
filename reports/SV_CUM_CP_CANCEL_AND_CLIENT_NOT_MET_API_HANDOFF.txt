@@ -1,0 +1,180 @@
+MCONNECT MOBILE - SV-CUM-CP CANCEL + CLIENT-NOT-MET REMARKS
+API HANDOFF
+
+Scope
+-----
+Mobile now exposes Cancel SV for every sv_cum_cp outcome surface, including
+the telecaller-fixed Confirm/Reject screen. Cancellation remarks are required.
+Mobile also previews the captured client-not-met proof photo and sends an
+optional staff remark through the existing CP outcome API.
+
+No new route is required if the existing routes satisfy the behavior below.
+
+
+1. CANCEL AN SV-CUM-CP ATOMICALLY
+--------------------------------
+
+POST /api/marketing/clientPlaceVisits/cancel
+Authorization: Bearer <token>
+Content-Type: application/json
+
+Request
+{
+  "id": "<clientPlaceVisitId>",
+  "reason": "Client requested cancellation"
+}
+
+Validation
+- id is required and must identify a CP assigned/visible to the authenticated
+  user according to the existing IAM rules.
+- reason is required after trimming and must not be empty.
+- Repeated requests for an already-cancelled visit should return success and
+  the same final state (idempotent behavior).
+
+Required atomic server behavior for cpType = sv_cum_cp
+- Set the clientPlaceVisits row to cancelled and persist the reason.
+- If convertedSiteVisitId exists, set that linked siteVisits row to cancelled
+  and persist the same cancellation reason.
+- Cancel/close the linked fieldVisits row so it cannot remain enroute or
+  in-progress.
+- Close/remove the related daily task from active task lists.
+- Do not create a booking, follow-up, replacement SV, or partial records.
+- Apply all changes in one backend mutation/transaction. On any failure,
+  return a 4xx/5xx response and leave every linked row unchanged.
+
+Success response
+{
+  "success": true,
+  "clientPlaceVisitId": "<id>",
+  "siteVisitId": "<convertedSiteVisitId-or-null>",
+  "status": "cancelled",
+  "alreadyCancelled": false
+}
+
+Idempotent repeat may return alreadyCancelled: true.
+
+Error response
+{
+  "success": false,
+  "error": "Human-readable error",
+  "code": "VALIDATION_ERROR | FORBIDDEN | NOT_FOUND | INVALID_STATE"
+}
+
+Mobile compatibility
+- Mobile only requires success and error today. The other response fields are
+  additive and safe for current Gson models.
+- After success, mobile exits the trip. It does not call fieldVisits/complete,
+  because the cancellation endpoint owns the entire close operation.
+
+
+2. CLIENT NOT MET - EXISTING ENDPOINTS
+--------------------------------------
+
+No new API is required. Mobile uses this sequence after the staff reviews the
+captured photo and optionally types a remark.
+
+A. Upload proof photo
+POST /api/storage/upload
+Existing multipart/upload contract.
+
+B. Mark client not met
+POST /api/marketing/clientPlaceVisits/markClientMet
+
+{
+  "id": "<clientPlaceVisitId>",
+  "clientMet": false,
+  "clientNoShowReason": "Client not seen"
+}
+
+C. Persist outcome, optional remark, and proof
+POST /api/marketing/clientPlaceVisits/setOutcome
+
+{
+  "id": "<clientPlaceVisitId>",
+  "outcome": "other",
+  "notes": "Client not seen. Staff remark: Gate was locked and phone was switched off",
+  "arrivalPhotoStorageId": "<storageId>"
+}
+
+The notes value contains only the standard no-show text when the optional
+remark is left blank. Existing CP-type terminal outcomes remain unchanged:
+- gift_distribution -> gift_distributed
+- old_client -> old_client_visited
+- collection_cp -> not_collected
+- other CP types -> other
+
+D. Complete linked field visit
+POST /api/geotrack/visit/complete
+
+Existing completion request with arrivalPhotoStorageId. For clientMet=false,
+the backend must require the photo but must not require an arrival OTP.
+
+
+Acceptance checks
+-----------------
+1. Cancelling a normal sv_cum_cp with remarks removes both CP and linked SV
+   from active lists and leaves no in-progress field visit/task.
+2. Cancelling a telecaller-fixed sv_cum_cp does the same.
+3. Repeating the cancel request returns success without duplicate side effects.
+4. Blank cancellation remarks return 400 and create no partial updates.
+5. Client-not-met completion succeeds with photo and no OTP.
+6. Optional remarks appear with the completed CP record on web/API detail.
+7. Client-not-met completion without optional remarks still succeeds.
+
+
+3. REJECT SV-CUM-CP AND CREATE ONE FOLLOW-UP CALL TASK
+------------------------------------------------------
+
+Use the existing outcome route. No second mobile request should be required.
+
+POST /api/marketing/clientPlaceVisits/setOutcome
+Authorization: Bearer <token>
+Content-Type: application/json
+
+Request
+{
+  "id": "<clientPlaceVisitId>",
+  "outcome": "rejected",
+  "notes": "Client asked to discuss again next week"
+}
+
+Required atomic server behavior when cpType = sv_cum_cp
+- Validate that the authenticated staff may act on this CP.
+- Mark the CP outcome as rejected and persist the trimmed rejection remarks.
+- Close the linked active field visit and remove the current visit task from
+  active/enroute/in-progress lists.
+- Update the linked proposed/converted SV to the existing rejected state. Do
+  not leave it confirmed, scheduled, enroute, or in progress.
+- Create exactly one active client follow-up-call task for the CP's designated
+  LMO/telecaller. Resolve the assignee from lmoStaffId first, then the linked
+  lead/visit telecallerStaffId. If no eligible active assignee exists, return
+  409 ASSIGNEE_NOT_FOUND and change nothing.
+- Copy client/lead id, client name, normalized mobile, project id,
+  clientPlaceVisitId, convertedSiteVisitId, rejection remarks, and source
+  `sv_cum_cp_rejected` onto the task.
+- Set the follow-up due time using the existing telecaller follow-up policy.
+  The server must return the chosen dueAt so clients do not invent a timezone
+  or business-hours rule.
+- Use a unique source key such as `sv_cum_cp_rejected:<clientPlaceVisitId>`.
+  Repeating the same outcome request must return the same task and must never
+  create duplicate calls.
+- Perform the rejection, linked-record close, and task creation in one
+  transaction. Any error leaves every row unchanged.
+
+Success response (additive fields are mobile-safe)
+{
+  "success": true,
+  "status": "rejected",
+  "followUpTaskId": "<taskId>",
+  "assignedToStaffId": "<lmo-or-telecaller-staff-id>",
+  "dueAt": 1788262200000,
+  "alreadyProcessed": false
+}
+
+An idempotent repeat may return alreadyProcessed: true with the same task id.
+
+Additional acceptance checks
+8. Rejecting a normal or telecaller-fixed sv_cum_cp closes the visit and
+   creates one follow-up-call task for its LMO/telecaller.
+9. Repeating the rejection returns the same task without duplicate side effects.
+10. Missing/inactive assignee returns 409 and leaves the CP/SV/field task intact.
