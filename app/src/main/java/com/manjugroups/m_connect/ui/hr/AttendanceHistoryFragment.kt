@@ -23,6 +23,7 @@ import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentAttendanceHistoryBinding
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
+import com.manjugroups.m_connect.ui.common.AdvancedListFilterSheet
 import com.manjugroups.m_connect.ui.common.AvatarUtils.loadUserAvatar
 import com.manjugroups.m_connect.ui.common.RejectWithReasonBottomSheet
 import com.manjugroups.m_connect.network.ApiService
@@ -53,6 +54,8 @@ class AttendanceHistoryFragment : Fragment() {
 
     private var filterFromDate: String = ""
     private var filterToDate: String = ""
+    private var filterAttendanceStatus: String? = null
+    private var filterStaffId: String? = null
 
     // Web-style rows-per-page pagination (10/25/50/100). The page resets
     // whenever the tab / search / date-filter context changes — tracked by
@@ -183,14 +186,15 @@ class AttendanceHistoryFragment : Fragment() {
         updateRangeLabel()
 
         binding.btnAttendanceFilter.setOnClickListener {
-            AttendanceFilterSheet
-                .newInstance(filterFromDate, filterToDate)
-                .showOnce(parentFragmentManager, "attendance_filter")
+            showAdvancedFilters()
         }
 
-        setFragmentResultListener(AttendanceFilterSheet.RESULT_KEY) { _, bundle ->
-            filterFromDate = bundle.getString(AttendanceFilterSheet.KEY_FROM).orEmpty()
-            filterToDate = bundle.getString(AttendanceFilterSheet.KEY_TO).orEmpty()
+        setFragmentResultListener(ATTENDANCE_FILTER_KEY) { _, bundle ->
+            val state = AdvancedListFilterSheet.state(bundle) ?: return@setFragmentResultListener
+            filterFromDate = state.fromDate.orEmpty()
+            filterToDate = state.toDate.orEmpty()
+            filterAttendanceStatus = state.value(KEY_STATUS)
+            filterStaffId = state.value(KEY_STAFF)
             updateRangeLabel()
             refreshAllData(showSkeleton = true, forceRefresh = true)
         }
@@ -287,6 +291,7 @@ class AttendanceHistoryFragment : Fragment() {
         binding.tabLayout.setOnTabSelectedListener(object : HorizontalTabLayout.OnTabSelectedListener {
             override fun onTabSelected(index: Int) {
                 activeTab = visibleLogicalTabs.getOrElse(index) { 0 }
+                filterStaffId = null
                 binding.etSearch.text?.clear()
                 binding.layoutSearch.visibility = View.GONE
                 if (activeTab == 2 || activeTab == 4) {
@@ -323,6 +328,79 @@ class AttendanceHistoryFragment : Fragment() {
             else -> ""
         }
     }
+
+    private fun currentAttendanceFilterSource(): List<Any> = when (activeTab) {
+        0 -> fillAbsentDays(cachedMyRecords, filterFromDate, filterToDate)
+        1 -> cachedTeamAttendance
+        2 -> if (activeSubTab == 1) teamApprovalRequestRows() else teamApprovalAttendanceRows()
+        3 -> allApprovalAttendanceRows()
+        4 -> if (activeSubTab == 0) hrReviewAttendanceRows() else hrReviewRequestRows()
+        5 -> cachedAllAttendance
+        else -> emptyList()
+    }
+
+    private fun showAdvancedFilters() {
+        val source = currentAttendanceFilterSource()
+        val statuses = source.mapNotNull(::attendanceStatus)
+            .distinct().sorted().map { value ->
+                AdvancedListFilterSheet.Option(value, humanizeAttendanceFilter(value))
+            }
+        val staff = if (activeTab == 0) emptyList() else source.mapNotNull { item ->
+            (item as? AttendanceApprovalRecord)?.let { row ->
+                val id = row.staffId?.takeIf(String::isNotBlank) ?: return@let null
+                val label = row.staffName?.takeIf(String::isNotBlank)
+                    ?: row.employeeId?.takeIf(String::isNotBlank)
+                    ?: "Staff"
+                AdvancedListFilterSheet.Option(id, label, row.employeeId)
+            }
+        }.distinctBy { it.value }.sortedBy { it.label.lowercase(Locale.US) }
+        val categories = buildList {
+            add(AdvancedListFilterSheet.Category(KEY_DATE, "Date range", dateRange = true))
+            add(AdvancedListFilterSheet.Category(KEY_STATUS, "Status", statuses))
+            if (staff.isNotEmpty()) add(AdvancedListFilterSheet.Category(KEY_STAFF, "Staff", staff))
+        }
+        val initial = AdvancedListFilterSheet.State(
+            selected = buildMap {
+                filterAttendanceStatus?.let { put(KEY_STATUS, setOf(it)) }
+                filterStaffId?.let { put(KEY_STAFF, setOf(it)) }
+            },
+            fromDate = filterFromDate.ifBlank { null },
+            toDate = filterToDate.ifBlank { null },
+        )
+        AdvancedListFilterSheet.newInstance(categories, initial, ATTENDANCE_FILTER_KEY).apply {
+            countProvider = { state -> source.count { matchesAttendanceState(it, state) } }
+        }.showOnce(parentFragmentManager, "attendance_advanced_filter")
+    }
+
+    private fun attendanceStatus(item: Any): String? = when (item) {
+        is AttendanceRecord -> item.approvedAttendance?.takeIf(String::isNotBlank)
+            ?: item.status?.takeIf(String::isNotBlank)
+            ?: if (item.id == null) "absent" else null
+        is AttendanceApprovalRecord -> item.approvedAttendance?.takeIf(String::isNotBlank)
+            ?: item.status?.takeIf(String::isNotBlank)
+        else -> null
+    }?.trim()?.lowercase(Locale.US)?.replace('_', '-')
+
+    private fun attendanceDate(item: Any): String? = when (item) {
+        is AttendanceRecord -> item.date
+        is AttendanceApprovalRecord -> item.date
+        else -> null
+    }
+
+    private fun attendanceStaffId(item: Any): String? =
+        (item as? AttendanceApprovalRecord)?.staffId
+
+    private fun matchesAttendanceState(item: Any, state: AdvancedListFilterSheet.State): Boolean {
+        val date = attendanceDate(item)
+        return (state.fromDate.isNullOrBlank() || date == null || date >= state.fromDate) &&
+            (state.toDate.isNullOrBlank() || date == null || date <= state.toDate) &&
+            (state.value(KEY_STATUS) == null || attendanceStatus(item) == state.value(KEY_STATUS)) &&
+            (state.value(KEY_STAFF) == null || attendanceStaffId(item) == state.value(KEY_STAFF))
+    }
+
+    private fun humanizeAttendanceFilter(value: String): String = value
+        .split('_', '-')
+        .joinToString(" ") { it.replaceFirstChar(Char::titlecase) }
 
     private fun sameMonthYear(a: Date, b: Date): Boolean {
         val ca = Calendar.getInstance().apply { time = a }
@@ -1572,18 +1650,9 @@ class AttendanceHistoryFragment : Fragment() {
     private fun filterCurrentListOnTyping(query: String) {
         val queryLower = query.trim().lowercase(Locale.US)
 
-        val originalList: List<Any> = when (activeTab) {
-            0 -> fillAbsentDays(cachedMyRecords, filterFromDate, filterToDate)
-            1 -> cachedTeamAttendance
-            2 -> if (activeSubTab == 1) teamApprovalRequestRows()
-                 else teamApprovalAttendanceRows()
-            3 -> allApprovalAttendanceRows()
-            4 -> {
-                if (activeSubTab == 0) hrReviewAttendanceRows()
-                else hrReviewRequestRows()
-            }
-            5 -> cachedAllAttendance
-            else -> emptyList()
+        val originalList = currentAttendanceFilterSource().filter { item ->
+            (filterAttendanceStatus == null || attendanceStatus(item) == filterAttendanceStatus) &&
+                (filterStaffId == null || attendanceStaffId(item) == filterStaffId)
         }
 
         if (queryLower.isEmpty()) {
@@ -1641,7 +1710,8 @@ class AttendanceHistoryFragment : Fragment() {
     private fun submitPagedList(display: List<Any>, query: String) {
         attendanceFilteredCount = display.size
         val pageCtx =
-            "$activeTab|$activeSubTab|$query|$filterFromDate|$filterToDate"
+            "$activeTab|$activeSubTab|$query|$filterFromDate|$filterToDate|" +
+                "$filterAttendanceStatus|$filterStaffId"
         if (pageCtx != lastPageContext) {
             lastPageContext = pageCtx
             attendancePager.reset()
@@ -1893,6 +1963,13 @@ class AttendanceHistoryFragment : Fragment() {
                 ).show()
             }
         }
+    }
+
+    companion object {
+        private const val ATTENDANCE_FILTER_KEY = "attendance_advanced_filter_result"
+        private const val KEY_DATE = "date"
+        private const val KEY_STATUS = "status"
+        private const val KEY_STAFF = "staff"
     }
 
 }

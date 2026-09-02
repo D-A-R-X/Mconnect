@@ -26,6 +26,7 @@ import com.manjugroups.m_connect.databinding.FragmentLeavesBinding
 import com.manjugroups.m_connect.network.LeaveData
 import com.manjugroups.m_connect.notifications.WorkflowNotificationRoute
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
+import com.manjugroups.m_connect.ui.common.AdvancedListFilterSheet
 import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -48,6 +49,10 @@ class LeavesFragment : Fragment() {
     private var activeScope: LeaveScope = LeaveScope.MY
     private var focusedEntityId: String? = null
     private var historyFilter: HistoryFilter = HistoryFilter.REVIEW
+    private var filterFromDate: String? = null
+    private var filterToDate: String? = null
+    private var filterLeaveType: String? = null
+    private var filterStaffId: String? = null
     private var skeletonAnimator: ObjectAnimator? = null
     // True once leaves have rendered at least once. Gates the skeleton so
     // a pull-to-refresh doesn't hide the list and flash placeholders over
@@ -68,6 +73,11 @@ class LeavesFragment : Fragment() {
         private const val ARG_MODE = "mode"
         private const val ARG_ENTITY_ID = "entity_id"
         private const val REJECT_RESULT_KEY = "leave_reject_reason"
+        private const val ADVANCED_FILTER_RESULT = "leave_advanced_filter_result"
+        private const val KEY_DATE = "date"
+        private const val KEY_STATUS = "status"
+        private const val KEY_TYPE = "leave_type"
+        private const val KEY_STAFF = "staff"
         const val MODE_HISTORY = WorkflowNotificationRoute.MODE_HISTORY
         const val MODE_APPROVAL = WorkflowNotificationRoute.MODE_APPROVAL
 
@@ -118,6 +128,22 @@ class LeavesFragment : Fragment() {
         binding.summaryHeader.setOnBackClickListener { navigateUp() }
         binding.summaryHeader.setBackButtonVisible(screenMode == MODE_APPROVAL)
         BottomActionInsets.applyAboveSystemNavAndTabs(binding.btnApplyLeave)
+        binding.btnAdvancedLeaveFilter.setOnClickListener { showAdvancedFilters() }
+        parentFragmentManager.setFragmentResultListener(
+            ADVANCED_FILTER_RESULT,
+            viewLifecycleOwner,
+        ) { _, bundle ->
+            val state = AdvancedListFilterSheet.state(bundle) ?: return@setFragmentResultListener
+            filterFromDate = state.fromDate
+            filterToDate = state.toDate
+            filterLeaveType = state.value(KEY_TYPE)
+            filterStaffId = state.value(KEY_STAFF)
+            historyFilter = state.value(KEY_STATUS)?.let { value ->
+                HistoryFilter.entries.firstOrNull { it.name == value }
+            } ?: HistoryFilter.REVIEW
+            binding.filterRow.selectTab(historyFilter.ordinal)
+            renderState(viewModel.uiState.value)
+        }
         binding.btnApplyLeave.setOnClickListener {
             parentFragmentManager.setFragmentResultListener(ApplyLeaveBottomSheet.RESULT_KEY_APPLIED, viewLifecycleOwner) { _, bundle ->
                 val success = bundle.getBoolean("success", false)
@@ -200,7 +226,7 @@ class LeavesFragment : Fragment() {
         // datasets (previously both showed the all-leaves set, so Team was
         // wrong for viewAll users).
         val displayLeaves = if (screenMode == MODE_APPROVAL) {
-            state.pendingApprovals
+            filterHistoryLeaves(state.pendingApprovals)
         } else {
             if (canApprove && activeScope != LeaveScope.MY) {
                 filterHistoryLeaves(scopedApprovals(state))
@@ -331,7 +357,74 @@ class LeavesFragment : Fragment() {
                     HistoryFilter.REJECTED -> bucketForStatus(leave.status) == StatusBucket.REJECTED
                 }
             }
+            .filter { leave ->
+                (filterFromDate.isNullOrBlank() || leave.toDate == null || leave.toDate >= filterFromDate!!) &&
+                    (filterToDate.isNullOrBlank() || leave.fromDate == null || leave.fromDate <= filterToDate!!) &&
+                    (filterLeaveType == null || leave.leaveType == filterLeaveType) &&
+                    (filterStaffId == null || leave.staffId == filterStaffId)
+            }
     }
+
+    private fun currentLeaveSource(state: LeavesState): List<LeaveData> {
+        val canApprove = session.hasPermission("leaves.approve")
+        return if (screenMode == MODE_APPROVAL) state.pendingApprovals
+        else if (canApprove && activeScope != LeaveScope.MY) scopedApprovals(state)
+        else state.myLeaves
+    }
+
+    private fun showAdvancedFilters() {
+        val source = currentLeaveSource(viewModel.uiState.value)
+            .filterNot { it.status?.trim()?.lowercase(Locale.US) == "cancelled" }
+        val types = source.mapNotNull { it.leaveType?.takeIf(String::isNotBlank) }
+            .distinct().sorted().map { AdvancedListFilterSheet.Option(it, humanizeFilter(it)) }
+        val staff = if (activeScope == LeaveScope.MY && screenMode != MODE_APPROVAL) emptyList()
+        else source.mapNotNull { leave ->
+            val id = leave.staffId?.takeIf(String::isNotBlank) ?: return@mapNotNull null
+            AdvancedListFilterSheet.Option(id, leave.staffName ?: "Staff")
+        }.distinctBy { it.value }.sortedBy { it.label.lowercase(Locale.US) }
+        val categories = buildList {
+            add(AdvancedListFilterSheet.Category(KEY_DATE, "Leave dates", dateRange = true))
+            add(AdvancedListFilterSheet.Category(
+                KEY_STATUS,
+                "Status",
+                HistoryFilter.entries.map { AdvancedListFilterSheet.Option(it.name, humanizeFilter(it.name)) },
+            ))
+            add(AdvancedListFilterSheet.Category(KEY_TYPE, "Leave type", types))
+            if (staff.isNotEmpty()) add(AdvancedListFilterSheet.Category(KEY_STAFF, "Staff", staff))
+        }
+        val initial = AdvancedListFilterSheet.State(
+            selected = buildMap {
+                put(KEY_STATUS, setOf(historyFilter.name))
+                filterLeaveType?.let { put(KEY_TYPE, setOf(it)) }
+                filterStaffId?.let { put(KEY_STAFF, setOf(it)) }
+            },
+            fromDate = filterFromDate,
+            toDate = filterToDate,
+        )
+        AdvancedListFilterSheet.newInstance(categories, initial, ADVANCED_FILTER_RESULT).apply {
+            countProvider = { state -> source.count { matchesLeaveState(it, state) } }
+        }.showOnce(parentFragmentManager, "leave_advanced_filters")
+    }
+
+    private fun matchesLeaveState(leave: LeaveData, state: AdvancedListFilterSheet.State): Boolean {
+        val selectedStatus = state.value(KEY_STATUS)?.let { value ->
+            HistoryFilter.entries.firstOrNull { it.name == value }
+        } ?: HistoryFilter.REVIEW
+        val bucketMatches = when (selectedStatus) {
+            HistoryFilter.REVIEW -> bucketForStatus(leave.status) == StatusBucket.REVIEW
+            HistoryFilter.APPROVED -> bucketForStatus(leave.status) == StatusBucket.APPROVED
+            HistoryFilter.REJECTED -> bucketForStatus(leave.status) == StatusBucket.REJECTED
+        }
+        return bucketMatches &&
+            (state.fromDate.isNullOrBlank() || leave.toDate == null || leave.toDate >= state.fromDate) &&
+            (state.toDate.isNullOrBlank() || leave.fromDate == null || leave.fromDate <= state.toDate) &&
+            (state.value(KEY_TYPE) == null || leave.leaveType == state.value(KEY_TYPE)) &&
+            (state.value(KEY_STAFF) == null || leave.staffId == state.value(KEY_STAFF))
+    }
+
+    private fun humanizeFilter(value: String): String = value.lowercase(Locale.US)
+        .split('_', '-')
+        .joinToString(" ") { it.replaceFirstChar(Char::titlecase) }
 
     // Cancels an in-flight chunked render when a newer pass starts.
     private var renderGen = 0
@@ -790,6 +883,7 @@ class LeavesFragment : Fragment() {
 
     private fun switchScope(scope: LeaveScope) {
         activeScope = scope
+        filterStaffId = null
         if (scope == LeaveScope.MY) {
             binding.tvBalanceTitle.text = "Total Leave"
             binding.tvSelectedScope.text = "My Leaves"

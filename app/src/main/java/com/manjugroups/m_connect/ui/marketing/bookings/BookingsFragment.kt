@@ -21,6 +21,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.Booking
 import com.manjugroups.m_connect.ui.common.navigateUp
+import com.manjugroups.m_connect.ui.common.AdvancedListFilterSheet
 import kotlinx.coroutines.launch
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
@@ -59,6 +60,10 @@ class BookingsFragment : Fragment() {
 
     private var activeFilter: StatusFilter = StatusFilter.DRAFT
     private var searchQuery: String = ""
+    private var filterFromDate: String? = null
+    private var filterToDate: String? = null
+    private var filterProjectId: String? = null
+    private var filterPlotId: String? = null
     private var allBookings: List<Booking> = emptyList()
     private var hasLoadedOnce: Boolean = false
 
@@ -123,6 +128,22 @@ class BookingsFragment : Fragment() {
             } else {
                 View.GONE
             }
+        }
+        view.findViewById<View>(R.id.btnBookingFilter).setOnClickListener { showAdvancedFilters() }
+        parentFragmentManager.setFragmentResultListener(
+            ADVANCED_FILTER_KEY,
+            viewLifecycleOwner,
+        ) { _, bundle ->
+            val state = AdvancedListFilterSheet.state(bundle) ?: return@setFragmentResultListener
+            filterFromDate = state.fromDate
+            filterToDate = state.toDate
+            activeFilter = state.value(KEY_STATUS)?.let { value ->
+                StatusFilter.entries.firstOrNull { it.name == value }
+            } ?: StatusFilter.ALL
+            filterProjectId = state.value(KEY_PROJECT)
+            filterPlotId = state.value(KEY_PLOT)
+            renderFilterPills()
+            loadBookings(showSkeleton = false)
         }
 
         listContainer = view.findViewById(R.id.bookingsList)
@@ -237,6 +258,54 @@ class BookingsFragment : Fragment() {
 
     // ---------- Filter / search ----------
 
+    private fun showAdvancedFilters() {
+        val projects = allBookings.mapNotNull { booking ->
+            val id = booking.projectId?.takeIf(String::isNotBlank) ?: return@mapNotNull null
+            AdvancedListFilterSheet.Option(id, booking.projectName ?: "Project")
+        }.distinctBy { it.value }.sortedBy { it.label.lowercase(Locale.US) }
+        val plots = allBookings.mapNotNull { booking ->
+            val id = booking.plotId?.takeIf(String::isNotBlank) ?: return@mapNotNull null
+            val label = booking.plotNumber ?: booking.plotNo ?: "Plot"
+            AdvancedListFilterSheet.Option(id, label, booking.projectName)
+        }.distinctBy { it.value }.sortedBy { it.label.lowercase(Locale.US) }
+        val categories = listOf(
+            AdvancedListFilterSheet.Category(KEY_DATE, "Booking date", dateRange = true),
+            AdvancedListFilterSheet.Category(
+                KEY_STATUS,
+                "Status",
+                StatusFilter.entries.filter { it != StatusFilter.ALL }.map {
+                    AdvancedListFilterSheet.Option(it.name, it.label)
+                },
+            ),
+            AdvancedListFilterSheet.Category(KEY_PROJECT, "Project", projects),
+            AdvancedListFilterSheet.Category(KEY_PLOT, "Plot", plots),
+        )
+        val initial = AdvancedListFilterSheet.State(
+            selected = buildMap {
+                if (activeFilter != StatusFilter.ALL) put(KEY_STATUS, setOf(activeFilter.name))
+                filterProjectId?.let { put(KEY_PROJECT, setOf(it)) }
+                filterPlotId?.let { put(KEY_PLOT, setOf(it)) }
+            },
+            fromDate = filterFromDate,
+            toDate = filterToDate,
+        )
+        AdvancedListFilterSheet.newInstance(categories, initial, ADVANCED_FILTER_KEY).apply {
+            countProvider = { state -> allBookings.count { matchesAdvancedState(it, state) } }
+        }.showOnce(parentFragmentManager, "booking_advanced_filters")
+    }
+
+    private fun matchesAdvancedState(booking: Booking, state: AdvancedListFilterSheet.State): Boolean {
+        val status = state.value(KEY_STATUS)?.let { value ->
+            StatusFilter.entries.firstOrNull { it.name == value }?.apiValue
+        }
+        val date = booking.bookingDate
+        return (status == null || booking.status.equals(status, ignoreCase = true)) &&
+            (state.fromDate.isNullOrBlank() || date == null || date >= state.fromDate) &&
+            (state.toDate.isNullOrBlank() || date == null || date <= state.toDate) &&
+            (state.value(KEY_PROJECT) == null || booking.projectId == state.value(KEY_PROJECT)) &&
+            (state.value(KEY_PLOT) == null || booking.plotId == state.value(KEY_PLOT))
+    }
+
     private fun setFilter(f: StatusFilter) {
         if (f == activeFilter) return
         activeFilter = f
@@ -286,10 +355,19 @@ class BookingsFragment : Fragment() {
         list.removeAllViews()
 
         val q = searchQuery.lowercase(Locale.getDefault())
+        val fromDate = filterFromDate
+        val toDate = filterToDate
+        val advancedRows = allBookings.filter { b ->
+            val date = b.bookingDate
+            (fromDate.isNullOrBlank() || date == null || date >= fromDate) &&
+                (toDate.isNullOrBlank() || date == null || date <= toDate) &&
+                (filterProjectId == null || b.projectId == filterProjectId) &&
+                (filterPlotId == null || b.plotId == filterPlotId)
+        }
         val rows = if (q.isEmpty()) {
-            allBookings
+            advancedRows
         } else {
-            allBookings.filter { b ->
+            advancedRows.filter { b ->
                 b.clientName?.lowercase(Locale.getDefault())?.contains(q) == true ||
                     b.mobileNumber?.lowercase(Locale.getDefault())?.contains(q) == true ||
                     b.bookingRefNo?.lowercase(Locale.getDefault())?.contains(q) == true ||
@@ -300,7 +378,8 @@ class BookingsFragment : Fragment() {
 
         // Reset the scroll window whenever the filter / search / data changes.
         val windowCtx =
-            "$activeFilter|$q|${System.identityHashCode(allBookings)}"
+            "$activeFilter|$filterFromDate|$filterToDate|$filterProjectId|$filterPlotId|" +
+                "$q|${System.identityHashCode(allBookings)}"
         if (windowCtx != bkWindowCtx) {
             bkWindowCtx = windowCtx
             bkPager.reset()
@@ -428,6 +507,12 @@ class BookingsFragment : Fragment() {
     }
 
     companion object {
+        private const val ADVANCED_FILTER_KEY = "booking_advanced_filter_result"
+        private const val KEY_DATE = "date"
+        private const val KEY_STATUS = "status"
+        private const val KEY_PROJECT = "project"
+        private const val KEY_PLOT = "plot"
+
         fun newInstance(): BookingsFragment = BookingsFragment()
     }
 }

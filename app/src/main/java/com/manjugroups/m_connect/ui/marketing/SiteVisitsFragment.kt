@@ -19,6 +19,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.TodayVisit
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
+import com.manjugroups.m_connect.ui.common.AdvancedListFilterSheet
 import com.manjugroups.m_connect.ui.common.dismissRefresh
 import com.manjugroups.m_connect.ui.common.setupPullToRefresh
 import com.manjugroups.m_connect.ui.home.TripNavigationFragment
@@ -65,7 +66,10 @@ class SiteVisitsFragment : Fragment() {
     // Active date-range filter (yyyy-MM-dd). Null = default −30/+30 window.
     private var filterFromDate: String? = null
     private var filterToDate: String? = null
-    private val DATE_FILTER_KEY = "sv_date_filter_result"
+    private var filterProject: String? = null
+    private var filterLmo: String? = null
+    private var filterFieldStaff: String? = null
+    private val ADVANCED_FILTER_KEY = "sv_advanced_filter_result"
     private var pendingEntryAnimation = true
     // Infinite scroll: render 20 rows, extend by 20 as the list nears its end.
     private var svWindowCtx: String? = null
@@ -107,7 +111,7 @@ class SiteVisitsFragment : Fragment() {
 
         setupSearch(view)
         setupFilterPills(view)
-        setupDateFilter(view)
+        setupAdvancedFilter(view)
         // Infinite scroll: render the next 20 rows as the user nears the end.
         view.findViewById<androidx.core.widget.NestedScrollView>(R.id.cpvScroll)?.let { scroll ->
             svPager.bindNestedScroll(scroll, totalCount = { svVisibleCount })
@@ -161,53 +165,128 @@ class SiteVisitsFragment : Fragment() {
         })
     }
 
-    // ---------- Date-range filter ----------
+    // ---------- Full-screen filters ----------
 
-    private fun setupDateFilter(root: View) {
+    private fun setupAdvancedFilter(root: View) {
         root.findViewById<View>(R.id.btnFilterCalendar)?.setOnClickListener {
-            com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet.newInstance(
-                title = "Filter by date",
-                subtitle = "Pick a day or a date range",
-                initialFrom = filterFromDate,
-                initialTo = filterToDate,
-                resultKey = DATE_FILTER_KEY,
-            ).show(childFragmentManager, "sv_date_filter")
+            showAdvancedFilters()
         }
-        childFragmentManager.setFragmentResultListener(
-            DATE_FILTER_KEY, viewLifecycleOwner,
+        parentFragmentManager.setFragmentResultListener(
+            ADVANCED_FILTER_KEY, viewLifecycleOwner,
         ) { _, bundle ->
-            filterFromDate = bundle.getString(
-                com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet.KEY_FROM,
-            )
-            filterToDate = bundle.getString(
-                com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet.KEY_TO,
-            )
+            val state = AdvancedListFilterSheet.state(bundle) ?: return@setFragmentResultListener
+            filterFromDate = state.fromDate
+            filterToDate = state.toDate
+            currentFilter = state.value(KEY_STATUS)?.let { value ->
+                Filter.entries.firstOrNull { it.name == value }
+            } ?: Filter.ALL
+            filterProject = state.value(KEY_PROJECT)
+            filterLmo = state.value(KEY_LMO)
+            filterFieldStaff = state.value(KEY_FIELD_STAFF)
+            applyPillStyles(root)
             updateDateFilterChip()
             loadVisits()
         }
         root.findViewById<TextView>(R.id.tvDateFilterChip)?.setOnClickListener {
-            // Tapping the chip clears the filter and reloads the default window.
+            currentFilter = Filter.ALL
             filterFromDate = null
             filterToDate = null
+            filterProject = null
+            filterLmo = null
+            filterFieldStaff = null
+            applyPillStyles(root)
             updateDateFilterChip()
             loadVisits()
         }
+    }
+
+    private fun showAdvancedFilters() {
+        fun options(selector: (TodayVisit) -> Pair<String, String>?): List<AdvancedListFilterSheet.Option> =
+            allVisits.mapNotNull(selector).distinctBy { it.first }
+                .sortedBy { it.second.lowercase(Locale.US) }
+                .map { AdvancedListFilterSheet.Option(it.first, it.second) }
+
+        val projects = options { visit -> facet(visit.projectId, visit.projectName ?: visit.placeName, "project") }
+        val lmos = options { visit -> facet(visit.lmoStaffId, visit.lmoName, "lmo") }
+        val fieldStaff = options { visit -> facet(visit.bdoStaffId, visit.bdoName, "staff") }
+        val categories = listOf(
+            AdvancedListFilterSheet.Category(KEY_DATE, "Date range", dateRange = true),
+            AdvancedListFilterSheet.Category(
+                KEY_STATUS,
+                "Status",
+                Filter.entries.filter { it != Filter.ALL }.map {
+                    AdvancedListFilterSheet.Option(it.name, humanizeFilterValue(it.name))
+                },
+            ),
+            AdvancedListFilterSheet.Category(KEY_PROJECT, "Project", projects),
+            AdvancedListFilterSheet.Category(KEY_LMO, "LMO", lmos),
+            AdvancedListFilterSheet.Category(KEY_FIELD_STAFF, "Field staff", fieldStaff),
+        )
+        val initial = AdvancedListFilterSheet.State(
+            selected = buildMap {
+                if (currentFilter != Filter.ALL) put(KEY_STATUS, setOf(currentFilter.name))
+                filterProject?.let { put(KEY_PROJECT, setOf(it)) }
+                filterLmo?.let { put(KEY_LMO, setOf(it)) }
+                filterFieldStaff?.let { put(KEY_FIELD_STAFF, setOf(it)) }
+            },
+            fromDate = filterFromDate,
+            toDate = filterToDate,
+        )
+        AdvancedListFilterSheet.newInstance(categories, initial, ADVANCED_FILTER_KEY).apply {
+            countProvider = { state -> allVisits.count { matchesAdvancedState(it, state) } }
+        }.showOnce(parentFragmentManager, "sv_advanced_filters")
     }
 
     private fun updateDateFilterChip() {
         val chip = rootView?.findViewById<TextView>(R.id.tvDateFilterChip) ?: return
         val from = filterFromDate
         val to = filterToDate
-        if (from == null || to == null) {
+        val activeCount = listOfNotNull(
+            filterFromDate?.let { "date" },
+            currentFilter.takeIf { it != Filter.ALL }?.name,
+            filterProject,
+            filterLmo,
+            filterFieldStaff,
+        ).size
+        if (activeCount == 0) {
             chip.visibility = View.GONE
             return
         }
         chip.visibility = View.VISIBLE
-        chip.text = if (from == to) {
-            "${prettyDate(from)}  ✕"
+        chip.text = if (activeCount == 1 && from != null && to != null) {
+            if (from == to) "${prettyDate(from)}  x" else "${prettyDate(from)} - ${prettyDate(to)}  x"
         } else {
-            "${prettyDate(from)} – ${prettyDate(to)}  ✕"
+            "$activeCount filters active  x"
         }
+    }
+
+    private fun facet(id: String?, label: String?, prefix: String): Pair<String, String>? {
+        val cleanLabel = label?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        return (id?.takeIf { it.isNotBlank() } ?: "$prefix:$cleanLabel") to cleanLabel
+    }
+
+    private fun humanizeFilterValue(value: String): String = value
+        .lowercase(Locale.US)
+        .split('_', '-')
+        .joinToString(" ") { it.replaceFirstChar(Char::titlecase) }
+
+    private fun matchesFacet(selected: String?, id: String?, label: String?, prefix: String): Boolean {
+        if (selected == null) return true
+        return selected == id || selected == label?.trim()?.let { "$prefix:$it" }
+    }
+
+    private fun matchesAdvancedState(visit: TodayVisit, state: AdvancedListFilterSheet.State): Boolean {
+        val status = state.value(KEY_STATUS)?.let { value ->
+            Filter.entries.firstOrNull { it.name == value }
+        } ?: Filter.ALL
+        val from = state.fromDate
+        val to = state.toDate
+        return (from.isNullOrBlank() || visit.scheduledDate >= from) &&
+            (to.isNullOrBlank() || visit.scheduledDate <= to) &&
+            matchesFilter(visit, status) &&
+            matchesFacet(state.value(KEY_PROJECT), visit.projectId, visit.projectName ?: visit.placeName, "project") &&
+            matchesFacet(state.value(KEY_LMO), visit.lmoStaffId, visit.lmoName, "lmo") &&
+            matchesFacet(state.value(KEY_FIELD_STAFF), visit.bdoStaffId, visit.bdoName, "staff")
     }
 
     private fun prettyDate(iso: String): String {
@@ -245,6 +324,7 @@ class SiteVisitsFragment : Fragment() {
                 if (currentFilter != filter) {
                     currentFilter = filter
                     applyPillStyles(root)
+                    updateDateFilterChip()
                     renderList()
                 }
             }
@@ -446,11 +526,15 @@ class SiteVisitsFragment : Fragment() {
         val visible = allVisits
             .filter { matchesFilter(it, currentFilter) }
             .filter { inDateRange(it) }
+            .filter { matchesFacet(filterProject, it.projectId, it.projectName ?: it.placeName, "project") }
+            .filter { matchesFacet(filterLmo, it.lmoStaffId, it.lmoName, "lmo") }
+            .filter { matchesFacet(filterFieldStaff, it.bdoStaffId, it.bdoName, "staff") }
             .filter { com.manjugroups.m_connect.util.VisitSearch.matches(it, searchQuery) }
         svVisibleCount = visible.size
 
         // Reset the scroll window whenever the filter / search / data changes.
-        val windowCtx = "$currentFilter|$searchQuery|${System.identityHashCode(allVisits)}"
+        val windowCtx = "$currentFilter|$filterProject|$filterLmo|$filterFieldStaff|" +
+            "$searchQuery|${System.identityHashCode(allVisits)}"
         if (windowCtx != svWindowCtx) {
             svWindowCtx = windowCtx
             svPager.reset()
@@ -742,5 +826,13 @@ class SiteVisitsFragment : Fragment() {
         animateIn(R.id.cpvSearchContainer, 180L, 420L, expoOut)
         animateIn(R.id.cpvFilterScroll, 260L, 420L, expoOut)
         animateIn(R.id.cpvScroll, 340L, 460L, expoOut)
+    }
+
+    companion object {
+        private const val KEY_DATE = "date"
+        private const val KEY_STATUS = "status"
+        private const val KEY_PROJECT = "project"
+        private const val KEY_LMO = "lmo"
+        private const val KEY_FIELD_STAFF = "field_staff"
     }
 }

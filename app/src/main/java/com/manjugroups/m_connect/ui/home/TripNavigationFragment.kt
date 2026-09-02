@@ -461,14 +461,20 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             isOpeningOutcomeSheet = false
             cpVisitDecisionCaptured = true
             pendingCpRevisit = CpRevisitConfirmation.fromResult(bundle)
-            if (bundle.getString(CompleteCpVisitBottomSheet.KEY_OUTCOME) == "cancelled") {
-                // clientPlaceVisits/cancel already closes the CP row, linked
-                // field visit and daily task. Calling completeVisit afterward
-                // would incorrectly try to complete a cancelled visit.
+            val outcome = bundle.getString(CompleteCpVisitBottomSheet.KEY_OUTCOME)
+            if (outcome == "cancelled" || outcome == "rejected") {
+                // These atomic outcome routes already close the CP row, linked
+                // SV, field visit and daily task. Completing the field visit a
+                // second time can turn a successful outcome into a false error.
                 clearVisitLocallyStarted()
                 pendingArrivalStorageId = null
                 arrivalInProgress = false
-                Toast.makeText(requireContext(), "Site visit cancelled", Toast.LENGTH_SHORT).show()
+                val message = if (outcome == "rejected") {
+                    "Visit rejected and follow-up created"
+                } else {
+                    "Site visit cancelled"
+                }
+                Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
                 navigateUp()
             } else {
                 finalizeCompleteVisit()

@@ -31,6 +31,7 @@ import com.manjugroups.m_connect.network.TrackingBootstrapData
 import com.manjugroups.m_connect.notifications.PushTokenManager
 import com.manjugroups.m_connect.notifications.WorkflowNotificationRoute
 import com.manjugroups.m_connect.update.InAppUpdateManager
+import com.manjugroups.m_connect.update.OperationalUpdateGate
 import com.manjugroups.m_connect.ui.chat.ChatListFragment
 import com.manjugroups.m_connect.ui.chat.ChatMessagesFragment
 import com.manjugroups.m_connect.ui.home.HomeFragment
@@ -204,12 +205,15 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        // Google Play in-app updates — checked on every cold start. High-priority
-        // releases force an immediate (blocking) update; everything else downloads
-        // flexibly in the background and prompts to restart. Constructed here,
-        // during onCreate (before STARTED), so its activity-result launcher is
-        // registered validly. No-ops on dev/sideload builds.
-        inAppUpdateManager = InAppUpdateManager(this).also { it.start() }
+        // Flexible Play updates are offered only on the idle Home root. The
+        // operational gate separately verifies attendance, tracking, field
+        // work, calls, and offline queues before any update action is allowed.
+        val updateGate = OperationalUpdateGate(this, session, api)
+        inAppUpdateManager = InAppUpdateManager(
+            activity = this,
+            isUiIdle = ::isUpdateUiIdle,
+            isOperationallyIdle = updateGate::isSafeToUpdate,
+        ).also { it.start() }
 
         // Surface the POST_NOTIFICATIONS system prompt on Android 13+ so
         // the user gets push notifications for chats / tasks / approvals.
@@ -1268,12 +1272,27 @@ class MainActivity : AppCompatActivity() {
         iamPollJob = null
     }
 
+    override fun onStop() {
+        super.onStop()
+        // A downloaded flexible update is completed silently only after the
+        // activity is backgrounded and every safety gate passes again.
+        inAppUpdateManager?.onAppBackgrounded()
+    }
+
     override fun onDestroy() {
         // Release the in-app-update install listener so we don't leak the
         // activity through Play's callback registry.
         inAppUpdateManager?.destroy()
         inAppUpdateManager = null
         super.onDestroy()
+    }
+
+    private fun isUpdateUiIdle(): Boolean {
+        if (isFinishing || isChangingConfigurations) return false
+        if (currentTab != TAB_HOME || supportFragmentManager.backStackEntryCount != 0) return false
+        return supportFragmentManager.fragments.none { fragment ->
+            (fragment as? androidx.fragment.app.DialogFragment)?.dialog?.isShowing == true
+        }
     }
 
 

@@ -25,6 +25,7 @@ import com.manjugroups.m_connect.databinding.FragmentPermissionsBinding
 import com.manjugroups.m_connect.network.PermissionData
 import com.manjugroups.m_connect.notifications.WorkflowNotificationRoute
 import com.manjugroups.m_connect.ui.common.navigateUp
+import com.manjugroups.m_connect.ui.common.AdvancedListFilterSheet
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -50,6 +51,9 @@ class PermissionsFragment : Fragment() {
     private var focusedEntityId: String? = null
     private var historyFilter: HistoryFilter = HistoryFilter.REVIEW
     private var scope: Scope = Scope.MY
+    private var filterFromDate: String? = null
+    private var filterToDate: String? = null
+    private var filterStaffId: String? = null
     private var skeletonAnimator: ObjectAnimator? = null
     // Gates the skeleton to the first load so a refresh doesn't blank the
     // list back to placeholders.
@@ -66,6 +70,10 @@ class PermissionsFragment : Fragment() {
         private const val ARG_MODE = "mode"
         private const val ARG_ENTITY_ID = "entity_id"
         private const val REJECT_RESULT_KEY = "permission_reject_reason"
+        private const val ADVANCED_FILTER_RESULT = "permission_advanced_filter_result"
+        private const val KEY_DATE = "date"
+        private const val KEY_STATUS = "status"
+        private const val KEY_STAFF = "staff"
         const val MODE_HISTORY = WorkflowNotificationRoute.MODE_HISTORY
         const val MODE_APPROVAL = WorkflowNotificationRoute.MODE_APPROVAL
 
@@ -116,6 +124,21 @@ class PermissionsFragment : Fragment() {
         binding.summaryHeader.setOnBackClickListener { navigateUp() }
         binding.summaryHeader.setBackButtonVisible(screenMode == MODE_APPROVAL)
         BottomActionInsets.applyAboveSystemNavAndTabs(binding.btnApplyPermission)
+        binding.btnAdvancedPermissionFilter.setOnClickListener { showAdvancedFilters() }
+        parentFragmentManager.setFragmentResultListener(
+            ADVANCED_FILTER_RESULT,
+            viewLifecycleOwner,
+        ) { _, bundle ->
+            val state = AdvancedListFilterSheet.state(bundle) ?: return@setFragmentResultListener
+            filterFromDate = state.fromDate
+            filterToDate = state.toDate
+            filterStaffId = state.value(KEY_STAFF)
+            historyFilter = state.value(KEY_STATUS)?.let { value ->
+                HistoryFilter.entries.firstOrNull { it.name == value }
+            } ?: HistoryFilter.REVIEW
+            binding.filterRow.selectTab(historyFilter.ordinal)
+            renderState(viewModel.uiState.value)
+        }
         binding.btnApplyPermission.setOnClickListener {
             parentFragmentManager.setFragmentResultListener(ApplyPermissionBottomSheet.RESULT_KEY_APPLIED, viewLifecycleOwner) { _, bundle ->
                 val success = bundle.getBoolean("success", false)
@@ -196,6 +219,7 @@ class PermissionsFragment : Fragment() {
 
     private fun switchScope(newScope: Scope) {
         scope = newScope
+        filterStaffId = null
         updateScopeUi()
         renderState(viewModel.uiState.value)
     }
@@ -328,7 +352,7 @@ class PermissionsFragment : Fragment() {
         }
 
         val displayPermissions = if (screenMode == MODE_APPROVAL) {
-            state.pendingApprovals
+            filterHistoryPermissions(state.pendingApprovals)
         } else when (scope) {
             Scope.MY -> filterHistoryPermissions(mineOnly)
             // Team = direct reports only (empty when the user has no team).
@@ -458,7 +482,79 @@ class PermissionsFragment : Fragment() {
                     HistoryFilter.REJECTED -> bucketForStatus(perm.status) == StatusBucket.REJECTED
                 }
             }
+            .filter { perm ->
+                val fromDate = filterFromDate
+                val toDate = filterToDate
+                (fromDate.isNullOrBlank() || perm.date == null || perm.date >= fromDate) &&
+                    (toDate.isNullOrBlank() || perm.date == null || perm.date <= toDate) &&
+                    (filterStaffId == null || perm.staffId == filterStaffId)
+            }
     }
+
+    private fun currentPermissionSource(state: PermissionsState): List<PermissionData> {
+        val selfId = session.staffId?.takeIf(String::isNotBlank)
+        val mine = state.myPermissions.filter { row ->
+            (selfId != null && row.staffId == selfId) ||
+                (row.staffId == null && row.staffName.isNullOrBlank())
+        }
+        return if (screenMode == MODE_APPROVAL) state.pendingApprovals else when (scope) {
+            Scope.MY -> mine
+            Scope.TEAM -> state.pendingApprovals
+            Scope.ALL -> state.allApprovals.distinctBy { it.id }
+        }
+    }
+
+    private fun showAdvancedFilters() {
+        val source = currentPermissionSource(viewModel.uiState.value)
+            .filterNot { it.status?.trim()?.lowercase(Locale.US) == "cancelled" }
+        val staff = if (scope == Scope.MY && screenMode != MODE_APPROVAL) emptyList()
+        else source.mapNotNull { permission ->
+            val id = permission.staffId?.takeIf(String::isNotBlank) ?: return@mapNotNull null
+            AdvancedListFilterSheet.Option(id, permission.staffName ?: "Staff")
+        }.distinctBy { it.value }.sortedBy { it.label.lowercase(Locale.US) }
+        val categories = buildList {
+            add(AdvancedListFilterSheet.Category(KEY_DATE, "Permission date", dateRange = true))
+            add(AdvancedListFilterSheet.Category(
+                KEY_STATUS,
+                "Status",
+                HistoryFilter.entries.map { AdvancedListFilterSheet.Option(it.name, humanizeFilter(it.name)) },
+            ))
+            if (staff.isNotEmpty()) add(AdvancedListFilterSheet.Category(KEY_STAFF, "Staff", staff))
+        }
+        val initial = AdvancedListFilterSheet.State(
+            selected = buildMap {
+                put(KEY_STATUS, setOf(historyFilter.name))
+                filterStaffId?.let { put(KEY_STAFF, setOf(it)) }
+            },
+            fromDate = filterFromDate,
+            toDate = filterToDate,
+        )
+        AdvancedListFilterSheet.newInstance(categories, initial, ADVANCED_FILTER_RESULT).apply {
+            countProvider = { state -> source.count { matchesPermissionState(it, state) } }
+        }.showOnce(parentFragmentManager, "permission_advanced_filters")
+    }
+
+    private fun matchesPermissionState(
+        permission: PermissionData,
+        state: AdvancedListFilterSheet.State,
+    ): Boolean {
+        val selectedStatus = state.value(KEY_STATUS)?.let { value ->
+            HistoryFilter.entries.firstOrNull { it.name == value }
+        } ?: HistoryFilter.REVIEW
+        val bucketMatches = when (selectedStatus) {
+            HistoryFilter.REVIEW -> bucketForStatus(permission.status) == StatusBucket.REVIEW
+            HistoryFilter.APPROVED -> bucketForStatus(permission.status) == StatusBucket.APPROVED
+            HistoryFilter.REJECTED -> bucketForStatus(permission.status) == StatusBucket.REJECTED
+        }
+        return bucketMatches &&
+            (state.fromDate.isNullOrBlank() || permission.date == null || permission.date >= state.fromDate) &&
+            (state.toDate.isNullOrBlank() || permission.date == null || permission.date <= state.toDate) &&
+            (state.value(KEY_STAFF) == null || permission.staffId == state.value(KEY_STAFF))
+    }
+
+    private fun humanizeFilter(value: String): String = value.lowercase(Locale.US)
+        .split('_', '-')
+        .joinToString(" ") { it.replaceFirstChar(Char::titlecase) }
 
     // Cancels an in-flight chunked render when a newer pass starts.
     private var renderGen = 0

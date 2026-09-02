@@ -24,6 +24,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ArrivalOtpVerifyBody
 import com.manjugroups.m_connect.network.GeoTrackApi
 import kotlinx.coroutines.launch
+import retrofit2.HttpException
 
 /**
  * Arrival OTP entry sheet.
@@ -165,6 +166,10 @@ class ArrivalOtpBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun performVerify() {
+        if (visitId.isBlank()) {
+            showError("Visit details are missing. Close this screen and open the trip again.")
+            return
+        }
         val entered = boxes.joinToString("") { it.text.toString().trim() }
         if (entered.length != 4) {
             showError("Enter all 4 digits")
@@ -194,7 +199,7 @@ class ArrivalOtpBottomSheet : BottomSheetDialogFragment() {
                 }
             } catch (e: Exception) {
                 verifyBtn?.isEnabled = true
-                showError("Network error: ${e.message ?: "unknown"}")
+                showError(arrivalOtpFailureMessage(e, "Couldn't verify OTP. Please try again."))
             }
         }
     }
@@ -267,7 +272,7 @@ class ArrivalOtpBottomSheet : BottomSheetDialogFragment() {
                 if (isAdded) {
                     Toast.makeText(
                         requireContext(),
-                        e.message ?: "Couldn't send the request",
+                        arrivalOtpFailureMessage(e, "Couldn't send the request. Please try again."),
                         Toast.LENGTH_LONG,
                     ).show()
                 }
@@ -309,4 +314,26 @@ class ArrivalOtpBottomSheet : BottomSheetDialogFragment() {
             }
         }
     }
+}
+
+internal fun arrivalOtpFailureMessage(error: Throwable, fallback: String): String {
+    val httpError = error as? HttpException
+    if (httpError != null) {
+        val raw = runCatching { httpError.response()?.errorBody()?.string() }.getOrNull()
+        return parseArrivalOtpErrorBody(raw)
+            ?: "$fallback (HTTP ${httpError.code()})"
+    }
+    return error.message?.takeIf { it.isNotBlank() } ?: fallback
+}
+
+internal fun parseArrivalOtpErrorBody(raw: String?): String? {
+    if (raw.isNullOrBlank()) return null
+    return runCatching {
+        val json = com.google.gson.JsonParser.parseString(raw).asJsonObject
+        (json.get("error")?.asString ?: json.get("message")?.asString)
+            ?.substringBefore('\n')
+            ?.removePrefix("Uncaught Error:")
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+    }.getOrNull()
 }

@@ -47,10 +47,10 @@
             android:layout_marginEnd="52dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:clickable="true"
-            android:contentDescription="Filter by date"
+            android:contentDescription="Filter visits"
             android:focusable="true"
             android:padding="9dp"
-            android:src="@drawable/ic_filter_calendar"
+            android:src="@drawable/ic_filter_blue"
             app:tint="#0B61CA" />
 
         <ImageView
@@ -123,6 +123,22 @@
         android:textColor="#FFFFFF"
         android:textSize="12sp"
         android:visibility="gone" />
+
+    <!-- Ownership scope. Hidden for staff without immediate reports. -->
+    <com.manjugroups.m_connect.ui.common.SegmentedControlView
+        android:id="@+id/cpvScopeFilter"
+        android:layout_width="match_parent"
+        android:layout_height="38dp"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/bg_leave_filter_container"
+        android:padding="3dp"
+        android:visibility="gone"
+        app:scv_active_background="@drawable/bg_leave_filter_active"
+        app:scv_font_family="@font/inter_semibold"
+        app:scv_text_color_selected="@android:color/white"
+        app:scv_text_color_unselected="?attr/colorForegroundSecondary"
+        app:scv_text_size="12sp" />
 
     <!-- FILTER PILLS -->
     <HorizontalScrollView

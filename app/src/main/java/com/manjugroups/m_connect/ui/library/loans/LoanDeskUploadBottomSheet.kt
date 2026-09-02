@@ -143,7 +143,7 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
     }
 
     private var onSubmitted: ((uploads: List<SubmittedDoc>) -> Unit)? = null
-    private var onDocumentChanged: ((label: String, document: LoanCaseDocument?) -> Unit)? = null
+    private var onDocumentChanged: ((label: String, document: LoanCaseDocument?, loanCase: com.manjugroups.m_connect.network.LoanCaseRow?) -> Unit)? = null
 
     // ── File picker / camera launchers (shared across all slots) ──
 
@@ -215,7 +215,7 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
     }
 
     fun setOnDocumentChangedListener(
-        listener: (label: String, document: LoanCaseDocument?) -> Unit,
+        listener: (label: String, document: LoanCaseDocument?, loanCase: com.manjugroups.m_connect.network.LoanCaseRow?) -> Unit,
     ) {
         onDocumentChanged = listener
     }
@@ -535,7 +535,7 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
                 renderSlot(slot)
                 persistDraft()
                 updateSubmitButtonState()
-                onDocumentChanged?.invoke(slot.label, null)
+                onDocumentChanged?.invoke(slot.label, null, response.loanCase)
                 Toast.makeText(requireContext(), "Document deleted", Toast.LENGTH_SHORT).show()
             } catch (error: Exception) {
                 slot.uploadJob = null
@@ -715,6 +715,7 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
                         storageId = sid,
                         fileName = slot.fileName,
                     ),
+                    resp.loanCase,
                 )
             } else {
                 onSlotUploadFailed(slot, resp.error ?: "Upload rejected by server")

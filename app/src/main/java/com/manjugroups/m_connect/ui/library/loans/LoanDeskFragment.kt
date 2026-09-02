@@ -362,8 +362,12 @@ class LoanDeskFragment : Fragment() {
             if (currentRole != RoleMode.SALES) return@newInstance
             submitLoanFromSales(item, uploads)
         }
-        sheet.setOnDocumentChangedListener { label, document ->
-            updateCachedLoanDocument(item.id, label, document)
+        sheet.setOnDocumentChangedListener { label, document, authoritativeCase ->
+            if (authoritativeCase != null) {
+                replaceCachedLoanCase(authoritativeCase)
+            } else {
+                updateCachedLoanDocument(item.id, label, document)
+            }
         }
         sheet.showOnce(parentFragmentManager, "LoanDeskUploadBottomSheet")
     }

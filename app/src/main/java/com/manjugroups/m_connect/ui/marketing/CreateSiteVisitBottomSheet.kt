@@ -24,6 +24,7 @@ import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.CreateSiteVisitRequest
+import com.manjugroups.m_connect.network.CreateSiteVisitResponse
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.MarketingProject
 import com.manjugroups.m_connect.network.SiteVisitAttendeeRequest
@@ -417,6 +418,9 @@ class CreateSiteVisitBottomSheet : BottomSheetDialogFragment() {
             try {
                 val response = geoApi.createSiteVisit(session.bearerToken, body)
                 if (!response.success) throw IllegalStateException(response.error ?: "Could not schedule site visit")
+                validateSiteVisitCreateResponse(body.routing, response)?.let {
+                    throw IllegalStateException(it)
+                }
                 toast(response.message ?: if (response.handoffId != null) "Sent for GM verification" else "Site visit scheduled")
                 setFragmentResult(RESULT_CREATED, bundleOf("siteVisitId" to response.siteVisitId, "handoffId" to response.handoffId))
                 requestId = UUID.randomUUID().toString()
@@ -526,4 +530,27 @@ class CreateSiteVisitBottomSheet : BottomSheetDialogFragment() {
         const val RESULT_CREATED = "site_visit_created"
         fun newInstance() = CreateSiteVisitBottomSheet()
     }
+}
+
+internal fun validateSiteVisitCreateResponse(
+    routing: String,
+    response: CreateSiteVisitResponse,
+): String? = when (routing) {
+    "direct_sv" -> when {
+        response.mode != "created" -> "The server did not confirm Site Visit creation. Please retry."
+        response.siteVisitId.isNullOrBlank() -> "The server did not return the created Site Visit. Please retry."
+        else -> null
+    }
+    "same_area" -> when {
+        response.mode != "created" -> "The server did not confirm same-area routing. Please retry."
+        response.siteVisitId.isNullOrBlank() -> "The server did not return the linked Site Visit. Please retry."
+        response.clientPlaceVisitId.isNullOrBlank() -> "The server did not return the verification CP. Please retry."
+        else -> null
+    }
+    "out_of_station", "immediate_pickup" -> when {
+        response.mode != "pending_gm_verification" -> "The server did not confirm GM verification. Please retry."
+        response.handoffId.isNullOrBlank() -> "The server did not return the GM handoff. Please retry."
+        else -> null
+    }
+    else -> "Unsupported Site Visit routing response."
 }

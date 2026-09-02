@@ -46,7 +46,6 @@ val googleServicesJson: Map<String, String> = run {
 }
 fun firebaseConfig(name: String): String =
     System.getenv(name)?.takeIf { it.isNotBlank() }
-        ?: gradleProp(name).takeIf { it.isNotBlank() }
         ?: googleServicesJson[name]
         ?: ""
 
@@ -141,16 +140,14 @@ android {
     }
 }
 
-// Push is required for incoming Modern Dialer calls. A release with empty
-// Firebase values installs normally but can never register an FCM token, which
-// makes lock-screen/full-screen calls fail silently. Debug builds remain usable
-// for local UI work, while every release build must carry a real client config.
+// Incoming Modern Dialer calls depend on FCM. Keep debug builds available for
+// local UI work, but never produce a release that cannot receive call pushes.
 tasks.configureEach {
     if (name == "preReleaseBuild") {
         doFirst {
             check(missingFirebaseConfig.isEmpty()) {
                 "Missing Firebase client config: ${missingFirebaseConfig.joinToString()}. " +
-                    "Provide Gradle properties, environment variables, or app/google-services.json."
+                    "Provide environment variables or app/google-services.json."
             }
         }
     }

@@ -7201,7 +7201,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             ?: return showError("Missing CP visit id")
         val convertedSvId = lockedCpVisit?.convertedSiteVisitId?.takeIf { it.isNotBlank() }
         if (convertedSvId != null) {
-            persistSvCumCpConfirm(cpVisitId)
+            persistSvCumCpConfirm(cpVisitId, convertedSvId)
         } else {
             persistSiteVisit()
         }
@@ -7216,7 +7216,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
      * convertCpVisitToSiteVisit) because that mutation short-circuits
      * when convertedSiteVisitId is already set.
      */
-    private fun persistSvCumCpConfirm(cpVisitId: String) {
+    private fun persistSvCumCpConfirm(cpVisitId: String, expectedSiteVisitId: String) {
         btnCpLockedConfirm?.isClickable = false
         btnCpLockedConfirm?.text = "Saving…"
         btnCpLockedReject?.isClickable = false
@@ -7240,6 +7240,13 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 )
                 if (!outcomeResp.success) {
                     finishCtaLockedConfirm(outcomeResp.error ?: "Failed to save outcome")
+                    return@launch
+                }
+                if (
+                    outcomeResp.siteVisitId != expectedSiteVisitId ||
+                    !outcomeResp.confirmationStatus.equals("confirmed", ignoreCase = true)
+                ) {
+                    finishCtaLockedConfirm("Site visit confirmation was not returned by the server. Please retry.")
                     return@launch
                 }
                 setFragmentResult(

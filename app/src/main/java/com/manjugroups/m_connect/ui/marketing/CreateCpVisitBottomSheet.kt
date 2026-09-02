@@ -704,6 +704,10 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                         toast(cleanServerErrorMessage(resp.error ?: "Failed to create CP visit"))
                         return@launch
                     }
+                    if (resp.id.isNullOrBlank() || resp.requestId != createRequestId) {
+                        toast("The server did not confirm the created CP. Tap Create visit again to resume safely.")
+                        return@launch
+                    }
                     toast("CP visit created successfully")
                     setFragmentResult(
                         RESULT_KEY_CREATED,

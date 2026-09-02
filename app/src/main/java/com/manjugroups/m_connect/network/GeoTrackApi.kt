@@ -555,7 +555,7 @@ interface GeoTrackApi {
         @Query("id") id: String
     ): CpVisitDetailResponse
 
-    // Marketing CP visits assigned to the bearer in a date range.
+    // Marketing CP visits assigned to the bearer or their immediate reports.
     // Used by Home's "Today's Trip" merge so visits that exist in
     // `clientPlaceVisits` but have no companion fieldVisits row yet
     // still surface on the home screen.
@@ -564,12 +564,9 @@ interface GeoTrackApi {
         @Header("Authorization") token: String,
         @Query("fromDate") fromDate: String? = null,
         @Query("toDate") toDate: String? = null,
-        // Backend gates scope=all on IAM (marketing.cpVisits.viewAll /
-        // .view / projects.viewAll / isAdmin). Non-privileged callers
-        // get scoped assignment-only results regardless of what we
-        // send, so it's safe to default this to "all" — admins and
-        // managers get the full pool, field staff get their own
-        // assignments via the fallback path.
+        // CP list screen sends mine or direct explicitly. Keep the historical
+        // default for Home and create-reconciliation callers until their
+        // separate behavior is migrated intentionally.
         @Query("scope") scope: String = "all",
         // Browsable list screens pass a high limit so client-side search can
         // reach a specific client; Home/today merges leave it null (default).
@@ -760,6 +757,15 @@ data class TrackingConsentResponse(
 data class GeoTrackResponse(
     val success: Boolean,
     val error: String? = null,
+    val status: String? = null,
+    val clientPlaceVisitId: String? = null,
+    val siteVisitId: String? = null,
+    val confirmationStatus: String? = null,
+    val alreadyCancelled: Boolean? = null,
+    val followUpTaskId: String? = null,
+    val assignedToStaffId: String? = null,
+    val dueAt: Long? = null,
+    val alreadyProcessed: Boolean? = null,
     val revisit: CpRevisitInfo? = null,
     val inserted: Int? = null,
     val tamperDetected: Boolean? = null,
@@ -1487,7 +1493,9 @@ data class UploadLoanDocumentResponse(
     val success: Boolean = false,
     val error: String? = null,
     val attached: Boolean = false,
+    val alreadyUploaded: Boolean = false,
     val document: UploadedLoanDocument? = null,
+    val loanCase: LoanCaseRow? = null,
 )
 
 data class UploadedLoanDocument(
@@ -1805,8 +1813,20 @@ data class MyMarketingCpVisitsResponse(
     val success: Boolean,
     val total: Int? = null,
     val visits: List<CpVisitDetail> = emptyList(),
+    // Echoed by the server so mobile can fail closed if an older endpoint
+    // ignores scope=direct and returns a wider hierarchy.
+    val scope: String? = null,
+    val viewerStaffId: String? = null,
+    val hasDirectReports: Boolean? = null,
+    val directReportCount: Int? = null,
+    // Nullable because the legacy endpoint can explicitly serialize this
+    // additive field as null. Gson does not apply Kotlin defaults for null.
+    val directReportIds: List<String>? = null,
     val error: String? = null,
-)
+) {
+    val safeDirectReportIds: List<String>
+        get() = directReportIds.orEmpty()
+}
 
 data class CpVisitDetail(
     @com.google.gson.annotations.SerializedName("_id") val id: String? = null,
@@ -2220,11 +2240,15 @@ data class TodayVisit(
     // visit. Shown on the SV/CP cards. SV rows get it from the backend list
     // query; CP rows are mapped from the CpVisitDetail's telecaller.
     val lmoName: String? = null,
+    val lmoStaffId: String? = null,
     // BDO (Business Development Officer) — the field officer ASSIGNED to this
     // visit (the visit's own bdoStaffId), supplied by the backend SV list. The
     // card must render THIS, not the signed-in viewer — the old code hardcoded
     // the session user, so every row wrongly showed the logged-in staffer.
     val bdoName: String? = null,
+    val bdoStaffId: String? = null,
+    val projectId: String? = null,
+    val projectName: String? = null,
     // Convex auto-populates `_creationTime` on every doc; we surface it
     // so Today's Trip can sort newest-first regardless of source (legacy
     // fieldVisits route vs CP-merge path). For CP-merge rows where the
