@@ -60,6 +60,7 @@ class BookingsFragment : Fragment() {
 
     private var activeFilter: StatusFilter = StatusFilter.DRAFT
     private var searchQuery: String = ""
+    private var searchReloadJob: kotlinx.coroutines.Job? = null
     private var filterFromDate: String? = null
     private var filterToDate: String? = null
     private var filterProjectId: String? = null
@@ -178,6 +179,11 @@ class BookingsFragment : Fragment() {
                 override fun afterTextChanged(s: Editable?) {
                     searchQuery = s?.toString()?.trim().orEmpty()
                     renderList()
+                    searchReloadJob?.cancel()
+                    searchReloadJob = viewLifecycleOwner.lifecycleScope.launch {
+                        kotlinx.coroutines.delay(350)
+                        loadBookings(showSkeleton = false)
+                    }
                 }
             })
         }
@@ -201,6 +207,8 @@ class BookingsFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        searchReloadJob?.cancel()
+        searchReloadJob = null
         listContainer = null
         emptyState = null
         skeletonContainer = null
@@ -234,6 +242,12 @@ class BookingsFragment : Fragment() {
                 val resp = api.listMyBookings(
                     token = token,
                     status = activeFilter.apiValue,
+                    projectId = filterProjectId,
+                    plotId = filterPlotId,
+                    fromDate = filterFromDate,
+                    toDate = filterToDate,
+                    search = searchQuery.ifBlank { null },
+                    pageSize = 200,
                 )
                 allBookings = if (resp.success) resp.bookings else emptyList()
             } catch (_: Exception) {

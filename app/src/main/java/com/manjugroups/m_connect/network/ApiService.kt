@@ -190,7 +190,13 @@ interface ApiService {
     suspend fun getMyAttendance(
         @Header("Authorization") token: String,
         @Query("fromDate") fromDate: String? = null,
-        @Query("toDate") toDate: String? = null
+        @Query("toDate") toDate: String? = null,
+        @Query("status") status: String? = null,
+        @Query("staffId") staffId: String? = null,
+        @Query("department") department: String? = null,
+        @Query("search") search: String? = null,
+        @Query("cursor") cursor: String? = null,
+        @Query("pageSize") pageSize: Int? = null,
     ): MyAttendanceResponse
 
     // Home geofence policy for the authenticated staff. The app uses this
@@ -272,6 +278,14 @@ interface ApiService {
         // requests=true also returns the caller's team correction/remark
         // requests waiting on the reporting officer (response.requests).
         @Query("requests") requests: Boolean? = null,
+        @Query("fromDate") fromDate: String? = null,
+        @Query("toDate") toDate: String? = null,
+        @Query("status") status: String? = null,
+        @Query("staffId") staffId: String? = null,
+        @Query("department") department: String? = null,
+        @Query("search") search: String? = null,
+        @Query("cursor") cursor: String? = null,
+        @Query("pageSize") pageSize: Int? = null,
     ): AttendanceApprovalsResponse
 
     // Team Attendance tab — the caller's reporting-subtree attendance for a
@@ -281,6 +295,12 @@ interface ApiService {
         @Header("Authorization") token: String,
         @Query("fromDate") fromDate: String,
         @Query("toDate") toDate: String,
+        @Query("status") status: String? = null,
+        @Query("staffId") staffId: String? = null,
+        @Query("department") department: String? = null,
+        @Query("search") search: String? = null,
+        @Query("cursor") cursor: String? = null,
+        @Query("pageSize") pageSize: Int? = null,
     ): AttendanceApprovalsResponse
 
     // Company-wide attendance for the "All" tab — mirrors the web Attendance
@@ -301,6 +321,9 @@ interface ApiService {
         // day being "Absent". Omit for the first page.
         @Query("cursor") cursor: String? = null,
         @Query("pageSize") pageSize: Int? = null,
+        @Query("status") status: String? = null,
+        @Query("staffId") staffId: String? = null,
+        @Query("department") department: String? = null,
     ): AttendanceApprovalsResponse
 
     // Whether the caller has a team (direct reports) — drives which attendance
@@ -459,13 +482,33 @@ interface ApiService {
     ): LeaveBalanceResponse
 
     @GET("api/hr/leaves/my")
-    suspend fun getMyLeaves(@Header("Authorization") token: String): MyLeavesResponse
+    suspend fun getMyLeaves(
+        @Header("Authorization") token: String,
+        @Query("fromDate") fromDate: String? = null,
+        @Query("toDate") toDate: String? = null,
+        @Query("status") status: String? = null,
+        @Query("leaveType") leaveType: String? = null,
+        @Query("staffId") staffId: String? = null,
+        @Query("department") department: String? = null,
+        @Query("search") search: String? = null,
+        @Query("cursor") cursor: String? = null,
+        @Query("pageSize") pageSize: Int? = null,
+    ): MyLeavesResponse
 
     @GET("api/hr/leaves/pending-approvals")
     suspend fun getPendingLeaveApprovals(
         @Header("Authorization") token: String,
         @Query("teamOnly") teamOnly: Boolean? = null,
         @Query("scope") scope: String? = null,
+        @Query("fromDate") fromDate: String? = null,
+        @Query("toDate") toDate: String? = null,
+        @Query("status") status: String? = null,
+        @Query("leaveType") leaveType: String? = null,
+        @Query("staffId") staffId: String? = null,
+        @Query("department") department: String? = null,
+        @Query("search") search: String? = null,
+        @Query("cursor") cursor: String? = null,
+        @Query("pageSize") pageSize: Int? = null,
     ): MyLeavesResponse
 
     @POST("api/hr/leaves/apply")
@@ -579,7 +622,14 @@ interface ApiService {
     @GET("api/hr/permissions")
     suspend fun getMyPermissions(
         @Header("Authorization") token: String,
-        @Query("staffId") staffId: String? = null
+        @Query("staffId") staffId: String? = null,
+        @Query("fromDate") fromDate: String? = null,
+        @Query("toDate") toDate: String? = null,
+        @Query("status") status: String? = null,
+        @Query("department") department: String? = null,
+        @Query("search") search: String? = null,
+        @Query("cursor") cursor: String? = null,
+        @Query("pageSize") pageSize: Int? = null,
     ): MyPermissionsResponse
 
     @GET("api/hr/permissions/pending-approvals")
@@ -589,6 +639,14 @@ interface ApiService {
         // reports. all=true returns every request company-wide when permitted.
         @Query("scope") scope: String? = null,
         @Query("all") all: Boolean? = null,
+        @Query("fromDate") fromDate: String? = null,
+        @Query("toDate") toDate: String? = null,
+        @Query("status") status: String? = null,
+        @Query("staffId") staffId: String? = null,
+        @Query("department") department: String? = null,
+        @Query("search") search: String? = null,
+        @Query("cursor") cursor: String? = null,
+        @Query("pageSize") pageSize: Int? = null,
     ): MyPermissionsResponse
 
     @POST("api/hr/permissions/apply")
@@ -1216,6 +1274,13 @@ interface ApiService {
     suspend fun listMyBookings(
         @Header("Authorization") token: String,
         @Query("status") status: String? = null,
+        @Query("projectId") projectId: String? = null,
+        @Query("plotId") plotId: String? = null,
+        @Query("fromDate") fromDate: String? = null,
+        @Query("toDate") toDate: String? = null,
+        @Query("search") search: String? = null,
+        @Query("cursor") cursor: String? = null,
+        @Query("pageSize") pageSize: Int? = null,
     ): BookingsListResponse
 
     @GET("api/bookings/{id}")

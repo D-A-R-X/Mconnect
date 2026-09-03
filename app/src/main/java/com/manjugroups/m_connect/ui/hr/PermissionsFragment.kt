@@ -137,7 +137,14 @@ class PermissionsFragment : Fragment() {
                 HistoryFilter.entries.firstOrNull { it.name == value }
             } ?: HistoryFilter.REVIEW
             binding.filterRow.selectTab(historyFilter.ordinal)
-            renderState(viewModel.uiState.value)
+            viewModel.load(
+                session.bearerToken,
+                session.hasPermission("permissions.approve"),
+                filterFromDate,
+                filterToDate,
+                if (historyFilter == HistoryFilter.REVIEW) "pending" else historyFilter.name.lowercase(Locale.US),
+                filterStaffId,
+            )
         }
         binding.btnApplyPermission.setOnClickListener {
             parentFragmentManager.setFragmentResultListener(ApplyPermissionBottomSheet.RESULT_KEY_APPLIED, viewLifecycleOwner) { _, bundle ->

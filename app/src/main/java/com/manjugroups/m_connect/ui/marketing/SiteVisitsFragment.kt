@@ -63,6 +63,7 @@ class SiteVisitsFragment : Fragment() {
     private var hasLoadedOnce = false
     private var currentFilter: Filter = Filter.ALL
     private var searchQuery: String = ""
+    private var searchReloadJob: kotlinx.coroutines.Job? = null
     // Active date-range filter (yyyy-MM-dd). Null = default −30/+30 window.
     private var filterFromDate: String? = null
     private var filterToDate: String? = null
@@ -146,6 +147,8 @@ class SiteVisitsFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        searchReloadJob?.cancel()
+        searchReloadJob = null
         SkeletonUtils.stopAll()
         pendingEntryAnimation = true
         rootView = null
@@ -160,6 +163,11 @@ class SiteVisitsFragment : Fragment() {
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 searchQuery = s?.toString()?.trim().orEmpty()
                 renderList()
+                searchReloadJob?.cancel()
+                searchReloadJob = viewLifecycleOwner.lifecycleScope.launch {
+                    kotlinx.coroutines.delay(350)
+                    loadVisits()
+                }
             }
             override fun afterTextChanged(s: Editable?) {}
         })
@@ -474,7 +482,18 @@ class SiteVisitsFragment : Fragment() {
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val resp = geoApi.getMySiteVisits(session.bearerToken, from, to)
+                val resp = geoApi.getMySiteVisits(
+                    token = session.bearerToken,
+                    fromDate = from,
+                    toDate = to,
+                    projectId = filterProject,
+                    telecallerStaffId = filterLmo,
+                    assignedStaffId = filterFieldStaff,
+                    status = currentFilter.takeUnless { it == Filter.ALL }
+                        ?.name?.lowercase(Locale.US),
+                    search = searchQuery.ifBlank { null },
+                    pageSize = 200,
+                )
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 hasLoadedOnce = true
                 if (!resp.success) {

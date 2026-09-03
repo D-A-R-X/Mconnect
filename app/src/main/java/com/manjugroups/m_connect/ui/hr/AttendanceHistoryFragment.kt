@@ -491,11 +491,29 @@ class AttendanceHistoryFragment : Fragment() {
 
                 val myDeferred = async {
                     if (cachedMyRecords.isNotEmpty()) null
-                    else runCatching { api.getMyAttendance(token, filterFromDate, filterToDate) }.getOrNull()
+                    else runCatching {
+                        api.getMyAttendance(
+                            token,
+                            filterFromDate,
+                            filterToDate,
+                            status = filterAttendanceStatus,
+                            staffId = filterStaffId,
+                            pageSize = 200,
+                        )
+                    }.getOrNull()
                 }
                 val teamDeferred = async {
                     if (cachedTeamAttendance.isNotEmpty()) null
-                    else runCatching { api.getTeamAttendance(token, filterFromDate, filterToDate) }.getOrNull()
+                    else runCatching {
+                        api.getTeamAttendance(
+                            token,
+                            filterFromDate,
+                            filterToDate,
+                            status = filterAttendanceStatus,
+                            staffId = filterStaffId,
+                            pageSize = 200,
+                        )
+                    }.getOrNull()
                 }
                 val approvalsDeferred = async {
                     if (cachedApprovals.isNotEmpty()) null
@@ -503,7 +521,14 @@ class AttendanceHistoryFragment : Fragment() {
                     // employees who report directly to the current officer.
                     else runCatching {
                         api.getPendingAttendanceApprovals(
-                            token, scope = "direct", requests = true,
+                            token,
+                            scope = "direct",
+                            requests = true,
+                            fromDate = filterFromDate,
+                            toDate = filterToDate,
+                            status = filterAttendanceStatus,
+                            staffId = filterStaffId,
+                            pageSize = 200,
                         )
                     }.getOrNull()
                 }
@@ -514,7 +539,17 @@ class AttendanceHistoryFragment : Fragment() {
                     canViewAllApprovals
                 val allApprovalsDeferred = async {
                     if (cachedAllApprovals.isNotEmpty() || !canViewAllApprovals) null
-                    else runCatching { api.getPendingAttendanceApprovals(token, all = true) }.getOrNull()
+                    else runCatching {
+                        api.getPendingAttendanceApprovals(
+                            token,
+                            all = true,
+                            fromDate = filterFromDate,
+                            toDate = filterToDate,
+                            status = filterAttendanceStatus,
+                            staffId = filterStaffId,
+                            pageSize = 200,
+                        )
+                    }.getOrNull()
                 }
                 val hrReviewDeferred = async {
                     if (cachedHrReview.isNotEmpty() || !canHrReview) null
@@ -524,7 +559,16 @@ class AttendanceHistoryFragment : Fragment() {
                     // Honor the date filter (e.g. "Last month") AND any active
                     // search — search bypasses the backend's ~750-row cap and
                     // returns the full range for that person.
-                    runCatching { api.getAllAttendance(token, filterFromDate, filterToDate, search = allSearch) }.getOrNull()
+                    runCatching {
+                        api.getAllAttendance(
+                            token,
+                            filterFromDate,
+                            filterToDate,
+                            search = allSearch,
+                            status = filterAttendanceStatus,
+                            staffId = filterStaffId,
+                        )
+                    }.getOrNull()
                 }
                 val finesDeferred = async {
                     runCatching { api.listFines(token, status = "active") }.getOrNull()

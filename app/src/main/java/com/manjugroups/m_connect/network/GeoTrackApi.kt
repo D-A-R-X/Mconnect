@@ -86,7 +86,14 @@ interface GeoTrackApi {
     suspend fun getMySiteVisits(
         @Header("Authorization") token: String,
         @Query("fromDate") fromDate: String? = null,
-        @Query("toDate") toDate: String? = null
+        @Query("toDate") toDate: String? = null,
+        @Query("projectId") projectId: String? = null,
+        @Query("telecallerStaffId") telecallerStaffId: String? = null,
+        @Query("assignedStaffId") assignedStaffId: String? = null,
+        @Query("status") status: String? = null,
+        @Query("search") search: String? = null,
+        @Query("cursor") cursor: String? = null,
+        @Query("pageSize") pageSize: Int? = null,
     ): MySiteVisitsResponse
 
     @GET("api/marketing/projects")
@@ -230,6 +237,7 @@ interface GeoTrackApi {
     @POST("api/marketing/clientPlaceVisits/referral")
     suspend fun recordCpReferral(
         @Header("Authorization") token: String,
+        @Header("Idempotency-Key") requestId: String,
         @Body body: RecordCpReferralRequest,
     ): GeoTrackResponse
 
@@ -574,6 +582,13 @@ interface GeoTrackApi {
         // Server-side full-text search — reaches visits beyond the recency cap
         // (e.g. a super-admin searching for an older client).
         @Query("search") search: String? = null,
+        @Query("assignedStaffId") assignedStaffId: String? = null,
+        @Query("telecallerStaffId") telecallerStaffId: String? = null,
+        @Query("status") status: String? = null,
+        @Query("outcome") outcome: String? = null,
+        @Query("cpType") cpType: String? = null,
+        @Query("cursor") cursor: String? = null,
+        @Query("pageSize") pageSize: Int? = null,
     ): MyMarketingCpVisitsResponse
 
     // ── Timeline (self-view) ──
@@ -1822,6 +1837,8 @@ data class MyMarketingCpVisitsResponse(
     // Nullable because the legacy endpoint can explicitly serialize this
     // additive field as null. Gson does not apply Kotlin defaults for null.
     val directReportIds: List<String>? = null,
+    val nextCursor: String? = null,
+    val hasMore: Boolean? = null,
     val error: String? = null,
 ) {
     val safeDirectReportIds: List<String>
@@ -2303,6 +2320,8 @@ data class MySiteVisitsResponse(
     val success: Boolean,
     val total: Int? = null,
     val visits: List<TodayVisit> = emptyList(),
+    val nextCursor: String? = null,
+    val hasMore: Boolean? = null,
     val error: String? = null
 )
 

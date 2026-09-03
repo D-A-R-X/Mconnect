@@ -94,6 +94,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private val geoApi = GeoTrackApi.create()
     private val api = ApiService.create()
     private lateinit var session: SessionManager
+    private val referralRequestId: String by lazy { java.util.UUID.randomUUID().toString() }
 
     /**
      * Booking-form auto-save. Pushes the serialised form state to a
@@ -1099,6 +1100,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         val referral = pendingReferral ?: return
         val response = geoApi.recordCpReferral(
             session.bearerToken,
+            referralRequestId,
             RecordCpReferralRequest(
                 id = cpVisitId,
                 clientName = referral.name,

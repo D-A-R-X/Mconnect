@@ -142,7 +142,15 @@ class LeavesFragment : Fragment() {
                 HistoryFilter.entries.firstOrNull { it.name == value }
             } ?: HistoryFilter.REVIEW
             binding.filterRow.selectTab(historyFilter.ordinal)
-            renderState(viewModel.uiState.value)
+            viewModel.load(
+                session.bearerToken,
+                session.hasPermission("leaves.approve"),
+                filterFromDate,
+                filterToDate,
+                if (historyFilter == HistoryFilter.REVIEW) "pending" else historyFilter.name.lowercase(Locale.US),
+                filterLeaveType,
+                filterStaffId,
+            )
         }
         binding.btnApplyLeave.setOnClickListener {
             parentFragmentManager.setFragmentResultListener(ApplyLeaveBottomSheet.RESULT_KEY_APPLIED, viewLifecycleOwner) { _, bundle ->

@@ -567,6 +567,13 @@ class CpVisitsFragment : Fragment() {
                         // client OLDER than the recency window is still found (the
                         // super-admin "on web but not mobile" case).
                         search = requestedSearch.ifBlank { null },
+                        assignedStaffId = filterAssignedStaffId,
+                        telecallerStaffId = filterTelecallerStaffId,
+                        status = currentFilter.takeUnless { it == Filter.ALL }
+                            ?.name?.lowercase(Locale.US),
+                        outcome = filterOutcome,
+                        cpType = filterCpType,
+                        pageSize = 200,
                     )
                 }
                 if (requestGeneration != loadGeneration) return@launch
