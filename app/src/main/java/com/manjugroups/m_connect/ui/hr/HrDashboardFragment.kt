@@ -293,18 +293,6 @@ class HrDashboardFragment : Fragment() {
             }
         }
 
-        // Reload the attendance cards after a correction/remark request is
-        // submitted from a day card's edit icon.
-        parentFragmentManager.setFragmentResultListener(
-            EditAttendanceBottomSheet.RESULT_KEY,
-            viewLifecycleOwner,
-        ) { _, bundle ->
-            if (bundle.getBoolean(EditAttendanceBottomSheet.KEY_SUBMITTED, false)) {
-                bundle.getString("date")?.let { submittedRemarkDates.add(it) }
-                loadRecentHistoryCards()
-            }
-        }
-
         collectState()
         collectEvents()
         flowViewModel.loadTodayAttendance(session.bearerToken, requireContext())

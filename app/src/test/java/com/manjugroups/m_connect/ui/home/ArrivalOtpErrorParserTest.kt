@@ -30,4 +30,48 @@ class ArrivalOtpErrorParserTest {
         assertNull(parseArrivalOtpErrorBody(null))
         assertNull(parseArrivalOtpErrorBody("not-json"))
     }
+
+    @Test
+    fun `retries a validation 400 with a distinct CP id`() {
+        assertEquals(
+            true,
+            shouldRetryArrivalOtpWithCpId(
+                httpCode = 400,
+                fieldVisitId = "field-visit-id",
+                cpVisitId = "cp-visit-id",
+            ),
+        )
+    }
+
+    @Test
+    fun `does not retry non-400 or duplicate identifiers`() {
+        assertEquals(false, shouldRetryArrivalOtpWithCpId(500, "field", "cp"))
+        assertEquals(false, shouldRetryArrivalOtpWithCpId(400, "same", "same"))
+        assertEquals(false, shouldRetryArrivalOtpWithCpId(400, "field", ""))
+    }
+
+    @Test
+    fun `does not retry OTP business rejection`() {
+        assertEquals(
+            false,
+            shouldRetryArrivalOtpWithCpId(400, "field", "cp", "Invalid OTP."),
+        )
+        assertEquals(
+            false,
+            shouldRetryArrivalOtpWithCpId(400, "field", "cp", "No active OTP."),
+        )
+    }
+
+    @Test
+    fun `retries an identifier validation response`() {
+        assertEquals(
+            true,
+            shouldRetryArrivalOtpWithCpId(
+                400,
+                "field",
+                "cp",
+                "A valid client place visit id is required",
+            ),
+        )
+    }
 }

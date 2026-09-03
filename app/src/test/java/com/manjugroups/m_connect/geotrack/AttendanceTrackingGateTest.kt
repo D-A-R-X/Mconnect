@@ -7,6 +7,20 @@ import org.junit.Test
 
 class AttendanceTrackingGateTest {
     @Test
+    fun `cold tracking start requires authoritative open session`() {
+        assertTrue(AttendanceTrackingGate.mayStartTracking(true))
+        assertFalse(AttendanceTrackingGate.mayStartTracking(false))
+        assertFalse(AttendanceTrackingGate.mayStartTracking(null))
+    }
+
+    @Test
+    fun `verified running tracking survives only unknown attendance`() {
+        assertTrue(AttendanceTrackingGate.mayContinueTracking(true))
+        assertTrue(AttendanceTrackingGate.mayContinueTracking(null))
+        assertFalse(AttendanceTrackingGate.mayContinueTracking(false))
+    }
+
+    @Test
     fun `open summary flag allows trip start`() {
         assertTrue(AttendanceTrackingGate.hasOpenSession(true, emptyList()))
     }

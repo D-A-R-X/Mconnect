@@ -24,6 +24,21 @@ object GeoTrackBootstrapSync {
         val session = SessionManager(appContext)
         if (!session.isLoggedIn) return false
 
+        // Privacy boundary: bootstrap/device state can outlive yesterday's
+        // attendance session. Never sync tracking state, queue permission
+        // events, or start the service until today's attendance APIs confirm
+        // that a punch-in session is open. Unknown is fail-closed for a fresh
+        // start; an already-running service handles transient outages itself.
+        val attendanceOpen = AttendanceTrackingGate.hasOpenSessionNow(session.bearerToken)
+        if (!AttendanceTrackingGate.mayStartTracking(attendanceOpen)) {
+            if (attendanceOpen == false) {
+                session.shouldTrackNow = false
+                session.activeTrackingSessionId = null
+                GeoTrackService.stop(appContext)
+            }
+            return false
+        }
+
         val deviceSync = runCatching {
             val notificationPermission = PushTokenManager.hasNotificationPermission(appContext)
             val fineLocationPermission = hasPermission(appContext, Manifest.permission.ACCESS_FINE_LOCATION)

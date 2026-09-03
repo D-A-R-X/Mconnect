@@ -75,10 +75,10 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
     // means no type was picked and the server stores the row without it.
     private var selectedCpType: CpTypeOption? = null
 
-    // Joint CP only: the SECOND staff. Cleared whenever the type moves away
-    // from Joint CP so a stale partner can never ride along on another type.
+    // Joint CP is an independent visit mode. The normal CP type remains the
+    // visit purpose while this flag controls whether a second staff is added.
+    private var isJointCp = false
     private var selectedJointPartner: StaffData? = null
-    private var selectedJointCpCategory: CpTypeOption? = null
     private var selectedReferralSource: ReferralSourceOption? = null
     private var selectedReferringClient: ReferralClientCandidate? = null
 
@@ -108,7 +108,6 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         CpTypeOption("old_client", "Old Client", "Re-engagement touch"),
         CpTypeOption("gift_distribution", "Gift Distribution", "Loyalty drop-off"),
         CpTypeOption("other_cp", "Other CP", "Miscellaneous client work"),
-        CpTypeOption("joint_cp", "Joint CP", "Two staff visit the same client"),
     )
 
     // Caches for fast display
@@ -210,7 +209,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         val etProj = view.findViewById<EditText>(R.id.etProject)
         val etLmo = view.findViewById<EditText>(R.id.etLmo)
         val etCpType = view.findViewById<EditText>(R.id.etCpType)
-        val etJointCpCategory = view.findViewById<EditText>(R.id.etJointCpCategory)
+        val switchJointCp = view.findViewById<com.google.android.material.switchmaterial.SwitchMaterial>(R.id.switchJointCp)
         val etReferralSource = view.findViewById<EditText>(R.id.etReferralSource)
         val etReferringClient = view.findViewById<EditText>(R.id.etReferringClient)
         val etDateTime = view.findViewById<EditText>(R.id.etDateTime)
@@ -262,7 +261,16 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         etProj.setOnClickListener { pickProject(etProj) }
         etLmo.setOnClickListener { pickLmo(etLmo) }
         etCpType.setOnClickListener { pickCpType(etCpType) }
-        etJointCpCategory.setOnClickListener { pickJointCpCategory(etJointCpCategory) }
+        switchJointCp.setOnCheckedChangeListener { _, checked ->
+            isJointCp = checked
+            // The current server contract does not support New Client CP as
+            // a joint category. Clear it rather than allowing a doomed submit.
+            if (checked && selectedCpType?.id == "new_client_cp") {
+                selectedCpType = null
+                etCpType.setText("")
+            }
+            applyCpConditionalVisibility()
+        }
         etReferralSource.setOnClickListener { pickReferralSource(etReferralSource) }
         etReferringClient.setOnClickListener {
             pickReferringClient(etReferringClient, etPhone.text?.toString().orEmpty())
@@ -481,11 +489,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
 
             // A Joint CP is meaningless with one person on it.
             val jointPartnerId = selectedJointPartner?.id
-            if (selectedCpType?.id == "joint_cp") {
-                if (selectedJointCpCategory == null) {
-                    toast("Select the Joint CP category")
-                    return@setOnClickListener
-                }
+            if (isJointCp) {
                 if (jointPartnerId.isNullOrBlank()) {
                     toast("Select the second staff for this Joint CP")
                     return@setOnClickListener
@@ -565,11 +569,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             // phone number after picking a booking-dependent CP type.
             // Never let collection_cp / booking_cp ship with a mobile
             // that has no cached booking-found result.
-            val effectiveCpPurpose = if (selectedCpType?.id == "joint_cp") {
-                selectedJointCpCategory?.id
-            } else {
-                selectedCpType?.id
-            }
+            val effectiveCpPurpose = selectedCpType?.id
             val isBookingDependent = effectiveCpPurpose == "collection_cp" ||
                 effectiveCpPurpose == "booking_cp"
             if (isBookingDependent &&
@@ -578,7 +578,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                 AlertDialog.Builder(requireContext())
                     .setTitle("The client has no bookings")
                     .setMessage(
-                        "${selectedJointCpCategory?.label ?: selectedCpType?.label ?: "This CP type"} needs a confirmed booking for this mobile. " +
+                        "${selectedCpType?.label ?: "This CP type"} needs a confirmed booking for this mobile. " +
                             "Re-pick the CP type or use a number that already has a booking."
                     )
                     .setPositiveButton("OK", null)
@@ -655,7 +655,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                     val requestFingerprint = listOf(
                         phone, clientNameInput, staff.id, lmo.id, selectedDate,
                         selectedTime, compiledAddress, project.id,
-                        selectedCpType?.id, selectedJointCpCategory?.id,
+                        selectedCpType?.id, isJointCp,
                         jointPartnerId, resolvedLat, resolvedLng,
                     ).joinToString("|")
                     if (createRequestFingerprint != requestFingerprint) {
@@ -678,10 +678,10 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                             googleMapsLink = maps.takeIf { it.isNotBlank() },
                             notes = notesVal.takeIf { it.isNotBlank() },
                             projectId = project.id,
-                            cpType = selectedCpType?.id,
-                            jointCpCategory = if (selectedCpType?.id == "joint_cp") {
-                                selectedJointCpCategory?.id
-                            } else null,
+                            // Keep the established API representation so old
+                            // and new clients share one backend behavior.
+                            cpType = if (isJointCp) "joint_cp" else selectedCpType?.id,
+                            jointCpCategory = selectedCpType?.id.takeIf { isJointCp },
                             referralSourceType = selectedReferralSource?.id
                                 ?.takeIf { isNewClientCpPurpose() },
                             referringClientId = selectedReferringClient?.id
@@ -692,7 +692,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                             pincode = pincode,
                             // Only sent for a Joint CP; the server ignores it
                             // for every other type.
-                            jointStaffIds = if (selectedCpType?.id == "joint_cp") {
+                            jointStaffIds = if (isJointCp) {
                                 listOfNotNull(jointPartnerId)
                             } else {
                                 null
@@ -1146,7 +1146,9 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         SearchableSelectionDialog.show(
             context = requireContext(),
             title = "Select CP type",
-            options = cpTypeOptions.map { opt ->
+            options = cpTypeOptions
+                .filterNot { isJointCp && it.id == "new_client_cp" }
+                .map { opt ->
                 SearchableOption(
                     item = opt,
                     title = opt.label,
@@ -1177,53 +1179,15 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
-    private fun pickJointCpCategory(label: EditText) {
-        SearchableSelectionDialog.show(
-            context = requireContext(),
-            title = "Select Joint CP category",
-            options = cpTypeOptions
-                .filterNot { it.id == "joint_cp" }
-                .map { opt ->
-                    SearchableOption(
-                        item = opt,
-                        title = opt.label,
-                        subtitle = opt.sublabel,
-                        keywords = opt.id + " " + opt.label + " " + opt.sublabel,
-                    )
-                },
-            emptyMessage = "No Joint CP categories available",
-        ) { picked ->
-            if (picked.id == "collection_cp" || picked.id == "booking_cp") {
-                gateJointCpCategorySelection(picked, label)
-                return@show
-            }
-            if (picked.id == "new_client_cp" && hasCurrentExistingClient()) {
-                blockNewClientCpForExistingClient(view ?: return@show)
-                return@show
-            }
-            selectedJointCpCategory = picked
-            label.setText(picked.label)
-            applyCpConditionalVisibility()
-        }
-    }
-
-    /**
-     * Shows the partner field only for a Joint CP, and clears the choice when
-     * the type moves away. Without the clear, picking Joint CP, choosing a
-     * partner, then switching type would still submit a second participant.
-     */
+    /** Shows the partner field only while Joint CP mode is enabled. */
     private fun applyCpConditionalVisibility() {
         val root = view ?: return
-        val isJoint = selectedCpType?.id == "joint_cp"
+        val isJoint = isJointCp
         root.findViewById<View>(R.id.blockJointPartner)?.visibility =
-            if (isJoint) View.VISIBLE else View.GONE
-        root.findViewById<View>(R.id.blockJointCpCategory)?.visibility =
             if (isJoint) View.VISIBLE else View.GONE
         if (!isJoint) {
             selectedJointPartner = null
-            selectedJointCpCategory = null
             root.findViewById<EditText>(R.id.etJointPartner)?.setText("")
-            root.findViewById<EditText>(R.id.etJointCpCategory)?.setText("")
         }
         val isNewClient = isNewClientCpPurpose()
         root.findViewById<View>(R.id.blockNewClientReferralSource)?.visibility =
@@ -1238,8 +1202,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun isNewClientCpPurpose(): Boolean =
-        selectedCpType?.id == "new_client_cp" ||
-            (selectedCpType?.id == "joint_cp" && selectedJointCpCategory?.id == "new_client_cp")
+        selectedCpType?.id == "new_client_cp"
 
     private fun rememberExistingClient(client: ClientProfile, phone: String) {
         existingClientProfile = client
@@ -1257,11 +1220,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         val existing = existingClientProfile ?: return
         applyClientAutofill(root, existing)
         selectedCpType = null
-        selectedJointCpCategory = null
-        selectedJointPartner = null
         root.findViewById<EditText>(R.id.etCpType)?.setText("")
-        root.findViewById<EditText>(R.id.etJointCpCategory)?.setText("")
-        root.findViewById<EditText>(R.id.etJointPartner)?.setText("")
         applyCpConditionalVisibility()
         AlertDialog.Builder(requireContext())
             .setTitle("Client already exists")
@@ -1381,32 +1340,6 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         ) { client ->
             selectedReferringClient = client
             label.setText("${client.name} • ${client.mobileNumber}")
-        }
-    }
-
-    private fun gateJointCpCategorySelection(picked: CpTypeOption, label: EditText) {
-        val phone = view?.findViewById<EditText>(R.id.etClientPhone)
-            ?.text?.toString().orEmpty().filter { it.isDigit() }.takeLast(10)
-        if (phone.length != 10) {
-            toast("Enter the client mobile before selecting ${picked.label}")
-            return
-        }
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val resp = geoApi.getPostSaleCasesByMobile(session.bearerToken, phone)
-                if (!resp.success || resp.cases.isEmpty()) {
-                    collectionCasesPhone = phone
-                    collectionCasesCache = emptyList()
-                    toast("${picked.label} requires an active booking for this mobile")
-                    return@launch
-                }
-                collectionCasesPhone = phone
-                collectionCasesCache = resp.cases
-                selectedJointCpCategory = picked
-                label.setText(picked.label)
-            } catch (e: Exception) {
-                toast("Network error: ${e.message}")
-            }
         }
     }
 

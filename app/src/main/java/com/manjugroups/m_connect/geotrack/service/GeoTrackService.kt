@@ -48,7 +48,7 @@ class GeoTrackService : Service() {
         private const val NOTIFICATION_ID = 9001
         private const val CHANNEL_ID = "geotrack_channel"
         private const val SYNC_INTERVAL_MS = 30_000L
-        private const val HEARTBEAT_INTERVAL_MS = 120_000L
+        private const val HEARTBEAT_INTERVAL_MS = 75_000L
         private const val LOCATION_INTERVAL_MS = 10_000L
         // Idle-shift power saving: when clocked in but physically STILL with no
         // active trip/visit, relax GPS to balanced/long-interval so the chip
@@ -134,6 +134,7 @@ class GeoTrackService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var syncJob: Job? = null
     private var heartbeatJob: Job? = null
+    private var startupGateJob: Job? = null
     // Last flight-mode / location-off state we reported a tamper for. Lets the
     // heartbeat loop catch a change whose system broadcast was missed (app
     // killed + restarted, or the toggle flipped while backgrounded) so a
@@ -152,12 +153,12 @@ class GeoTrackService : Service() {
     private val lastProcessedTime = AtomicLong(0L)
     // Live clock-in gate. GeoTrack must capture travel ONLY between punch-in
     // and punch-out, so we refuse to buffer points (and tear the service down)
-    // the moment the attendance session is no longer open. Defaults to true
-    // because the service is only ever started off a clock-in; the first
-    // enforceClockInGate() pass confirms it and stops if we're actually
-    // clocked out (stale/boot/biometric/before-punch starts).
-    @Volatile private var sessionOpen = true
+    // the moment the attendance session is no longer open. It deliberately
+    // starts false: no callback, heartbeat, network event, or tamper event is
+    // allowed until the attendance APIs confirm an open punch session.
+    @Volatile private var sessionOpen = false
     @Volatile private var clockGateStopped = false
+    @Volatile private var trackingInitialized = false
     private val offlineStartedAt = AtomicLong(0L)
     private var consecutiveSyncFailures = 0
 
@@ -269,13 +270,45 @@ class GeoTrackService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        isRunning = true
         if (!startForegroundSafely()) {
             Log.w(TAG, "Stopping GeoTrack service: could not enter foreground state safely")
             isRunning = false
             stopSelf()
             return START_NOT_STICKY
         }
+
+        if (trackingInitialized || startupGateJob?.isActive == true) {
+            return START_STICKY
+        }
+
+        // Enter the foreground promptly (required by Android), but initialize
+        // no tracking component until attendance is authoritatively open.
+        startupGateJob = serviceScope.launch {
+            val open = AttendanceTrackingGate.hasOpenSessionNow(session.bearerToken)
+            if (!AttendanceTrackingGate.mayStartTracking(open)) {
+                Log.i(TAG, "GeoTrack cold start blocked: attendanceOpen=$open")
+                if (open == false) {
+                    session.shouldTrackNow = false
+                    session.activeTrackingSessionId = null
+                }
+                clockGateStopped = true
+                stopSelf()
+                return@launch
+            }
+            sessionOpen = true
+            queueDirectTrackingCommand(start = true)
+            initializeTracking()
+        }
+
+        // A system restart repeats the same attendance gate before capture, so
+        // active shifts retain Android's normal foreground-service resilience.
+        return START_STICKY
+    }
+
+    private fun initializeTracking() {
+        if (trackingInitialized || clockGateStopped) return
+        trackingInitialized = true
+        isRunning = true
 
         // No always-on wakelock: the location-type foreground service keeps
         // fused updates flowing in Doze. We only take a short timed wakelock
@@ -309,7 +342,6 @@ class GeoTrackService : Service() {
         try { getLastLocationAndNotifyServer() } catch (e: Exception) { Log.e(TAG, "Server notify failed: ${e.message}") }
 
         Log.i(TAG, "Service fully initialized")
-        return START_STICKY
     }
 
     private fun startForegroundSafely(): Boolean {
@@ -364,6 +396,7 @@ class GeoTrackService : Service() {
 
         syncJob?.cancel()
         heartbeatJob?.cancel()
+        startupGateJob?.cancel()
         cleanupJob?.cancel()
         serviceScope.cancel()
         super.onDestroy()
@@ -558,12 +591,16 @@ class GeoTrackService : Service() {
                     // Send immediate heartbeat so battery shows up right away
                     val battery = getBatteryLevel()
                     val tickAt = System.currentTimeMillis()
+                    val heartbeatRequestId = heartbeatRequestId(tickAt)
                     try {
                         api.heartbeat(
-                            session.bearerToken,
-                            HeartbeatRequest(
+                            token = session.bearerToken,
+                            idempotencyKey = heartbeatRequestId,
+                            body = HeartbeatRequest(
                                 sessionId = session.activeTrackingSessionId,
                                 deviceId = session.trackingDeviceId,
+                                requestId = heartbeatRequestId,
+                                deviceSequence = tickAt,
                                 batteryPct = battery,
                                 appVersion = BuildConfig.VERSION_NAME,
                                 recordedAt = tickAt,
@@ -582,6 +619,7 @@ class GeoTrackService : Service() {
                                 metadata = buildMap {
                                     session.activeTrackingSessionId?.let { put("sessionId", it) }
                                     session.trackingDeviceId?.let { put("deviceId", it) }
+                                    put("requestId", heartbeatRequestId)
                                     if (battery != null) put("batteryPct", battery)
                                     put("appVersion", BuildConfig.VERSION_NAME)
                                 },
@@ -805,11 +843,11 @@ class GeoTrackService : Service() {
     private suspend fun enforceClockInGate(): Boolean {
         if (clockGateStopped) return false
         val open = AttendanceTrackingGate.hasOpenSessionNow(session.bearerToken)
-            ?: return true // unknown — keep tracking, recheck next cycle
-        sessionOpen = open
-        if (open) return true
+        if (AttendanceTrackingGate.mayContinueTracking(open)) return true
+        sessionOpen = false
         Log.i(TAG, "Attendance session closed (clocked out) — stopping GeoTrack")
         clockGateStopped = true
+        queueDirectTrackingCommand(start = false)
         // Clear the bootstrap flags so START_STICKY / a later bootstrap sync
         // doesn't resurrect tracking until the next genuine clock-in.
         runCatching {
@@ -818,6 +856,29 @@ class GeoTrackService : Service() {
         }
         stopSelf()
         return false
+    }
+
+    private suspend fun queueDirectTrackingCommand(start: Boolean) {
+        val sessionKey = session.activeTrackingSessionId ?: "current"
+        val eventType = if (start) {
+            GeoTrackEventQueue.TRACKING_START_EVENT_TYPE
+        } else {
+            GeoTrackEventQueue.TRACKING_STOP_EVENT_TYPE
+        }
+        val queued = GeoTrackEventQueue.enqueueDistinct(
+            context = this,
+            eventType = eventType,
+            metadata = buildMap {
+                session.activeTrackingSessionId?.let { put("sessionId", it) }
+                session.trackingDeviceId?.let { put("deviceId", it) }
+            },
+            signature = "${eventType.lowercase()}_$sessionKey",
+            minIntervalMs = 24 * 60 * 60 * 1000L,
+        )
+        if (queued && hasNetwork()) {
+            runCatching { GeoTrackEventQueue.flush(this, api, session) }
+                .onFailure { Log.w(TAG, "$eventType sync deferred: ${it.message}") }
+        }
     }
 
     private fun startSyncLoop() {
@@ -922,6 +983,7 @@ class GeoTrackService : Service() {
                 val tickAt = System.currentTimeMillis()
                 val airplane = isAirplaneModeOn()
                 val locEnabled = isLocationEnabled()
+                val heartbeatRequestId = heartbeatRequestId(tickAt)
                 // Catch a flight-mode / location-off change whose broadcast we
                 // missed. reportTamper de-dupes, so re-reporting the same state
                 // is cheap and a genuine repeat still fires.
@@ -929,10 +991,13 @@ class GeoTrackService : Service() {
                 try {
                     runWithSyncWakeLock {
                         api.heartbeat(
-                            session.bearerToken,
-                            HeartbeatRequest(
+                            token = session.bearerToken,
+                            idempotencyKey = heartbeatRequestId,
+                            body = HeartbeatRequest(
                                 sessionId = sessionId,
                                 deviceId = deviceId,
+                                requestId = heartbeatRequestId,
+                                deviceSequence = tickAt,
                                 batteryPct = battery,
                                 appVersion = BuildConfig.VERSION_NAME,
                                 recordedAt = tickAt,
@@ -958,6 +1023,7 @@ class GeoTrackService : Service() {
                             metadata = buildMap {
                                 if (sessionId != null) put("sessionId", sessionId)
                                 if (deviceId != null) put("deviceId", deviceId)
+                                put("requestId", heartbeatRequestId)
                                 if (battery != null) put("batteryPct", battery)
                                 put("appVersion", BuildConfig.VERSION_NAME)
                                 put("airplaneMode", airplane)
@@ -1078,6 +1144,11 @@ class GeoTrackService : Service() {
         } catch (e: Exception) {
             Log.w(TAG, "Tamper queue failed: ${e.message}")
         }
+    }
+
+    private fun heartbeatRequestId(recordedAt: Long): String {
+        val deviceId = session.trackingDeviceId ?: "android"
+        return "heartbeat-$deviceId-$recordedAt"
     }
 
     private suspend fun queuePermissionHealthEvents(hasFine: Boolean, hasBackground: Boolean) {

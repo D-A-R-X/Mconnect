@@ -7,6 +7,9 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.Window
 import android.widget.TextView
+import android.widget.EditText
+import android.text.Editable
+import android.text.TextWatcher
 import androidx.core.os.bundleOf
 import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.setFragmentResult
@@ -40,6 +43,7 @@ class AdvancedListFilterSheet : DialogFragment() {
         val options: List<Option> = emptyList(),
         val single: Boolean = true,
         val dateRange: Boolean = false,
+        val searchable: Boolean = !dateRange,
     ) : Serializable
 
     data class State(
@@ -66,6 +70,9 @@ class AdvancedListFilterSheet : DialogFragment() {
     private lateinit var optionAdapter: OptionAdapter
     private var resultCount: TextView? = null
     private var activeSummary: TextView? = null
+    private var optionSearch: EditText? = null
+    private var optionsEmpty: TextView? = null
+    private var optionQuery = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -104,6 +111,8 @@ class AdvancedListFilterSheet : DialogFragment() {
         super.onViewCreated(view, savedInstanceState)
         resultCount = view.findViewById(R.id.tvFilterResultCount)
         activeSummary = view.findViewById(R.id.tvFilterActiveSummary)
+        optionSearch = view.findViewById(R.id.etFilterOptionSearch)
+        optionsEmpty = view.findViewById(R.id.tvFilterOptionsEmpty)
 
         categoryAdapter = CategoryAdapter()
         optionAdapter = OptionAdapter()
@@ -115,6 +124,15 @@ class AdvancedListFilterSheet : DialogFragment() {
             layoutManager = LinearLayoutManager(requireContext())
             adapter = optionAdapter
         }
+        optionSearch?.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                optionQuery = s?.toString()?.trim().orEmpty()
+                optionAdapter.notifyDataSetChanged()
+                refreshOptionPane()
+            }
+            override fun afterTextChanged(s: Editable?) = Unit
+        })
 
         childFragmentManager.setFragmentResultListener(DATE_RESULT_KEY, viewLifecycleOwner) { _, b ->
             fromDate = b.getString(CalendarRangePickerSheet.KEY_FROM)
@@ -139,6 +157,7 @@ class AdvancedListFilterSheet : DialogFragment() {
 
         categoryAdapter.notifyDataSetChanged()
         optionAdapter.notifyDataSetChanged()
+        refreshOptionPane()
         refreshFooter()
     }
 
@@ -164,6 +183,17 @@ class AdvancedListFilterSheet : DialogFragment() {
     }
 
     private fun category(): Category? = categories.getOrNull(selectedCategory)
+
+    private fun refreshOptionPane() {
+        val current = category()
+        val searchable = current?.searchable == true && current.dateRange.not()
+        optionSearch?.visibility = if (searchable) View.VISIBLE else View.GONE
+        val visibleCount = optionAdapter.itemCount
+        optionsEmpty?.apply {
+            visibility = if (current?.dateRange != true && visibleCount == 0) View.VISIBLE else View.GONE
+            text = if (optionQuery.isBlank()) "No options available" else "No matching options"
+        }
+    }
 
     private fun toggle(category: Category, value: String) {
         val values = selected.getOrPut(category.key) { linkedSetOf() }
@@ -242,11 +272,16 @@ class AdvancedListFilterSheet : DialogFragment() {
             holder.badge.visibility = if (count > 0) View.VISIBLE else View.GONE
             holder.itemView.isSelected = position == selectedCategory
             holder.itemView.setOnClickListener {
+                val next = holder.bindingAdapterPosition
+                if (next == RecyclerView.NO_POSITION) return@setOnClickListener
                 val old = selectedCategory
-                selectedCategory = holder.bindingAdapterPosition
+                selectedCategory = next
+                optionQuery = ""
+                optionSearch?.setText("")
                 notifyItemChanged(old)
                 notifyItemChanged(selectedCategory)
                 optionAdapter.notifyDataSetChanged()
+                refreshOptionPane()
             }
         }
 
@@ -266,7 +301,10 @@ class AdvancedListFilterSheet : DialogFragment() {
 
         private fun options(): List<Option> = if (category()?.dateRange == true) {
             dateOptions.map { if (it.value == DATE_CUSTOM) it.copy(subtitle = dateLabel()) else it }
-        } else category()?.options.orEmpty()
+        } else category()?.options.orEmpty().filter { option ->
+            optionQuery.isBlank() || option.label.contains(optionQuery, ignoreCase = true) ||
+                option.subtitle?.contains(optionQuery, ignoreCase = true) == true
+        }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder = Holder(
             layoutInflater.inflate(R.layout.item_advanced_filter_option, parent, false),

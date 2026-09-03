@@ -205,12 +205,13 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        // Flexible Play updates are offered only on the idle Home root. The
+        // Updates are offered only on an idle root tab. The
         // operational gate separately verifies attendance, tracking, field
         // work, calls, and offline queues before any update action is allowed.
         val updateGate = OperationalUpdateGate(this, session, api)
         inAppUpdateManager = InAppUpdateManager(
             activity = this,
+            api = api,
             isUiIdle = ::isUpdateUiIdle,
             isOperationallyIdle = updateGate::isSafeToUpdate,
         ).also { it.start() }
@@ -506,6 +507,7 @@ class MainActivity : AppCompatActivity() {
         // header/tab state never bleeds in from the popped fragment.
         supportFragmentManager.addOnBackStackChangedListener {
             syncChromeToBackStack()
+            inAppUpdateManager?.onHostStateChanged()
         }
 
         currentTab = normalizeTab(savedInstanceState?.getInt(KEY_CURRENT_TAB, TAB_HOME) ?: TAB_HOME)
@@ -1289,7 +1291,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun isUpdateUiIdle(): Boolean {
         if (isFinishing || isChangingConfigurations) return false
-        if (currentTab != TAB_HOME || supportFragmentManager.backStackEntryCount != 0) return false
+        if (supportFragmentManager.backStackEntryCount != 0) return false
         return supportFragmentManager.fragments.none { fragment ->
             (fragment as? androidx.fragment.app.DialogFragment)?.dialog?.isShowing == true
         }
@@ -1574,6 +1576,7 @@ class MainActivity : AppCompatActivity() {
             // the final status-bar color and icon contrast.
             if (currentTab == index && supportFragmentManager.backStackEntryCount == 0) {
                 applyTopBarForTab(index)
+                inAppUpdateManager?.onHostStateChanged()
             }
         }
         transaction.commit()

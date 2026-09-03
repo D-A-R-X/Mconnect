@@ -178,16 +178,7 @@ class ArrivalOtpBottomSheet : BottomSheetDialogFragment() {
         verifyBtn?.isEnabled = false
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val resp = geoApi.verifyArrivalOtp(
-                    session.bearerToken,
-                    ArrivalOtpVerifyBody(
-                        visitId = visitId,
-                        otp = entered,
-                        lat = lat,
-                        lng = lng,
-                        arrivalPhotoStorageId = arrivalPhotoStorageId,
-                    ),
-                )
+                val resp = verifyArrivalOtp(entered)
                 if (resp.success) {
                     setFragmentResult(RESULT_KEY, bundleOf(KEY_OTP to entered))
                     dismissAllowingStateLoss()
@@ -201,6 +192,45 @@ class ArrivalOtpBottomSheet : BottomSheetDialogFragment() {
                 verifyBtn?.isEnabled = true
                 showError(arrivalOtpFailureMessage(e, "Couldn't verify OTP. Please try again."))
             }
+        }
+    }
+
+    private suspend fun verifyArrivalOtp(otp: String): com.manjugroups.m_connect.network.ArrivalOtpVerifyResponse {
+        val primaryBody = ArrivalOtpVerifyBody(
+            visitId = visitId,
+            otp = otp,
+            lat = lat,
+            lng = lng,
+            arrivalPhotoStorageId = arrivalPhotoStorageId,
+        )
+        return try {
+            geoApi.verifyArrivalOtp(session.bearerToken, primaryBody)
+        } catch (error: HttpException) {
+            val fallbackId = cpVisitId?.trim().orEmpty()
+            val serverMessage = runCatching {
+                parseArrivalOtpErrorBody(error.response()?.errorBody()?.string())
+            }.getOrNull()
+            if (!shouldRetryArrivalOtpWithCpId(
+                    httpCode = error.code(),
+                    fieldVisitId = visitId,
+                    cpVisitId = fallbackId,
+                    serverMessage = serverMessage,
+                )
+            ) {
+                if (!serverMessage.isNullOrBlank()) {
+                    throw IllegalStateException(serverMessage, error)
+                }
+                throw error
+            }
+
+            // Some deployed compatibility layers still validate CP arrivals
+            // using the clientPlaceVisits id rather than the linked fieldVisits
+            // id. A 400 is raised before OTP verification in that case, so one
+            // retry with the alternate id is safe and preserves the same proof.
+            geoApi.verifyArrivalOtp(
+                session.bearerToken,
+                primaryBody.copy(visitId = fallbackId),
+            )
         }
     }
 
@@ -336,4 +366,32 @@ internal fun parseArrivalOtpErrorBody(raw: String?): String? {
             ?.trim()
             ?.takeIf { it.isNotBlank() }
     }.getOrNull()
+}
+
+internal fun shouldRetryArrivalOtpWithCpId(
+    httpCode: Int,
+    fieldVisitId: String,
+    cpVisitId: String,
+    serverMessage: String? = null,
+): Boolean {
+    if (httpCode != 400 || cpVisitId.isBlank() || cpVisitId == fieldVisitId) return false
+    val message = serverMessage?.trim()?.lowercase().orEmpty()
+    if (message.isEmpty()) return true
+    if (
+        message.contains("invalid otp") ||
+        message.contains("no active otp") ||
+        message.contains("otp expired") ||
+        message.contains("not authorized") ||
+        message.contains("attempt") ||
+        message.contains("already verified") ||
+        message.contains("already completed") ||
+        message.contains("cancelled")
+    ) {
+        return false
+    }
+    return message.contains("visitid") ||
+        message.contains("visit id") ||
+        message.contains("field visit") ||
+        message.contains("validator") ||
+        message.contains("required")
 }

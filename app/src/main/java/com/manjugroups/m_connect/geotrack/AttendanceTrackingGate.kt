@@ -20,6 +20,12 @@ import com.manjugroups.m_connect.network.SessionData
  *    work as long as the day is open.
  */
 object AttendanceTrackingGate {
+    /** A cold service start must never rely on stale local tracking state. */
+    fun mayStartTracking(openSession: Boolean?): Boolean = openSession == true
+
+    /** Once verified and running, a temporary outage must not break the route. */
+    fun mayContinueTracking(openSession: Boolean?): Boolean = openSession != false
+
     /**
      * Resolve the live attendance state from both representations returned by
      * the attendance APIs. Some responses contain the canonical open session

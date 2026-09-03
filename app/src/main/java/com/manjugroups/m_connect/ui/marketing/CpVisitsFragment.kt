@@ -28,6 +28,7 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.CpVisitState
+import com.manjugroups.m_connect.network.CpVisitFilterOptionsResponse
 import com.manjugroups.m_connect.network.CreateCpVisitRequest
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.TodayVisit
@@ -43,6 +44,8 @@ import com.manjugroups.m_connect.ui.common.navigateUp
 import com.manjugroups.m_connect.ui.common.applySmoothTransitions
 import com.manjugroups.m_connect.ui.common.pushDetail
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import retrofit2.HttpException
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -57,7 +60,9 @@ class CpVisitsFragment : Fragment() {
     private lateinit var session: SessionManager
     private var rootView: View? = null
 
-    private enum class Filter { ALL, SCHEDULED, POSTPONED, IN_PROGRESS, COMPLETED, CANCELLED }
+    private enum class Filter {
+        ALL, SCHEDULED, POSTPONED, IN_PROGRESS, COMPLETED, CANCELLED, PENDING_GM_APPROVAL
+    }
 
     private var allVisits: List<TodayVisit> = emptyList()
     private var focusArgApplied = false
@@ -86,6 +91,7 @@ class CpVisitsFragment : Fragment() {
     private var filterCpType: String? = null
     private var filterAssignedStaffId: String? = null
     private var filterTelecallerStaffId: String? = null
+    private var filterOptions: CpVisitFilterOptionsResponse? = null
     private val ADVANCED_FILTER_KEY = "cp_advanced_filter_result"
     private var loadGeneration = 0
     // Row cache: a visit's card is inflated at most ONCE per (data,
@@ -321,20 +327,47 @@ class CpVisitsFragment : Fragment() {
     }
 
     private fun showAdvancedFilters() {
-        val fieldStaff = allVisits.mapNotNull { visit ->
+        val loadedFieldStaff = allVisits.mapNotNull { visit ->
             visit.bdoStaffId?.takeIf { it.isNotBlank() }?.let { id ->
                 AdvancedListFilterSheet.Option(id, visit.bdoName ?: "Field staff")
             }
-        }.distinctBy { it.value }.sortedBy { it.label.lowercase(Locale.US) }
-        val telecallers = allVisits.mapNotNull { visit ->
+        }
+        val loadedTelecallers = allVisits.mapNotNull { visit ->
             visit.lmoStaffId?.takeIf { it.isNotBlank() }?.let { id ->
                 AdvancedListFilterSheet.Option(id, visit.lmoName ?: "Telecaller")
             }
-        }.distinctBy { it.value }.sortedBy { it.label.lowercase(Locale.US) }
-        val outcomes = allVisits.mapNotNull { it.cpVisit?.outcome?.takeIf(String::isNotBlank) }
-            .distinct().sorted().map { AdvancedListFilterSheet.Option(it, humanizeFilterValue(it)) }
-        val cpTypes = allVisits.mapNotNull { it.cpVisit?.cpType?.takeIf(String::isNotBlank) }
-            .distinct().sorted().map { AdvancedListFilterSheet.Option(it, humanizeFilterValue(it)) }
+        }
+        fun serverOptions(values: List<com.manjugroups.m_connect.network.CpVisitFilterOption>?): List<AdvancedListFilterSheet.Option> =
+            values.orEmpty().mapNotNull { option ->
+                val id = option.id?.takeIf(String::isNotBlank) ?: return@mapNotNull null
+                val label = option.name?.takeIf(String::isNotBlank)
+                    ?: option.label?.takeIf(String::isNotBlank)
+                    ?: humanizeFilterValue(id)
+                val staffDetail = listOfNotNull(
+                    option.employeeId?.takeIf(String::isNotBlank),
+                    option.designation?.takeIf(String::isNotBlank),
+                    option.department?.takeIf(String::isNotBlank),
+                ).joinToString(" • ").ifBlank { null }
+                AdvancedListFilterSheet.Option(
+                    id,
+                    label,
+                    staffDetail ?: option.count?.let { "$it visits" },
+                )
+            }
+        fun mergeOptions(vararg groups: List<AdvancedListFilterSheet.Option>) = groups
+            .flatMap { it }
+            .distinctBy { it.value }
+
+        val fieldStaff = mergeOptions(serverOptions(filterOptions?.fieldStaff), loadedFieldStaff)
+        val telecallers = mergeOptions(serverOptions(filterOptions?.telecallers), loadedTelecallers)
+        val outcomes = mergeOptions(
+            CP_OUTCOME_OPTIONS.map { (value, label) -> AdvancedListFilterSheet.Option(value, label) },
+            serverOptions(filterOptions?.outcomes),
+        )
+        val cpTypes = mergeOptions(
+            CP_TYPE_OPTIONS.map { (value, label) -> AdvancedListFilterSheet.Option(value, label) },
+            serverOptions(filterOptions?.cpTypes),
+        )
         val categories = listOf(
             AdvancedListFilterSheet.Category(KEY_DATE, "Date range", dateRange = true),
             AdvancedListFilterSheet.Category(
@@ -344,10 +377,10 @@ class CpVisitsFragment : Fragment() {
                     AdvancedListFilterSheet.Option(it.name, humanizeFilterValue(it.name))
                 },
             ),
-            AdvancedListFilterSheet.Category(KEY_OUTCOME, "Outcome", outcomes),
-            AdvancedListFilterSheet.Category(KEY_CP_TYPE, "CP type", cpTypes),
-            AdvancedListFilterSheet.Category(KEY_FIELD_STAFF, "Field staff", fieldStaff),
-            AdvancedListFilterSheet.Category(KEY_TELECALLER, "Telecaller", telecallers),
+            AdvancedListFilterSheet.Category(KEY_OUTCOME, "Outcome", outcomes, searchable = true),
+            AdvancedListFilterSheet.Category(KEY_CP_TYPE, "CP type", cpTypes, searchable = true),
+            AdvancedListFilterSheet.Category(KEY_FIELD_STAFF, "Field staff", fieldStaff, searchable = true),
+            AdvancedListFilterSheet.Category(KEY_TELECALLER, "Telecaller", telecallers, searchable = true),
         )
         val initial = AdvancedListFilterSheet.State(
             selected = buildMap {
@@ -511,6 +544,7 @@ class CpVisitsFragment : Fragment() {
             Filter.IN_PROGRESS -> isInProgress(status) && !isCancelled(status) && !isCompleted(status)
             Filter.COMPLETED -> isCompleted(status)
             Filter.CANCELLED -> isCancelled(status)
+            Filter.PENDING_GM_APPROVAL -> status == "pending_gm_approval" || status == "pending-gm-approval"
             Filter.SCHEDULED -> !isInProgress(status) && !isCompleted(status) &&
                 !isCancelled(status) && !isPostponed(visit)
         }
@@ -542,6 +576,16 @@ class CpVisitsFragment : Fragment() {
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
+                val optionsRequest = async {
+                    runCatching {
+                        geoApi.getMarketingCpVisitFilterOptions(
+                            session.bearerToken,
+                            scope = requestedScope.apiValue,
+                            fromDate = from,
+                            toDate = to,
+                        )
+                    }.getOrNull()
+                }
                 // Switched from /api/sitevisits/my (legacy fieldVisits) to
                 // /api/marketing/clientPlaceVisits/my so each row carries
                 // the proposedSiteVisit / lead.followUpStatus / party
@@ -554,7 +598,7 @@ class CpVisitsFragment : Fragment() {
                 // this is what showed the intermittent "CP network error" on an
                 // otherwise-reachable backend. Only IOException/timeout is
                 // retried; a parse/business error fails fast.
-                val resp = retryIo(times = 1, initialDelayMs = 500) {
+                suspend fun requestVisits(includeUnhealthyFacets: Boolean) =
                     geoApi.getMyMarketingCpVisits(
                         session.bearerToken,
                         fromDate = from,
@@ -570,11 +614,20 @@ class CpVisitsFragment : Fragment() {
                         assignedStaffId = filterAssignedStaffId,
                         telecallerStaffId = filterTelecallerStaffId,
                         status = currentFilter.takeUnless { it == Filter.ALL }
-                            ?.name?.lowercase(Locale.US),
-                        outcome = filterOutcome,
+                            ?.name?.lowercase(Locale.US)
+                            ?.takeIf { includeUnhealthyFacets },
+                        outcome = filterOutcome?.takeIf { includeUnhealthyFacets },
                         cpType = filterCpType,
                         pageSize = 200,
                     )
+
+                val resp = try {
+                    retryIo(times = 1, initialDelayMs = 500) { requestVisits(true) }
+                } catch (e: HttpException) {
+                    val canFallback = e.code() >= 500 &&
+                        (currentFilter != Filter.ALL || !filterOutcome.isNullOrBlank())
+                    if (!canFallback) throw e
+                    retryIo(times = 1, initialDelayMs = 500) { requestVisits(false) }
                 }
                 if (requestGeneration != loadGeneration) return@launch
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
@@ -588,6 +641,7 @@ class CpVisitsFragment : Fragment() {
                     ).show()
                     return@launch
                 }
+                optionsRequest.await()?.takeIf { it.success }?.let { filterOptions = it }
                 val teamAvailable = resp.hasDirectReports == true ||
                     (resp.directReportCount ?: 0) > 0 ||
                     resp.safeDirectReportIds.isNotEmpty()
@@ -848,6 +902,7 @@ class CpVisitsFragment : Fragment() {
                 Filter.IN_PROGRESS -> "No Visits In Progress"
                 Filter.COMPLETED -> "No Completed Visits"
                 Filter.CANCELLED -> "No Cancelled Visits"
+                Filter.PENDING_GM_APPROVAL -> "No Pending Approvals"
                 Filter.ALL -> when {
                     searchQuery.isNotBlank() -> "No Matches Found"
                     currentScope == CpVisitListScope.TEAM -> "No Team CP Visits"
@@ -1549,6 +1604,31 @@ class CpVisitsFragment : Fragment() {
     }
 
     companion object {
+        private val CP_OUTCOME_OPTIONS = listOf(
+            "interested" to "Interested",
+            "not_interested" to "Not interested",
+            "postponed" to "Follow-up",
+            "referral" to "Referral",
+            "converted_to_site_visit" to "Converted to Site Visit",
+            "converted_to_booking" to "Converted to Booking",
+            "other" to "Others",
+            "rejected" to "Rejected",
+            "gift_distributed" to "Gift Distributed",
+            "old_client_visited" to "Old Client Visited",
+            "collection_done" to "Collection Done",
+            "not_collected" to "Not Collected",
+        )
+        private val CP_TYPE_OPTIONS = listOf(
+            "sv_cum_cp" to "SV cum CP",
+            "follow_up" to "Follow-up",
+            "booking_cp" to "Booking CP",
+            "collection_cp" to "Collection CP",
+            "old_client" to "Old Client",
+            "gift_distribution" to "Gift Distribution",
+            "new_client_cp" to "New Client CP",
+            "other_cp" to "Other CP",
+            "joint_cp" to "Joint CP",
+        )
         private const val ARG_FOCUS_CP_VISIT_ID = "arg_focus_cp_visit_id"
         private const val KEY_DATE = "date"
         private const val KEY_STATUS = "status"

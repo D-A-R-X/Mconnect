@@ -12,6 +12,13 @@ import java.util.concurrent.TimeUnit
 
 interface ApiService {
 
+    @GET("api/mobile/app-version")
+    suspend fun getMobileAppVersion(
+        @Query("platform") platform: String,
+        @Query("currentVersion") currentVersion: String,
+        @Query("buildNumber") buildNumber: Int,
+    ): MobileAppVersionResponse
+
     // Auth
     @POST("api/auth/send-otp")
     suspend fun sendOtp(@Body body: SendOtpRequest): SendOtpResponse
@@ -247,18 +254,6 @@ interface ApiService {
      * Mirrors /api/hr/leaves/cancel — same delete affordance on the
      * mobile attendance history page. Server rejects non-pending dates.
      */
-    /**
-     * Raise an attendance correction / remark request for HR approval.
-     * Mirrors the web attendance "Request Time Correction / Remark" dialog
-     * (attendanceRequests.submit). Used by the mobile Edit Attendance
-     * sheet to request a punch-timing update on a past day.
-     */
-    @POST("api/hr/attendance/request")
-    suspend fun submitAttendanceRequest(
-        @Header("Authorization") token: String,
-        @Body body: AttendanceRequestBody
-    ): AttendanceRequestResponse
-
     @POST("api/hr/attendance/cancel")
     suspend fun cancelMyAttendance(
         @Header("Authorization") token: String,
@@ -1666,32 +1661,8 @@ data class CompleteOnDutyTripResponse(
 /** Body for /api/hr/attendance/cancel — withdraws a pending row by date. */
 data class AttendanceCancelRequest(val date: String)
 
-/**
- * Body for /api/hr/attendance/request. type is "remark" (just remark) or
- * "correction" (corrected punch in/out times + reason). The server derives
- * staffId/staffName from the bearer token, so they're not sent here.
- */
-data class AttendanceRequestBody(
-    // Null for a no-punch ("Absent") day with no attendance row yet — the
-    // backend seeds a row for {staffId, date}. Gson omits null fields, so the
-    // request body simply carries no attendanceId in that case.
-    val attendanceId: String? = null,
-    val date: String,
-    val type: String,
-    val remark: String? = null,
-    val correctedPunchIn: String? = null,
-    val correctedPunchOut: String? = null,
-    val correctionReason: String? = null,
-)
-
-data class AttendanceRequestResponse(
-    val success: Boolean = false,
-    val requestId: String? = null,
-    val error: String? = null,
-)
 data class AttendanceRecord(
-    // Convex document id of the staffAttendance row — required to raise a
-    // correction/remark request against it (/api/hr/attendance/request).
+    // Convex document id of the staffAttendance row.
     @SerializedName("_id", alternate = ["id"]) val id: String? = null,
     val date: String?,
     val status: String?,
@@ -2355,6 +2326,17 @@ data class ApproveLoanRequest(
 data class IdRequest(val id: String)
 data class RejectRequest(val id: String, val reason: String, val isRequest: Boolean? = null)
 data class SimpleResponse(val success: Boolean, val error: String? = null)
+
+data class MobileAppVersionResponse(
+    val success: Boolean = false,
+    val latestVersion: String? = null,
+    val latestBuildNumber: Int? = null,
+    val minimumSupportedVersion: String? = null,
+    val minimumSupportedBuildNumber: Int? = null,
+    val updateRequired: Boolean? = null,
+    val updateUrl: String? = null,
+    val error: String? = null,
+)
 data class PushRegisterRequest(
     val token: String,
     val platform: String,

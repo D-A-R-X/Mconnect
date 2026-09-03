@@ -216,18 +216,6 @@ class AttendanceHistoryFragment : Fragment() {
             )
         }
 
-        // A submitted correction/remark request reloads the list so any
-        // pending-request state the backend surfaces is reflected.
-        setFragmentResultListener(EditAttendanceBottomSheet.RESULT_KEY) { _, bundle ->
-            if (bundle.getBoolean(EditAttendanceBottomSheet.KEY_SUBMITTED, false)) {
-                val date = bundle.getString("date")
-                if (date != null) {
-                    submittedRemarkDates.add(date)
-                }
-                refreshAllData(showSkeleton = false, forceRefresh = true)
-            }
-        }
-
         // Tabs are role/hierarchy based (mirrors the web). Fetch whether the
         // caller is a reporting officer first so a manager who has a team but
         // no explicit approve permission still gets the Team tabs.

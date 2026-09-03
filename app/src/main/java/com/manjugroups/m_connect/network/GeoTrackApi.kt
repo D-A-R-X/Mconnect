@@ -34,26 +34,54 @@ interface GeoTrackApi {
 
     // ── Location ──
 
-    @POST("api/tracking/location/batch")
+    @POST
     suspend fun pushBatch(
+        @Url url: String = DIRECT_LOCATION_BATCH_URL,
         @Header("Authorization") token: String,
+        @Header("Idempotency-Key") idempotencyKey: String,
         @Body body: PushBatchRequest
     ): GeoTrackResponse
 
     // ── Heartbeat ──
 
-    @POST("api/tracking/heartbeat")
+    @POST
     suspend fun heartbeat(
+        @Url url: String = DIRECT_HEARTBEAT_URL,
         @Header("Authorization") token: String,
+        @Header("Idempotency-Key") idempotencyKey: String,
         @Body body: HeartbeatRequest
     ): GeoTrackResponse
 
     // ── Tamper ──
 
-    @POST("api/geotrack/tamper/report")
+    @POST
     suspend fun reportTamper(
+        @Url url: String = DIRECT_TAMPER_URL,
         @Header("Authorization") token: String,
+        @Header("Idempotency-Key") idempotencyKey: String,
         @Body body: TamperReportRequest
+    ): GeoTrackResponse
+
+    @POST("api/geotrack/tamper/report")
+    suspend fun reportLegacyTamper(
+        @Header("Authorization") token: String,
+        @Body body: TamperReportRequest,
+    ): GeoTrackResponse
+
+    @POST
+    suspend fun startDirectTracking(
+        @Url url: String = DIRECT_START_URL,
+        @Header("Authorization") token: String,
+        @Header("Idempotency-Key") idempotencyKey: String,
+        @Body body: DirectTrackingStartRequest,
+    ): GeoTrackResponse
+
+    @POST
+    suspend fun stopDirectTracking(
+        @Url url: String = DIRECT_STOP_URL,
+        @Header("Authorization") token: String,
+        @Header("Idempotency-Key") idempotencyKey: String,
+        @Body body: DirectTrackingStopRequest = DirectTrackingStopRequest(),
     ): GeoTrackResponse
 
     // ── Consent ──
@@ -591,6 +619,14 @@ interface GeoTrackApi {
         @Query("pageSize") pageSize: Int? = null,
     ): MyMarketingCpVisitsResponse
 
+    @GET("api/marketing/clientPlaceVisits/filter-options")
+    suspend fun getMarketingCpVisitFilterOptions(
+        @Header("Authorization") token: String,
+        @Query("scope") scope: String,
+        @Query("fromDate") fromDate: String? = null,
+        @Query("toDate") toDate: String? = null,
+    ): CpVisitFilterOptionsResponse
+
     // ── Timeline (self-view) ──
 
     @GET("api/geotrack/timeline")
@@ -619,6 +655,13 @@ interface GeoTrackApi {
     ): TripsResponse
 
     companion object {
+        const val DIRECT_BASE_URL = "https://api-geo.theairix.com"
+        const val DIRECT_LOCATION_BATCH_URL = "$DIRECT_BASE_URL/api/tracking/location/batch"
+        const val DIRECT_HEARTBEAT_URL = "$DIRECT_BASE_URL/api/tracking/heartbeat"
+        const val DIRECT_TAMPER_URL = "$DIRECT_BASE_URL/api/tracking/tamper-events"
+        const val DIRECT_START_URL = "$DIRECT_BASE_URL/api/geotrack/start"
+        const val DIRECT_STOP_URL = "$DIRECT_BASE_URL/api/geotrack/stop"
+
         // Single shared client (see ApiService.create() — same rationale):
         // build once, reuse the connection pool across every trip/visit call
         // instead of rebuilding an OkHttpClient per call site.
@@ -677,6 +720,8 @@ interface GeoTrackApi {
 // ── Request Models ──
 
 data class LocationPoint(
+    val pointId: String,
+    val deviceSequence: Long,
     val lat: Double,
     val lng: Double,
     val accuracy: Float,
@@ -696,12 +741,15 @@ data class LocationPoint(
 data class PushBatchRequest(
     val sessionId: String? = null,
     val deviceId: String? = null,
+    val requestId: String,
     val points: List<LocationPoint>
 )
 
 data class HeartbeatRequest(
     val sessionId: String? = null,
     val deviceId: String? = null,
+    val requestId: String,
+    val deviceSequence: Long,
     val batteryPct: Int,
     val appVersion: String,
     // Client tick time (ms epoch). The server stores this as the heartbeat
@@ -717,12 +765,21 @@ data class HeartbeatRequest(
 )
 
 data class TamperReportRequest(
+    val sessionId: String? = null,
     val eventType: String,
     val metadata: Map<String, Any?> = emptyMap(),
     // Original occurrence time (ms epoch) for offline-queued events, so a
     // replayed GPS_DISABLED/REBOOT surfaces in the feed when it HAPPENED.
     val detectedAt: Long? = null,
+    val requestId: String,
 )
+
+data class DirectTrackingStartRequest(
+    val lat: Double? = null,
+    val lng: Double? = null,
+)
+
+class DirectTrackingStopRequest
 
 data class ConsentRequest(
     val consented: Boolean = true,
@@ -783,6 +840,10 @@ data class GeoTrackResponse(
     val alreadyProcessed: Boolean? = null,
     val revisit: CpRevisitInfo? = null,
     val inserted: Int? = null,
+    val insertedCount: Int? = null,
+    val duplicateCount: Int? = null,
+    val filteredCount: Int? = null,
+    val filteredReasons: Map<String, Int>? = null,
     val tamperDetected: Boolean? = null,
     // Server-side rejection diagnostics for a batch: how many points were
     // dropped by the accuracy gate vs the clock-in→clock-out window clamp.
@@ -1844,6 +1905,27 @@ data class MyMarketingCpVisitsResponse(
     val safeDirectReportIds: List<String>
         get() = directReportIds.orEmpty()
 }
+
+data class CpVisitFilterOption(
+    @com.google.gson.annotations.SerializedName(value = "id", alternate = ["_id", "value"])
+    val id: String? = null,
+    val name: String? = null,
+    val label: String? = null,
+    val employeeId: String? = null,
+    val designation: String? = null,
+    val department: String? = null,
+    val count: Int? = null,
+)
+
+data class CpVisitFilterOptionsResponse(
+    val success: Boolean = false,
+    val fieldStaff: List<CpVisitFilterOption>? = null,
+    val telecallers: List<CpVisitFilterOption>? = null,
+    val statuses: List<CpVisitFilterOption>? = null,
+    val outcomes: List<CpVisitFilterOption>? = null,
+    val cpTypes: List<CpVisitFilterOption>? = null,
+    val error: String? = null,
+)
 
 data class CpVisitDetail(
     @com.google.gson.annotations.SerializedName("_id") val id: String? = null,

@@ -1,8 +1,10 @@
 package com.manjugroups.m_connect.update
 
 import android.app.Activity
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
+import android.net.Uri
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
@@ -23,8 +25,13 @@ import com.google.android.play.core.install.InstallStateUpdatedListener
 import com.google.android.play.core.install.model.AppUpdateType
 import com.google.android.play.core.install.model.InstallStatus
 import com.google.android.play.core.install.model.UpdateAvailability
+import com.manjugroups.m_connect.BuildConfig
 import com.manjugroups.m_connect.R
+import com.manjugroups.m_connect.network.ApiService
+import com.manjugroups.m_connect.network.MobileAppVersionResponse
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
@@ -39,6 +46,7 @@ import kotlinx.coroutines.launch
  */
 class InAppUpdateManager(
     private val activity: AppCompatActivity,
+    private val api: ApiService,
     private val isUiIdle: () -> Boolean,
     private val isOperationallyIdle: suspend () -> Boolean,
 ) {
@@ -50,19 +58,25 @@ class InAppUpdateManager(
         ) { result: ActivityResult ->
             if (result.resultCode != Activity.RESULT_OK) {
                 Log.w(TAG, "In-app update flow not completed (resultCode=${result.resultCode})")
+                pendingUpdateInfo = null
+                checkForUpdate()
             }
         }
 
     private val installListener = InstallStateUpdatedListener { state ->
         if (state.installStatus() == InstallStatus.DOWNLOADED) {
-            handleDownloadedUpdate()
+            if (isForeground) handleDownloadedUpdate() else completeDownloadedUpdateInBackground()
         }
     }
 
     private var listenerRegistered = false
     private var isForeground = false
     private var safetyJob: Job? = null
+    private var availabilityJob: Job? = null
     private var visibleDialog: AlertDialog? = null
+    private var pendingUpdateInfo: AppUpdateInfo? = null
+    private var remotePolicy: RequiredRemoteUpdate? = restoreRemotePolicy()
+    private var lastRemoteCheckMs = 0L
 
     /** Register callbacks in onCreate; availability is checked in onResume. */
     fun start() {
@@ -74,29 +88,43 @@ class InAppUpdateManager(
 
     fun onResume() {
         isForeground = true
-        if (!isUiIdle()) return
+        checkForUpdate()
+        availabilityJob?.cancel()
+        availabilityJob = activity.lifecycleScope.launch {
+            while (isActive) {
+                delay(FOREGROUND_CHECK_INTERVAL_MS)
+                checkForUpdate()
+            }
+        }
+    }
+
+    /** Re-evaluate a cached update when navigation or operational state changes. */
+    fun onHostStateChanged() {
+        if (!isForeground || !isUiIdle()) return
+        pendingUpdateInfo?.let(::handleUpdateInfoInForeground) ?: checkForUpdate()
+    }
+
+    private fun checkForUpdate() {
         manager.appUpdateInfo
             .addOnSuccessListener(::handleUpdateInfoInForeground)
             .addOnFailureListener { error ->
                 Log.d(TAG, "appUpdateInfo check failed: ${error.message}")
+                checkRemotePolicy()
             }
     }
 
     /** Complete a downloaded update only after the host enters the background. */
     fun onAppBackgrounded() {
         isForeground = false
+        availabilityJob?.cancel()
+        availabilityJob = null
         visibleDialog?.dismiss()
         visibleDialog = null
         if (!isUiIdle()) return
         manager.appUpdateInfo
             .addOnSuccessListener { info ->
                 if (info.installStatus() == InstallStatus.DOWNLOADED) {
-                    runWhenSafe(requireForeground = false) {
-                        manager.completeUpdate()
-                            .addOnFailureListener { error ->
-                                Log.w(TAG, "Background update completion failed: ${error.message}")
-                            }
-                    }
+                    completeDownloadedUpdateInBackground()
                 }
             }
             .addOnFailureListener { /* Retry at the next safe app entry. */ }
@@ -105,6 +133,9 @@ class InAppUpdateManager(
     fun destroy() {
         safetyJob?.cancel()
         safetyJob = null
+        availabilityJob?.cancel()
+        availabilityJob = null
+        pendingUpdateInfo = null
         visibleDialog?.dismiss()
         visibleDialog = null
         if (listenerRegistered) {
@@ -114,6 +145,14 @@ class InAppUpdateManager(
     }
 
     private fun handleUpdateInfoInForeground(info: AppUpdateInfo) {
+        val hasActionableUpdate =
+            info.installStatus() == InstallStatus.DOWNLOADED ||
+                info.updateAvailability() == UpdateAvailability.DEVELOPER_TRIGGERED_UPDATE_IN_PROGRESS ||
+                (info.updateAvailability() == UpdateAvailability.UPDATE_AVAILABLE &&
+                    (info.isUpdateTypeAllowed(AppUpdateType.FLEXIBLE) ||
+                        info.isUpdateTypeAllowed(AppUpdateType.IMMEDIATE)))
+        pendingUpdateInfo = info.takeIf { hasActionableUpdate }
+        if (!hasActionableUpdate) checkRemotePolicy()
         when {
             info.installStatus() == InstallStatus.DOWNLOADED ->
                 handleDownloadedUpdate()
@@ -132,7 +171,102 @@ class InAppUpdateManager(
                         actionLabel = "Update",
                     ) { launchFlexible(info) }
                 }
+
+            info.updateAvailability() == UpdateAvailability.UPDATE_AVAILABLE &&
+                info.isUpdateTypeAllowed(AppUpdateType.IMMEDIATE) ->
+                runWhenSafe {
+                    showUpdateDialog(
+                        title = "Update required",
+                        message = "A new version of MConnect is required to continue.",
+                        actionLabel = "Update now",
+                    ) { launchImmediate(info) }
+                }
         }
+    }
+
+    private fun checkRemotePolicy() {
+        remotePolicy?.let(::showRemotePolicyWhenSafe)
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (lastRemoteCheckMs != 0L && now - lastRemoteCheckMs < REMOTE_CHECK_INTERVAL_MS) return
+        lastRemoteCheckMs = now
+        activity.lifecycleScope.launch {
+            val response = runCatching {
+                api.getMobileAppVersion(
+                    platform = "android",
+                    currentVersion = BuildConfig.VERSION_NAME,
+                    buildNumber = BuildConfig.VERSION_CODE,
+                )
+            }.getOrNull() ?: return@launch
+            remotePolicy = response.toRequiredUpdate()
+            persistRemotePolicy(remotePolicy)
+            remotePolicy?.let(::showRemotePolicyWhenSafe)
+        }
+    }
+
+    private fun showRemotePolicyWhenSafe(policy: RequiredRemoteUpdate) {
+        runWhenSafe {
+            showUpdateDialog(
+                title = "Update required",
+                message = "MConnect ${policy.version} is ready. Update the app to continue.",
+                actionLabel = "Update now",
+            ) {
+                runCatching {
+                    activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(policy.updateUrl)))
+                }.onFailure { Log.w(TAG, "Opening update URL failed: ${it.message}") }
+            }
+        }
+    }
+
+    private fun MobileAppVersionResponse.toRequiredUpdate(): RequiredRemoteUpdate? {
+        if (!success) return null
+        val candidateVersion = latestVersion ?: minimumSupportedVersion ?: return null
+        val candidateBuild = latestBuildNumber ?: minimumSupportedBuildNumber
+        val newerBuild = candidateBuild?.let { it > BuildConfig.VERSION_CODE } == true
+        val newerVersion = compareVersions(candidateVersion, BuildConfig.VERSION_NAME) > 0
+        val url = updateUrl?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        return if (updateRequired == true || newerBuild || newerVersion) {
+            RequiredRemoteUpdate(candidateVersion, candidateBuild, url)
+        } else {
+            null
+        }
+    }
+
+    private fun restoreRemotePolicy(): RequiredRemoteUpdate? {
+        val prefs = activity.getSharedPreferences(REMOTE_PREFS, Activity.MODE_PRIVATE)
+        val version = prefs.getString(KEY_REMOTE_VERSION, null) ?: return null
+        val build = prefs.getInt(KEY_REMOTE_BUILD, 0).takeIf { it > 0 }
+        val url = prefs.getString(KEY_REMOTE_URL, null) ?: return null
+        if (compareVersions(version, BuildConfig.VERSION_NAME) <= 0 &&
+            build?.let { it <= BuildConfig.VERSION_CODE } != false
+        ) {
+            prefs.edit().clear().apply()
+            return null
+        }
+        return RequiredRemoteUpdate(version, build, url)
+    }
+
+    private fun persistRemotePolicy(policy: RequiredRemoteUpdate?) {
+        activity.getSharedPreferences(REMOTE_PREFS, Activity.MODE_PRIVATE).edit().apply {
+            if (policy == null) {
+                clear()
+            } else {
+                putString(KEY_REMOTE_VERSION, policy.version)
+                if (policy.buildNumber == null) remove(KEY_REMOTE_BUILD)
+                else putInt(KEY_REMOTE_BUILD, policy.buildNumber)
+                putString(KEY_REMOTE_URL, policy.updateUrl)
+            }
+        }.apply()
+    }
+
+    private fun compareVersions(left: String, right: String): Int {
+        val leftParts = left.split('.', '-', '+').map { it.toIntOrNull() ?: 0 }
+        val rightParts = right.split('.', '-', '+').map { it.toIntOrNull() ?: 0 }
+        repeat(maxOf(leftParts.size, rightParts.size)) { index ->
+            val comparison = (leftParts.getOrNull(index) ?: 0)
+                .compareTo(rightParts.getOrNull(index) ?: 0)
+            if (comparison != 0) return comparison
+        }
+        return 0
     }
 
     private fun handleDownloadedUpdate() {
@@ -143,6 +277,16 @@ class InAppUpdateManager(
                 message = "The update is ready. Restart MConnect now to use the latest version.",
                 actionLabel = "Restart now",
             ) { manager.completeUpdate() }
+        }
+    }
+
+    private fun completeDownloadedUpdateInBackground() {
+        if (isForeground || !isUiIdle()) return
+        runWhenSafe(requireForeground = false) {
+            manager.completeUpdate()
+                .addOnFailureListener { error ->
+                    Log.w(TAG, "Background update completion failed: ${error.message}")
+                }
         }
     }
 
@@ -171,11 +315,12 @@ class InAppUpdateManager(
         if (!isForeground || visibleDialog?.isShowing == true) return
         val view = LayoutInflater.from(activity).inflate(R.layout.dialog_app_update, null)
         val dialog = AlertDialog.Builder(activity).setView(view).create()
+        dialog.setCancelable(false)
+        dialog.setCanceledOnTouchOutside(false)
         visibleDialog = dialog
         dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
         view.findViewById<TextView>(R.id.txtUpdateTitle).text = title
         view.findViewById<TextView>(R.id.txtUpdateMessage).text = message
-        view.findViewById<View>(R.id.btnUpdateLater).setOnClickListener { dialog.dismiss() }
         view.findViewById<TextView>(R.id.btnUpdateNow).apply {
             text = actionLabel
             setOnClickListener {
@@ -217,5 +362,17 @@ class InAppUpdateManager(
 
     companion object {
         private const val TAG = "InAppUpdate"
+        private const val FOREGROUND_CHECK_INTERVAL_MS = 5 * 60 * 1000L
+        private const val REMOTE_CHECK_INTERVAL_MS = 15 * 60 * 1000L
+        private const val REMOTE_PREFS = "mandatory_app_update"
+        private const val KEY_REMOTE_VERSION = "version"
+        private const val KEY_REMOTE_BUILD = "build"
+        private const val KEY_REMOTE_URL = "url"
     }
+
+    private data class RequiredRemoteUpdate(
+        val version: String,
+        val buildNumber: Int?,
+        val updateUrl: String,
+    )
 }
