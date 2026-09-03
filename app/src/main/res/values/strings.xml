@@ -38,4 +38,6 @@
     <string name="signup_hint">Don\'t have an account? Sign Up Here</string>
     <string name="different_method">Sign in with different method Here.</string>
     <string name="employee_id_coming_soon">Employee ID sign in will be available soon.</string>
+    <string name="joint_cp">Joint CP</string>
+    <string name="joint_cp_toggle_summary">Add a second staff to this visit</string>
 </resources>

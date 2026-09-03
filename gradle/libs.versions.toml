@@ -64,6 +64,7 @@ camerax-video = { group = "androidx.camera", name = "camera-video", version.ref 
 app-update = { group = "com.google.android.play", name = "app-update", version.ref = "appUpdate" }
 app-update-ktx = { group = "com.google.android.play", name = "app-update-ktx", version.ref = "appUpdate" }
 mlkit-barcode-scanning = { group = "com.google.mlkit", name = "barcode-scanning", version = "17.3.0" }
+mlkit-document-scanner = { group = "com.google.android.gms", name = "play-services-mlkit-document-scanner", version = "16.0.0" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

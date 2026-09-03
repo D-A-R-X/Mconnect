@@ -254,6 +254,21 @@ When making changes in this repo:
 6. Keep manual fragment navigation consistent with the existing `fragmentContainer` approach.
 7. Be cautious with session fields because many screens read directly from `SessionManager`.
 
+## Session Safety Invariant
+
+- A mobile session may be cleared automatically only after an authenticated
+  request to the authoritative MMS host returns HTTP 401.
+- A 401 from login/public routes or a secondary host such as GeoTrack, Dialer,
+  maps, storage, or chat is an operation-specific failure and must never clear
+  the MMS session.
+- All Android 401 producers must call `SessionInvalidationPolicy`; do not call
+  `SessionInvalidationBus.reportUnauthorized()` from a new interceptor without
+  that policy. Mixed-host iOS services must enforce the equivalent host and
+  authorization check before calling `SessionInvalidationBus.emit()`.
+- Any authentication, networking, base-URL, or secondary-service integration
+  change must run `SessionInvalidationPolicyTest` and the full unit suite. Add a
+  regression case before changing the invalidation boundary.
+
 ## Known Sharp Edges
 
 - `README.md` is partly stale and should not be treated as source of truth for all runtime details.

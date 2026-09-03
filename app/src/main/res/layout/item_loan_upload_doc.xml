@@ -54,7 +54,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="4dp"
                 android:fontFamily="@font/inter_semibold"
-                android:text="Camera"
+                android:text="Scan"
                 android:textColor="#0B61CA"
                 android:textSize="12sp" />
         </LinearLayout>
@@ -104,7 +104,7 @@
                 android:gravity="center"
                 android:textColor="#98A2B3"
                 android:textSize="11sp"
-                tools:text="Max 2MB · JPG, PNG, PDF" />
+                tools:text="Max 20 MB · Scan, JPG, PNG or PDF" />
         </LinearLayout>
 
         <!-- Uploading — pill with spinner + status text. Shown while
@@ -193,7 +193,7 @@
         <RelativeLayout
             android:id="@+id/layoutUploaded"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
+            android:layout_height="62dp"
             android:background="@drawable/bg_loan_input_box"
             android:clickable="true"
             android:focusable="true"
@@ -210,29 +210,51 @@
                 app:tint="#667085"
                 android:importantForAccessibility="no" />
 
-            <TextView
-                android:id="@+id/tvUploadedName"
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:id="@+id/uploadedTextContainer"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_centerVertical="true"
                 android:layout_toEndOf="@id/ivDocIcon"
+                android:layout_toStartOf="@id/btnDeleteUploaded"
                 android:layout_marginStart="10dp"
-                android:layout_marginEnd="28dp"
-                android:fontFamily="@font/inter_semibold"
-                android:textColor="#101828"
-                android:textSize="13sp"
-                android:singleLine="true"
-                android:ellipsize="middle"
-                tools:text="pan_card_doc.pdf" />
+                android:layout_marginEnd="8dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/tvUploadedName"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="middle"
+                    android:fontFamily="@font/inter_semibold"
+                    android:singleLine="true"
+                    android:textColor="?attr/colorForegroundPrimary"
+                    android:textSize="13sp"
+                    tools:text="pan_card_doc.pdf" />
+
+                <TextView
+                    android:id="@+id/tvUploadedHint"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:fontFamily="@font/inter_medium"
+                    android:text="Tap to preview"
+                    android:textColor="?attr/colorAccentPrimary"
+                    android:textSize="11sp" />
+            </LinearLayout>
 
             <ImageView
-                android:layout_width="16dp"
-                android:layout_height="16dp"
+                android:id="@+id/btnDeleteUploaded"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
                 android:layout_alignParentEnd="true"
                 android:layout_centerVertical="true"
-                android:src="@drawable/ic_leave_action_check"
-                app:tint="#1BCA0B"
-                android:importantForAccessibility="no" />
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:contentDescription="Delete uploaded document"
+                android:focusable="true"
+                android:padding="10dp"
+                android:src="@drawable/ic_trash_red" />
         </RelativeLayout>
     </FrameLayout>
 </LinearLayout>

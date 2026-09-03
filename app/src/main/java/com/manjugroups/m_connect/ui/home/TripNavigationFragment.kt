@@ -60,6 +60,7 @@ import com.manjugroups.m_connect.network.JointCpParticipant
 import com.manjugroups.m_connect.network.JointCpSummary
 import com.manjugroups.m_connect.network.MmsFleetDriverSiteVisitRequest
 import com.manjugroups.m_connect.network.StartVisitRequest
+import com.manjugroups.m_connect.network.StorageUploader
 import com.manjugroups.m_connect.network.TrackingBootstrapData
 import com.manjugroups.m_connect.ui.common.navigateUp
 import com.manjugroups.m_connect.ui.common.OutcomeRemarksBottomSheet
@@ -69,8 +70,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.RequestBody.Companion.asRequestBody
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -261,12 +260,12 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         //   with outcome=gift_distributed + the photo as proof of
         //   the handover.
         // - Yes path (default): upload, then ask the client OTP
-        // - No path (CP only): upload, then mark not-met + complete
+        // - No path (CP only): review photo and optional remarks, then upload
         when {
             isGiftDistributionPostOtpPhotoCapture ->
                 uploadGiftDistributionPhotoThenComplete(photoFile!!)
             cpNoPathPhotoCapture ->
-                uploadArrivalPhotoThenCompleteWithoutClient(photoFile!!)
+                showClientNotMetProofReview(photoFile!!)
             else ->
                 uploadArrivalPhotoThenAskOtp(photoFile!!)
         }
@@ -462,7 +461,24 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             isOpeningOutcomeSheet = false
             cpVisitDecisionCaptured = true
             pendingCpRevisit = CpRevisitConfirmation.fromResult(bundle)
-            finalizeCompleteVisit()
+            val outcome = bundle.getString(CompleteCpVisitBottomSheet.KEY_OUTCOME)
+            if (outcome == "cancelled" || outcome == "rejected") {
+                // These atomic outcome routes already close the CP row, linked
+                // SV, field visit and daily task. Completing the field visit a
+                // second time can turn a successful outcome into a false error.
+                clearVisitLocallyStarted()
+                pendingArrivalStorageId = null
+                arrivalInProgress = false
+                val message = if (outcome == "rejected") {
+                    "Visit rejected and follow-up created"
+                } else {
+                    "Site visit cancelled"
+                }
+                Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
+                navigateUp()
+            } else {
+                finalizeCompleteVisit()
+            }
         }
         setFragmentResultListener(CpClientSeenBottomSheet.RESULT_KEY) { _, bundle ->
             val clientSeen = bundle.getBoolean(CpClientSeenBottomSheet.KEY_CLIENT_SEEN)
@@ -470,6 +486,33 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 startCpYesPath()
             } else {
                 startCpNoPath()
+            }
+        }
+        setFragmentResultListener(CpClientNotMetProofBottomSheet.RESULT_KEY) { _, bundle ->
+            val photo = bundle.getString(CpClientNotMetProofBottomSheet.KEY_PHOTO_PATH)
+                ?.takeIf { it.isNotBlank() }
+                ?.let(::File)
+            when (bundle.getString(CpClientNotMetProofBottomSheet.KEY_ACTION)) {
+                CpClientNotMetProofBottomSheet.ACTION_SUBMIT -> {
+                    if (photo == null || !photo.exists()) {
+                        resetClientNotMetCapture("Captured photo is no longer available. Please retake it.")
+                    } else {
+                        uploadArrivalPhotoThenCompleteWithoutClient(
+                            photo,
+                            bundle.getString(CpClientNotMetProofBottomSheet.KEY_REMARKS),
+                        )
+                    }
+                }
+                CpClientNotMetProofBottomSheet.ACTION_RETAKE -> {
+                    photo?.let(::discardUploadedArrivalPhoto)
+                    cpNoPathPhotoCapture = true
+                    arrivalInProgress = true
+                    launchArrivalCamera()
+                }
+                else -> {
+                    photo?.let(::discardUploadedArrivalPhoto)
+                    resetClientNotMetCapture()
+                }
             }
         }
         setFragmentResultListener(CpTripCompletedBottomSheet.RESULT_KEY) { _, _ ->
@@ -1896,22 +1939,24 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
             return
         }
-        swipeArrived?.lockAsBusy("Uploading photo…")
+        swipeArrived?.lockAsBusy("Optimizing and uploading photo…")
         viewLifecycleOwner.lifecycleScope.launch {
-            val storageId = uploadArrivalPhoto(photoFile)
+            val upload = uploadArrivalPhoto(photoFile)
+            val storageId = upload.storageId
             if (storageId == null) {
                 arrivalInProgress = false
                 swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
                 context?.let { ctx ->
                     Toast.makeText(
                         ctx,
-                        "Photo upload failed. Try again.",
+                        upload.errorMessage ?: "Photo upload failed. Try again.",
                         Toast.LENGTH_LONG
                     ).show()
                 }
                 return@launch
             }
             pendingArrivalStorageId = storageId
+            discardUploadedArrivalPhoto(photoFile)
 
             val otpLat = pendingArrivalLat
             val otpLng = pendingArrivalLng
@@ -1943,18 +1988,19 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         }
     }
 
-    private suspend fun uploadArrivalPhoto(file: File): String? = withContext(Dispatchers.IO) {
-        try {
-            val upload = com.manjugroups.m_connect.util.ImageCompressor.compress(file)
-            val body = upload.asRequestBody("image/jpeg".toMediaType())
-            val resp = api.uploadStorageFile(session.bearerToken, body)
-            if (upload !== file) runCatching { upload.delete() }
-            resp.storageId
-        } catch (e: Exception) {
-            android.util.Log.w("TripNav", "Arrival photo upload failed", e)
-            null
-        }
-    }
+    private suspend fun uploadArrivalPhoto(file: File): StorageUploader.Result =
+        StorageUploader.upload(
+            api = api,
+            token = session.bearerToken,
+            file = file,
+            attempts = 2,
+            contentType = "image/jpeg",
+            // Arrival proof is viewed on a phone/web card, not printed. This
+            // keeps text/faces clear while materially reducing weak-uplink time.
+            imageMaxEdge = 1280,
+            imageQuality = 74,
+            imageSkipBelowBytes = 250_000L,
+        )
 
     private fun onArrivalOtpVerified(@Suppress("UNUSED_PARAMETER") otp: String) {
         // The OTP itself is already verified server-side by /verify; here we
@@ -2743,21 +2789,24 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             finalizeCompleteVisit()
             return
         }
-        swipeArrived?.lockAsBusy("Uploading photo…")
+        swipeArrived?.lockAsBusy("Optimizing and uploading photo…")
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val storageId = uploadArrivalPhoto(photoFile)
+                val upload = uploadArrivalPhoto(photoFile)
+                val storageId = upload.storageId
                 if (storageId == null) {
                     isGiftDistributionPostOtpPhotoCapture = false
                     swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
                     Toast.makeText(
                         requireContext(),
-                        "Photo upload failed. Tap Confirm Gift Distribution to retry.",
+                        upload.errorMessage
+                            ?: "Photo upload failed. Tap Confirm Gift Distribution to retry.",
                         Toast.LENGTH_LONG,
                     ).show()
                     return@launch
                 }
                 pendingArrivalStorageId = storageId
+                discardUploadedArrivalPhoto(photoFile)
 
                 swipeArrived?.lockAsBusy("Completing visit…")
                 val metResp = geoApi.markClientMet(
@@ -3058,27 +3107,48 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         launchArrivalCamera()
     }
 
-    private fun uploadArrivalPhotoThenCompleteWithoutClient(photoFile: File) {
-        swipeArrived?.lockAsBusy("Uploading photo…")
+    private fun showClientNotMetProofReview(photoFile: File) {
+        swipeArrived?.lockAsBusy("Review captured photo")
+        CpClientNotMetProofBottomSheet
+            .newInstance(photoFile.absolutePath)
+            .showOnce(parentFragmentManager, "cp_client_not_met_proof")
+    }
+
+    private fun resetClientNotMetCapture(message: String? = null) {
+        arrivalInProgress = false
+        cpNoPathPhotoCapture = false
+        swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+        message?.let {
+            Toast.makeText(requireContext(), it, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun uploadArrivalPhotoThenCompleteWithoutClient(
+        photoFile: File,
+        optionalRemark: String?,
+    ) {
+        swipeArrived?.lockAsBusy("Optimizing and uploading photo…")
         viewLifecycleOwner.lifecycleScope.launch {
-            val storageId = uploadArrivalPhoto(photoFile)
+            val upload = uploadArrivalPhoto(photoFile)
+            val storageId = upload.storageId
             if (storageId == null) {
                 arrivalInProgress = false
                 cpNoPathPhotoCapture = false
                 swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
                 Toast.makeText(
                     requireContext(),
-                    "Photo upload failed. Try again.",
+                    upload.errorMessage ?: "Photo upload failed. Try again.",
                     Toast.LENGTH_LONG
                 ).show()
                 return@launch
             }
             pendingArrivalStorageId = storageId
-            completeCpVisitWithoutClient()
+            discardUploadedArrivalPhoto(photoFile)
+            completeCpVisitWithoutClient(optionalRemark)
         }
     }
 
-    private fun completeCpVisitWithoutClient() {
+    private fun completeCpVisitWithoutClient(optionalRemark: String?) {
         val cpId = cpVisitId ?: run {
             arrivalInProgress = false
             swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
@@ -3105,6 +3175,11 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     isCollectionCp -> "not_collected"
                     else -> "other"
                 }
+                val completionNotes = optionalRemark
+                    ?.trim()
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { "$noShowReason. Staff remark: $it" }
+                    ?: noShowReason
 
                 val metResp = geoApi.markClientMet(
                     session.bearerToken,
@@ -3126,7 +3201,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     com.manjugroups.m_connect.network.SetOutcomeRequest(
                         id = cpId,
                         outcome = terminalOutcome,
-                        notes = noShowReason,
+                        notes = completionNotes,
                         // Not-met completions have NO arrival OTP (the client
                         // wasn't there) — the proof photo is the sole evidence.
                         // Pass it so the backend attaches it to the field visit
@@ -3205,7 +3280,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 // (arrivalPhotoStorageId, arrivalVerifiedAt). `remarks` stays
                 // human-readable so it can carry future free-text notes
                 // without us having to parse it again.
-                geoApi.completeVisit(
+                val completion = geoApi.completeVisit(
                     session.bearerToken,
                     CompleteVisitRequest(
                         visitId = id,
@@ -3213,18 +3288,30 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                         lng = loc?.longitude,
                         remarks = "Arrival verified",
                         arrivalPhotoStorageId = storageId,
-                    )
+                    ),
                 )
+                check(completion.success) {
+                    completion.error ?: "Visit completion was rejected"
+                }
                 applyStatusPill("Complete")
-                val bootstrap = geoApi
-                    .getTrackingBootstrap(session.bearerToken, session.trackingDeviceId)
-                    .data
-                applyTrackingBootstrap(
-                    bootstrap,
-                    attendanceActive = runCatching {
-                        AttendanceTrackingGate.isClockedInForToday(session.bearerToken, api)
-                    }.getOrDefault(false),
-                )
+                // Completion is already committed. A dashboard refresh failure
+                // must not tell staff the visit failed and tempt a duplicate.
+                runCatching {
+                    val bootstrap = geoApi
+                        .getTrackingBootstrap(session.bearerToken, session.trackingDeviceId)
+                        .data
+                    applyTrackingBootstrap(
+                        bootstrap,
+                        attendanceActive = runCatching {
+                            AttendanceTrackingGate.isClockedInForToday(
+                                session.bearerToken,
+                                api,
+                            )
+                        }.getOrDefault(false),
+                    )
+                }.onFailure {
+                    android.util.Log.w("TripNav", "Post-completion refresh failed", it)
+                }
                 val revisit = pendingCpRevisit
                 if (revisit != null) {
                     showClientNotSeenCompletion = false
@@ -3258,6 +3345,14 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             File.createTempFile("arrival_", ".jpg", dir)
         } catch (_: Exception) {
             null
+        }
+    }
+
+    private fun discardUploadedArrivalPhoto(file: File) {
+        runCatching { file.delete() }
+        if (pendingArrivalPhoto?.absolutePath == file.absolutePath) {
+            pendingArrivalPhoto = null
+            pendingArrivalPhotoUri = null
         }
     }
 

@@ -82,6 +82,11 @@ class MconnectFirebaseMessagingService : FirebaseMessagingService() {
             ModernDialerCallController.showIncomingCall(this, message.data)
             return
         }
+        if (ModernDialerCallController.isEndedCall(message.data)) {
+            ModernDialerCallController.clearCallNotifications(this)
+            ModernDialerWebViewBridge.remoteEnded()
+            return
+        }
 
         if (message.data["type"] == "geotrack_sync") {
             CoroutineScope(Dispatchers.IO).launch {

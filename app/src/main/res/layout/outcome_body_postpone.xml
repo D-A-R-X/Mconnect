@@ -19,7 +19,7 @@
     <TextView
         android:id="@+id/tvPostDateLabel"
         style="@style/OutcomeFieldLabel"
-        android:text="Next visit date" />
+        android:text="Follow-up date" />
 
     <TextView
         android:id="@+id/tvPostDateHelp"
@@ -28,7 +28,7 @@
         android:layout_marginTop="2dp"
         android:fontFamily="@font/inter_regular"
         android:includeFontPadding="false"
-        android:text="When should this visit be rescheduled to."
+        android:text="When should the client be followed up."
         android:textColor="#94A3B8"
         android:textSize="11sp" />
 
@@ -64,7 +64,7 @@
         android:layout_marginTop="2dp"
         android:fontFamily="@font/inter_regular"
         android:includeFontPadding="false"
-        android:text="Why is the visit being postponed."
+        android:text="Why does this client need a follow-up."
         android:textColor="#94A3B8"
         android:textSize="11sp" />
 
@@ -92,7 +92,7 @@
             android:background="@android:color/transparent"
             android:fontFamily="@font/inter_medium"
             android:gravity="top"
-            android:hint="Reason for postponement"
+            android:hint="Reason for follow-up"
             android:includeFontPadding="false"
             android:inputType="textMultiLine|textCapSentences"
             android:minLines="2"

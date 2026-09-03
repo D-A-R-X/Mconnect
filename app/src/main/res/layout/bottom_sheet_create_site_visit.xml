@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_auth_sheet"
+    android:orientation="vertical">
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="20dp"
+            android:paddingTop="16dp"
+            android:paddingBottom="24dp">
+
+            <View
+                android:layout_width="40dp"
+                android:layout_height="4dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginBottom="14dp"
+                android:background="@drawable/bg_chat_sheet_handle" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_bold"
+                android:text="Schedule Site Visit"
+                android:textColor="#101828"
+                android:textSize="20sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="Client travel to a project"
+                android:textColor="#667085"
+                android:textSize="13sp" />
+
+            <TextView style="@style/SvCreateLabel" android:layout_marginTop="18dp" android:text="SV Type *" />
+            <EditText android:id="@+id/etSvType" style="@style/SvCreatePicker" android:hint="Select SV type" />
+
+            <TextView style="@style/SvCreateSection" android:text="Client Details" />
+            <LinearLayout style="@style/SvCreateCard">
+                <TextView style="@style/SvCreateLabel" android:text="Client Phone Number *" />
+                <EditText android:id="@+id/etSvClientPhone" style="@style/SvCreateInput" android:digits="0123456789+ " android:hint="10-digit mobile number" android:inputType="phone" android:maxLength="18" />
+                <TextView style="@style/SvCreateLabel" android:text="Client / Lead *" />
+                <EditText android:id="@+id/etSvLead" style="@style/SvCreatePicker" android:hint="Search by phone first" />
+                <TextView android:id="@+id/tvSvClientHint" style="@style/SvCreateHint" android:text="Enter a phone number to find an existing lead." />
+            </LinearLayout>
+
+            <TextView style="@style/SvCreateSection" android:text="Visit Details" />
+            <LinearLayout style="@style/SvCreateCard">
+                <TextView style="@style/SvCreateLabel" android:text="Project *" />
+                <EditText android:id="@+id/etSvProject" style="@style/SvCreatePicker" android:hint="Select project" />
+                <TextView style="@style/SvCreateLabel" android:text="Origin" />
+                <EditText android:id="@+id/etSvOrigin" style="@style/SvCreatePicker" android:hint="Select origin" />
+                <TextView style="@style/SvCreateLabel" android:text="Scheduled Date &amp; Time *" />
+                <EditText android:id="@+id/etSvDateTime" style="@style/SvCreatePicker" android:hint="Select date and time" />
+                <LinearLayout android:id="@+id/blockSvPickupTime" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                    <TextView style="@style/SvCreateLabel" android:text="Pickup Time *" />
+                    <EditText android:id="@+id/etSvPickupTime" style="@style/SvCreatePicker" android:hint="Select pickup time" />
+                </LinearLayout>
+                <TextView style="@style/SvCreateLabel" android:text="Client Travel" />
+                <EditText android:id="@+id/etSvTravelMode" style="@style/SvCreatePicker" android:hint="Select travel mode" />
+            </LinearLayout>
+
+            <TextView style="@style/SvCreateSection" android:text="Assignments" />
+            <LinearLayout style="@style/SvCreateCard">
+                <TextView style="@style/SvCreateLabel" android:text="LMO *" />
+                <EditText android:id="@+id/etSvLmo" style="@style/SvCreatePicker" android:hint="Select LMO" />
+                <TextView style="@style/SvCreateLabel" android:text="BDO *" />
+                <EditText android:id="@+id/etSvBdo" style="@style/SvCreatePicker" android:hint="Select BDO" />
+                <TextView style="@style/SvCreateLabel" android:text="Site Incharge *" />
+                <EditText android:id="@+id/etSvIncharge" style="@style/SvCreatePicker" android:hint="Select site incharge" />
+                <LinearLayout android:id="@+id/blockSvFieldStaff" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+                    <TextView style="@style/SvCreateLabel" android:text="Field Staff *" />
+                    <EditText android:id="@+id/etSvFieldStaff" style="@style/SvCreatePicker" android:hint="Select verification staff" />
+                </LinearLayout>
+                <TextView style="@style/SvCreateLabel" android:text="HOD *" />
+                <EditText android:id="@+id/etSvHod" style="@style/SvCreatePicker" android:hint="Select HOD" />
+                <TextView style="@style/SvCreateLabel" android:text="AVP *" />
+                <EditText android:id="@+id/etSvAvp" style="@style/SvCreatePicker" android:hint="Select AVP" />
+                <TextView style="@style/SvCreateLabel" android:text="GM *" />
+                <EditText android:id="@+id/etSvGm" style="@style/SvCreatePicker" android:hint="Select GM" />
+                <TextView style="@style/SvCreateLabel" android:text="Senior Manager *" />
+                <EditText android:id="@+id/etSvSeniorManager" style="@style/SvCreatePicker" android:hint="Select senior manager" />
+            </LinearLayout>
+
+            <TextView style="@style/SvCreateSection" android:text="Pickup Location" />
+            <LinearLayout style="@style/SvCreateCard">
+                <TextView style="@style/SvCreateLabel" android:text="Pickup Address *" />
+                <EditText android:id="@+id/etSvPickupAddress" style="@style/SvCreateInput" android:gravity="top|start" android:hint="Client pickup address" android:inputType="textMultiLine|textCapSentences" android:minHeight="76dp" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnSvDropPin"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="46dp"
+                    android:layout_marginTop="10dp"
+                    android:fontFamily="@font/inter_semibold"
+                    android:text="Set pickup pin on map"
+                    android:textAllCaps="false"
+                    android:textColor="#0B61CA"
+                    app:cornerRadius="8dp"
+                    app:strokeColor="#0B61CA" />
+                <TextView android:id="@+id/tvSvPin" style="@style/SvCreateHint" android:text="A precise map pin is required." />
+            </LinearLayout>
+
+            <TextView style="@style/SvCreateSection" android:text="Visitors" />
+            <LinearLayout style="@style/SvCreateCard">
+                <TextView style="@style/SvCreateLabel" android:text="Number of Visitors" />
+                <EditText android:id="@+id/etSvVisitorCount" style="@style/SvCreateInput" android:hint="0" android:inputType="number" android:maxLength="2" />
+                <LinearLayout android:id="@+id/svVisitorsContainer" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" />
+                <TextView style="@style/SvCreateLabel" android:text="Notes" />
+                <EditText android:id="@+id/etSvNotes" style="@style/SvCreateInput" android:gravity="top|start" android:hint="Anything the team should know" android:inputType="textMultiLine|textCapSentences" android:minHeight="76dp" />
+            </LinearLayout>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_auth_sheet"
+        android:elevation="12dp"
+        android:orientation="horizontal"
+        android:paddingHorizontal="20dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="16dp">
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSvCancel"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="54dp"
+            android:layout_marginEnd="8dp"
+            android:layout_weight="1"
+            android:fontFamily="@font/inter_bold"
+            android:text="Cancel"
+            android:textAllCaps="false"
+            app:cornerRadius="27dp"
+            app:strokeColor="#D0D5DD" />
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSvSubmit"
+            android:layout_width="0dp"
+            android:layout_height="54dp"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:backgroundTint="#1BCA0B"
+            android:fontFamily="@font/inter_bold"
+            android:text="Schedule"
+            android:textAllCaps="false"
+            android:textColor="#FFFFFF"
+            app:cornerRadius="27dp" />
+    </LinearLayout>
+</LinearLayout>

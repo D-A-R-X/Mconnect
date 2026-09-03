@@ -7,6 +7,8 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.geotrack.data.GeoTrackDatabase
 import com.manjugroups.m_connect.geotrack.data.PendingGeoTrackEventEntity
 import com.manjugroups.m_connect.network.GeoTrackApi
+import com.manjugroups.m_connect.network.DirectTrackingStartRequest
+import com.manjugroups.m_connect.network.DirectTrackingStopRequest
 import com.manjugroups.m_connect.network.HeartbeatRequest
 import com.manjugroups.m_connect.network.TamperReportRequest
 
@@ -18,6 +20,23 @@ object GeoTrackEventQueue {
 
     /** Reserved event type for queued heartbeat replays. */
     const val HEARTBEAT_EVENT_TYPE = "HEARTBEAT"
+    const val TRACKING_START_EVENT_TYPE = "TRACKING_START"
+    const val TRACKING_STOP_EVENT_TYPE = "TRACKING_STOP"
+    private val directTamperTypes = setOf(
+        "GPS_DISABLED",
+        "GPS_ENABLED",
+        "LOCATION_DISABLED",
+        "LOCATION_ENABLED",
+        "NETWORK_OFFLINE",
+        "NETWORK_ONLINE",
+        "AIRPLANE_MODE_ON",
+        "AIRPLANE_MODE_OFF",
+        "MOCK_LOCATION",
+        "PERMISSION_MISSING",
+        "DEVICE_REBOOT",
+        "DEVICE_SHUTDOWN",
+        "HEARTBEAT_MISSED",
+    )
 
     suspend fun enqueue(
         context: Context,
@@ -81,6 +100,9 @@ object GeoTrackEventQueue {
             // replayed heartbeat/tamper event backfills the timeline at the
             // moment it HAPPENED, not the moment connectivity returned.
             val occurredAt = (metadata["ts"] as? Number)?.toLong() ?: event.occurredAt
+            val deviceId = (metadata["deviceId"] as? String) ?: session.trackingDeviceId ?: "android"
+            val requestId = (metadata["requestId"] as? String)
+                ?: "geotrack-event-$deviceId-${event.id}-$occurredAt"
 
             // Heartbeats reuse this queue (no separate Room table) but
             // need to hit the heartbeat endpoint, not the tamper one.
@@ -91,12 +113,14 @@ object GeoTrackEventQueue {
             val ok = if (event.eventType == HEARTBEAT_EVENT_TYPE) {
                 runCatching {
                     val resp = api.heartbeat(
-                        session.bearerToken,
-                        HeartbeatRequest(
+                        token = session.bearerToken,
+                        idempotencyKey = requestId,
+                        body = HeartbeatRequest(
                             sessionId = (metadata["sessionId"] as? String)
                                 ?: session.activeTrackingSessionId,
-                            deviceId = (metadata["deviceId"] as? String)
-                                ?: session.trackingDeviceId,
+                            deviceId = deviceId,
+                            requestId = requestId,
+                            deviceSequence = occurredAt,
                             // -1 = "unknown battery at replay time"; the
                             // server treats negative as missing and just
                             // records the heartbeat tick. Same idea for
@@ -104,16 +128,53 @@ object GeoTrackEventQueue {
                             batteryPct = (metadata["batteryPct"] as? Number)?.toInt() ?: -1,
                             appVersion = (metadata["appVersion"] as? String) ?: "unknown",
                             recordedAt = occurredAt,
+                            airplaneMode = metadata["airplaneMode"] as? Boolean,
+                            locationEnabled = metadata["locationEnabled"] as? Boolean,
                         ),
                     )
                     resp.success
                 }.getOrDefault(false)
+            } else if (event.eventType == TRACKING_START_EVENT_TYPE) {
+                runCatching {
+                    api.startDirectTracking(
+                        token = session.bearerToken,
+                        idempotencyKey = requestId,
+                        body = DirectTrackingStartRequest(
+                            lat = (metadata["lat"] as? Number)?.toDouble(),
+                            lng = (metadata["lng"] as? Number)?.toDouble(),
+                        ),
+                    ).success
+                }.getOrDefault(false)
+            } else if (event.eventType == TRACKING_STOP_EVENT_TYPE) {
+                runCatching {
+                    api.stopDirectTracking(
+                        token = session.bearerToken,
+                        idempotencyKey = requestId,
+                        body = DirectTrackingStopRequest(),
+                    ).success
+                }.getOrDefault(false)
             } else {
                 runCatching {
-                    api.reportTamper(
-                        session.bearerToken,
-                        TamperReportRequest(event.eventType, metadata, detectedAt = occurredAt),
-                    ).success
+                    val body = TamperReportRequest(
+                        sessionId = (metadata["sessionId"] as? String)
+                            ?: session.activeTrackingSessionId,
+                        eventType = event.eventType,
+                        metadata = metadata,
+                        detectedAt = occurredAt,
+                        requestId = requestId,
+                    )
+                    if (event.eventType in directTamperTypes) {
+                        api.reportTamper(
+                            token = session.bearerToken,
+                            idempotencyKey = requestId,
+                            body = body,
+                        ).success
+                    } else {
+                        // Historical MMS-only lifecycle events such as
+                        // USER_LOGIN and APP_UPDATED are not accepted by the
+                        // direct GeoTrack tamper contract.
+                        api.reportLegacyTamper(session.bearerToken, body).success
+                    }
                 }.getOrDefault(false)
             }
             if (ok) {

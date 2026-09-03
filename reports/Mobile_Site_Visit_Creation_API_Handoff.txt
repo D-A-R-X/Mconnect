@@ -1,0 +1,123 @@
+MOBILE SITE VISIT CREATION - BACKEND / WEB API HANDOFF
+Date: 30 Aug 2026
+
+Scope
+Android and iOS now use one authenticated, idempotent mobile scheduler contract.
+The endpoint must reproduce the existing web Schedule Site Visit transaction.
+Do not make mobile chain lead + client + CP + SV mutations independently: a network
+failure between calls can create orphan or duplicate records.
+
+REQUIRED NEW ENDPOINT
+POST /api/marketing/siteVisits/create
+Authorization: Bearer <session token>
+IAM: marketing.siteVisits.create
+Content-Type: application/json
+
+Request
+{
+  "requestId": "uuid-generated-on-device-and-reused-for-retry",
+  "routing": "direct_sv | same_area | out_of_station | immediate_pickup",
+  "origin": "telecaller | walk_in | campaign | referral | client_place_visit",
+  "leadId": "optional existing telecallerLeads id",
+  "clientName": "required when leadId is absent",
+  "mobileNumber": "required normalized 10-digit mobile",
+  "projectId": "required projects id",
+  "scheduledDate": "YYYY-MM-DD",
+  "scheduledTime": "HH:mm",
+  "pickupTime": "HH:mm; required except direct_sv",
+  "travelMode": "cab | own_vehicle; direct_sv must normalize to own_vehicle",
+  "telecallerId": "required eligible LMO/CP/BDO staff id",
+  "bdoStaffId": "required eligible LMO/CP/BDO staff id",
+  "inchargeStaffId": "required active Sales & Marketing staff id",
+  "fieldStaffId": "required only for same_area",
+  "hodStaffId": "required active staff id",
+  "avpStaffId": "required active Sales & Marketing staff id",
+  "gmStaffId": "required active Sales & Marketing staff id",
+  "seniorManagerStaffId": "required active Sales & Marketing staff id",
+  "pickupAddress": "required",
+  "pickupLat": 13.0827,
+  "pickupLng": 80.2707,
+  "pickupGoogleMapsLink": "optional",
+  "expectedAttendeeCount": 2,
+  "attendees": [
+    { "name": "Client", "relation": "Self", "age": "42", "isVeg": true }
+  ],
+  "notes": "optional"
+}
+
+Success 200
+{
+  "success": true,
+  "mode": "created | pending_gm_verification",
+  "siteVisitId": "present for direct_sv/same_area when created",
+  "clientPlaceVisitId": "present for same_area",
+  "handoffId": "present for out_of_station/immediate_pickup",
+  "message": "Site visit scheduled"
+}
+
+Required transaction behavior
+1. Authenticate the real session actor and require marketing.siteVisits.create.
+2. Deduplicate by (actor staff id, requestId). A retry returns the original 200
+   response and must never create a second client, lead, CP, handoff, or SV.
+3. Normalize mobile/date/time. Reject past schedule, pickup after scheduled time,
+   and immediate_pickup when scheduledDate is not today in business timezone.
+4. Resolve leadId when supplied. Otherwise require clientName + mobileNumber,
+   deduplicate client by normalized phone, upsert Client and create/find Lead in
+   the same transaction. Never trust a device-supplied owner outside IAM scope.
+5. Validate project, all staff ids, active status, role eligibility, reporting
+   assignments, and Same Area fieldStaffId. Run the existing Site Incharge +/-1h
+   busy guard and same-client/same-day SV guard.
+6. Require finite pickup coordinates and a non-empty pickup address. Persist and
+   sync these coordinates to the canonical client pickup location.
+7. direct_sv: call the existing siteVisits create flow with own_vehicle and no
+   confirmation tracking.
+8. same_area: atomically create the verification clientPlaceVisit with proposed
+   SV payload, then the confirmation-pending Site Visit, matching the web flow.
+9. out_of_station / immediate_pickup: do not call siteVisits.create directly.
+   Create the existing outOfStationHandoff for GM verification and return handoffId.
+10. Preserve existing notifications, audit rows, pre-visit follow-up, fleet alert,
+    WhatsApp confirmation rules, QR/status behavior, and client-location sync.
+
+Normalized error contract
+400 INVALID_REQUEST        missing/malformed fields
+401 UNAUTHENTICATED        expired/invalid session
+403 FORBIDDEN              IAM or assignment scope denied
+404 NOT_FOUND              project/lead/staff missing
+409 DUPLICATE_VISIT        same client already has an SV that day
+409 STAFF_BUSY             Site Incharge conflict; message must name visit/time
+409 IDEMPOTENCY_CONFLICT   requestId reused with a different payload
+422 VALIDATION_ERROR       date/time/routing/role/location rule failed
+500 INTERNAL_ERROR         safe message; log correlation id server-side
+
+All failures should use:
+{
+  "success": false,
+  "code": "STAFF_BUSY",
+  "error": "Cannot schedule: Site Incharge ...",
+  "fieldErrors": { "inchargeStaffId": "Already assigned at 15:00" },
+  "correlationId": "server-generated-id"
+}
+
+EXISTING READ ENDPOINTS REUSED BY MOBILE
+GET /api/marketing/projects
+GET /api/hr/staff?status=active
+GET /api/telecaller/leads/search-by-phone?phone=<digits>
+POST /api/address/parse (available for future structured-address parity)
+GET /api/address/autocomplete and GET /api/address/place (map picker support)
+
+WEB PARITY / UI NOTE
+No web edit is requested in this handoff. The existing web Schedule Site Visit form
+already owns these fields and routing rules. After the endpoint is implemented,
+web may optionally call the same orchestration endpoint to remove duplicated client/
+lead/CP/SV chaining, but only under separate approval.
+
+Acceptance tests
+- Each routing creates exactly the web-equivalent records and statuses.
+- Retrying an identical requestId returns the original ids without duplicates.
+- Unknown clients are created once and appear in Clients with canonical pickup pin.
+- Same Area requires field staff and creates a confirmation-pending SV + CP link.
+- Outstation/Immediate produce only a GM handoff until confirmation.
+- Direct SV forces own vehicle.
+- Past time, invalid pickup order, role mismatch, duplicate day, and busy incharge
+  return stable 4xx errors and create no partial records.
+- Existing SV lifecycle, QR, fleet, WhatsApp, CP, and reporting behavior is unchanged.

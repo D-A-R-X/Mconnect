@@ -46,6 +46,203 @@
             android:textColor="#667085"
             android:textSize="13sp" />
 
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:background="@drawable/bg_cp_creation_input_box"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="14dp"
+            android:paddingVertical="10dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/inter_semibold"
+                    android:text="@string/joint_cp"
+                    android:textColor="?attr/colorForegroundPrimary"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:fontFamily="@font/inter_regular"
+                    android:text="@string/joint_cp_toggle_summary"
+                    android:textColor="?attr/colorForegroundSecondary"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/switchJointCp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="@string/joint_cp"
+                app:useMaterialThemeColors="true" />
+        </LinearLayout>
+
+        <!-- CP type remains the visit purpose for normal and joint visits. -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:fontFamily="@font/inter_medium"
+            android:text="CP Type *"
+            android:textColor="#344054"
+            android:textSize="13sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:layout_marginTop="6dp"
+            android:background="@drawable/bg_cp_creation_input_box"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="14dp">
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:src="@drawable/ic_cp_project" />
+
+            <EditText
+                android:id="@+id/etCpType"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="10dp"
+                android:layout_weight="1"
+                android:background="@null"
+                android:clickable="true"
+                android:focusable="false"
+                android:fontFamily="@font/inter_medium"
+                android:hint="Select CP type"
+                android:inputType="none"
+                android:textColor="#101828"
+                android:textColorHint="#9CA3AF"
+                android:textSize="14sp" />
+
+            <ImageView
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:src="@drawable/ic_chevron_down"
+                app:tint="#667085" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/blockNewClientReferralSource"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="Referral Source *"
+                android:textColor="#344054"
+                android:textSize="13sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="50dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_cp_creation_input_box"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="14dp">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_cp_staff" />
+
+                <EditText
+                    android:id="@+id/etReferralSource"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="10dp"
+                    android:layout_weight="1"
+                    android:background="@null"
+                    android:clickable="true"
+                    android:focusable="false"
+                    android:fontFamily="@font/inter_medium"
+                    android:hint="Select referral source"
+                    android:inputType="none"
+                    android:textColor="#101828"
+                    android:textColorHint="#9CA3AF"
+                    android:textSize="14sp" />
+
+                <ImageView
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:src="@drawable/ic_chevron_down"
+                    app:tint="#667085" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/blockReferringClient"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:fontFamily="@font/inter_medium"
+                    android:text="Referring Client *"
+                    android:textColor="#344054"
+                    android:textSize="13sp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="50dp"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/bg_cp_creation_input_box"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="14dp">
+
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@drawable/ic_cp_phone" />
+
+                    <EditText
+                        android:id="@+id/etReferringClient"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_marginStart="10dp"
+                        android:layout_weight="1"
+                        android:background="@null"
+                        android:clickable="true"
+                        android:focusable="false"
+                        android:fontFamily="@font/inter_medium"
+                        android:hint="Search client by name or mobile"
+                        android:inputType="none"
+                        android:textColor="#101828"
+                        android:textColorHint="#9CA3AF"
+                        android:textSize="14sp" />
+
+                    <ImageView
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:src="@drawable/ic_chevron_down"
+                        app:tint="#667085" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+
         <!-- ══════════════ CLIENT DETAILS ══════════════ -->
         <TextView
             android:layout_width="wrap_content"
@@ -671,107 +868,6 @@
                     android:layout_height="16dp"
                     android:src="@drawable/ic_chevron_down"
                     app:tint="#667085" />
-            </LinearLayout>
-
-            <!-- CP Type -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:fontFamily="@font/inter_medium"
-                android:text="CP Type *"
-                android:textColor="#344054"
-                android:textSize="13sp" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="50dp"
-                android:layout_marginTop="6dp"
-                android:background="@drawable/bg_cp_creation_input_box"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingHorizontal="14dp">
-
-                <ImageView
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:src="@drawable/ic_cp_project" />
-
-                <EditText
-                    android:id="@+id/etCpType"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_marginStart="10dp"
-                    android:layout_weight="1"
-                    android:background="@null"
-                    android:clickable="true"
-                    android:focusable="false"
-                    android:fontFamily="@font/inter_medium"
-                    android:hint="Select CP type"
-                    android:inputType="none"
-                    android:textColor="#101828"
-                    android:textColorHint="#9CA3AF"
-                    android:textSize="14sp" />
-
-                <ImageView
-                    android:layout_width="16dp"
-                    android:layout_height="16dp"
-                    android:src="@drawable/ic_chevron_down"
-                    app:tint="#667085" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/blockJointCpCategory"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:visibility="gone">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="14dp"
-                    android:fontFamily="@font/inter_medium"
-                    android:text="Joint CP Category *"
-                    android:textColor="#344054"
-                    android:textSize="13sp" />
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="50dp"
-                    android:layout_marginTop="6dp"
-                    android:background="@drawable/bg_cp_creation_input_box"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal"
-                    android:paddingHorizontal="14dp">
-
-                    <ImageView
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
-                        android:src="@drawable/ic_cp_project" />
-
-                    <EditText
-                        android:id="@+id/etJointCpCategory"
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_marginStart="10dp"
-                        android:layout_weight="1"
-                        android:background="@null"
-                        android:clickable="true"
-                        android:focusable="false"
-                        android:fontFamily="@font/inter_medium"
-                        android:hint="Select Joint CP category"
-                        android:inputType="none"
-                        android:textColor="#101828"
-                        android:textColorHint="#9CA3AF"
-                        android:textSize="14sp" />
-
-                    <ImageView
-                        android:layout_width="16dp"
-                        android:layout_height="16dp"
-                        android:src="@drawable/ic_chevron_down"
-                        app:tint="#667085" />
-                </LinearLayout>
             </LinearLayout>
 
             <!-- Date & Time -->

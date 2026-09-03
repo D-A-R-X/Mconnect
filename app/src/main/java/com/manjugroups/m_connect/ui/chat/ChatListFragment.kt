@@ -358,11 +358,20 @@ class ChatListFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
+        if (!isHidden) applyChatChrome()
+        startRefreshLoop()
+    }
+
+    override fun onHiddenChanged(hidden: Boolean) {
+        super.onHiddenChanged(hidden)
+        if (!hidden && _binding != null) applyChatChrome()
+    }
+
+    private fun applyChatChrome() {
         (activity as? MainActivity)?.let { main ->
             main.setTabBarVisible(true)
             main.setTopBarAppearance(Color.parseColor("#FEFEFE"), true, fullBleed = false)
         }
-        startRefreshLoop()
     }
 
     override fun onPause() {

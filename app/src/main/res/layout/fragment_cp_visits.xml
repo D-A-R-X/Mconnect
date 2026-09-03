@@ -47,10 +47,10 @@
             android:layout_marginEnd="52dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:clickable="true"
-            android:contentDescription="Filter by date"
+            android:contentDescription="Filter visits"
             android:focusable="true"
             android:padding="9dp"
-            android:src="@drawable/ic_filter_calendar"
+            android:src="@drawable/ic_filter_blue"
             app:tint="#0B61CA" />
 
         <ImageView
@@ -141,9 +141,43 @@
             android:orientation="horizontal">
 
             <TextView
+                android:id="@+id/pillMy"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:background="@drawable/bg_cpv_filter_pill_inactive"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:paddingHorizontal="16dp"
+                android:text="My"
+                android:textColor="#475467"
+                android:textSize="13sp"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/pillTeam"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_cpv_filter_pill_inactive"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:paddingHorizontal="16dp"
+                android:text="Team"
+                android:textColor="#475467"
+                android:textSize="13sp"
+                android:visibility="gone" />
+
+            <TextView
                 android:id="@+id/pillAll"
                 android:layout_width="wrap_content"
                 android:layout_height="34dp"
+                android:layout_marginStart="8dp"
                 android:background="@drawable/bg_cpv_filter_pill_inactive"
                 android:clickable="true"
                 android:focusable="true"

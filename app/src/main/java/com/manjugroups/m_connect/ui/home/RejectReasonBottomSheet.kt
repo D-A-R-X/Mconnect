@@ -17,7 +17,6 @@ import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.GeoTrackApi
-import com.manjugroups.m_connect.network.MarkClientMetRequest
 import com.manjugroups.m_connect.network.SetOutcomeRequest
 import kotlinx.coroutines.launch
 
@@ -25,15 +24,15 @@ import kotlinx.coroutines.launch
  * RejectReasonBottomSheet — sub-flow opened from
  * [CompleteCpVisitBottomSheet] when the field staff taps "Reject It"
  * on a locked SV-cum-CP. Captures a free-text rejection reason and
- * fires the same `markClientMet` + `setCpVisitOutcome(not_interested)`
- * chain the locked footer used to invoke directly, but with the
- * reason shipped as the outcome notes so the back office has context.
+ * submits the atomic `setCpVisitOutcome(rejected)` mutation with the
+ * reason in outcome notes. The server closes all linked visit/task records
+ * and creates the follow-up call before returning success.
  *
  * Result contract (mirrors CompleteCpVisitBottomSheet so the trip nav
  * doesn't need to know which surface produced the rejection):
  *   RESULT_KEY → bundle {
  *     KEY_CLIENT_MET: Boolean = true,
- *     KEY_OUTCOME:    String  = "not_interested",
+ *     KEY_OUTCOME:    String  = "rejected",
  *     KEY_REASON:     String  = the captured text,
  *   }
  *
@@ -116,14 +115,6 @@ class RejectReasonBottomSheet : BottomSheetDialogFragment() {
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val metResp = geoApi.markClientMet(
-                    session.bearerToken,
-                    MarkClientMetRequest(id = cpVisitId, clientMet = true),
-                )
-                if (!metResp.success) {
-                    finishWithError(metResp.error ?: "Failed to record client met")
-                    return@launch
-                }
                 val outcomeResp = geoApi.setCpVisitOutcome(
                     session.bearerToken,
                     SetOutcomeRequest(
@@ -134,6 +125,10 @@ class RejectReasonBottomSheet : BottomSheetDialogFragment() {
                 )
                 if (!outcomeResp.success) {
                     finishWithError(outcomeResp.error ?: "Failed to record rejection")
+                    return@launch
+                }
+                if (outcomeResp.status != OUTCOME_REJECTED || outcomeResp.followUpTaskId.isNullOrBlank()) {
+                    finishWithError("Rejection was not confirmed with a follow-up task. Please retry.")
                     return@launch
                 }
                 // Single result keyed by THIS sheet — the parent sheet

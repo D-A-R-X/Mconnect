@@ -49,6 +49,14 @@ fun firebaseConfig(name: String): String =
         ?: googleServicesJson[name]
         ?: ""
 
+val requiredFirebaseConfig = listOf(
+    "FIREBASE_APPLICATION_ID",
+    "FIREBASE_PROJECT_ID",
+    "FIREBASE_API_KEY",
+    "FIREBASE_GCM_SENDER_ID",
+)
+val missingFirebaseConfig = requiredFirebaseConfig.filter { firebaseConfig(it).isBlank() }
+
 val googleMapsApiKey = envOrDefault(
     "GOOGLE_MAPS_ANDROID_KEY",
     envOrDefault(
@@ -132,6 +140,19 @@ android {
     }
 }
 
+// Incoming Modern Dialer calls depend on FCM. Keep debug builds available for
+// local UI work, but never produce a release that cannot receive call pushes.
+tasks.configureEach {
+    if (name == "preReleaseBuild") {
+        doFirst {
+            check(missingFirebaseConfig.isEmpty()) {
+                "Missing Firebase client config: ${missingFirebaseConfig.joinToString()}. " +
+                    "Provide environment variables or app/google-services.json."
+            }
+        }
+    }
+}
+
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
@@ -173,6 +194,9 @@ dependencies {
     implementation(libs.app.update.ktx)
     // ML Kit barcode scanning — powers the Front Desk QR scanner.
     implementation(libs.mlkit.barcode.scanning)
+    // Full Loan Desk scanner UI: edge detection, crop, filters, page review,
+    // reordering and native multi-page PDF output.
+    implementation(libs.mlkit.document.scanner)
 
     ksp(libs.room.compiler)
     testImplementation(libs.junit)

@@ -232,19 +232,37 @@
                     </LinearLayout>
 
                     <!-- Filter Tabs -->
-                    <com.manjugroups.m_connect.ui.common.SegmentedControlView
-                        android:id="@+id/filterRow"
+                    <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="38dp"
                         android:layout_marginHorizontal="8dp"
                         android:layout_marginTop="12dp"
-                        android:background="@drawable/bg_leave_filter_container"
-                        android:padding="3dp"
-                        app:scv_active_background="@drawable/bg_leave_filter_active"
-                        app:scv_font_family="@font/inter_semibold"
-                        app:scv_text_color_selected="@android:color/white"
-                        app:scv_text_color_unselected="?attr/colorForegroundSecondary"
-                        app:scv_text_size="11sp" />
+                        android:orientation="horizontal">
+
+                        <com.manjugroups.m_connect.ui.common.SegmentedControlView
+                            android:id="@+id/filterRow"
+                            android:layout_width="0dp"
+                            android:layout_height="38dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_leave_filter_container"
+                            android:padding="3dp"
+                            app:scv_active_background="@drawable/bg_leave_filter_active"
+                            app:scv_font_family="@font/inter_semibold"
+                            app:scv_text_color_selected="@android:color/white"
+                            app:scv_text_color_unselected="?attr/colorForegroundSecondary"
+                            app:scv_text_size="11sp" />
+
+                        <ImageButton
+                            android:id="@+id/btnAdvancedPermissionFilter"
+                            android:layout_width="38dp"
+                            android:layout_height="38dp"
+                            android:layout_marginStart="8dp"
+                            android:background="@drawable/bg_leave_filter_container"
+                            android:contentDescription="More permission filters"
+                            android:padding="9dp"
+                            android:src="@drawable/ic_filter_blue"
+                            app:tint="?attr/colorAccentPrimary" />
+                    </LinearLayout>
 
                 </LinearLayout>
 

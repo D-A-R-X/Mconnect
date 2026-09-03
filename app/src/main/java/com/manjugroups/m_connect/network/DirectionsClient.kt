@@ -2,7 +2,13 @@ package com.manjugroups.m_connect.network
 
 import com.google.android.gms.maps.model.LatLng
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.max
 
 /**
  * Driving-route helper. Calls our Convex backend (which proxies to the
@@ -27,6 +33,20 @@ object DirectionsClient {
         val distanceText: String,
         val durationText: String,
     )
+
+    data class RoadMatchedLeg(
+        val points: List<LatLng>,
+        val isRoadMatched: Boolean,
+    )
+
+    data class RoadMatchedTrail(
+        val legs: List<RoadMatchedLeg>,
+        val sourcePointCount: Int,
+        val anchorCount: Int,
+    ) {
+        val matchedLegCount: Int get() = legs.count { it.isRoadMatched }
+        val isFullyMatched: Boolean get() = legs.isNotEmpty() && matchedLegCount == legs.size
+    }
 
     private val api by lazy { GeoTrackApi.create() }
 
@@ -97,6 +117,98 @@ object DirectionsClient {
             android.util.Log.w("DirectionsClient", "Backend route call failed", e)
             null
         }
+    }
+
+    /**
+     * Builds a display-only road route through ordered anchors from the recorded GPS trail.
+     * The original samples remain the source of truth for trip evidence and distance.
+     */
+    suspend fun fetchRoadMatchedTrail(
+        bearerToken: String,
+        recordedPoints: List<LatLng>,
+        maxAnchors: Int = 8,
+    ): RoadMatchedTrail? {
+        if (bearerToken.isBlank() || recordedPoints.size < 2) return null
+        val anchors = selectRouteAnchors(recordedPoints, maxAnchors)
+        if (anchors.size < 2) return null
+
+        val legs = coroutineScope {
+            anchors.zipWithNext().map { (origin, destination) ->
+                async {
+                    val routed = fetchDriving(bearerToken, origin, destination)
+                    if (routed != null && routed.polyline.size >= 2) {
+                        RoadMatchedLeg(routed.polyline, isRoadMatched = true)
+                    } else {
+                        RoadMatchedLeg(listOf(origin, destination), isRoadMatched = false)
+                    }
+                }
+            }.awaitAll()
+        }
+        return RoadMatchedTrail(legs, recordedPoints.size, anchors.size)
+    }
+
+    internal fun selectRouteAnchors(points: List<LatLng>, maxAnchors: Int): List<LatLng> {
+        val limit = max(2, maxAnchors)
+        val cleaned = points.fold(mutableListOf<LatLng>()) { result, point ->
+            if (result.isEmpty() || distanceMeters(result.last(), point) >= 5.0) result += point
+            result
+        }
+        if (cleaned.size <= 2) return cleaned
+
+        var toleranceMeters = 12.0
+        var simplified = simplify(cleaned, toleranceMeters)
+        while (simplified.size > limit && toleranceMeters < 250.0) {
+            toleranceMeters *= 1.5
+            simplified = simplify(cleaned, toleranceMeters)
+        }
+        if (simplified.size <= limit) return simplified
+
+        val lastIndex = simplified.lastIndex
+        return (0 until limit).map { slot ->
+            simplified[(slot * lastIndex.toDouble() / (limit - 1)).toInt()]
+        }.distinct()
+    }
+
+    private fun simplify(points: List<LatLng>, toleranceMeters: Double): List<LatLng> {
+        if (points.size <= 2) return points
+        var furthestIndex = -1
+        var furthestDistance = 0.0
+        for (index in 1 until points.lastIndex) {
+            val distance = distanceToSegmentMeters(points[index], points.first(), points.last())
+            if (distance > furthestDistance) {
+                furthestDistance = distance
+                furthestIndex = index
+            }
+        }
+        if (furthestIndex < 0 || furthestDistance <= toleranceMeters) {
+            return listOf(points.first(), points.last())
+        }
+        val before = simplify(points.subList(0, furthestIndex + 1), toleranceMeters)
+        val after = simplify(points.subList(furthestIndex, points.size), toleranceMeters)
+        return before.dropLast(1) + after
+    }
+
+    private fun distanceToSegmentMeters(point: LatLng, start: LatLng, end: LatLng): Double {
+        val referenceLat = (start.latitude + end.latitude + point.latitude) / 3.0
+        val metersPerDegreeLat = 111_320.0
+        val metersPerDegreeLng = metersPerDegreeLat * cos(referenceLat * PI / 180.0)
+        val px = (point.longitude - start.longitude) * metersPerDegreeLng
+        val py = (point.latitude - start.latitude) * metersPerDegreeLat
+        val ex = (end.longitude - start.longitude) * metersPerDegreeLng
+        val ey = (end.latitude - start.latitude) * metersPerDegreeLat
+        val lengthSquared = ex * ex + ey * ey
+        if (lengthSquared == 0.0) return kotlin.math.sqrt(px * px + py * py)
+        val projection = ((px * ex + py * ey) / lengthSquared).coerceIn(0.0, 1.0)
+        val dx = px - projection * ex
+        val dy = py - projection * ey
+        return kotlin.math.sqrt(dx * dx + dy * dy)
+    }
+
+    private fun distanceMeters(first: LatLng, second: LatLng): Double {
+        val latMeters = (second.latitude - first.latitude) * 111_320.0
+        val meanLat = (first.latitude + second.latitude) / 2.0 * PI / 180.0
+        val lngMeters = (second.longitude - first.longitude) * 111_320.0 * cos(meanLat)
+        return kotlin.math.sqrt(latMeters * latMeters + lngMeters * lngMeters)
     }
 
     private fun formatDistance(meters: Int): String =

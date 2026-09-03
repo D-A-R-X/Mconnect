@@ -1,0 +1,51 @@
+MCONNECT MOBILE - JOINT CP OTP ASSIST AUTHORIZATION
+API HANDOFF
+
+Scope
+-----
+No new endpoint is required. Align the existing OTP-assist action with the
+participant-aware Joint CP authorization contract.
+
+Endpoint
+--------
+POST /api/marketing/cp-visits/otp-assist
+Authorization: Bearer <token>
+Content-Type: application/json
+
+Request
+{
+  "clientPlaceVisitId": "<clientPlaceVisitId>",
+  "lat": 13.0827,
+  "lng": 80.2707,
+  "remark": "Client is not sharing the OTP"
+}
+
+Required authorization
+----------------------
+Allow the authenticated staff member when either condition is true:
+
+1. clientPlaceVisits.assignedStaffId == authenticatedStaffId
+2. clientPlaceVisitParticipants contains the parent visit id and
+   authenticatedStaffId
+
+Do not authorize from a device-supplied staff id. Preserve all existing OTP,
+visit-state, reporting-manager, audit, and chat-message checks.
+
+Error response
+--------------
+Return the existing JSON shape with an actionable reason:
+
+{
+  "success": false,
+  "error": "Human-readable reason",
+  "code": "FORBIDDEN | NO_ACTIVE_OTP | MANAGER_NOT_CONFIGURED | INVALID_STATE"
+}
+
+Acceptance checks
+-----------------
+1. Primary Joint CP staff can request OTP assistance.
+2. Companion Joint CP staff can request assistance for the same parent visit.
+3. An unrelated staff member receives 403 and no chat/audit side effect.
+4. Missing OTP or manager configuration returns an actionable 4xx JSON error.
+5. Repeated taps do not create duplicate help messages while one request is
+   already in flight.

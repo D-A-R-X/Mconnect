@@ -24,7 +24,7 @@
         android:layout_gravity="center"
         android:layout_marginTop="118dp"
         android:importantForAccessibility="no"
-        android:src="@drawable/ic_travel_marker"
+        android:src="@drawable/ic_map_location_marker"
         android:translationY="-18dp" />
 
     <!-- My-location button. -->
@@ -45,8 +45,7 @@
             android:layout_height="22dp"
             android:layout_gravity="center"
             android:importantForAccessibility="no"
-            android:src="@drawable/ic_travel_marker"
-            app:tint="#0B61CA" />
+            android:src="@drawable/ic_map_location_marker" />
     </FrameLayout>
 
     <!-- Search header (title + grab handle + search field + suggestions). -->
@@ -114,6 +113,18 @@
                 android:visibility="gone"
                 app:tint="#98A2B3" />
         </LinearLayout>
+
+        <TextView
+            android:id="@+id/tvPinSearchStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:fontFamily="@font/inter_medium"
+            android:textColor="#B42318"
+            android:textSize="11sp"
+            android:visibility="gone"
+            tools:text="No network. Check your connection and try again."
+            tools:visibility="visible" />
     </LinearLayout>
 
     <!-- Suggestions dropdown (below the search header). -->
@@ -121,7 +132,7 @@
         android:id="@+id/rvPinSuggestions"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="72dp"
+        android:layout_marginTop="80dp"
         android:layout_marginHorizontal="12dp"
         android:background="@drawable/bg_chat_contact_card"
         android:elevation="8dp"
@@ -151,8 +162,7 @@
                 android:layout_width="18dp"
                 android:layout_height="18dp"
                 android:importantForAccessibility="no"
-                android:src="@drawable/ic_travel_marker"
-                app:tint="#0B61CA" />
+                android:src="@drawable/ic_map_location_marker" />
 
             <TextView
                 android:id="@+id/tvPinAddress"

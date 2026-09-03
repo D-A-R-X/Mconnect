@@ -1,0 +1,84 @@
+MCONNECT MOBILE - CP MY / DIRECT TEAM FILTER
+API HANDOFF
+
+Scope
+-----
+The Android CP screen now has separate My and Team scopes. Team means immediate
+direct reports only. It must never include a report-of-a-report.
+
+Example
+-------
+- A reports to B.
+- C reports to A.
+- B / My returns only CPs owned by B.
+- B / Team returns CPs owned by A.
+- B / Team must not return CPs owned only by C.
+
+Existing route to extend
+------------------------
+GET /api/marketing/clientPlaceVisits/my
+Authorization: Bearer <token>
+
+Query
+- scope=mine   : CPs owned by the authenticated staff member only.
+- scope=direct : CPs owned by immediate direct reports only. Exclude the
+                 authenticated viewer and do not recurse into descendants.
+- Existing fromDate, toDate, limit, and search behavior remains unchanged.
+
+Ownership
+---------
+A CP belongs to a staff member when either:
+- clientPlaceVisits.assignedStaffId equals that staff id, or
+- that staff id is an active Joint CP participant.
+
+Do not use telecallerStaffId, proposed SV AVP/HOD/GM fields, or indirect
+reporting descendants to decide ownership for these two mobile filters.
+
+Direct-report resolution
+------------------------
+For scope=direct, resolve only one edge below the authenticated viewer:
+- staff.reportingTo == viewerStaffId
+- Include an explicit primary-business reporting link only if that link is
+  treated as a direct report by the existing HR hierarchy contract.
+- Do not breadth-first-search or recursively expand those staff ids.
+
+The server must apply this filter before limit/pagination and before returning
+search results. Client-side filtering alone is not an authorization boundary.
+
+Success response
+----------------
+{
+  "success": true,
+  "scope": "mine",
+  "viewerStaffId": "<viewerStaffId>",
+  "hasDirectReports": true,
+  "directReportCount": 1,
+  "directReportIds": ["<A staff id>"],
+  "total": 12,
+  "visits": []
+}
+
+For scope=direct, echo "scope": "direct" and return the same exact immediate
+directReportIds used to authorize/filter the visits. Mobile applies those ids
+again as defense in depth. An older response that omits the scope echo is not
+accepted for Team, because it may contain the current recursive team pool.
+
+Permissions and errors
+----------------------
+- scope=mine requires ordinary mobile CP-list access.
+- scope=direct is available when the viewer has at least one direct report and
+  is permitted to supervise that report under the existing IAM rules.
+- Return 403 for an unauthorized direct-team request; never silently widen or
+  fall back to company/subtree scope.
+- Invalid scope returns HTTP 400 with {"success":false,"error":"..."}.
+
+Acceptance checks
+-----------------
+1. A reports to B and C reports to A: B Team includes A and excludes C.
+2. A's Team includes C.
+3. My never includes another staff member's non-joint CP.
+4. Joint CP appears for each owning participant in their corresponding scope.
+5. Search/date/limit cannot leak an indirect or company CP.
+6. A viewer with no direct reports receives hasDirectReports=false,
+   directReportCount=0, directReportIds=[], and an empty direct visit list.
+7. Admin/company permissions do not widen scope=mine or scope=direct.

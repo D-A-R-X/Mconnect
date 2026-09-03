@@ -16,9 +16,11 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
+import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.TodayVisit
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
+import com.manjugroups.m_connect.ui.common.AdvancedListFilterSheet
 import com.manjugroups.m_connect.ui.common.dismissRefresh
 import com.manjugroups.m_connect.ui.common.setupPullToRefresh
 import com.manjugroups.m_connect.ui.home.TripNavigationFragment
@@ -46,6 +48,7 @@ import com.manjugroups.m_connect.ui.common.showOnce
  */
 class SiteVisitsFragment : Fragment() {
     private val geoApi = GeoTrackApi.create()
+    private val api = ApiService.create()
     private lateinit var session: SessionManager
     private var rootView: View? = null
 
@@ -61,17 +64,33 @@ class SiteVisitsFragment : Fragment() {
     // flash already-rendered rows back to placeholders.
     private var hasLoadedOnce = false
     private var currentFilter: Filter = Filter.ALL
+    private var currentScope: CpVisitListScope = CpVisitListScope.ALL
+    private var activeOwnershipScope: CpVisitListScope? = null
+    private var directReportIds: Set<String> = emptySet()
     private var searchQuery: String = ""
+    private var searchReloadJob: kotlinx.coroutines.Job? = null
     // Active date-range filter (yyyy-MM-dd). Null = default −30/+30 window.
     private var filterFromDate: String? = null
     private var filterToDate: String? = null
-    private val DATE_FILTER_KEY = "sv_date_filter_result"
+    private var filterProject: String? = null
+    private var filterLmo: String? = null
+    private var filterFieldStaff: String? = null
+    private val ADVANCED_FILTER_KEY = "sv_advanced_filter_result"
     private var pendingEntryAnimation = true
     // Infinite scroll: render 20 rows, extend by 20 as the list nears its end.
     private var svWindowCtx: String? = null
     private var svVisibleCount = 0
+    private var svNextCursor: String? = null
+    private var svHasMore = false
+    private var svTotal: Int? = null
+    private var svLoadingMore = false
+    private var svLoadGeneration = 0
+    private var svAutoFillPages = 0
+    private var filterOptions: com.manjugroups.m_connect.network.SiteVisitFilterOptionsResponse? = null
+    private var activeServerQuery: SiteVisitServerQuery? = null
     private val svPager = com.manjugroups.m_connect.ui.common.InfiniteScrollPager(
-        onLoadMore = { renderList() },
+        onLoadMore = { rootView?.post { renderList() } },
+        onEndReached = { loadMoreSiteVisits() },
     )
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
@@ -89,13 +108,27 @@ class SiteVisitsFragment : Fragment() {
         view.findViewById<View>(R.id.btnCpVisitsBack).setOnClickListener {
             navigateUp()
         }
-        // No create flow yet — hide the + button (CP visits has its own create
-        // dialog; site visit creation flows through the conversion path).
-        view.findViewById<View>(R.id.btnCreateCpVisit)?.visibility = View.GONE
+        val createButton = view.findViewById<View>(R.id.btnCreateCpVisit)
+        createButton?.visibility = if (session.hasPermission("marketing.siteVisits.create")) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
+        createButton?.contentDescription = "Schedule site visit"
+        createButton?.setOnClickListener {
+            CreateSiteVisitBottomSheet.newInstance()
+                .showOnce(parentFragmentManager, "create_site_visit")
+        }
+        parentFragmentManager.setFragmentResultListener(
+            CreateSiteVisitBottomSheet.RESULT_CREATED,
+            viewLifecycleOwner,
+        ) { _, _ -> loadVisits() }
 
         setupSearch(view)
+        setupScopeFilter(view)
         setupFilterPills(view)
-        setupDateFilter(view)
+        setupAdvancedFilter(view)
+        loadOwnershipDirectory()
         // Infinite scroll: render the next 20 rows as the user nears the end.
         view.findViewById<androidx.core.widget.NestedScrollView>(R.id.cpvScroll)?.let { scroll ->
             svPager.bindNestedScroll(scroll, totalCount = { svVisibleCount })
@@ -130,6 +163,8 @@ class SiteVisitsFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        searchReloadJob?.cancel()
+        searchReloadJob = null
         SkeletonUtils.stopAll()
         pendingEntryAnimation = true
         rootView = null
@@ -144,58 +179,161 @@ class SiteVisitsFragment : Fragment() {
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 searchQuery = s?.toString()?.trim().orEmpty()
                 renderList()
+                searchReloadJob?.cancel()
+                searchReloadJob = viewLifecycleOwner.lifecycleScope.launch {
+                    kotlinx.coroutines.delay(350)
+                    loadVisits()
+                }
             }
             override fun afterTextChanged(s: Editable?) {}
         })
     }
 
-    // ---------- Date-range filter ----------
+    // ---------- Full-screen filters ----------
 
-    private fun setupDateFilter(root: View) {
+    private fun setupAdvancedFilter(root: View) {
         root.findViewById<View>(R.id.btnFilterCalendar)?.setOnClickListener {
-            com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet.newInstance(
-                title = "Filter by date",
-                subtitle = "Pick a day or a date range",
-                initialFrom = filterFromDate,
-                initialTo = filterToDate,
-                resultKey = DATE_FILTER_KEY,
-            ).show(childFragmentManager, "sv_date_filter")
+            showAdvancedFilters()
         }
-        childFragmentManager.setFragmentResultListener(
-            DATE_FILTER_KEY, viewLifecycleOwner,
+        parentFragmentManager.setFragmentResultListener(
+            ADVANCED_FILTER_KEY, viewLifecycleOwner,
         ) { _, bundle ->
-            filterFromDate = bundle.getString(
-                com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet.KEY_FROM,
-            )
-            filterToDate = bundle.getString(
-                com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet.KEY_TO,
-            )
+            val state = AdvancedListFilterSheet.state(bundle) ?: return@setFragmentResultListener
+            filterFromDate = state.fromDate
+            filterToDate = state.toDate
+            currentFilter = state.value(KEY_STATUS)?.let { value ->
+                Filter.entries.firstOrNull { it.name == value }
+            } ?: Filter.ALL
+            activeOwnershipScope = null
+            currentScope = CpVisitListScope.ALL
+            filterProject = state.value(KEY_PROJECT)
+            filterLmo = state.value(KEY_LMO)
+            filterFieldStaff = state.value(KEY_FIELD_STAFF)
+            applyPillStyles(root)
             updateDateFilterChip()
             loadVisits()
         }
         root.findViewById<TextView>(R.id.tvDateFilterChip)?.setOnClickListener {
-            // Tapping the chip clears the filter and reloads the default window.
+            currentFilter = Filter.ALL
             filterFromDate = null
             filterToDate = null
+            filterProject = null
+            filterLmo = null
+            filterFieldStaff = null
+            applyPillStyles(root)
             updateDateFilterChip()
             loadVisits()
         }
+    }
+
+    private fun showAdvancedFilters() {
+        fun options(selector: (TodayVisit) -> Pair<String, String>?): List<AdvancedListFilterSheet.Option> =
+            allVisits.mapNotNull(selector).distinctBy { it.first }
+                .sortedBy { it.second.lowercase(Locale.US) }
+                .map { AdvancedListFilterSheet.Option(it.first, it.second) }
+
+        val projects = options { visit -> facet(visit.projectId, visit.projectName ?: visit.placeName, "project") }
+        val lmos = options { visit -> facet(visit.lmoStaffId, visit.lmoName, "lmo") }
+        val fieldStaff = options { visit -> facet(visit.bdoStaffId, visit.bdoName, "staff") }
+        fun serverOptions(values: List<com.manjugroups.m_connect.network.CpVisitFilterOption>?): List<AdvancedListFilterSheet.Option> =
+            values.orEmpty().mapNotNull { option ->
+                val id = option.id?.takeIf(String::isNotBlank) ?: return@mapNotNull null
+                val label = option.name?.takeIf(String::isNotBlank)
+                    ?: option.label?.takeIf(String::isNotBlank)
+                    ?: humanizeFilterValue(id)
+                AdvancedListFilterSheet.Option(id, label, option.count?.let { "$it visits" })
+            }
+        fun mergeOptions(
+            authoritative: List<AdvancedListFilterSheet.Option>,
+            loaded: List<AdvancedListFilterSheet.Option>,
+        ) = (authoritative + loaded).distinctBy { it.value }
+        val categories = listOf(
+            AdvancedListFilterSheet.Category(KEY_DATE, "Date range", dateRange = true),
+            AdvancedListFilterSheet.Category(
+                KEY_STATUS,
+                "Status",
+                Filter.entries.filter { it != Filter.ALL }.map {
+                    AdvancedListFilterSheet.Option(it.name, humanizeFilterValue(it.name))
+                },
+            ),
+            AdvancedListFilterSheet.Category(
+                KEY_PROJECT, "Project", mergeOptions(serverOptions(filterOptions?.projects), projects), searchable = true,
+            ),
+            AdvancedListFilterSheet.Category(
+                KEY_LMO, "LMO", mergeOptions(serverOptions(filterOptions?.lmos), lmos), searchable = true,
+            ),
+            AdvancedListFilterSheet.Category(
+                KEY_FIELD_STAFF,
+                "Field staff",
+                mergeOptions(serverOptions(filterOptions?.fieldStaff), fieldStaff),
+                searchable = true,
+            ),
+        )
+        val initial = AdvancedListFilterSheet.State(
+            selected = buildMap {
+                if (currentFilter != Filter.ALL) put(KEY_STATUS, setOf(currentFilter.name))
+                filterProject?.let { put(KEY_PROJECT, setOf(it)) }
+                filterLmo?.let { put(KEY_LMO, setOf(it)) }
+                filterFieldStaff?.let { put(KEY_FIELD_STAFF, setOf(it)) }
+            },
+            fromDate = filterFromDate,
+            toDate = filterToDate,
+        )
+        AdvancedListFilterSheet.newInstance(categories, initial, ADVANCED_FILTER_KEY).apply {
+            countProvider = { state -> allVisits.count { matchesAdvancedState(it, state) } }
+        }.showOnce(parentFragmentManager, "sv_advanced_filters")
     }
 
     private fun updateDateFilterChip() {
         val chip = rootView?.findViewById<TextView>(R.id.tvDateFilterChip) ?: return
         val from = filterFromDate
         val to = filterToDate
-        if (from == null || to == null) {
+        val activeCount = listOfNotNull(
+            filterFromDate?.let { "date" },
+            currentFilter.takeIf { it != Filter.ALL }?.name,
+            filterProject,
+            filterLmo,
+            filterFieldStaff,
+        ).size
+        if (activeCount == 0) {
             chip.visibility = View.GONE
             return
         }
         chip.visibility = View.VISIBLE
-        chip.text = if (from == to) {
-            "${prettyDate(from)}  ✕"
+        chip.text = if (activeCount == 1 && from != null && to != null) {
+            if (from == to) "${prettyDate(from)}  x" else "${prettyDate(from)} - ${prettyDate(to)}  x"
         } else {
-            "${prettyDate(from)} – ${prettyDate(to)}  ✕"
+            "$activeCount filters active  x"
         }
+    }
+
+    private fun facet(id: String?, label: String?, prefix: String): Pair<String, String>? {
+        val cleanLabel = label?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        return (id?.takeIf { it.isNotBlank() } ?: "$prefix:$cleanLabel") to cleanLabel
+    }
+
+    private fun humanizeFilterValue(value: String): String = value
+        .lowercase(Locale.US)
+        .split('_', '-')
+        .joinToString(" ") { it.replaceFirstChar(Char::titlecase) }
+
+    private fun matchesFacet(selected: String?, id: String?, label: String?, prefix: String): Boolean {
+        if (selected == null) return true
+        return selected == id || selected == label?.trim()?.let { "$prefix:$it" }
+    }
+
+    private fun matchesAdvancedState(visit: TodayVisit, state: AdvancedListFilterSheet.State): Boolean {
+        val status = state.value(KEY_STATUS)?.let { value ->
+            Filter.entries.firstOrNull { it.name == value }
+        } ?: Filter.ALL
+        val from = state.fromDate
+        val to = state.toDate
+        return (from.isNullOrBlank() || visit.scheduledDate >= from) &&
+            (to.isNullOrBlank() || visit.scheduledDate <= to) &&
+            matchesFilter(visit, status) &&
+            matchesFacet(state.value(KEY_PROJECT), visit.projectId, visit.projectName ?: visit.placeName, "project") &&
+            matchesFacet(state.value(KEY_LMO), visit.lmoStaffId, visit.lmoName, "lmo") &&
+            matchesFacet(state.value(KEY_FIELD_STAFF), visit.bdoStaffId, visit.bdoName, "staff")
     }
 
     private fun prettyDate(iso: String): String {
@@ -215,6 +353,42 @@ class SiteVisitsFragment : Fragment() {
 
     // ---------- Filter pills ----------
 
+    private fun setupScopeFilter(root: View) {
+        fun selectScope(scope: CpVisitListScope) {
+            currentScope = scope
+            activeOwnershipScope = scope
+            currentFilter = Filter.ALL
+            applyPillStyles(root)
+            updateDateFilterChip()
+            renderList()
+        }
+        root.findViewById<TextView>(R.id.pillMy).apply {
+            visibility = View.VISIBLE
+            setOnClickListener { selectScope(CpVisitListScope.MY) }
+        }
+        root.findViewById<TextView>(R.id.pillTeam).apply {
+            visibility = if (session.isAdmin) View.VISIBLE else View.GONE
+            setOnClickListener { selectScope(CpVisitListScope.TEAM) }
+        }
+    }
+
+    private fun loadOwnershipDirectory() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val staff = runCatching {
+                api.getStaff(session.bearerToken, status = "active")
+            }.getOrNull()?.takeIf { it.success }?.staff.orEmpty()
+            val viewerIds = setOfNotNull(session.staffId).filter(String::isNotBlank).toSet()
+            directReportIds = staff.mapNotNull { person ->
+                person.id?.takeIf {
+                    person.reportingTo in viewerIds || person.reportingToId in viewerIds
+                }
+            }.toSet()
+            rootView?.findViewById<View>(R.id.pillTeam)?.visibility =
+                if (session.isAdmin || directReportIds.isNotEmpty()) View.VISIBLE else View.GONE
+            renderList()
+        }
+    }
+
     private fun pillsAndFilters(root: View): List<Pair<TextView, Filter>> = listOf(
         root.findViewById<TextView>(R.id.pillAll) to Filter.ALL,
         root.findViewById<TextView>(R.id.pillFixed) to Filter.FIXED,
@@ -230,11 +404,12 @@ class SiteVisitsFragment : Fragment() {
     private fun setupFilterPills(root: View) {
         pillsAndFilters(root).forEach { (pill, filter) ->
             pill?.setOnClickListener {
-                if (currentFilter != filter) {
-                    currentFilter = filter
-                    applyPillStyles(root)
-                    renderList()
-                }
+                activeOwnershipScope = null
+                currentScope = CpVisitListScope.ALL
+                currentFilter = filter
+                applyPillStyles(root)
+                updateDateFilterChip()
+                renderList()
             }
         }
         applyPillStyles(root)
@@ -243,7 +418,7 @@ class SiteVisitsFragment : Fragment() {
     private fun applyPillStyles(root: View) {
         pillsAndFilters(root).forEach { (pill, filter) ->
             pill ?: return@forEach
-            val isActive = filter == currentFilter
+            val isActive = activeOwnershipScope == null && filter == currentFilter
             pill.background = ContextCompat.getDrawable(
                 pill.context,
                 if (isActive) R.drawable.bg_cpv_filter_pill_active
@@ -253,6 +428,22 @@ class SiteVisitsFragment : Fragment() {
             pill.typeface = ResourcesCompat.getFont(
                 pill.context,
                 if (isActive) R.font.inter_semibold else R.font.inter_medium
+            )
+        }
+        listOf(
+            root.findViewById<TextView>(R.id.pillMy) to CpVisitListScope.MY,
+            root.findViewById<TextView>(R.id.pillTeam) to CpVisitListScope.TEAM,
+        ).forEach { (pill, scope) ->
+            val isActive = activeOwnershipScope == scope
+            pill.background = ContextCompat.getDrawable(
+                pill.context,
+                if (isActive) R.drawable.bg_cpv_filter_pill_active
+                else R.drawable.bg_cpv_filter_pill_inactive,
+            )
+            pill.setTextColor(Color.parseColor(if (isActive) "#FFFFFF" else "#475467"))
+            pill.typeface = ResourcesCompat.getFont(
+                pill.context,
+                if (isActive) R.font.inter_semibold else R.font.inter_medium,
             )
         }
     }
@@ -380,17 +571,49 @@ class SiteVisitsFragment : Fragment() {
             to = ymd.format(cal.time)
         }
 
+        val query = SiteVisitServerQuery(
+            fromDate = from,
+            toDate = to,
+            projectId = filterProject,
+            telecallerStaffId = filterLmo,
+            assignedStaffId = filterFieldStaff,
+            status = currentFilter.takeUnless { it == Filter.ALL }?.name?.lowercase(Locale.US),
+            search = searchQuery.ifBlank { null },
+        )
+        val generation = ++svLoadGeneration
+        activeServerQuery = query
+        svNextCursor = null
+        svHasMore = false
+        svTotal = null
+        svLoadingMore = false
+        svAutoFillPages = 0
+        svPager.reset()
+
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val resp = geoApi.getMySiteVisits(session.bearerToken, from, to)
+                launch {
+                    runCatching {
+                        geoApi.getSiteVisitFilterOptions(
+                            session.bearerToken,
+                            fromDate = query.fromDate,
+                            toDate = query.toDate,
+                        )
+                    }.getOrNull()?.takeIf { it.success }?.let { response ->
+                        if (generation == svLoadGeneration) filterOptions = response
+                    }
+                }
+                val resp = requestSiteVisitPage(query, cursor = null)
+                if (generation != svLoadGeneration) return@launch
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 hasLoadedOnce = true
                 if (!resp.success) {
                     showLoadError(resp.error ?: "Failed to load site visits")
                     return@launch
                 }
-                // Exclude CP visits (which live in CpVisitsFragment) — keep only
-                // proper site visits where tripType is null/"site_visit"/etc.
+                // Exclude CP trip rows, but retain real siteVisits rows that
+                // carry clientPlaceVisitId. A confirmed SV-cum-CP deliberately
+                // keeps that back-reference to its verification CP; filtering
+                // on the link id made every converted SV disappear here.
                 //
                 // Sort by creationTime descending so the most recently
                 // CREATED SV shows up at the top (matches the server's
@@ -401,13 +624,25 @@ class SiteVisitsFragment : Fragment() {
                 // scheduled entries. Fall back to scheduledDate when
                 // creationTime is missing (legacy rows).
                 allVisits = resp.visits
-                    .filter { it.tripType != "client_place" && it.clientPlaceVisitId == null }
+                    .filter(SiteVisitListRules::belongsInSiteVisits)
                     .sortedWith(
                         compareByDescending<TodayVisit> { it.creationTime ?: 0.0 }
                             .thenByDescending { it.scheduledDate }
                     )
+                svNextCursor = resp.nextCursor
+                svTotal = resp.total
+                svHasMore = SiteVisitListRules.hasUsableNextPage(
+                    resp.hasMore, null, svNextCursor, svTotal,
+                )
                 renderList()
+                // The endpoint also carries legacy CP field visits. If those
+                // dominate page one, progressively fill the first visible SV
+                // window instead of leaving an admin with only a few cards.
+                if (allVisits.size < svPager.pageSize && svHasMore) {
+                    loadMoreSiteVisits()
+                }
             } catch (e: Exception) {
+                if (generation != svLoadGeneration) return@launch
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 showLoadError("Network error: ${e.message ?: "unknown"}")
             } finally {
@@ -421,6 +656,78 @@ class SiteVisitsFragment : Fragment() {
         }
     }
 
+    private fun loadMoreSiteVisits() {
+        val query = activeServerQuery ?: return
+        val cursor = svNextCursor?.takeIf { svHasMore && !svLoadingMore } ?: return
+        val generation = svLoadGeneration
+        svLoadingMore = true
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = requestSiteVisitPage(query, cursor)
+                if (generation != svLoadGeneration || !resp.success) return@launch
+                svAutoFillPages += 1
+                val merged = LinkedHashMap<String, TodayVisit>()
+                allVisits.forEach { merged[it.id] = it }
+                resp.visits
+                    .filter(SiteVisitListRules::belongsInSiteVisits)
+                    .forEach { merged[it.id] = it }
+                allVisits = merged.values.sortedWith(
+                    compareByDescending<TodayVisit> { it.creationTime ?: 0.0 }
+                        .thenByDescending { it.scheduledDate },
+                )
+                svNextCursor = resp.nextCursor
+                svTotal = resp.total ?: svTotal
+                svHasMore = SiteVisitListRules.hasUsableNextPage(
+                    resp.hasMore, cursor, svNextCursor, svTotal,
+                )
+                renderList()
+            } catch (_: Exception) {
+                // Keep the pages already rendered. Pull-to-refresh remains the
+                // explicit retry path and never blanks usable SV data.
+            } finally {
+                if (generation == svLoadGeneration) {
+                    svLoadingMore = false
+                    if (SiteVisitListRules.shouldAutoFill(
+                            visitCount = allVisits.size,
+                            pageSize = svPager.pageSize,
+                            hasMore = svHasMore,
+                            loadedExtraPages = svAutoFillPages,
+                            maxExtraPages = MAX_AUTO_FILL_PAGES,
+                        )
+                    ) {
+                        rootView?.post { loadMoreSiteVisits() }
+                    }
+                }
+            }
+        }
+    }
+
+    private suspend fun requestSiteVisitPage(
+        query: SiteVisitServerQuery,
+        cursor: String?,
+    ) = geoApi.getMySiteVisits(
+        token = session.bearerToken,
+        fromDate = query.fromDate,
+        toDate = query.toDate,
+        projectId = query.projectId,
+        telecallerStaffId = query.telecallerStaffId,
+        assignedStaffId = query.assignedStaffId,
+        status = query.status,
+        search = query.search,
+        cursor = cursor,
+        pageSize = 200,
+    )
+
+    private data class SiteVisitServerQuery(
+        val fromDate: String,
+        val toDate: String,
+        val projectId: String?,
+        val telecallerStaffId: String?,
+        val assignedStaffId: String?,
+        val status: String?,
+        val search: String?,
+    )
+
     private fun renderList() {
         val root = rootView ?: return
         val list = root.findViewById<LinearLayout>(R.id.cpVisitsList)
@@ -430,13 +737,27 @@ class SiteVisitsFragment : Fragment() {
         list.removeAllViews()
 
         val visible = allVisits
+            .filter { visit ->
+                when (currentScope) {
+                    CpVisitListScope.ALL -> true
+                    CpVisitListScope.MY -> SiteVisitListRules.belongsToAny(
+                        visit,
+                        setOfNotNull(session.staffId).filter(String::isNotBlank).toSet(),
+                    )
+                    CpVisitListScope.TEAM -> SiteVisitListRules.belongsToAny(visit, directReportIds)
+                }
+            }
             .filter { matchesFilter(it, currentFilter) }
             .filter { inDateRange(it) }
+            .filter { matchesFacet(filterProject, it.projectId, it.projectName ?: it.placeName, "project") }
+            .filter { matchesFacet(filterLmo, it.lmoStaffId, it.lmoName, "lmo") }
+            .filter { matchesFacet(filterFieldStaff, it.bdoStaffId, it.bdoName, "staff") }
             .filter { com.manjugroups.m_connect.util.VisitSearch.matches(it, searchQuery) }
         svVisibleCount = visible.size
 
         // Reset the scroll window whenever the filter / search / data changes.
-        val windowCtx = "$currentFilter|$searchQuery|${System.identityHashCode(allVisits)}"
+        val windowCtx = "$currentScope|$currentFilter|$filterProject|$filterLmo|$filterFieldStaff|" +
+            "$searchQuery|${System.identityHashCode(allVisits)}"
         if (windowCtx != svWindowCtx) {
             svWindowCtx = windowCtx
             svPager.reset()
@@ -728,5 +1049,14 @@ class SiteVisitsFragment : Fragment() {
         animateIn(R.id.cpvSearchContainer, 180L, 420L, expoOut)
         animateIn(R.id.cpvFilterScroll, 260L, 420L, expoOut)
         animateIn(R.id.cpvScroll, 340L, 460L, expoOut)
+    }
+
+    companion object {
+        private const val MAX_AUTO_FILL_PAGES = 10
+        private const val KEY_DATE = "date"
+        private const val KEY_STATUS = "status"
+        private const val KEY_PROJECT = "project"
+        private const val KEY_LMO = "lmo"
+        private const val KEY_FIELD_STAFF = "field_staff"
     }
 }

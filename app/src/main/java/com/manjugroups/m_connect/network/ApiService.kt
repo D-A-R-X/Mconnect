@@ -12,6 +12,15 @@ import java.util.concurrent.TimeUnit
 
 interface ApiService {
 
+    @GET("api/mobile/app-version")
+    suspend fun getMobileAppVersion(
+        @Query("platform") platform: String,
+        @Query("currentVersion") currentVersion: String,
+        @Query("buildNumber") buildNumber: Int,
+        @Header("X-App-Version") appVersionHeader: String,
+        @Header("X-App-Build") appBuildHeader: Int,
+    ): MobileAppVersionResponse
+
     // Auth
     @POST("api/auth/send-otp")
     suspend fun sendOtp(@Body body: SendOtpRequest): SendOtpResponse
@@ -93,6 +102,34 @@ interface ApiService {
         @Header("Authorization") token: String,
     ): MobileDialerConfigResponse
 
+    @GET("api/mobile/dialer/calls/current")
+    suspend fun getMobileDialerCurrentCall(
+        @Header("Authorization") token: String,
+        @Query("callId") callId: String? = null,
+    ): MobileDialerCurrentCallResponse
+
+    @POST("api/mobile/dialer/calls/{callId}/action")
+    suspend fun performMobileDialerCallAction(
+        @Header("Authorization") token: String,
+        @Header("Idempotency-Key") idempotencyKey: String,
+        @Path("callId") callId: String,
+        @Body body: MobileDialerCallActionRequest,
+    ): MobileDialerCallActionResponse
+
+    @POST("api/mobile/dialer/calls/{callId}/media/restart")
+    suspend fun restartMobileDialerMedia(
+        @Header("Authorization") token: String,
+        @Header("Idempotency-Key") idempotencyKey: String,
+        @Path("callId") callId: String,
+        @Body body: MobileDialerMediaRestartRequest,
+    ): MobileDialerMediaRestartResponse
+
+    @GET("api/mobile/dialer/calls/{callId}/media")
+    suspend fun getMobileDialerMedia(
+        @Header("Authorization") token: String,
+        @Path("callId") callId: String,
+    ): MobileDialerMediaResponse
+
     @GET("api/dashboard/calls")
     suspend fun getDashboardCalls(
         @Header("Authorization") token: String,
@@ -162,7 +199,13 @@ interface ApiService {
     suspend fun getMyAttendance(
         @Header("Authorization") token: String,
         @Query("fromDate") fromDate: String? = null,
-        @Query("toDate") toDate: String? = null
+        @Query("toDate") toDate: String? = null,
+        @Query("status") status: String? = null,
+        @Query("staffId") staffId: String? = null,
+        @Query("department") department: String? = null,
+        @Query("search") search: String? = null,
+        @Query("cursor") cursor: String? = null,
+        @Query("pageSize") pageSize: Int? = null,
     ): MyAttendanceResponse
 
     // Home geofence policy for the authenticated staff. The app uses this
@@ -213,18 +256,6 @@ interface ApiService {
      * Mirrors /api/hr/leaves/cancel — same delete affordance on the
      * mobile attendance history page. Server rejects non-pending dates.
      */
-    /**
-     * Raise an attendance correction / remark request for HR approval.
-     * Mirrors the web attendance "Request Time Correction / Remark" dialog
-     * (attendanceRequests.submit). Used by the mobile Edit Attendance
-     * sheet to request a punch-timing update on a past day.
-     */
-    @POST("api/hr/attendance/request")
-    suspend fun submitAttendanceRequest(
-        @Header("Authorization") token: String,
-        @Body body: AttendanceRequestBody
-    ): AttendanceRequestResponse
-
     @POST("api/hr/attendance/cancel")
     suspend fun cancelMyAttendance(
         @Header("Authorization") token: String,
@@ -244,6 +275,14 @@ interface ApiService {
         // requests=true also returns the caller's team correction/remark
         // requests waiting on the reporting officer (response.requests).
         @Query("requests") requests: Boolean? = null,
+        @Query("fromDate") fromDate: String? = null,
+        @Query("toDate") toDate: String? = null,
+        @Query("status") status: String? = null,
+        @Query("staffId") staffId: String? = null,
+        @Query("department") department: String? = null,
+        @Query("search") search: String? = null,
+        @Query("cursor") cursor: String? = null,
+        @Query("pageSize") pageSize: Int? = null,
     ): AttendanceApprovalsResponse
 
     // Team Attendance tab — the caller's reporting-subtree attendance for a
@@ -253,6 +292,12 @@ interface ApiService {
         @Header("Authorization") token: String,
         @Query("fromDate") fromDate: String,
         @Query("toDate") toDate: String,
+        @Query("status") status: String? = null,
+        @Query("staffId") staffId: String? = null,
+        @Query("department") department: String? = null,
+        @Query("search") search: String? = null,
+        @Query("cursor") cursor: String? = null,
+        @Query("pageSize") pageSize: Int? = null,
     ): AttendanceApprovalsResponse
 
     // Company-wide attendance for the "All" tab — mirrors the web Attendance
@@ -273,6 +318,9 @@ interface ApiService {
         // day being "Absent". Omit for the first page.
         @Query("cursor") cursor: String? = null,
         @Query("pageSize") pageSize: Int? = null,
+        @Query("status") status: String? = null,
+        @Query("staffId") staffId: String? = null,
+        @Query("department") department: String? = null,
     ): AttendanceApprovalsResponse
 
     // Whether the caller has a team (direct reports) — drives which attendance
@@ -431,13 +479,33 @@ interface ApiService {
     ): LeaveBalanceResponse
 
     @GET("api/hr/leaves/my")
-    suspend fun getMyLeaves(@Header("Authorization") token: String): MyLeavesResponse
+    suspend fun getMyLeaves(
+        @Header("Authorization") token: String,
+        @Query("fromDate") fromDate: String? = null,
+        @Query("toDate") toDate: String? = null,
+        @Query("status") status: String? = null,
+        @Query("leaveType") leaveType: String? = null,
+        @Query("staffId") staffId: String? = null,
+        @Query("department") department: String? = null,
+        @Query("search") search: String? = null,
+        @Query("cursor") cursor: String? = null,
+        @Query("pageSize") pageSize: Int? = null,
+    ): MyLeavesResponse
 
     @GET("api/hr/leaves/pending-approvals")
     suspend fun getPendingLeaveApprovals(
         @Header("Authorization") token: String,
         @Query("teamOnly") teamOnly: Boolean? = null,
         @Query("scope") scope: String? = null,
+        @Query("fromDate") fromDate: String? = null,
+        @Query("toDate") toDate: String? = null,
+        @Query("status") status: String? = null,
+        @Query("leaveType") leaveType: String? = null,
+        @Query("staffId") staffId: String? = null,
+        @Query("department") department: String? = null,
+        @Query("search") search: String? = null,
+        @Query("cursor") cursor: String? = null,
+        @Query("pageSize") pageSize: Int? = null,
     ): MyLeavesResponse
 
     @POST("api/hr/leaves/apply")
@@ -551,7 +619,14 @@ interface ApiService {
     @GET("api/hr/permissions")
     suspend fun getMyPermissions(
         @Header("Authorization") token: String,
-        @Query("staffId") staffId: String? = null
+        @Query("staffId") staffId: String? = null,
+        @Query("fromDate") fromDate: String? = null,
+        @Query("toDate") toDate: String? = null,
+        @Query("status") status: String? = null,
+        @Query("department") department: String? = null,
+        @Query("search") search: String? = null,
+        @Query("cursor") cursor: String? = null,
+        @Query("pageSize") pageSize: Int? = null,
     ): MyPermissionsResponse
 
     @GET("api/hr/permissions/pending-approvals")
@@ -561,6 +636,14 @@ interface ApiService {
         // reports. all=true returns every request company-wide when permitted.
         @Query("scope") scope: String? = null,
         @Query("all") all: Boolean? = null,
+        @Query("fromDate") fromDate: String? = null,
+        @Query("toDate") toDate: String? = null,
+        @Query("status") status: String? = null,
+        @Query("staffId") staffId: String? = null,
+        @Query("department") department: String? = null,
+        @Query("search") search: String? = null,
+        @Query("cursor") cursor: String? = null,
+        @Query("pageSize") pageSize: Int? = null,
     ): MyPermissionsResponse
 
     @POST("api/hr/permissions/apply")
@@ -1096,14 +1179,6 @@ interface ApiService {
         @Query("limit") limit: Int? = null
     ): MyLeadsResponse
 
-    // Doocti click-to-call. The endpoint lives on the Next.js admin host
-    // (mms.aivida.in/api/doocti-call), not Convex, so we pass the full URL.
-    @POST
-    suspend fun dialDoocti(
-        @Url url: String,
-        @Body body: DialDooctiRequest,
-    ): DialDooctiResponse
-
     // ── Marketing: Projects + Inventory Units (KOS-52) ──────────────────────
     @GET("api/marketing/projects")
     suspend fun getMarketingProjects(
@@ -1196,6 +1271,13 @@ interface ApiService {
     suspend fun listMyBookings(
         @Header("Authorization") token: String,
         @Query("status") status: String? = null,
+        @Query("projectId") projectId: String? = null,
+        @Query("plotId") plotId: String? = null,
+        @Query("fromDate") fromDate: String? = null,
+        @Query("toDate") toDate: String? = null,
+        @Query("search") search: String? = null,
+        @Query("cursor") cursor: String? = null,
+        @Query("pageSize") pageSize: Int? = null,
     ): BookingsListResponse
 
     @GET("api/bookings/{id}")
@@ -1255,6 +1337,14 @@ interface ApiService {
         @Header("Authorization") token: String,
         @Query("phone") phone: String,
     ): ClientSearchResponse
+
+    @GET("api/clients/referral-candidates")
+    suspend fun searchReferralClientCandidates(
+        @Header("Authorization") token: String,
+        @Query("query") query: String,
+        @Query("limit") limit: Int = 25,
+        @Query("cursor") cursor: String? = null,
+    ): ReferralClientCandidatesResponse
 
     /**
      * Push edits made by the field staff on the prefilled client
@@ -1326,26 +1416,22 @@ interface ApiService {
                 level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY
                 else HttpLoggingInterceptor.Level.NONE
             }
-            // Auto-logout on 401. Without this, a deployment URL swap
+            // Auto-logout on an authenticated MMS 401. Without this, a deployment URL swap
             // (dev → prod or vice versa) or a server-side session
             // revocation leaves the app stuck with every screen showing
             // empty / errored data and no way back to a working state.
-            // The interceptor watches every response, fires the
-            // SessionInvalidationBus on 401, and the currently-foreground
-            // activity collects + bounces the user to login. Bearer-less
-            // requests (auth/OTP/login endpoints) shouldn't normally 401
-            // unless the token is invalid anyway, so we don't try to
-            // distinguish — every 401 is treated as "session is dead."
+            // Bearer-less login/public requests cannot invalidate a newly
+            // created session.
             val authWatchdog = okhttp3.Interceptor { chain ->
                 val request = chain.request()
                 val response = chain.proceed(request)
-                // Skip the auto-logout when the outgoing request used the
-                // dev bypass token — the server can't validate a synthetic
-                // token so it will always 401, but the local dev session
-                // is still legitimately "logged in" for UI exploration.
-                // Without this, bypass users get kicked back to login on
-                // the very first authed call after AuthBypass succeeds.
-                if (response.code == 401 && !isBypassAuth(request)) {
+                if (com.manjugroups.m_connect.auth.SessionInvalidationPolicy.shouldInvalidate(
+                        responseCode = response.code,
+                        authorizationHeader = request.header("Authorization"),
+                        requestHost = request.url.host,
+                        sessionAuthorityHost = java.net.URI(BuildConfig.BASE_URL).host.orEmpty(),
+                    )
+                ) {
                     com.manjugroups.m_connect.auth.SessionInvalidationBus
                         .reportUnauthorized()
                 }
@@ -1377,13 +1463,6 @@ interface ApiService {
                 .create(ApiService::class.java)
         }
 
-        private fun isBypassAuth(request: okhttp3.Request): Boolean {
-            val header = request.header("Authorization") ?: return false
-            // Both "Bearer <token>" and bare "<token>" shapes turn up
-            // in the codebase, so strip the prefix before comparing.
-            val token = header.removePrefix("Bearer ").trim()
-            return com.manjugroups.m_connect.auth.AuthBypass.isBypassToken(token)
-        }
     }
 }
 
@@ -1573,32 +1652,8 @@ data class CompleteOnDutyTripResponse(
 /** Body for /api/hr/attendance/cancel — withdraws a pending row by date. */
 data class AttendanceCancelRequest(val date: String)
 
-/**
- * Body for /api/hr/attendance/request. type is "remark" (just remark) or
- * "correction" (corrected punch in/out times + reason). The server derives
- * staffId/staffName from the bearer token, so they're not sent here.
- */
-data class AttendanceRequestBody(
-    // Null for a no-punch ("Absent") day with no attendance row yet — the
-    // backend seeds a row for {staffId, date}. Gson omits null fields, so the
-    // request body simply carries no attendanceId in that case.
-    val attendanceId: String? = null,
-    val date: String,
-    val type: String,
-    val remark: String? = null,
-    val correctedPunchIn: String? = null,
-    val correctedPunchOut: String? = null,
-    val correctionReason: String? = null,
-)
-
-data class AttendanceRequestResponse(
-    val success: Boolean = false,
-    val requestId: String? = null,
-    val error: String? = null,
-)
 data class AttendanceRecord(
-    // Convex document id of the staffAttendance row — required to raise a
-    // correction/remark request against it (/api/hr/attendance/request).
+    // Convex document id of the staffAttendance row.
     @SerializedName("_id", alternate = ["id"]) val id: String? = null,
     val date: String?,
     val status: String?,
@@ -2262,6 +2317,19 @@ data class ApproveLoanRequest(
 data class IdRequest(val id: String)
 data class RejectRequest(val id: String, val reason: String, val isRequest: Boolean? = null)
 data class SimpleResponse(val success: Boolean, val error: String? = null)
+
+data class MobileAppVersionResponse(
+    val success: Boolean = false,
+    val platform: String? = null,
+    val latestVersion: String? = null,
+    val latestBuildNumber: Int? = null,
+    val minimumSupportedVersion: String? = null,
+    val minimumSupportedBuildNumber: Int? = null,
+    val updateRequired: Boolean? = null,
+    val updateUrl: String? = null,
+    val publishedAt: String? = null,
+    val error: String? = null,
+)
 data class PushRegisterRequest(
     val token: String,
     val platform: String,
@@ -3102,6 +3170,20 @@ data class ClientSearchResponse(
     val error: String? = null,
 )
 
+data class ReferralClientCandidatesResponse(
+    val success: Boolean,
+    val clients: List<ReferralClientCandidate> = emptyList(),
+    val nextCursor: String? = null,
+    val error: String? = null,
+)
+
+data class ReferralClientCandidate(
+    @SerializedName("_id", alternate = ["id"]) val id: String,
+    @SerializedName("clientName", alternate = ["name"]) val name: String,
+    val mobileNumber: String,
+    val formattedAddress: String? = null,
+)
+
 data class ClientProfile(
     @SerializedName("_id", alternate = ["id"]) val id: String? = null,
     val title: String? = null,
@@ -3288,21 +3370,6 @@ data class LeadPropertyInterest(
     val extentInSqft: String? = null,
 )
 
-data class DialDooctiRequest(
-    val phone_number: String,
-    val station: String? = null,
-    val cli_number: String? = null,
-    val agent: String? = null,
-)
-
-data class DialDooctiResponse(
-    val ok: Boolean? = null,
-    val data: Any? = null,
-    val error: String? = null,
-    val stage: String? = null,
-    val status: Int? = null,
-)
-
 data class MobileDialerConfigResponse(
     val success: Boolean,
     val configured: Boolean = false,
@@ -3337,7 +3404,82 @@ data class MobileDialerFeatures(
     val mute: Boolean = false,
     val hold: Boolean = false,
     val pushProvider: String? = null,
+    val pushProviders: List<String> = emptyList(),
     val pushConfigSource: String? = null,
+)
+
+data class MobileDialerCurrentCallResponse(
+    val success: Boolean,
+    val call: MobileDialerCurrentCall? = null,
+    val code: String? = null,
+    val error: String? = null,
+    val retryable: Boolean? = null,
+)
+
+data class MobileDialerCurrentCall(
+    val callId: String,
+    val stage: String? = null,
+    val direction: String? = null,
+    val fromNumber: String? = null,
+    val toNumber: String? = null,
+    val displayName: String? = null,
+    val extension: String? = null,
+    val requiresPickup: Boolean = false,
+    val muted: Boolean = false,
+    val held: Boolean = false,
+    val startedAt: String? = null,
+    val expiresAt: String? = null,
+)
+
+data class MobileDialerCallActionRequest(
+    val action: String,
+    val platform: String = "android",
+    val deviceId: String,
+    val eventId: String? = null,
+)
+
+data class MobileDialerCallActionResponse(
+    val success: Boolean,
+    val callId: String? = null,
+    val stage: String? = null,
+    val alreadyApplied: Boolean = false,
+    val code: String? = null,
+    val error: String? = null,
+    val retryable: Boolean? = null,
+)
+
+data class MobileDialerMediaRestartRequest(
+    val reason: String,
+    val platform: String = "android",
+    val deviceId: String,
+)
+
+data class MobileDialerMediaRestartResponse(
+    val success: Boolean,
+    val callId: String? = null,
+    val stage: String? = null,
+    val iceRestarted: Boolean = false,
+    val code: String? = null,
+    val error: String? = null,
+    val retryable: Boolean? = null,
+)
+
+data class MobileDialerMediaResponse(
+    val success: Boolean,
+    val callId: String? = null,
+    val extension: String? = null,
+    val media: MobileDialerMediaDiagnostics? = null,
+    val code: String? = null,
+    val error: String? = null,
+    val retryable: Boolean? = null,
+)
+
+data class MobileDialerMediaDiagnostics(
+    val iceConnectionState: String? = null,
+    val iceGatheringState: String? = null,
+    val signalingState: String? = null,
+    val candidateType: String? = null,
+    val lastRtpAt: String? = null,
 )
 
 // ── Marketing: Projects + Inventory Units (KOS-52) ──────────────────────────

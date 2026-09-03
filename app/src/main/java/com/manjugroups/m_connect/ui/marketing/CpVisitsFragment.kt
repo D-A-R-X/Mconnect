@@ -28,10 +28,12 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.CpVisitState
+import com.manjugroups.m_connect.network.CpVisitFilterOptionsResponse
 import com.manjugroups.m_connect.network.CreateCpVisitRequest
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.TodayVisit
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
+import com.manjugroups.m_connect.ui.common.AdvancedListFilterSheet
 import com.manjugroups.m_connect.ui.common.preferredCpClientName
 import com.manjugroups.m_connect.ui.common.preferredCpClientPhone
 import com.manjugroups.m_connect.ui.home.CompleteCpVisitBottomSheet
@@ -42,6 +44,8 @@ import com.manjugroups.m_connect.ui.common.navigateUp
 import com.manjugroups.m_connect.ui.common.applySmoothTransitions
 import com.manjugroups.m_connect.ui.common.pushDetail
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import retrofit2.HttpException
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -56,7 +60,9 @@ class CpVisitsFragment : Fragment() {
     private lateinit var session: SessionManager
     private var rootView: View? = null
 
-    private enum class Filter { ALL, SCHEDULED, POSTPONED, IN_PROGRESS, COMPLETED, CANCELLED }
+    private enum class Filter {
+        ALL, SCHEDULED, POSTPONED, IN_PROGRESS, COMPLETED, CANCELLED, PENDING_GM_APPROVAL
+    }
 
     private var allVisits: List<TodayVisit> = emptyList()
     private var focusArgApplied = false
@@ -71,6 +77,8 @@ class CpVisitsFragment : Fragment() {
      */
     private var focusCpVisitId: String? = null
     private var currentFilter: Filter = Filter.ALL
+    private var currentScope: CpVisitListScope = CpVisitListScope.MY
+    private var activeOwnershipScope: CpVisitListScope? = null
     private var searchQuery: String = ""
     // Debounces the server-side search reload so a super-admin can find an
     // older client that's beyond the recency cap of the default list.
@@ -80,7 +88,13 @@ class CpVisitsFragment : Fragment() {
     // Active date-range filter (yyyy-MM-dd). Null = default window.
     private var filterFromDate: String? = null
     private var filterToDate: String? = null
-    private val DATE_FILTER_KEY = "cp_date_filter_result"
+    private var filterOutcome: String? = null
+    private var filterCpType: String? = null
+    private var filterAssignedStaffId: String? = null
+    private var filterTelecallerStaffId: String? = null
+    private var filterOptions: CpVisitFilterOptionsResponse? = null
+    private val ADVANCED_FILTER_KEY = "cp_advanced_filter_result"
+    private var loadGeneration = 0
     // Row cache: a visit's card is inflated at most ONCE per (data,
     // clock-state) generation — re-inflating up to 200 card layouts on every
     // tab switch is what used to make this screen feel slow. Pagination now
@@ -92,8 +106,12 @@ class CpVisitsFragment : Fragment() {
     // Infinite scroll: render 20 rows, extend by 20 as the list nears its end.
     private var cpWindowCtx: String? = null
     private var cpMatchedCount = 0
+    private var cpNextCursor: String? = null
+    private var cpHasMore = false
+    private var cpLoadingMore = false
     private val cpPager = com.manjugroups.m_connect.ui.common.InfiniteScrollPager(
-        onLoadMore = { renderList() },
+        onLoadMore = { rootView?.post { renderList() } },
+        onEndReached = { loadMoreCpVisits() },
     )
     private var pendingEntryAnimation = true
     // True once the first CP-visit fetch has rendered. Gates the skeleton
@@ -113,6 +131,7 @@ class CpVisitsFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         session = SessionManager(requireContext())
+        currentScope = CpVisitListScopePolicy.initialScope(session.isAdmin)
         rootView = view
         // Read the requested visit ONCE. Re-reading it on every view creation
         // would re-open the trip each time the user came back to the list.
@@ -127,8 +146,9 @@ class CpVisitsFragment : Fragment() {
         view.findViewById<View>(R.id.btnCreateCpVisit).setOnClickListener { showCreateDialog() }
 
         setupSearch(view)
+        setupScopeFilter(view)
         setupFilterPills(view)
-        setupDateFilter(view)
+        setupAdvancedFilter(view)
         observeAttendanceState()
         setFragmentResultListener(CompleteCpVisitBottomSheet.RESULT_KEY) { _, bundle ->
             CpRevisitConfirmation.fromResult(bundle)?.let { revisit ->
@@ -275,52 +295,159 @@ class CpVisitsFragment : Fragment() {
         })
     }
 
-    // ---------- Date-range filter ----------
+    // ---------- Full-screen filters ----------
 
-    private fun setupDateFilter(root: View) {
+    private fun setupAdvancedFilter(root: View) {
         root.findViewById<View>(R.id.btnFilterCalendar)?.setOnClickListener {
-            com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet.newInstance(
-                title = "Filter by date",
-                subtitle = "Pick a day or a date range",
-                initialFrom = filterFromDate,
-                initialTo = filterToDate,
-                resultKey = DATE_FILTER_KEY,
-            ).show(childFragmentManager, "cp_date_filter")
+            showAdvancedFilters()
         }
-        childFragmentManager.setFragmentResultListener(
-            DATE_FILTER_KEY, viewLifecycleOwner,
+        parentFragmentManager.setFragmentResultListener(
+            ADVANCED_FILTER_KEY, viewLifecycleOwner,
         ) { _, bundle ->
-            filterFromDate = bundle.getString(
-                com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet.KEY_FROM,
-            )
-            filterToDate = bundle.getString(
-                com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet.KEY_TO,
-            )
+            val state = AdvancedListFilterSheet.state(bundle) ?: return@setFragmentResultListener
+            filterFromDate = state.fromDate
+            filterToDate = state.toDate
+            currentFilter = state.value(KEY_STATUS)?.let { value ->
+                Filter.entries.firstOrNull { it.name == value }
+            } ?: Filter.ALL
+            activeOwnershipScope = null
+            currentScope = CpVisitListScopePolicy.initialScope(session.isAdmin)
+            filterOutcome = state.value(KEY_OUTCOME)
+            filterCpType = state.value(KEY_CP_TYPE)
+            filterAssignedStaffId = state.value(KEY_FIELD_STAFF)
+            filterTelecallerStaffId = state.value(KEY_TELECALLER)
+            applyPillStyles(root)
             updateDateFilterChip()
             loadVisits()
         }
         root.findViewById<TextView>(R.id.tvDateFilterChip)?.setOnClickListener {
+            currentFilter = Filter.ALL
             filterFromDate = null
             filterToDate = null
+            filterOutcome = null
+            filterCpType = null
+            filterAssignedStaffId = null
+            filterTelecallerStaffId = null
+            applyPillStyles(root)
             updateDateFilterChip()
             loadVisits()
         }
+    }
+
+    private fun showAdvancedFilters() {
+        val loadedFieldStaff = allVisits.mapNotNull { visit ->
+            visit.bdoStaffId?.takeIf { it.isNotBlank() }?.let { id ->
+                AdvancedListFilterSheet.Option(id, visit.bdoName ?: "Field staff")
+            }
+        }
+        val loadedTelecallers = allVisits.mapNotNull { visit ->
+            visit.lmoStaffId?.takeIf { it.isNotBlank() }?.let { id ->
+                AdvancedListFilterSheet.Option(id, visit.lmoName ?: "Telecaller")
+            }
+        }
+        fun serverOptions(values: List<com.manjugroups.m_connect.network.CpVisitFilterOption>?): List<AdvancedListFilterSheet.Option> =
+            values.orEmpty().mapNotNull { option ->
+                val id = option.id?.takeIf(String::isNotBlank) ?: return@mapNotNull null
+                val label = option.name?.takeIf(String::isNotBlank)
+                    ?: option.label?.takeIf(String::isNotBlank)
+                    ?: humanizeFilterValue(id)
+                val staffDetail = listOfNotNull(
+                    option.employeeId?.takeIf(String::isNotBlank),
+                    option.designation?.takeIf(String::isNotBlank),
+                    option.department?.takeIf(String::isNotBlank),
+                ).joinToString(" • ").ifBlank { null }
+                AdvancedListFilterSheet.Option(
+                    id,
+                    label,
+                    staffDetail ?: option.count?.let { "$it visits" },
+                )
+            }
+        fun mergeOptions(vararg groups: List<AdvancedListFilterSheet.Option>) = groups
+            .flatMap { it }
+            .distinctBy { it.value }
+
+        val fieldStaff = mergeOptions(serverOptions(filterOptions?.fieldStaff), loadedFieldStaff)
+        val telecallers = mergeOptions(serverOptions(filterOptions?.telecallers), loadedTelecallers)
+        val outcomes = mergeOptions(
+            CP_OUTCOME_OPTIONS.map { (value, label) -> AdvancedListFilterSheet.Option(value, label) },
+            serverOptions(filterOptions?.outcomes),
+        )
+        val cpTypes = mergeOptions(
+            CP_TYPE_OPTIONS.map { (value, label) -> AdvancedListFilterSheet.Option(value, label) },
+            serverOptions(filterOptions?.cpTypes),
+        )
+        val categories = listOf(
+            AdvancedListFilterSheet.Category(KEY_DATE, "Date range", dateRange = true),
+            AdvancedListFilterSheet.Category(
+                KEY_STATUS,
+                "Status",
+                Filter.entries.filter { it != Filter.ALL }.map {
+                    AdvancedListFilterSheet.Option(it.name, humanizeFilterValue(it.name))
+                },
+            ),
+            AdvancedListFilterSheet.Category(KEY_OUTCOME, "Outcome", outcomes, searchable = true),
+            AdvancedListFilterSheet.Category(KEY_CP_TYPE, "CP type", cpTypes, searchable = true),
+            AdvancedListFilterSheet.Category(KEY_FIELD_STAFF, "Field staff", fieldStaff, searchable = true),
+            AdvancedListFilterSheet.Category(KEY_TELECALLER, "Telecaller", telecallers, searchable = true),
+        )
+        val initial = AdvancedListFilterSheet.State(
+            selected = buildMap {
+                if (currentFilter != Filter.ALL) put(KEY_STATUS, setOf(currentFilter.name))
+                filterOutcome?.let { put(KEY_OUTCOME, setOf(it)) }
+                filterCpType?.let { put(KEY_CP_TYPE, setOf(it)) }
+                filterAssignedStaffId?.let { put(KEY_FIELD_STAFF, setOf(it)) }
+                filterTelecallerStaffId?.let { put(KEY_TELECALLER, setOf(it)) }
+            },
+            fromDate = filterFromDate,
+            toDate = filterToDate,
+        )
+        AdvancedListFilterSheet.newInstance(categories, initial, ADVANCED_FILTER_KEY).apply {
+            countProvider = { state -> allVisits.count { matchesAdvancedState(it, state) } }
+        }.showOnce(parentFragmentManager, "cp_advanced_filters")
     }
 
     private fun updateDateFilterChip() {
         val chip = rootView?.findViewById<TextView>(R.id.tvDateFilterChip) ?: return
         val from = filterFromDate
         val to = filterToDate
-        if (from == null || to == null) {
+        val activeCount = listOfNotNull(
+            filterFromDate?.let { "date" },
+            currentFilter.takeIf { it != Filter.ALL }?.name,
+            filterOutcome,
+            filterCpType,
+            filterAssignedStaffId,
+            filterTelecallerStaffId,
+        ).size
+        if (activeCount == 0) {
             chip.visibility = View.GONE
             return
         }
         chip.visibility = View.VISIBLE
-        chip.text = if (from == to) {
-            "${prettyDate(from)}  ✕"
+        chip.text = if (activeCount == 1 && from != null && to != null) {
+            if (from == to) "${prettyDate(from)}  x" else "${prettyDate(from)} - ${prettyDate(to)}  x"
         } else {
-            "${prettyDate(from)} – ${prettyDate(to)}  ✕"
+            "$activeCount filters active  x"
         }
+    }
+
+    private fun humanizeFilterValue(value: String): String = value
+        .lowercase(Locale.US)
+        .split('_', '-')
+        .joinToString(" ") { it.replaceFirstChar(Char::titlecase) }
+
+    private fun matchesAdvancedState(visit: TodayVisit, state: AdvancedListFilterSheet.State): Boolean {
+        val status = state.value(KEY_STATUS)?.let { value ->
+            Filter.entries.firstOrNull { it.name == value }
+        } ?: Filter.ALL
+        val from = state.fromDate
+        val to = state.toDate
+        val dateMatches = (from.isNullOrBlank() || visit.scheduledDate >= from) &&
+            (to.isNullOrBlank() || visit.scheduledDate <= to)
+        return dateMatches && matchesFilter(visit, status) &&
+            state.value(KEY_OUTCOME)?.let { it == visit.cpVisit?.outcome } != false &&
+            state.value(KEY_CP_TYPE)?.let { it == visit.cpVisit?.cpType } != false &&
+            state.value(KEY_FIELD_STAFF)?.let { it == visit.bdoStaffId } != false &&
+            state.value(KEY_TELECALLER)?.let { it == visit.lmoStaffId } != false
     }
 
     private fun prettyDate(iso: String): String {
@@ -340,6 +467,36 @@ class CpVisitsFragment : Fragment() {
 
     // ---------- Filter pills ----------
 
+    private fun setupScopeFilter(root: View) {
+        fun selectScope(selected: CpVisitListScope) {
+            currentScope = selected
+            activeOwnershipScope = selected
+            currentFilter = Filter.ALL
+            allVisits = emptyList()
+            rowViewCache.clear()
+            rowsBuiltFor = null
+            hasLoadedOnce = false
+            applyPillStyles(root)
+            loadVisits()
+        }
+        root.findViewById<TextView>(R.id.pillMy).setOnClickListener {
+            selectScope(CpVisitListScope.MY)
+        }
+        root.findViewById<TextView>(R.id.pillTeam).setOnClickListener {
+            selectScope(CpVisitListScope.TEAM)
+        }
+        updateScopeAvailability(root, available = false)
+    }
+
+    private fun updateScopeAvailability(root: View, available: Boolean) {
+        val canChooseOwnership = session.isAdmin || available || currentScope == CpVisitListScope.TEAM
+        root.findViewById<View>(R.id.pillMy).visibility =
+            if (canChooseOwnership) View.VISIBLE else View.GONE
+        root.findViewById<View>(R.id.pillTeam).visibility =
+            if (canChooseOwnership) View.VISIBLE else View.GONE
+        applyPillStyles(root)
+    }
+
     private fun pillsAndFilters(root: View): List<Pair<TextView, Filter>> = listOf(
         root.findViewById<TextView>(R.id.pillAll) to Filter.ALL,
         root.findViewById<TextView>(R.id.pillScheduled) to Filter.SCHEDULED,
@@ -352,9 +509,20 @@ class CpVisitsFragment : Fragment() {
     private fun setupFilterPills(root: View) {
         pillsAndFilters(root).forEach { (pill, filter) ->
             pill.setOnClickListener {
-                if (currentFilter != filter) {
-                    currentFilter = filter
-                    applyPillStyles(root)
+                val defaultScope = CpVisitListScopePolicy.initialScope(session.isAdmin)
+                val needsReload = currentScope != defaultScope
+                activeOwnershipScope = null
+                currentScope = defaultScope
+                currentFilter = filter
+                applyPillStyles(root)
+                updateDateFilterChip()
+                if (needsReload) {
+                    allVisits = emptyList()
+                    rowViewCache.clear()
+                    rowsBuiltFor = null
+                    hasLoadedOnce = false
+                    loadVisits()
+                } else {
                     renderList()
                 }
             }
@@ -364,7 +532,7 @@ class CpVisitsFragment : Fragment() {
 
     private fun applyPillStyles(root: View) {
         pillsAndFilters(root).forEach { (pill, filter) ->
-            val isActive = filter == currentFilter
+            val isActive = activeOwnershipScope == null && filter == currentFilter
             pill.background = ContextCompat.getDrawable(
                 pill.context,
                 if (isActive) R.drawable.bg_cpv_filter_pill_active
@@ -374,6 +542,22 @@ class CpVisitsFragment : Fragment() {
             pill.typeface = ResourcesCompat.getFont(
                 pill.context,
                 if (isActive) R.font.inter_semibold else R.font.inter_medium
+            )
+        }
+        listOf(
+            root.findViewById<TextView>(R.id.pillMy) to CpVisitListScope.MY,
+            root.findViewById<TextView>(R.id.pillTeam) to CpVisitListScope.TEAM,
+        ).forEach { (pill, scope) ->
+            val isActive = activeOwnershipScope == scope
+            pill.background = ContextCompat.getDrawable(
+                pill.context,
+                if (isActive) R.drawable.bg_cpv_filter_pill_active
+                else R.drawable.bg_cpv_filter_pill_inactive,
+            )
+            pill.setTextColor(Color.parseColor(if (isActive) "#FFFFFF" else "#475467"))
+            pill.typeface = ResourcesCompat.getFont(
+                pill.context,
+                if (isActive) R.font.inter_semibold else R.font.inter_medium,
             )
         }
     }
@@ -404,6 +588,7 @@ class CpVisitsFragment : Fragment() {
             Filter.IN_PROGRESS -> isInProgress(status) && !isCancelled(status) && !isCompleted(status)
             Filter.COMPLETED -> isCompleted(status)
             Filter.CANCELLED -> isCancelled(status)
+            Filter.PENDING_GM_APPROVAL -> status == "pending_gm_approval" || status == "pending-gm-approval"
             Filter.SCHEDULED -> !isInProgress(status) && !isCompleted(status) &&
                 !isCancelled(status) && !isPostponed(visit)
         }
@@ -429,9 +614,26 @@ class CpVisitsFragment : Fragment() {
         // dates load; otherwise fetch the default (all) window.
         val from = filterFromDate
         val to = filterToDate
+        val requestedScope = currentScope
+        val requestedSearch = searchQuery
+        val requestGeneration = ++loadGeneration
+        cpNextCursor = null
+        cpHasMore = false
+        cpLoadingMore = false
+        cpPager.reset()
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
+                val optionsRequest = async {
+                    runCatching {
+                        geoApi.getMarketingCpVisitFilterOptions(
+                            session.bearerToken,
+                            scope = requestedScope.apiValue,
+                            fromDate = from,
+                            toDate = to,
+                        )
+                    }.getOrNull()
+                }
                 // Switched from /api/sitevisits/my (legacy fieldVisits) to
                 // /api/marketing/clientPlaceVisits/my so each row carries
                 // the proposedSiteVisit / lead.followUpStatus / party
@@ -444,20 +646,38 @@ class CpVisitsFragment : Fragment() {
                 // this is what showed the intermittent "CP network error" on an
                 // otherwise-reachable backend. Only IOException/timeout is
                 // retried; a parse/business error fails fast.
-                val resp = retryIo(times = 1, initialDelayMs = 500) {
+                suspend fun requestVisits(includeUnhealthyFacets: Boolean) =
                     geoApi.getMyMarketingCpVisits(
                         session.bearerToken,
                         fromDate = from,
                         toDate = to,
+                        scope = requestedScope.apiValue,
                         // Browsable list: pull a wide window so the on-screen
                         // search can reach any client, not just the newest 20.
                         limit = 200,
                         // When searching, ask the backend to full-text search so a
                         // client OLDER than the recency window is still found (the
                         // super-admin "on web but not mobile" case).
-                        search = searchQuery.ifBlank { null },
+                        search = requestedSearch.ifBlank { null },
+                        assignedStaffId = filterAssignedStaffId,
+                        telecallerStaffId = filterTelecallerStaffId,
+                        status = currentFilter.takeUnless { it == Filter.ALL }
+                            ?.name?.lowercase(Locale.US)
+                            ?.takeIf { includeUnhealthyFacets },
+                        outcome = filterOutcome?.takeIf { includeUnhealthyFacets },
+                        cpType = filterCpType,
+                        pageSize = 200,
                     )
+
+                val resp = try {
+                    retryIo(times = 1, initialDelayMs = 500) { requestVisits(true) }
+                } catch (e: HttpException) {
+                    val canFallback = e.code() >= 500 &&
+                        (currentFilter != Filter.ALL || !filterOutcome.isNullOrBlank())
+                    if (!canFallback) throw e
+                    retryIo(times = 1, initialDelayMs = 500) { requestVisits(false) }
                 }
+                if (requestGeneration != loadGeneration) return@launch
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 hasLoadedOnce = true
                 if (!resp.success) {
@@ -469,18 +689,42 @@ class CpVisitsFragment : Fragment() {
                     ).show()
                     return@launch
                 }
+                optionsRequest.await()?.takeIf { it.success }?.let { filterOptions = it }
+                val teamAvailable = resp.hasDirectReports == true ||
+                    (resp.directReportCount ?: 0) > 0 ||
+                    resp.safeDirectReportIds.isNotEmpty()
+                updateScopeAvailability(root, teamAvailable)
+                if (!CpVisitListScopePolicy.acceptsResponse(requestedScope, resp.scope)) {
+                    allVisits = emptyList()
+                    showLoadError(
+                        "Team CP access needs the direct-report server update. " +
+                            "No wider team records were shown.",
+                    )
+                    return@launch
+                }
+                val allowedOwnerIds = when (requestedScope) {
+                    CpVisitListScope.MY -> setOfNotNull(session.staffId)
+                    CpVisitListScope.TEAM -> resp.safeDirectReportIds.filter { it.isNotBlank() }.toSet()
+                    CpVisitListScope.ALL -> emptySet()
+                }
                 // Sort: ongoing first (in-progress / arrived / reaching),
                 // then pending (scheduled / not started), then completed
                 // at the bottom. Within each status group, newest-first
                 // by creationTime (= most recently assigned) with
                 // scheduledDate as the legacy-row fallback.
                 allVisits = resp.visits
+                    .filter {
+                        requestedScope == CpVisitListScope.ALL ||
+                            CpVisitListScopePolicy.belongsToAny(it, allowedOwnerIds)
+                    }
                     .mapNotNull { it.toCpListVisitOrNull() }
                     .sortedWith(
                         compareBy<TodayVisit> { statusGroupPriority(it.status) }
                             .thenByDescending { it.creationTime ?: 0.0 }
                             .thenByDescending { it.scheduledDate }
                     )
+                cpNextCursor = resp.nextCursor
+                cpHasMore = resp.hasMore == true && !cpNextCursor.isNullOrBlank()
                 consumeFocusVisit()
                 // Empty-state diagnostic toasts removed — the
                 // "No Cp Visits Yet" empty-state UI already conveys
@@ -490,6 +734,7 @@ class CpVisitsFragment : Fragment() {
                 // collapse to a no-op render call below.
                 renderList()
             } catch (e: Exception) {
+                if (requestGeneration != loadGeneration) return@launch
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 if (allVisits.isNotEmpty()) {
                     // A transient failure on a refresh must NOT blank a list the
@@ -510,9 +755,65 @@ class CpVisitsFragment : Fragment() {
                     ).show()
                 }
             } finally {
-                root.findViewById<androidx.swiperefreshlayout.widget.SwipeRefreshLayout>(
-                    R.id.cpvRefresh
-                )?.dismissRefresh()
+                if (requestGeneration == loadGeneration) {
+                    root.findViewById<androidx.swiperefreshlayout.widget.SwipeRefreshLayout>(
+                        R.id.cpvRefresh
+                    )?.dismissRefresh()
+                }
+            }
+        }
+    }
+
+    private fun loadMoreCpVisits() {
+        val cursor = cpNextCursor?.takeIf { cpHasMore && !cpLoadingMore } ?: return
+        val generation = loadGeneration
+        val requestedScope = currentScope
+        cpLoadingMore = true
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = geoApi.getMyMarketingCpVisits(
+                    session.bearerToken,
+                    fromDate = filterFromDate,
+                    toDate = filterToDate,
+                    scope = requestedScope.apiValue,
+                    limit = 200,
+                    search = searchQuery.ifBlank { null },
+                    assignedStaffId = filterAssignedStaffId,
+                    telecallerStaffId = filterTelecallerStaffId,
+                    status = currentFilter.takeUnless { it == Filter.ALL }?.name?.lowercase(Locale.US),
+                    outcome = filterOutcome,
+                    cpType = filterCpType,
+                    cursor = cursor,
+                    pageSize = 200,
+                )
+                if (generation != loadGeneration || !resp.success ||
+                    !CpVisitListScopePolicy.acceptsResponse(requestedScope, resp.scope)
+                ) return@launch
+                val allowedOwnerIds = when (requestedScope) {
+                    CpVisitListScope.MY -> setOfNotNull(session.staffId)
+                    CpVisitListScope.TEAM -> resp.safeDirectReportIds.filter(String::isNotBlank).toSet()
+                    CpVisitListScope.ALL -> emptySet()
+                }
+                val incoming = resp.visits
+                    .filter {
+                        requestedScope == CpVisitListScope.ALL ||
+                            CpVisitListScopePolicy.belongsToAny(it, allowedOwnerIds)
+                    }
+                    .mapNotNull { it.toCpListVisitOrNull() }
+                allVisits = (allVisits + incoming)
+                    .distinctBy { it.clientPlaceVisitId ?: it.id }
+                    .sortedWith(
+                        compareBy<TodayVisit> { statusGroupPriority(it.status) }
+                            .thenByDescending { it.creationTime ?: 0.0 }
+                            .thenByDescending { it.scheduledDate },
+                    )
+                cpNextCursor = resp.nextCursor
+                cpHasMore = resp.hasMore == true && !cpNextCursor.isNullOrBlank() && cpNextCursor != cursor
+                renderList()
+            } catch (_: Exception) {
+                // Preserve loaded CP pages; pull-to-refresh retries page one.
+            } finally {
+                if (generation == loadGeneration) cpLoadingMore = false
             }
         }
     }
@@ -555,7 +856,8 @@ class CpVisitsFragment : Fragment() {
             (this.attendees?.isNotEmpty() == true) ||
             !this.foodPreferences.isNullOrBlank() ||
             !this.vehiclePreference.isNullOrBlank()
-        val category = if (proposedHasFields || leadFlaggedSvFixed || hasSvFixParty) {
+        val isSvCumCpType = this.cpType?.trim()?.equals("sv_cum_cp", ignoreCase = true) == true
+        val category = if (isSvCumCpType || proposedHasFields || leadFlaggedSvFixed || hasSvFixParty) {
             "sv_cum_cp"
         } else {
             "direct_cp"
@@ -624,8 +926,12 @@ class CpVisitsFragment : Fragment() {
             // the trip screen had no name to show and a manager viewing it
             // could not tell whose visit it was.
             bdoName = this.assignedStaff?.name?.takeIf { it.isNotBlank() },
+            bdoStaffId = this.assignedStaffId,
             lmoName = this.telecaller?.name?.takeIf { it.isNotBlank() }
                 ?: this.telecaller?.staffName?.takeIf { it.isNotBlank() },
+            lmoStaffId = this.telecallerStaffId,
+            projectId = this.projectId,
+            projectName = this.project?.name,
             cpVisit = cpState,
             // Thread the CP's `createdAt` ms timestamp into the
             // envelope's `creationTime` slot so the CP list's
@@ -668,6 +974,10 @@ class CpVisitsFragment : Fragment() {
         fun matches(v: TodayVisit): Boolean {
             if (!matchesFilter(v, currentFilter)) return false
             if (!inDateRange(v)) return false
+            if (filterOutcome != null && v.cpVisit?.outcome != filterOutcome) return false
+            if (filterCpType != null && v.cpVisit?.cpType != filterCpType) return false
+            if (filterAssignedStaffId != null && v.bdoStaffId != filterAssignedStaffId) return false
+            if (filterTelecallerStaffId != null && v.lmoStaffId != filterTelecallerStaffId) return false
             return com.manjugroups.m_connect.util.VisitSearch.matches(v, searchQuery)
         }
         val matched = allVisits.filter { matches(it) }
@@ -675,7 +985,9 @@ class CpVisitsFragment : Fragment() {
 
         // Reset the scroll window whenever the filter / search / data changes.
         val windowCtx =
-            "$currentFilter|$searchQuery|${System.identityHashCode(allVisits)}"
+            "$currentScope|$currentFilter|$filterOutcome|$filterCpType|" +
+                "$filterAssignedStaffId|$filterTelecallerStaffId|$searchQuery|" +
+                System.identityHashCode(allVisits)
         if (windowCtx != cpWindowCtx) {
             cpWindowCtx = windowCtx
             cpPager.reset()
@@ -698,10 +1010,17 @@ class CpVisitsFragment : Fragment() {
                 Filter.IN_PROGRESS -> "No Visits In Progress"
                 Filter.COMPLETED -> "No Completed Visits"
                 Filter.CANCELLED -> "No Cancelled Visits"
-                Filter.ALL -> if (searchQuery.isBlank()) "No Cp Visits Yet" else "No Matches Found"
+                Filter.PENDING_GM_APPROVAL -> "No Pending Approvals"
+                Filter.ALL -> when {
+                    searchQuery.isNotBlank() -> "No Matches Found"
+                    currentScope == CpVisitListScope.TEAM -> "No Team CP Visits"
+                    else -> "No Cp Visits Yet"
+                }
             }
             emptySubtitle.text = if (searchQuery.isNotBlank()) {
                 "Try a different search term or switch filters to see other client place visits."
+            } else if (currentScope == CpVisitListScope.TEAM) {
+                "No CP visits are assigned to your immediate direct reports."
             } else {
                 "Stay organized by creating or joining teams. Groups help you manage tasks, track progress, and collaborate with your team in one place."
             }
@@ -1393,7 +1712,38 @@ class CpVisitsFragment : Fragment() {
     }
 
     companion object {
+        private val CP_OUTCOME_OPTIONS = listOf(
+            "interested" to "Interested",
+            "not_interested" to "Not interested",
+            "postponed" to "Follow-up",
+            "referral" to "Referral",
+            "converted_to_site_visit" to "Converted to Site Visit",
+            "converted_to_booking" to "Converted to Booking",
+            "other" to "Others",
+            "rejected" to "Rejected",
+            "gift_distributed" to "Gift Distributed",
+            "old_client_visited" to "Old Client Visited",
+            "collection_done" to "Collection Done",
+            "not_collected" to "Not Collected",
+        )
+        private val CP_TYPE_OPTIONS = listOf(
+            "sv_cum_cp" to "SV cum CP",
+            "follow_up" to "Follow-up",
+            "booking_cp" to "Booking CP",
+            "collection_cp" to "Collection CP",
+            "old_client" to "Old Client",
+            "gift_distribution" to "Gift Distribution",
+            "new_client_cp" to "New Client CP",
+            "other_cp" to "Other CP",
+            "joint_cp" to "Joint CP",
+        )
         private const val ARG_FOCUS_CP_VISIT_ID = "arg_focus_cp_visit_id"
+        private const val KEY_DATE = "date"
+        private const val KEY_STATUS = "status"
+        private const val KEY_OUTCOME = "outcome"
+        private const val KEY_CP_TYPE = "cp_type"
+        private const val KEY_FIELD_STAFF = "field_staff"
+        private const val KEY_TELECALLER = "telecaller"
 
         /** Entry used by the task router: opens the list, then that visit. */
         fun newInstance(focusCpVisitId: String? = null): CpVisitsFragment =

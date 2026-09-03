@@ -20,6 +20,7 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
@@ -27,32 +28,42 @@ import androidx.lifecycle.lifecycleScope
 import coil.load
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions
+import com.google.mlkit.vision.documentscanner.GmsDocumentScanning
+import com.google.mlkit.vision.documentscanner.GmsDocumentScanningResult
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
+import com.manjugroups.m_connect.network.DeleteLoanDocumentRequest
 import com.manjugroups.m_connect.network.GeoTrackApi
-import com.manjugroups.m_connect.network.UploadLoanDocumentRequest
+import com.manjugroups.m_connect.network.LoanCaseDocument
 import com.manjugroups.m_connect.util.ScanPdfBuilder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
+import java.util.UUID
 
 /**
  * Loan Desk document upload sheet.
  *
  * Pipeline (upload-on-pick):
- *   1. User picks a file (gallery or camera) — slot flips to UPLOADING
+ *   1. User scans or picks a file — slot flips to UPLOADING
  *      with a spinner. Submit is gated off until every UPLOADING slot
  *      resolves, so the user can't dispatch a half-uploaded payload.
- *   2. We copy the URI to the app cache off-main and POST to
- *      /api/storage/upload immediately. On success we persist
+ *   2. We copy the URI to the app cache off-main and POST to the Loan Desk
+ *      upload endpoint immediately. On success we persist
  *      `{label, fileName, storageId}` to SharedPreferences keyed by
  *      caseId so an accidental dismiss doesn't lose work — reopening
  *      the sheet for the same case restores the slots in READY state.
@@ -86,17 +97,21 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
         val layoutFailed: View,
         val layoutUploaded: View,
         val tvUploadedName: TextView,
+        val tvUploadingLabel: TextView,
         val tvFailedLabel: TextView,
         val btnRetryUpload: TextView,
+        val btnDeleteUploaded: View,
         // Server-side state — already uploaded and approved at some
         // point. Lets the slot pre-fill and preview from /api/storage
         // without re-picking.
-        val preExistingFileName: String? = null,
-        val preExistingStorageId: String? = null,
+        var preExistingFileName: String? = null,
+        var preExistingStorageId: String? = null,
         // Live state — the freshly picked file in this session.
         var state: SlotUiState = SlotUiState.IDLE,
         var fileName: String? = null,
         var storageId: String? = null,
+        var localFilePath: String? = null,
+        var uploadRequestId: String? = null,
         var lastError: String? = null,
         var uploadJob: Job? = null,
     )
@@ -117,9 +132,37 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
     private lateinit var btnSubmit: TextView
     private val gson = Gson()
 
+    private val documentScanner by lazy {
+        val options = GmsDocumentScannerOptions.Builder()
+            .setGalleryImportAllowed(true)
+            .setPageLimit(MAX_SCAN_PAGES)
+            .setResultFormats(GmsDocumentScannerOptions.RESULT_FORMAT_PDF)
+            .setScannerMode(GmsDocumentScannerOptions.SCANNER_MODE_FULL)
+            .build()
+        GmsDocumentScanning.getClient(options)
+    }
+
     private var onSubmitted: ((uploads: List<SubmittedDoc>) -> Unit)? = null
+    private var onDocumentChanged: ((label: String, document: LoanCaseDocument?, loanCase: com.manjugroups.m_connect.network.LoanCaseRow?) -> Unit)? = null
 
     // ── File picker / camera launchers (shared across all slots) ──
+
+    private val documentScannerLauncher = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult(),
+    ) { activityResult ->
+        if (activityResult.resultCode != Activity.RESULT_OK) return@registerForActivityResult
+        val result = GmsDocumentScanningResult.fromActivityResultIntent(activityResult.data)
+        val pdf = result?.pdf
+        if (pdf == null || pdf.pageCount <= 0) {
+            Toast.makeText(requireContext(), "No scanned pages were returned", Toast.LENGTH_SHORT).show()
+            return@registerForActivityResult
+        }
+        startUploadFromUri(
+            slotIndex = activeSlotIndex,
+            uri = pdf.uri,
+            preferredFileName = scanPdfName(slots.getOrNull(activeSlotIndex)?.label.orEmpty()),
+        )
+    }
 
     private val filePickerLauncher = registerForActivityResult(
         object : ActivityResultContracts.GetContent() {
@@ -169,6 +212,12 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
 
     fun setOnSubmittedListener(listener: (uploads: List<SubmittedDoc>) -> Unit) {
         this.onSubmitted = listener
+    }
+
+    fun setOnDocumentChangedListener(
+        listener: (label: String, document: LoanCaseDocument?, loanCase: com.manjugroups.m_connect.network.LoanCaseRow?) -> Unit,
+    ) {
+        onDocumentChanged = listener
     }
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
@@ -250,12 +299,14 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
             val layoutFailed = row.findViewById<View>(R.id.layoutFailed)
             val layoutUploaded = row.findViewById<View>(R.id.layoutUploaded)
             val tvUploadedName = row.findViewById<TextView>(R.id.tvUploadedName)
+            val tvUploadingLabel = row.findViewById<TextView>(R.id.tvUploadingLabel)
             val tvFailedLabel = row.findViewById<TextView>(R.id.tvFailedLabel)
             val btnRetryUpload = row.findViewById<TextView>(R.id.btnRetryUpload)
+            val btnDeleteUploaded = row.findViewById<View>(R.id.btnDeleteUploaded)
 
             tvDocTitle.text = "$label *"
             tvUnuploadedTitle.text = "Upload $label"
-            tvUnuploadedSubtitle.text = "Max 2MB · JPG, PNG, PDF"
+            tvUnuploadedSubtitle.text = "Max 20 MB · Scan, JPG, PNG or PDF"
 
             val preExisting = preExistingNames.getOrNull(index)?.takeIf { it.isNotBlank() }
             val preExistingStorageId =
@@ -271,8 +322,10 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
                 layoutFailed = layoutFailed,
                 layoutUploaded = layoutUploaded,
                 tvUploadedName = tvUploadedName,
+                tvUploadingLabel = tvUploadingLabel,
                 tvFailedLabel = tvFailedLabel,
                 btnRetryUpload = btnRetryUpload,
+                btnDeleteUploaded = btnDeleteUploaded,
                 preExistingFileName = preExisting,
                 preExistingStorageId = preExistingStorageId,
             )
@@ -286,6 +339,7 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
             layoutUploaded.setOnClickListener {
                 previewSlot(slot)
             }
+            btnDeleteUploaded.visibility = if (isViewMode) View.GONE else View.VISIBLE
             if (isViewMode) {
                 btnCamera.visibility = View.GONE
             } else {
@@ -295,21 +349,11 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
                 }
                 btnCamera.setOnClickListener {
                     activeSlotIndex = index
-                    // Fresh scan for this slot — drop pages from an aborted
-                    // scan of another slot.
-                    scanPages.clear()
-                    checkCameraPermissionAndLaunch()
+                    launchDocumentScanner()
                 }
-                layoutUploaded.setOnLongClickListener {
-                    clearSlot(slot)
-                    true
-                }
+                btnDeleteUploaded.setOnClickListener { confirmDeleteSlot(slot) }
                 btnRetryUpload.setOnClickListener {
-                    // The retry just resets the slot to IDLE — the
-                    // user has to repick. We don't keep the raw URI
-                    // around since picker uris can become invalid
-                    // (revoked grants, picker source process gone).
-                    clearSlot(slot)
+                    retrySlotUpload(slot)
                 }
             }
 
@@ -334,7 +378,6 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
                     return@setOnClickListener
                 }
                 onSubmitted?.invoke(ready)
-                clearDraft()
                 dismiss()
             }
         } else {
@@ -403,18 +446,127 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
         slot.state = SlotUiState.IDLE
         slot.fileName = null
         slot.storageId = null
+        slot.localFilePath?.let { runCatching { File(it).delete() } }
+        slot.localFilePath = null
+        slot.uploadRequestId = null
         slot.lastError = null
         renderSlot(slot)
         persistDraft()
         updateSubmitButtonState()
     }
 
+    private fun retrySlotUpload(slot: DocSlotState) {
+        val file = slot.localFilePath?.let(::File)
+        if (file == null || !file.exists() || file.length() <= 0L) {
+            clearSlot(slot)
+            Toast.makeText(
+                requireContext(),
+                "The local copy is unavailable. Please scan the document again.",
+                Toast.LENGTH_LONG,
+            ).show()
+            return
+        }
+        slot.tvUploadingLabel.text = "Uploading..."
+        slot.state = SlotUiState.UPLOADING
+        slot.lastError = null
+        renderSlot(slot)
+        updateSubmitButtonState()
+        slot.uploadJob = viewLifecycleOwner.lifecycleScope.launch {
+            performUpload(slot, file)
+        }
+    }
+
+    private fun confirmDeleteSlot(slot: DocSlotState) {
+        val storageId = slot.storageId ?: slot.preExistingStorageId
+        if (storageId.isNullOrBlank()) {
+            clearSlot(slot)
+            return
+        }
+        val currentLoanCaseId = loanCaseId
+        if (currentLoanCaseId.isNullOrBlank()) {
+            Toast.makeText(
+                requireContext(),
+                "This document is not attached to a loan case yet.",
+                Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Delete document?")
+            .setMessage("${slot.label} will be removed from this loan case.")
+            .setNegativeButton("Keep", null)
+            .setPositiveButton("Delete") { _, _ ->
+                deleteSlot(slot, currentLoanCaseId, storageId)
+            }
+            .show()
+    }
+
+    private fun deleteSlot(slot: DocSlotState, currentLoanCaseId: String, storageId: String) {
+        val previousState = slot.state
+        slot.tvUploadingLabel.text = "Deleting..."
+        slot.state = SlotUiState.UPLOADING
+        renderSlot(slot)
+        updateSubmitButtonState()
+        slot.uploadJob = viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val response = withContext(Dispatchers.IO) {
+                    GeoTrackApi.create().deleteLoanDocument(
+                        SessionManager(requireContext()).bearerToken,
+                        DeleteLoanDocumentRequest(
+                            loanCaseId = currentLoanCaseId,
+                            label = slot.label,
+                            storageId = storageId,
+                        ),
+                    )
+                }
+                if (!response.success) {
+                    throw IllegalStateException(response.error ?: "Document could not be deleted")
+                }
+                slot.localFilePath?.let { runCatching { File(it).delete() } }
+                slot.preExistingFileName = null
+                slot.preExistingStorageId = null
+                slot.fileName = null
+                slot.storageId = null
+                slot.localFilePath = null
+                slot.uploadRequestId = null
+                slot.lastError = null
+                slot.uploadJob = null
+                slot.state = SlotUiState.IDLE
+                renderSlot(slot)
+                persistDraft()
+                updateSubmitButtonState()
+                onDocumentChanged?.invoke(slot.label, null, response.loanCase)
+                Toast.makeText(requireContext(), "Document deleted", Toast.LENGTH_SHORT).show()
+            } catch (error: Exception) {
+                slot.uploadJob = null
+                slot.state = previousState
+                slot.tvUploadingLabel.text = "Uploading..."
+                renderSlot(slot)
+                updateSubmitButtonState()
+                val message = if (error is retrofit2.HttpException) {
+                    LoanErrorParser.friendlyMessage(error)
+                } else {
+                    error.message ?: "Delete failed. Check your network and retry."
+                }
+                Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     // ── Upload pipeline ──
 
-    private fun startUploadFromUri(slotIndex: Int, uri: Uri) {
+    private fun startUploadFromUri(
+        slotIndex: Int,
+        uri: Uri,
+        preferredFileName: String? = null,
+    ) {
         val slot = slots.getOrNull(slotIndex) ?: return
-        val displayName = getFileName(uri) ?: "document_${slotIndex + 1}.pdf"
+        val displayName = safeFileName(
+            preferredFileName ?: getFileName(uri) ?: "document_${slotIndex + 1}.pdf",
+        )
         slot.fileName = displayName
+        slot.uploadRequestId = UUID.randomUUID().toString()
+        slot.tvUploadingLabel.text = "Uploading..."
         slot.state = SlotUiState.UPLOADING
         slot.lastError = null
         renderSlot(slot)
@@ -454,7 +606,9 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
         scanPages.clear()
         if (pages.isEmpty()) return
         slot.state = SlotUiState.UPLOADING
+        slot.tvUploadingLabel.text = "Uploading..."
         slot.fileName = scanPdfName(slot.label)
+        slot.uploadRequestId = UUID.randomUUID().toString()
         renderSlot(slot)
         updateSubmitButtonState()
         viewLifecycleOwner.lifecycleScope.launch {
@@ -471,15 +625,27 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
-    private fun scanPdfName(label: String): String =
-        "scan_" +
-            label.lowercase(Locale.US).replace(Regex("[^a-z0-9]+"), "_").trim('_') +
-            "_${System.currentTimeMillis()}.pdf"
+    private fun scanPdfName(label: String): String {
+        val safeLabel = label.lowercase(Locale.US)
+            .replace(Regex("[^a-z0-9]+"), "_")
+            .trim('_')
+            .ifBlank { "document" }
+        val caseRef = (loanCaseId ?: caseId).orEmpty()
+            .replace(Regex("[^A-Za-z0-9]+"), "")
+            .takeLast(10)
+            .lowercase(Locale.US)
+        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(Date())
+        return listOf("loan", safeLabel, caseRef, timestamp)
+            .filter { it.isNotBlank() }
+            .joinToString("_") + ".pdf"
+    }
 
     private fun startUploadFromCameraFile(slotIndex: Int, file: File) {
         val slot = slots.getOrNull(slotIndex) ?: return
         slot.fileName = file.name
+        slot.uploadRequestId = UUID.randomUUID().toString()
         slot.state = SlotUiState.UPLOADING
+        slot.tvUploadingLabel.text = "Uploading..."
         slot.lastError = null
         renderSlot(slot)
         updateSubmitButtonState()
@@ -489,76 +655,89 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
     }
 
     private suspend fun performUpload(slot: DocSlotState, file: File) {
+        slot.localFilePath = file.absolutePath
+        if (!file.exists() || file.length() <= 0L) {
+            onSlotUploadFailed(slot, "The selected document is empty")
+            return
+        }
+        if (file.length() > MAX_DOCUMENT_BYTES) {
+            onSlotUploadFailed(slot, "Document must be 20 MB or smaller")
+            return
+        }
         val mime = when (file.extension.lowercase(Locale.US)) {
             "pdf" -> "application/pdf"
             "png" -> "image/png"
             "webp" -> "image/webp"
-            else -> "image/jpeg"
+            "jpg", "jpeg" -> "image/jpeg"
+            else -> {
+                onSlotUploadFailed(slot, "Only PDF and image documents are supported")
+                return
+            }
         }
         val token = SessionManager(requireContext()).bearerToken
+        val requestId = slot.uploadRequestId
+            ?: UUID.randomUUID().toString().also { slot.uploadRequestId = it }
         val result = withContext(Dispatchers.IO) {
             runCatching {
-                val bytes = file.readBytes()
-                ApiService.create().uploadStorageFile(
+                val textType = "text/plain".toMediaType()
+                val filePart = MultipartBody.Part.createFormData(
+                    "file",
+                    file.name,
+                    file.asRequestBody(mime.toMediaType()),
+                )
+                GeoTrackApi.create().uploadLoanDocumentFile(
                     token = token,
-                    body = bytes.toRequestBody(mime.toMediaTypeOrNull()),
+                    loanCaseId = loanCaseId
+                        ?.takeIf { it.isNotBlank() }
+                        ?.toRequestBody(textType),
+                    label = slot.label.toRequestBody(textType),
+                    file = filePart,
+                    fileName = file.name.toRequestBody(textType),
+                    requestId = requestId.toRequestBody(textType),
                 )
             }
         }
         result.onSuccess { resp ->
-            val sid = resp.storageId
+            val sid = resp.document?.storageId
             if (resp.success && !sid.isNullOrBlank()) {
-                // When editing a real loan case, persist the slot server-side
-                // right away via /api/postsales/loans/upload-document (the
-                // same setLoanChecklistDocument path the web Loan Desk uses)
-                // so the scanned PDF lands on the case even if the sheet is
-                // dismissed before a full submit.
-                val lcId = loanCaseId
-                if (!lcId.isNullOrBlank()) {
-                    val attach = withContext(Dispatchers.IO) {
-                        runCatching {
-                            GeoTrackApi.create().uploadLoanDocument(
-                                token = token,
-                                body = UploadLoanDocumentRequest(
-                                    loanCaseId = lcId,
-                                    index = slot.index,
-                                    storageId = sid,
-                                    fileName = slot.fileName,
-                                ),
-                            )
-                        }
-                    }
-                    val attached = attach.getOrNull()
-                    if (attached?.success != true) {
-                        onSlotUploadFailed(
-                            slot,
-                            attached?.error
-                                ?: attach.exceptionOrNull()?.message
-                                ?: "Couldn't save the document to the loan case",
-                        )
-                        return
-                    }
-                }
+                slot.uploadJob = null
                 slot.storageId = sid
+                slot.fileName = resp.document.fileName.ifBlank { file.name }
                 slot.state = SlotUiState.READY
                 slot.lastError = null
                 renderSlot(slot)
                 persistDraft()
                 updateSubmitButtonState()
+                onDocumentChanged?.invoke(
+                    slot.label,
+                    LoanCaseDocument(
+                        label = slot.label,
+                        storageId = sid,
+                        fileName = slot.fileName,
+                    ),
+                    resp.loanCase,
+                )
             } else {
                 onSlotUploadFailed(slot, resp.error ?: "Upload rejected by server")
             }
         }
         result.onFailure { err ->
-            onSlotUploadFailed(slot, err.message ?: "Network error")
+            val message = if (err is retrofit2.HttpException) {
+                LoanErrorParser.friendlyMessage(err)
+            } else {
+                err.message ?: "Network error"
+            }
+            onSlotUploadFailed(slot, message)
         }
     }
 
     private fun onSlotUploadFailed(slot: DocSlotState, message: String) {
+        slot.uploadJob = null
         slot.state = SlotUiState.FAILED
         slot.lastError = message
         slot.storageId = null
         renderSlot(slot)
+        persistDraft()
         updateSubmitButtonState()
         if (isAdded) {
             Toast.makeText(requireContext(), "${slot.label}: $message", Toast.LENGTH_SHORT).show()
@@ -610,11 +789,17 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
         val prefs = draftPrefs() ?: return
         val key = draftKey() ?: return
         val payload = slots
-            .filter { it.state == SlotUiState.READY }
+            .filter { it.state == SlotUiState.READY || it.state == SlotUiState.FAILED }
             .mapNotNull { s ->
-                val sid = s.storageId ?: return@mapNotNull null
                 val name = s.fileName ?: return@mapNotNull null
-                DraftEntry(label = s.label, fileName = name, storageId = sid)
+                DraftEntry(
+                    label = s.label,
+                    fileName = name,
+                    storageId = s.storageId,
+                    localFilePath = s.localFilePath,
+                    uploadRequestId = s.uploadRequestId,
+                    state = s.state.name,
+                )
             }
         prefs.edit().putString(key, gson.toJson(payload)).apply()
     }
@@ -635,26 +820,53 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
             val match = byLabel[slot.label.lowercase(Locale.US)] ?: return@forEach
             slot.fileName = match.fileName
             slot.storageId = match.storageId
-            slot.state = SlotUiState.READY
+            slot.localFilePath = match.localFilePath
+            slot.uploadRequestId = match.uploadRequestId
+            slot.state = if (!match.storageId.isNullOrBlank()) {
+                SlotUiState.READY
+            } else if (match.localFilePath?.let(::File)?.exists() == true) {
+                slot.lastError = "Upload interrupted. Tap Retry."
+                SlotUiState.FAILED
+            } else {
+                return@forEach
+            }
             slot.tvUploadedName.text = match.fileName
             renderSlot(slot)
         }
         updateSubmitButtonState()
     }
 
-    private fun clearDraft() {
-        val prefs = draftPrefs() ?: return
-        val key = draftKey() ?: return
-        prefs.edit().remove(key).apply()
-    }
-
     private data class DraftEntry(
         val label: String,
-        val fileName: String,
-        val storageId: String,
+        val fileName: String? = null,
+        val storageId: String? = null,
+        val localFilePath: String? = null,
+        val uploadRequestId: String? = null,
+        val state: String? = null,
     )
 
     // ── Camera ──
+
+    private fun launchDocumentScanner() {
+        val host = activity ?: return
+        documentScanner.getStartScanIntent(host)
+            .addOnSuccessListener { intentSender ->
+                if (!isAdded) return@addOnSuccessListener
+                documentScannerLauncher.launch(
+                    IntentSenderRequest.Builder(intentSender).build(),
+                )
+            }
+            .addOnFailureListener {
+                if (!isAdded) return@addOnFailureListener
+                Toast.makeText(
+                    requireContext(),
+                    "Document scanner unavailable. Opening the camera instead.",
+                    Toast.LENGTH_LONG,
+                ).show()
+                scanPages.clear()
+                checkCameraPermissionAndLaunch()
+            }
+    }
 
     private fun checkCameraPermissionAndLaunch() {
         if (ContextCompat.checkSelfPermission(
@@ -708,8 +920,10 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
         val cr = requireContext().contentResolver
         val input = cr.openInputStream(uri) ?: return null
         val folder = File(requireContext().cacheDir, "loandesk").apply { if (!exists()) mkdirs() }
-        val cacheFile = File(folder, displayName)
-        cacheFile.outputStream().use { out -> input.copyTo(out) }
+        val cacheFile = File(folder, safeFileName(displayName))
+        input.use { source ->
+            cacheFile.outputStream().use { out -> source.copyTo(out) }
+        }
         cacheFile
     } catch (e: Exception) {
         e.printStackTrace()
@@ -728,6 +942,16 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
         return name
     }
 
+    private fun safeFileName(value: String): String {
+        val leaf = value.substringAfterLast('/').substringAfterLast('\\')
+        val cleaned = leaf.replace(Regex("[^A-Za-z0-9._-]+"), "_")
+            .trim('_', '.')
+            .take(180)
+        return cleaned.ifBlank {
+            "loan_document_${System.currentTimeMillis()}.pdf"
+        }
+    }
+
     /**
      * Three-way preview source:
      *   1. Freshly picked file from this session → cacheDir hit, Coil
@@ -742,8 +966,17 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
         val freshName = slot.fileName
         if (freshName != null) {
             val folder = File(requireContext().cacheDir, "loandesk")
-            val file = File(folder, freshName)
+            val file = slot.localFilePath?.let(::File) ?: File(folder, freshName)
             if (file.exists() && file.length() > 0) {
+                if (file.extension.equals("pdf", ignoreCase = true)) {
+                    val uri = FileProvider.getUriForFile(
+                        requireContext(),
+                        "${requireContext().packageName}.fileprovider",
+                        file,
+                    )
+                    openDocument(uri, "application/pdf", grantRead = true)
+                    return
+                }
                 showPreviewDialog { imageView, progressBar ->
                     progressBar.visibility = View.VISIBLE
                     imageView.load(file) {
@@ -768,6 +1001,11 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
                 "Preview unavailable",
                 Toast.LENGTH_SHORT,
             ).show()
+            return
+        }
+        val effectiveName = slot.fileName ?: slot.preExistingFileName
+        if (effectiveName?.endsWith(".pdf", ignoreCase = true) == true) {
+            openRemotePdf(storageId)
             return
         }
         showPreviewDialog { imageView, progressBar ->
@@ -824,6 +1062,43 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
+    private fun openRemotePdf(storageId: String) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val response = withContext(Dispatchers.IO) {
+                    ApiService.create().getStorageUrl(
+                        SessionManager(requireContext()).bearerToken,
+                        storageId,
+                    )
+                }
+                val url = response.url
+                if (!response.success || url.isNullOrBlank()) {
+                    Toast.makeText(requireContext(), "Couldn't open PDF", Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+                openDocument(Uri.parse(url), "application/pdf", grantRead = false)
+            } catch (_: Exception) {
+                Toast.makeText(requireContext(), "Couldn't open PDF", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun openDocument(uri: Uri, mime: String, grantRead: Boolean) {
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, mime)
+            if (grantRead) addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        try {
+            startActivity(intent)
+        } catch (_: ActivityNotFoundException) {
+            runCatching {
+                startActivity(Intent(Intent.ACTION_VIEW, uri))
+            }.onFailure {
+                Toast.makeText(requireContext(), "No PDF viewer is installed", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     private fun showPreviewDialog(bind: (imageView: ImageView, progressBar: View) -> Unit) {
         // Use PopupWindow rather than AlertDialog — the chat preview
         // does the same and it's the only thing that reliably fills
@@ -864,6 +1139,16 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
         private const val ARG_CASE_ID = "caseId"
         private const val ARG_LOAN_CASE_ID = "loanCaseId"
         private const val DRAFT_PREFS = "loan_desk_drafts"
+        private const val MAX_SCAN_PAGES = 20
+        private const val MAX_DOCUMENT_BYTES = 20L * 1024L * 1024L
+
+        fun clearRecoveryDraft(context: Context, caseId: String?) {
+            val key = caseId?.takeIf { it.isNotBlank() }?.let { "case_$it" } ?: return
+            context.getSharedPreferences(DRAFT_PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .remove(key)
+                .apply()
+        }
 
         /**
          * @param caseId The postSaleCase id this sheet is editing —

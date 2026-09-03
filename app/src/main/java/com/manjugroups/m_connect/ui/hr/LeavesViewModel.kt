@@ -39,18 +39,47 @@ class LeavesViewModel : ViewModel() {
     private val _event = MutableSharedFlow<String>()
     val event: SharedFlow<String> = _event.asSharedFlow()
 
-    fun load(bearerToken: String, canApprove: Boolean) {
+    fun load(
+        bearerToken: String,
+        canApprove: Boolean,
+        fromDate: String? = null,
+        toDate: String? = null,
+        status: String? = null,
+        leaveType: String? = null,
+        staffId: String? = null,
+    ) {
         _uiState.value = _uiState.value.copy(isLoading = true)
         viewModelScope.launch {
             try {
                 // Independent reads fired in PARALLEL — previously serial, so the
                 // screen blocked on the SUM of four round-trips; now the slowest.
                 val balanceD = async { runCatching { api.getLeaveBalance(bearerToken) }.getOrNull() }
-                val historyD = async { runCatching { api.getMyLeaves(bearerToken) }.getOrNull() }
+                val historyD = async {
+                    runCatching {
+                        api.getMyLeaves(
+                            bearerToken,
+                            fromDate = fromDate,
+                            toDate = toDate,
+                            status = status,
+                            leaveType = leaveType,
+                            staffId = staffId,
+                            pageSize = 200,
+                        )
+                    }.getOrNull()
+                }
                 val pendingD = async {
                     if (canApprove) {
                         runCatching {
-                            api.getPendingLeaveApprovals(bearerToken, scope = "direct")
+                            api.getPendingLeaveApprovals(
+                                bearerToken,
+                                scope = "direct",
+                                fromDate = fromDate,
+                                toDate = toDate,
+                                status = status,
+                                leaveType = leaveType,
+                                staffId = staffId,
+                                pageSize = 200,
+                            )
                         }.getOrNull()
                     } else null
                 }
@@ -65,6 +94,12 @@ class LeavesViewModel : ViewModel() {
                                 bearerToken,
                                 teamOnly = true,
                                 scope = "direct",
+                                fromDate = fromDate,
+                                toDate = toDate,
+                                status = status,
+                                leaveType = leaveType,
+                                staffId = staffId,
+                                pageSize = 200,
                             )
                         }.getOrNull()
                     } else null

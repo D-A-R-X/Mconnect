@@ -31,6 +31,7 @@ import com.manjugroups.m_connect.network.TrackingBootstrapData
 import com.manjugroups.m_connect.notifications.PushTokenManager
 import com.manjugroups.m_connect.notifications.WorkflowNotificationRoute
 import com.manjugroups.m_connect.update.InAppUpdateManager
+import com.manjugroups.m_connect.update.OperationalUpdateGate
 import com.manjugroups.m_connect.ui.chat.ChatListFragment
 import com.manjugroups.m_connect.ui.chat.ChatMessagesFragment
 import com.manjugroups.m_connect.ui.home.HomeFragment
@@ -204,12 +205,16 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        // Google Play in-app updates — checked on every cold start. High-priority
-        // releases force an immediate (blocking) update; everything else downloads
-        // flexibly in the background and prompts to restart. Constructed here,
-        // during onCreate (before STARTED), so its activity-result launcher is
-        // registered validly. No-ops on dev/sideload builds.
-        inAppUpdateManager = InAppUpdateManager(this).also { it.start() }
+        // Updates are offered only on an idle root tab. The
+        // operational gate separately verifies attendance, tracking, field
+        // work, calls, and offline queues before any update action is allowed.
+        val updateGate = OperationalUpdateGate(this, session, api)
+        inAppUpdateManager = InAppUpdateManager(
+            activity = this,
+            api = api,
+            isUiIdle = ::isUpdateUiIdle,
+            isOperationallyIdle = updateGate::isSafeToUpdate,
+        ).also { it.start() }
 
         // Surface the POST_NOTIFICATIONS system prompt on Android 13+ so
         // the user gets push notifications for chats / tasks / approvals.
@@ -226,13 +231,9 @@ class MainActivity : AppCompatActivity() {
             notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
         }
 
-        // Listen for any API call returning 401 — when that happens
-        // the saved session token is no longer valid (expired, revoked,
-        // or minted against a different Convex deployment than the
-        // current build is pointing at). Clear local state + bounce to
-        // login so the user can re-authenticate. Without this, a 401
-        // would silently fail every screen and leave the app in a
-        // "everything's empty / errored" stuck state.
+        // Listen for an authenticated 401 from the authoritative MMS API.
+        // Public login requests and secondary services cannot revoke this
+        // session; their failures stay within their own retry/error paths.
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 com.manjugroups.m_connect.auth.SessionInvalidationBus
@@ -502,6 +503,7 @@ class MainActivity : AppCompatActivity() {
         // header/tab state never bleeds in from the popped fragment.
         supportFragmentManager.addOnBackStackChangedListener {
             syncChromeToBackStack()
+            inAppUpdateManager?.onHostStateChanged()
         }
 
         currentTab = normalizeTab(savedInstanceState?.getInt(KEY_CURRENT_TAB, TAB_HOME) ?: TAB_HOME)
@@ -800,7 +802,10 @@ class MainActivity : AppCompatActivity() {
         navTasksPeek.visibility = android.view.View.GONE
         // Fill the nav bar behind the sheet so the page can't bleed through it.
         setNavBarSolid(true)
-        com.manjugroups.m_connect.ui.common.PendingTasksBottomSheet(pendingTasksList, taskNudgePendingCount)
+        com.manjugroups.m_connect.ui.common.PendingTasksBottomSheet.newInstance(
+            pendingTasksList,
+            taskNudgePendingCount,
+        )
             .showOnce(supportFragmentManager, TAG_PENDING_SHEET)
     }
 
@@ -1265,12 +1270,27 @@ class MainActivity : AppCompatActivity() {
         iamPollJob = null
     }
 
+    override fun onStop() {
+        super.onStop()
+        // A downloaded flexible update is completed silently only after the
+        // activity is backgrounded and every safety gate passes again.
+        inAppUpdateManager?.onAppBackgrounded()
+    }
+
     override fun onDestroy() {
         // Release the in-app-update install listener so we don't leak the
         // activity through Play's callback registry.
         inAppUpdateManager?.destroy()
         inAppUpdateManager = null
         super.onDestroy()
+    }
+
+    private fun isUpdateUiIdle(): Boolean {
+        if (isFinishing || isChangingConfigurations) return false
+        if (supportFragmentManager.backStackEntryCount != 0) return false
+        return supportFragmentManager.fragments.none { fragment ->
+            (fragment as? androidx.fragment.app.DialogFragment)?.dialog?.isShowing == true
+        }
     }
 
 
@@ -1468,11 +1488,20 @@ class MainActivity : AppCompatActivity() {
         if (!::statusBarBackground.isInitialized) return
         val wasFullBleed = statusBarFullBleed
         statusBarFullBleed = fullBleed
+
+        // Paint first, then resize. A height change is applied on the next layout
+        // pass, so collapsing a white detail-screen strip for a blue root tab can
+        // otherwise expose one white frame during the switch.
+        statusBarBackground.setBackgroundColor(backgroundColor)
         if (fullBleed) {
             statusBarBackground.layoutParams = statusBarBackground.layoutParams.apply { height = 0 }
-            window.statusBarColor = Color.TRANSPARENT
+            // The destination header still draws edge-to-edge, but keeping the
+            // system status-bar layer painted prevents a prior white detail
+            // screen from flashing through while root tabs are attached/shown.
+            // Transparent remains transparent for map/canvas callers that ask
+            // for it explicitly.
+            window.statusBarColor = backgroundColor
         } else {
-            statusBarBackground.setBackgroundColor(backgroundColor)
             statusBarBackground.layoutParams = statusBarBackground.layoutParams.apply {
                 height = resolveTopInset()
             }
@@ -1536,6 +1565,16 @@ class MainActivity : AppCompatActivity() {
             transaction.show(existingTarget)
         }
 
+        transaction.runOnCommit {
+            // Fragment visibility callbacks from the outgoing page can update
+            // system-bar chrome after selectTab's eager apply. Re-assert only
+            // once the transaction has finished so the visible root tab owns
+            // the final status-bar color and icon contrast.
+            if (currentTab == index && supportFragmentManager.backStackEntryCount == 0) {
+                applyTopBarForTab(index)
+                inAppUpdateManager?.onHostStateChanged()
+            }
+        }
         transaction.commit()
         prewarmNeighbours()
     }
