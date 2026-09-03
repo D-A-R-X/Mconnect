@@ -65,6 +65,7 @@ class SiteVisitsFragment : Fragment() {
     private var hasLoadedOnce = false
     private var currentFilter: Filter = Filter.ALL
     private var currentScope: CpVisitListScope = CpVisitListScope.ALL
+    private var activeOwnershipScope: CpVisitListScope? = null
     private var directReportIds: Set<String> = emptySet()
     private var searchQuery: String = ""
     private var searchReloadJob: kotlinx.coroutines.Job? = null
@@ -203,6 +204,8 @@ class SiteVisitsFragment : Fragment() {
             currentFilter = state.value(KEY_STATUS)?.let { value ->
                 Filter.entries.firstOrNull { it.name == value }
             } ?: Filter.ALL
+            activeOwnershipScope = null
+            currentScope = CpVisitListScope.ALL
             filterProject = state.value(KEY_PROJECT)
             filterLmo = state.value(KEY_LMO)
             filterFieldStaff = state.value(KEY_FIELD_STAFF)
@@ -352,8 +355,11 @@ class SiteVisitsFragment : Fragment() {
 
     private fun setupScopeFilter(root: View) {
         fun selectScope(scope: CpVisitListScope) {
-            currentScope = if (currentScope == scope) CpVisitListScope.ALL else scope
+            currentScope = scope
+            activeOwnershipScope = scope
+            currentFilter = Filter.ALL
             applyPillStyles(root)
+            updateDateFilterChip()
             renderList()
         }
         root.findViewById<TextView>(R.id.pillMy).apply {
@@ -398,12 +404,12 @@ class SiteVisitsFragment : Fragment() {
     private fun setupFilterPills(root: View) {
         pillsAndFilters(root).forEach { (pill, filter) ->
             pill?.setOnClickListener {
-                if (currentFilter != filter) {
-                    currentFilter = filter
-                    applyPillStyles(root)
-                    updateDateFilterChip()
-                    renderList()
-                }
+                activeOwnershipScope = null
+                currentScope = CpVisitListScope.ALL
+                currentFilter = filter
+                applyPillStyles(root)
+                updateDateFilterChip()
+                renderList()
             }
         }
         applyPillStyles(root)
@@ -412,7 +418,7 @@ class SiteVisitsFragment : Fragment() {
     private fun applyPillStyles(root: View) {
         pillsAndFilters(root).forEach { (pill, filter) ->
             pill ?: return@forEach
-            val isActive = filter == currentFilter
+            val isActive = activeOwnershipScope == null && filter == currentFilter
             pill.background = ContextCompat.getDrawable(
                 pill.context,
                 if (isActive) R.drawable.bg_cpv_filter_pill_active
@@ -428,7 +434,7 @@ class SiteVisitsFragment : Fragment() {
             root.findViewById<TextView>(R.id.pillMy) to CpVisitListScope.MY,
             root.findViewById<TextView>(R.id.pillTeam) to CpVisitListScope.TEAM,
         ).forEach { (pill, scope) ->
-            val isActive = currentScope == scope
+            val isActive = activeOwnershipScope == scope
             pill.background = ContextCompat.getDrawable(
                 pill.context,
                 if (isActive) R.drawable.bg_cpv_filter_pill_active

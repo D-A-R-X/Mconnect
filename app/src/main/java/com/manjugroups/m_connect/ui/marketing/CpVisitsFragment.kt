@@ -78,6 +78,7 @@ class CpVisitsFragment : Fragment() {
     private var focusCpVisitId: String? = null
     private var currentFilter: Filter = Filter.ALL
     private var currentScope: CpVisitListScope = CpVisitListScope.MY
+    private var activeOwnershipScope: CpVisitListScope? = null
     private var searchQuery: String = ""
     // Debounces the server-side search reload so a super-admin can find an
     // older client that's beyond the recency cap of the default list.
@@ -309,6 +310,8 @@ class CpVisitsFragment : Fragment() {
             currentFilter = state.value(KEY_STATUS)?.let { value ->
                 Filter.entries.firstOrNull { it.name == value }
             } ?: Filter.ALL
+            activeOwnershipScope = null
+            currentScope = CpVisitListScopePolicy.initialScope(session.isAdmin)
             filterOutcome = state.value(KEY_OUTCOME)
             filterCpType = state.value(KEY_CP_TYPE)
             filterAssignedStaffId = state.value(KEY_FIELD_STAFF)
@@ -466,13 +469,9 @@ class CpVisitsFragment : Fragment() {
 
     private fun setupScopeFilter(root: View) {
         fun selectScope(selected: CpVisitListScope) {
-            val target = if (session.isAdmin && currentScope == selected) {
-                CpVisitListScope.ALL
-            } else {
-                selected
-            }
-            if (target == currentScope) return
-            currentScope = target
+            currentScope = selected
+            activeOwnershipScope = selected
+            currentFilter = Filter.ALL
             allVisits = emptyList()
             rowViewCache.clear()
             rowsBuiltFor = null
@@ -510,10 +509,20 @@ class CpVisitsFragment : Fragment() {
     private fun setupFilterPills(root: View) {
         pillsAndFilters(root).forEach { (pill, filter) ->
             pill.setOnClickListener {
-                if (currentFilter != filter) {
-                    currentFilter = filter
-                    applyPillStyles(root)
-                    updateDateFilterChip()
+                val defaultScope = CpVisitListScopePolicy.initialScope(session.isAdmin)
+                val needsReload = currentScope != defaultScope
+                activeOwnershipScope = null
+                currentScope = defaultScope
+                currentFilter = filter
+                applyPillStyles(root)
+                updateDateFilterChip()
+                if (needsReload) {
+                    allVisits = emptyList()
+                    rowViewCache.clear()
+                    rowsBuiltFor = null
+                    hasLoadedOnce = false
+                    loadVisits()
+                } else {
                     renderList()
                 }
             }
@@ -523,7 +532,7 @@ class CpVisitsFragment : Fragment() {
 
     private fun applyPillStyles(root: View) {
         pillsAndFilters(root).forEach { (pill, filter) ->
-            val isActive = filter == currentFilter
+            val isActive = activeOwnershipScope == null && filter == currentFilter
             pill.background = ContextCompat.getDrawable(
                 pill.context,
                 if (isActive) R.drawable.bg_cpv_filter_pill_active
@@ -539,7 +548,7 @@ class CpVisitsFragment : Fragment() {
             root.findViewById<TextView>(R.id.pillMy) to CpVisitListScope.MY,
             root.findViewById<TextView>(R.id.pillTeam) to CpVisitListScope.TEAM,
         ).forEach { (pill, scope) ->
-            val isActive = currentScope == scope
+            val isActive = activeOwnershipScope == scope
             pill.background = ContextCompat.getDrawable(
                 pill.context,
                 if (isActive) R.drawable.bg_cpv_filter_pill_active
