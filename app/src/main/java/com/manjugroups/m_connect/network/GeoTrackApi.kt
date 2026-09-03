@@ -627,6 +627,13 @@ interface GeoTrackApi {
         @Query("toDate") toDate: String? = null,
     ): CpVisitFilterOptionsResponse
 
+    @GET("api/sitevisits/filter-options")
+    suspend fun getSiteVisitFilterOptions(
+        @Header("Authorization") token: String,
+        @Query("fromDate") fromDate: String? = null,
+        @Query("toDate") toDate: String? = null,
+    ): SiteVisitFilterOptionsResponse
+
     // ── Timeline (self-view) ──
 
     @GET("api/geotrack/timeline")
@@ -674,16 +681,19 @@ interface GeoTrackApi {
                 level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY
                 else HttpLoggingInterceptor.Level.NONE
             }
-            // Same auto-logout-on-401 watchdog as ApiService.create() —
-            // GeoTrack endpoints also need it because every trip /
-            // visit call goes through this client, and a stale token
-            // would silently fail tracking + outcome flows otherwise.
+            // MMS business endpoints can invalidate the MMS session. Direct
+            // GeoTrack transport is a separate authority: its failures must
+            // retry/fail without clearing an otherwise valid app login.
             val authWatchdog = okhttp3.Interceptor { chain ->
                 val request = chain.request()
                 val response = chain.proceed(request)
-                // Skip auto-logout when the outgoing request used the dev
-                // bypass token (see ApiService.isBypassAuth for context).
-                if (response.code == 401 && !isBypassAuth(request)) {
+                if (com.manjugroups.m_connect.auth.SessionInvalidationPolicy.shouldInvalidate(
+                        responseCode = response.code,
+                        authorizationHeader = request.header("Authorization"),
+                        requestHost = request.url.host,
+                        sessionAuthorityHost = java.net.URI(BuildConfig.BASE_URL).host.orEmpty(),
+                    )
+                ) {
                     com.manjugroups.m_connect.auth.SessionInvalidationBus
                         .reportUnauthorized()
                 }
@@ -709,11 +719,6 @@ interface GeoTrackApi {
                 .create(GeoTrackApi::class.java)
         }
 
-        private fun isBypassAuth(request: okhttp3.Request): Boolean {
-            val header = request.header("Authorization") ?: return false
-            val token = header.removePrefix("Bearer ").trim()
-            return com.manjugroups.m_connect.auth.AuthBypass.isBypassToken(token)
-        }
     }
 }
 
@@ -1924,6 +1929,15 @@ data class CpVisitFilterOptionsResponse(
     val statuses: List<CpVisitFilterOption>? = null,
     val outcomes: List<CpVisitFilterOption>? = null,
     val cpTypes: List<CpVisitFilterOption>? = null,
+    val error: String? = null,
+)
+
+data class SiteVisitFilterOptionsResponse(
+    val success: Boolean = false,
+    val projects: List<CpVisitFilterOption>? = null,
+    val lmos: List<CpVisitFilterOption>? = null,
+    val fieldStaff: List<CpVisitFilterOption>? = null,
+    val statuses: List<CpVisitFilterOption>? = null,
     val error: String? = null,
 )
 

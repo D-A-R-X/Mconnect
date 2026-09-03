@@ -27,6 +27,26 @@ class SiteVisitListRulesTest {
         assertFalse(SiteVisitListRules.belongsInSiteVisits(visit))
     }
 
+    @Test
+    fun `mixed first page auto fills until a visible window is available`() {
+        assertTrue(
+            SiteVisitListRules.shouldAutoFill(
+                visitCount = 2,
+                pageSize = 20,
+                hasMore = true,
+                loadedExtraPages = 1,
+                maxExtraPages = 10,
+            ),
+        )
+    }
+
+    @Test
+    fun `auto fill stops when window full server exhausted or safety cap reached`() {
+        assertFalse(SiteVisitListRules.shouldAutoFill(20, 20, true, 1, 10))
+        assertFalse(SiteVisitListRules.shouldAutoFill(2, 20, false, 1, 10))
+        assertFalse(SiteVisitListRules.shouldAutoFill(2, 20, true, 10, 10))
+    }
+
     private fun visit(tripType: String?, clientPlaceVisitId: String?) = TodayVisit(
         id = "visit-1",
         clientPlaceId = "place-1",

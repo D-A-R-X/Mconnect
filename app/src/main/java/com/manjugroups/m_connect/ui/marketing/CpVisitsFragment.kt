@@ -105,8 +105,12 @@ class CpVisitsFragment : Fragment() {
     // Infinite scroll: render 20 rows, extend by 20 as the list nears its end.
     private var cpWindowCtx: String? = null
     private var cpMatchedCount = 0
+    private var cpNextCursor: String? = null
+    private var cpHasMore = false
+    private var cpLoadingMore = false
     private val cpPager = com.manjugroups.m_connect.ui.common.InfiniteScrollPager(
         onLoadMore = { renderList() },
+        onEndReached = { loadMoreCpVisits() },
     )
     private var pendingEntryAnimation = true
     // True once the first CP-visit fetch has rendered. Gates the skeleton
@@ -126,6 +130,7 @@ class CpVisitsFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         session = SessionManager(requireContext())
+        currentScope = CpVisitListScopePolicy.initialScope(session.isAdmin)
         rootView = view
         // Read the requested visit ONCE. Re-reading it on every view creation
         // would re-open the trip each time the user came back to the list.
@@ -460,10 +465,24 @@ class CpVisitsFragment : Fragment() {
     // ---------- Filter pills ----------
 
     private fun setupScopeFilter(root: View) {
+        val scopes = if (session.isAdmin) {
+            listOf(CpVisitListScope.MY, CpVisitListScope.TEAM, CpVisitListScope.ALL)
+        } else {
+            listOf(CpVisitListScope.MY, CpVisitListScope.TEAM)
+        }
         root.findViewById<com.manjugroups.m_connect.ui.common.SegmentedControlView>(
             R.id.cpvScopeFilter,
-        ).setTabs(listOf("My", "Team"), initialIndex = 0) { index ->
-            val selected = if (index == 0) CpVisitListScope.MY else CpVisitListScope.TEAM
+        ).setTabs(
+            labels = scopes.map {
+                when (it) {
+                    CpVisitListScope.MY -> "My"
+                    CpVisitListScope.TEAM -> "Team"
+                    CpVisitListScope.ALL -> "All"
+                }
+            },
+            initialIndex = scopes.indexOf(currentScope).coerceAtLeast(0),
+        ) { index ->
+            val selected = scopes.getOrNull(index) ?: return@setTabs
             if (selected == currentScope) return@setTabs
             currentScope = selected
             allVisits = emptyList()
@@ -476,7 +495,11 @@ class CpVisitsFragment : Fragment() {
 
     private fun updateScopeAvailability(root: View, available: Boolean) {
         root.findViewById<View>(R.id.cpvScopeFilter).visibility =
-            if (available || currentScope == CpVisitListScope.TEAM) View.VISIBLE else View.GONE
+            if (session.isAdmin || available || currentScope == CpVisitListScope.TEAM) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
     }
 
     private fun pillsAndFilters(root: View): List<Pair<TextView, Filter>> = listOf(
@@ -573,6 +596,10 @@ class CpVisitsFragment : Fragment() {
         val requestedScope = currentScope
         val requestedSearch = searchQuery
         val requestGeneration = ++loadGeneration
+        cpNextCursor = null
+        cpHasMore = false
+        cpLoadingMore = false
+        cpPager.reset()
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
@@ -657,6 +684,7 @@ class CpVisitsFragment : Fragment() {
                 val allowedOwnerIds = when (requestedScope) {
                     CpVisitListScope.MY -> setOfNotNull(session.staffId)
                     CpVisitListScope.TEAM -> resp.safeDirectReportIds.filter { it.isNotBlank() }.toSet()
+                    CpVisitListScope.ALL -> emptySet()
                 }
                 // Sort: ongoing first (in-progress / arrived / reaching),
                 // then pending (scheduled / not started), then completed
@@ -664,13 +692,18 @@ class CpVisitsFragment : Fragment() {
                 // by creationTime (= most recently assigned) with
                 // scheduledDate as the legacy-row fallback.
                 allVisits = resp.visits
-                    .filter { CpVisitListScopePolicy.belongsToAny(it, allowedOwnerIds) }
+                    .filter {
+                        requestedScope == CpVisitListScope.ALL ||
+                            CpVisitListScopePolicy.belongsToAny(it, allowedOwnerIds)
+                    }
                     .mapNotNull { it.toCpListVisitOrNull() }
                     .sortedWith(
                         compareBy<TodayVisit> { statusGroupPriority(it.status) }
                             .thenByDescending { it.creationTime ?: 0.0 }
                             .thenByDescending { it.scheduledDate }
                     )
+                cpNextCursor = resp.nextCursor
+                cpHasMore = resp.hasMore == true && !cpNextCursor.isNullOrBlank()
                 consumeFocusVisit()
                 // Empty-state diagnostic toasts removed — the
                 // "No Cp Visits Yet" empty-state UI already conveys
@@ -706,6 +739,60 @@ class CpVisitsFragment : Fragment() {
                         R.id.cpvRefresh
                     )?.dismissRefresh()
                 }
+            }
+        }
+    }
+
+    private fun loadMoreCpVisits() {
+        val cursor = cpNextCursor?.takeIf { cpHasMore && !cpLoadingMore } ?: return
+        val generation = loadGeneration
+        val requestedScope = currentScope
+        cpLoadingMore = true
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = geoApi.getMyMarketingCpVisits(
+                    session.bearerToken,
+                    fromDate = filterFromDate,
+                    toDate = filterToDate,
+                    scope = requestedScope.apiValue,
+                    limit = 200,
+                    search = searchQuery.ifBlank { null },
+                    assignedStaffId = filterAssignedStaffId,
+                    telecallerStaffId = filterTelecallerStaffId,
+                    status = currentFilter.takeUnless { it == Filter.ALL }?.name?.lowercase(Locale.US),
+                    outcome = filterOutcome,
+                    cpType = filterCpType,
+                    cursor = cursor,
+                    pageSize = 200,
+                )
+                if (generation != loadGeneration || !resp.success ||
+                    !CpVisitListScopePolicy.acceptsResponse(requestedScope, resp.scope)
+                ) return@launch
+                val allowedOwnerIds = when (requestedScope) {
+                    CpVisitListScope.MY -> setOfNotNull(session.staffId)
+                    CpVisitListScope.TEAM -> resp.safeDirectReportIds.filter(String::isNotBlank).toSet()
+                    CpVisitListScope.ALL -> emptySet()
+                }
+                val incoming = resp.visits
+                    .filter {
+                        requestedScope == CpVisitListScope.ALL ||
+                            CpVisitListScopePolicy.belongsToAny(it, allowedOwnerIds)
+                    }
+                    .mapNotNull { it.toCpListVisitOrNull() }
+                allVisits = (allVisits + incoming)
+                    .distinctBy { it.clientPlaceVisitId ?: it.id }
+                    .sortedWith(
+                        compareBy<TodayVisit> { statusGroupPriority(it.status) }
+                            .thenByDescending { it.creationTime ?: 0.0 }
+                            .thenByDescending { it.scheduledDate },
+                    )
+                cpNextCursor = resp.nextCursor
+                cpHasMore = resp.hasMore == true && !cpNextCursor.isNullOrBlank() && cpNextCursor != cursor
+                renderList()
+            } catch (_: Exception) {
+                // Preserve loaded CP pages; pull-to-refresh retries page one.
+            } finally {
+                if (generation == loadGeneration) cpLoadingMore = false
             }
         }
     }

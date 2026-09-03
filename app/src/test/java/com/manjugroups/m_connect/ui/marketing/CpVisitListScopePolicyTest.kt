@@ -44,6 +44,17 @@ class CpVisitListScopePolicyTest {
     }
 
     @Test
+    fun jointLeadCountsAsOwningTheCp() {
+        val jointVisit = CpVisitDetail(
+            id = "joint-cp",
+            assignedStaffId = "A",
+            joint = JointCpSummary(leadStaffId = "B"),
+        )
+
+        assertTrue(CpVisitListScopePolicy.belongsToAny(jointVisit, setOf("B")))
+    }
+
+    @Test
     fun telecallerOrProposedSvRoleDoesNotOwnTheCp() {
         val visit = CpVisitDetail(
             id = "cp-a",
@@ -60,5 +71,18 @@ class CpVisitListScopePolicyTest {
         assertFalse(CpVisitListScopePolicy.acceptsResponse(CpVisitListScope.TEAM, "subtree"))
         assertTrue(CpVisitListScopePolicy.acceptsResponse(CpVisitListScope.TEAM, "direct"))
         assertTrue(CpVisitListScopePolicy.acceptsResponse(CpVisitListScope.MY, null))
+    }
+
+    @Test
+    fun adminDefaultsToAllWhileStaffDefaultsToMine() {
+        assertEquals(CpVisitListScope.ALL, CpVisitListScopePolicy.initialScope(isAdmin = true))
+        assertEquals(CpVisitListScope.MY, CpVisitListScopePolicy.initialScope(isAdmin = false))
+    }
+
+    @Test
+    fun allScopeRequiresExplicitServerEcho() {
+        assertTrue(CpVisitListScopePolicy.acceptsResponse(CpVisitListScope.ALL, "all"))
+        assertFalse(CpVisitListScopePolicy.acceptsResponse(CpVisitListScope.ALL, null))
+        assertFalse(CpVisitListScopePolicy.acceptsResponse(CpVisitListScope.ALL, "direct"))
     }
 }

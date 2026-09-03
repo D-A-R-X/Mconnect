@@ -231,13 +231,9 @@ class MainActivity : AppCompatActivity() {
             notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
         }
 
-        // Listen for any API call returning 401 — when that happens
-        // the saved session token is no longer valid (expired, revoked,
-        // or minted against a different Convex deployment than the
-        // current build is pointing at). Clear local state + bounce to
-        // login so the user can re-authenticate. Without this, a 401
-        // would silently fail every screen and leave the app in a
-        // "everything's empty / errored" stuck state.
+        // Listen for an authenticated 401 from the authoritative MMS API.
+        // Public login requests and secondary services cannot revoke this
+        // session; their failures stay within their own retry/error paths.
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 com.manjugroups.m_connect.auth.SessionInvalidationBus

@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 
 /**
  * App-wide signal that the saved session token is no longer valid
- * server-side — typically a 401 from any API call, which can happen
+ * server-side — an authenticated 401 from the MMS API, which can happen
  * when:
  *
  *   - The token expired naturally
@@ -35,5 +35,24 @@ object SessionInvalidationBus {
      */
     fun reportUnauthorized() {
         _signals.tryEmit(Unit)
+    }
+}
+
+/**
+ * Prevents public login routes and secondary services from revoking the MMS
+ * session. Only the host that issued the bearer token is authoritative.
+ */
+internal object SessionInvalidationPolicy {
+    fun shouldInvalidate(
+        responseCode: Int,
+        authorizationHeader: String?,
+        requestHost: String,
+        sessionAuthorityHost: String,
+    ): Boolean {
+        if (responseCode != 401 || authorizationHeader.isNullOrBlank()) return false
+        if (!requestHost.equals(sessionAuthorityHost, ignoreCase = true)) return false
+
+        val token = authorizationHeader.removePrefix("Bearer ").trim()
+        return token.isNotEmpty() && !AuthBypass.isBypassToken(token)
     }
 }

@@ -75,8 +75,16 @@ class SiteVisitsFragment : Fragment() {
     // Infinite scroll: render 20 rows, extend by 20 as the list nears its end.
     private var svWindowCtx: String? = null
     private var svVisibleCount = 0
+    private var svNextCursor: String? = null
+    private var svHasMore = false
+    private var svLoadingMore = false
+    private var svLoadGeneration = 0
+    private var svAutoFillPages = 0
+    private var filterOptions: com.manjugroups.m_connect.network.SiteVisitFilterOptionsResponse? = null
+    private var activeServerQuery: SiteVisitServerQuery? = null
     private val svPager = com.manjugroups.m_connect.ui.common.InfiniteScrollPager(
         onLoadMore = { renderList() },
+        onEndReached = { loadMoreSiteVisits() },
     )
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
@@ -217,6 +225,18 @@ class SiteVisitsFragment : Fragment() {
         val projects = options { visit -> facet(visit.projectId, visit.projectName ?: visit.placeName, "project") }
         val lmos = options { visit -> facet(visit.lmoStaffId, visit.lmoName, "lmo") }
         val fieldStaff = options { visit -> facet(visit.bdoStaffId, visit.bdoName, "staff") }
+        fun serverOptions(values: List<com.manjugroups.m_connect.network.CpVisitFilterOption>?): List<AdvancedListFilterSheet.Option> =
+            values.orEmpty().mapNotNull { option ->
+                val id = option.id?.takeIf(String::isNotBlank) ?: return@mapNotNull null
+                val label = option.name?.takeIf(String::isNotBlank)
+                    ?: option.label?.takeIf(String::isNotBlank)
+                    ?: humanizeFilterValue(id)
+                AdvancedListFilterSheet.Option(id, label, option.count?.let { "$it visits" })
+            }
+        fun mergeOptions(
+            authoritative: List<AdvancedListFilterSheet.Option>,
+            loaded: List<AdvancedListFilterSheet.Option>,
+        ) = (authoritative + loaded).distinctBy { it.value }
         val categories = listOf(
             AdvancedListFilterSheet.Category(KEY_DATE, "Date range", dateRange = true),
             AdvancedListFilterSheet.Category(
@@ -226,9 +246,18 @@ class SiteVisitsFragment : Fragment() {
                     AdvancedListFilterSheet.Option(it.name, humanizeFilterValue(it.name))
                 },
             ),
-            AdvancedListFilterSheet.Category(KEY_PROJECT, "Project", projects),
-            AdvancedListFilterSheet.Category(KEY_LMO, "LMO", lmos),
-            AdvancedListFilterSheet.Category(KEY_FIELD_STAFF, "Field staff", fieldStaff),
+            AdvancedListFilterSheet.Category(
+                KEY_PROJECT, "Project", mergeOptions(serverOptions(filterOptions?.projects), projects), searchable = true,
+            ),
+            AdvancedListFilterSheet.Category(
+                KEY_LMO, "LMO", mergeOptions(serverOptions(filterOptions?.lmos), lmos), searchable = true,
+            ),
+            AdvancedListFilterSheet.Category(
+                KEY_FIELD_STAFF,
+                "Field staff",
+                mergeOptions(serverOptions(filterOptions?.fieldStaff), fieldStaff),
+                searchable = true,
+            ),
         )
         val initial = AdvancedListFilterSheet.State(
             selected = buildMap {
@@ -480,20 +509,38 @@ class SiteVisitsFragment : Fragment() {
             to = ymd.format(cal.time)
         }
 
+        val query = SiteVisitServerQuery(
+            fromDate = from,
+            toDate = to,
+            projectId = filterProject,
+            telecallerStaffId = filterLmo,
+            assignedStaffId = filterFieldStaff,
+            status = currentFilter.takeUnless { it == Filter.ALL }?.name?.lowercase(Locale.US),
+            search = searchQuery.ifBlank { null },
+        )
+        val generation = ++svLoadGeneration
+        activeServerQuery = query
+        svNextCursor = null
+        svHasMore = false
+        svLoadingMore = false
+        svAutoFillPages = 0
+        svPager.reset()
+
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val resp = geoApi.getMySiteVisits(
-                    token = session.bearerToken,
-                    fromDate = from,
-                    toDate = to,
-                    projectId = filterProject,
-                    telecallerStaffId = filterLmo,
-                    assignedStaffId = filterFieldStaff,
-                    status = currentFilter.takeUnless { it == Filter.ALL }
-                        ?.name?.lowercase(Locale.US),
-                    search = searchQuery.ifBlank { null },
-                    pageSize = 200,
-                )
+                launch {
+                    runCatching {
+                        geoApi.getSiteVisitFilterOptions(
+                            session.bearerToken,
+                            fromDate = query.fromDate,
+                            toDate = query.toDate,
+                        )
+                    }.getOrNull()?.takeIf { it.success }?.let { response ->
+                        if (generation == svLoadGeneration) filterOptions = response
+                    }
+                }
+                val resp = requestSiteVisitPage(query, cursor = null)
+                if (generation != svLoadGeneration) return@launch
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 hasLoadedOnce = true
                 if (!resp.success) {
@@ -519,8 +566,17 @@ class SiteVisitsFragment : Fragment() {
                         compareByDescending<TodayVisit> { it.creationTime ?: 0.0 }
                             .thenByDescending { it.scheduledDate }
                     )
+                svNextCursor = resp.nextCursor
+                svHasMore = resp.hasMore == true && !svNextCursor.isNullOrBlank()
                 renderList()
+                // The endpoint also carries legacy CP field visits. If those
+                // dominate page one, progressively fill the first visible SV
+                // window instead of leaving an admin with only a few cards.
+                if (allVisits.size < svPager.pageSize && svHasMore) {
+                    loadMoreSiteVisits()
+                }
             } catch (e: Exception) {
+                if (generation != svLoadGeneration) return@launch
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 showLoadError("Network error: ${e.message ?: "unknown"}")
             } finally {
@@ -533,6 +589,75 @@ class SiteVisitsFragment : Fragment() {
             }
         }
     }
+
+    private fun loadMoreSiteVisits() {
+        val query = activeServerQuery ?: return
+        val cursor = svNextCursor?.takeIf { svHasMore && !svLoadingMore } ?: return
+        val generation = svLoadGeneration
+        svLoadingMore = true
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = requestSiteVisitPage(query, cursor)
+                if (generation != svLoadGeneration || !resp.success) return@launch
+                svAutoFillPages += 1
+                val merged = LinkedHashMap<String, TodayVisit>()
+                allVisits.forEach { merged[it.id] = it }
+                resp.visits
+                    .filter(SiteVisitListRules::belongsInSiteVisits)
+                    .forEach { merged[it.id] = it }
+                allVisits = merged.values.sortedWith(
+                    compareByDescending<TodayVisit> { it.creationTime ?: 0.0 }
+                        .thenByDescending { it.scheduledDate },
+                )
+                svNextCursor = resp.nextCursor
+                svHasMore = resp.hasMore == true && !svNextCursor.isNullOrBlank() && svNextCursor != cursor
+                renderList()
+            } catch (_: Exception) {
+                // Keep the pages already rendered. Pull-to-refresh remains the
+                // explicit retry path and never blanks usable SV data.
+            } finally {
+                if (generation == svLoadGeneration) {
+                    svLoadingMore = false
+                    if (SiteVisitListRules.shouldAutoFill(
+                            visitCount = allVisits.size,
+                            pageSize = svPager.pageSize,
+                            hasMore = svHasMore,
+                            loadedExtraPages = svAutoFillPages,
+                            maxExtraPages = MAX_AUTO_FILL_PAGES,
+                        )
+                    ) {
+                        rootView?.post { loadMoreSiteVisits() }
+                    }
+                }
+            }
+        }
+    }
+
+    private suspend fun requestSiteVisitPage(
+        query: SiteVisitServerQuery,
+        cursor: String?,
+    ) = geoApi.getMySiteVisits(
+        token = session.bearerToken,
+        fromDate = query.fromDate,
+        toDate = query.toDate,
+        projectId = query.projectId,
+        telecallerStaffId = query.telecallerStaffId,
+        assignedStaffId = query.assignedStaffId,
+        status = query.status,
+        search = query.search,
+        cursor = cursor,
+        pageSize = 200,
+    )
+
+    private data class SiteVisitServerQuery(
+        val fromDate: String,
+        val toDate: String,
+        val projectId: String?,
+        val telecallerStaffId: String?,
+        val assignedStaffId: String?,
+        val status: String?,
+        val search: String?,
+    )
 
     private fun renderList() {
         val root = rootView ?: return
@@ -848,6 +973,7 @@ class SiteVisitsFragment : Fragment() {
     }
 
     companion object {
+        private const val MAX_AUTO_FILL_PAGES = 10
         private const val KEY_DATE = "date"
         private const val KEY_STATUS = "status"
         private const val KEY_PROJECT = "project"

@@ -17,6 +17,8 @@ interface ApiService {
         @Query("platform") platform: String,
         @Query("currentVersion") currentVersion: String,
         @Query("buildNumber") buildNumber: Int,
+        @Header("X-App-Version") appVersionHeader: String,
+        @Header("X-App-Build") appBuildHeader: Int,
     ): MobileAppVersionResponse
 
     // Auth
@@ -1414,26 +1416,22 @@ interface ApiService {
                 level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY
                 else HttpLoggingInterceptor.Level.NONE
             }
-            // Auto-logout on 401. Without this, a deployment URL swap
+            // Auto-logout on an authenticated MMS 401. Without this, a deployment URL swap
             // (dev → prod or vice versa) or a server-side session
             // revocation leaves the app stuck with every screen showing
             // empty / errored data and no way back to a working state.
-            // The interceptor watches every response, fires the
-            // SessionInvalidationBus on 401, and the currently-foreground
-            // activity collects + bounces the user to login. Bearer-less
-            // requests (auth/OTP/login endpoints) shouldn't normally 401
-            // unless the token is invalid anyway, so we don't try to
-            // distinguish — every 401 is treated as "session is dead."
+            // Bearer-less login/public requests cannot invalidate a newly
+            // created session.
             val authWatchdog = okhttp3.Interceptor { chain ->
                 val request = chain.request()
                 val response = chain.proceed(request)
-                // Skip the auto-logout when the outgoing request used the
-                // dev bypass token — the server can't validate a synthetic
-                // token so it will always 401, but the local dev session
-                // is still legitimately "logged in" for UI exploration.
-                // Without this, bypass users get kicked back to login on
-                // the very first authed call after AuthBypass succeeds.
-                if (response.code == 401 && !isBypassAuth(request)) {
+                if (com.manjugroups.m_connect.auth.SessionInvalidationPolicy.shouldInvalidate(
+                        responseCode = response.code,
+                        authorizationHeader = request.header("Authorization"),
+                        requestHost = request.url.host,
+                        sessionAuthorityHost = java.net.URI(BuildConfig.BASE_URL).host.orEmpty(),
+                    )
+                ) {
                     com.manjugroups.m_connect.auth.SessionInvalidationBus
                         .reportUnauthorized()
                 }
@@ -1465,13 +1463,6 @@ interface ApiService {
                 .create(ApiService::class.java)
         }
 
-        private fun isBypassAuth(request: okhttp3.Request): Boolean {
-            val header = request.header("Authorization") ?: return false
-            // Both "Bearer <token>" and bare "<token>" shapes turn up
-            // in the codebase, so strip the prefix before comparing.
-            val token = header.removePrefix("Bearer ").trim()
-            return com.manjugroups.m_connect.auth.AuthBypass.isBypassToken(token)
-        }
     }
 }
 
@@ -2329,12 +2320,14 @@ data class SimpleResponse(val success: Boolean, val error: String? = null)
 
 data class MobileAppVersionResponse(
     val success: Boolean = false,
+    val platform: String? = null,
     val latestVersion: String? = null,
     val latestBuildNumber: Int? = null,
     val minimumSupportedVersion: String? = null,
     val minimumSupportedBuildNumber: Int? = null,
     val updateRequired: Boolean? = null,
     val updateUrl: String? = null,
+    val publishedAt: String? = null,
     val error: String? = null,
 )
 data class PushRegisterRequest(

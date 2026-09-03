@@ -195,6 +195,8 @@ class InAppUpdateManager(
                     platform = "android",
                     currentVersion = BuildConfig.VERSION_NAME,
                     buildNumber = BuildConfig.VERSION_CODE,
+                    appVersionHeader = BuildConfig.VERSION_NAME,
+                    appBuildHeader = BuildConfig.VERSION_CODE,
                 )
             }.getOrNull() ?: return@launch
             remotePolicy = response.toRequiredUpdate()
@@ -218,17 +220,11 @@ class InAppUpdateManager(
     }
 
     private fun MobileAppVersionResponse.toRequiredUpdate(): RequiredRemoteUpdate? {
-        if (!success) return null
-        val candidateVersion = latestVersion ?: minimumSupportedVersion ?: return null
-        val candidateBuild = latestBuildNumber ?: minimumSupportedBuildNumber
-        val newerBuild = candidateBuild?.let { it > BuildConfig.VERSION_CODE } == true
-        val newerVersion = compareVersions(candidateVersion, BuildConfig.VERSION_NAME) > 0
+        if (!requiresMandatoryMobileUpdate(this, BuildConfig.VERSION_CODE)) return null
+        val candidateVersion = minimumSupportedVersion ?: latestVersion ?: "new version"
+        val candidateBuild = minimumSupportedBuildNumber ?: latestBuildNumber ?: return null
         val url = updateUrl?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-        return if (updateRequired == true || newerBuild || newerVersion) {
-            RequiredRemoteUpdate(candidateVersion, candidateBuild, url)
-        } else {
-            null
-        }
+        return RequiredRemoteUpdate(candidateVersion, candidateBuild, url)
     }
 
     private fun restoreRemotePolicy(): RequiredRemoteUpdate? {
@@ -236,9 +232,7 @@ class InAppUpdateManager(
         val version = prefs.getString(KEY_REMOTE_VERSION, null) ?: return null
         val build = prefs.getInt(KEY_REMOTE_BUILD, 0).takeIf { it > 0 }
         val url = prefs.getString(KEY_REMOTE_URL, null) ?: return null
-        if (compareVersions(version, BuildConfig.VERSION_NAME) <= 0 &&
-            build?.let { it <= BuildConfig.VERSION_CODE } != false
-        ) {
+        if (build == null || build <= BuildConfig.VERSION_CODE) {
             prefs.edit().clear().apply()
             return null
         }
@@ -256,17 +250,6 @@ class InAppUpdateManager(
                 putString(KEY_REMOTE_URL, policy.updateUrl)
             }
         }.apply()
-    }
-
-    private fun compareVersions(left: String, right: String): Int {
-        val leftParts = left.split('.', '-', '+').map { it.toIntOrNull() ?: 0 }
-        val rightParts = right.split('.', '-', '+').map { it.toIntOrNull() ?: 0 }
-        repeat(maxOf(leftParts.size, rightParts.size)) { index ->
-            val comparison = (leftParts.getOrNull(index) ?: 0)
-                .compareTo(rightParts.getOrNull(index) ?: 0)
-            if (comparison != 0) return comparison
-        }
-        return 0
     }
 
     private fun handleDownloadedUpdate() {
@@ -375,4 +358,15 @@ class InAppUpdateManager(
         val buildNumber: Int?,
         val updateUrl: String,
     )
+}
+
+internal fun requiresMandatoryMobileUpdate(
+    policy: MobileAppVersionResponse,
+    installedBuildNumber: Int,
+): Boolean {
+    if (!policy.success) return false
+    val minimumBuild = policy.minimumSupportedBuildNumber
+        ?: policy.latestBuildNumber?.takeIf { policy.updateRequired == true }
+        ?: return false
+    return policy.updateRequired == true || installedBuildNumber < minimumBuild
 }
