@@ -47,6 +47,26 @@ class SiteVisitListRulesTest {
         assertFalse(SiteVisitListRules.shouldAutoFill(2, 20, true, 10, 10))
     }
 
+    @Test
+    fun `site visit ownership includes field staff and lmo only`() {
+        val visit = visit(tripType = "site_visit", clientPlaceVisitId = null).copy(
+            bdoStaffId = "field",
+            lmoStaffId = "lmo",
+        )
+
+        assertTrue(SiteVisitListRules.belongsToAny(visit, setOf("field")))
+        assertTrue(SiteVisitListRules.belongsToAny(visit, setOf("lmo")))
+        assertFalse(SiteVisitListRules.belongsToAny(visit, setOf("other")))
+    }
+
+    @Test
+    fun `pagination stops when next offset reaches total`() {
+        assertTrue(SiteVisitListRules.hasUsableNextPage(true, "600", "700", 800))
+        assertFalse(SiteVisitListRules.hasUsableNextPage(true, "700", "800", 800))
+        assertFalse(SiteVisitListRules.hasUsableNextPage(true, "800", "800", 900))
+        assertFalse(SiteVisitListRules.hasUsableNextPage(false, "100", "200", 800))
+    }
+
     private fun visit(tripType: String?, clientPlaceVisitId: String?) = TodayVisit(
         id = "visit-1",
         clientPlaceId = "place-1",

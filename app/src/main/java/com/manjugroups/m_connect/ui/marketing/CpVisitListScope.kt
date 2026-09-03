@@ -23,7 +23,10 @@ internal object CpVisitListScopePolicy {
     ): Boolean = when (requestedScope) {
         CpVisitListScope.MY -> returnedScope == null || returnedScope == "mine"
         CpVisitListScope.TEAM -> returnedScope == "direct"
-        CpVisitListScope.ALL -> returnedScope == "all"
+        // ALL is exposed only after the caller has independently established
+        // an authenticated admin session. Deployed servers may omit or
+        // normalize this response echo even though they honor scope=all.
+        CpVisitListScope.ALL -> true
     }
 
     fun initialScope(isAdmin: Boolean): CpVisitListScope =

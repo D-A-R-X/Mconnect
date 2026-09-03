@@ -109,7 +109,7 @@ class CpVisitsFragment : Fragment() {
     private var cpHasMore = false
     private var cpLoadingMore = false
     private val cpPager = com.manjugroups.m_connect.ui.common.InfiniteScrollPager(
-        onLoadMore = { renderList() },
+        onLoadMore = { rootView?.post { renderList() } },
         onEndReached = { loadMoreCpVisits() },
     )
     private var pendingEntryAnimation = true
@@ -465,41 +465,37 @@ class CpVisitsFragment : Fragment() {
     // ---------- Filter pills ----------
 
     private fun setupScopeFilter(root: View) {
-        val scopes = if (session.isAdmin) {
-            listOf(CpVisitListScope.MY, CpVisitListScope.TEAM, CpVisitListScope.ALL)
-        } else {
-            listOf(CpVisitListScope.MY, CpVisitListScope.TEAM)
-        }
-        root.findViewById<com.manjugroups.m_connect.ui.common.SegmentedControlView>(
-            R.id.cpvScopeFilter,
-        ).setTabs(
-            labels = scopes.map {
-                when (it) {
-                    CpVisitListScope.MY -> "My"
-                    CpVisitListScope.TEAM -> "Team"
-                    CpVisitListScope.ALL -> "All"
-                }
-            },
-            initialIndex = scopes.indexOf(currentScope).coerceAtLeast(0),
-        ) { index ->
-            val selected = scopes.getOrNull(index) ?: return@setTabs
-            if (selected == currentScope) return@setTabs
-            currentScope = selected
+        fun selectScope(selected: CpVisitListScope) {
+            val target = if (session.isAdmin && currentScope == selected) {
+                CpVisitListScope.ALL
+            } else {
+                selected
+            }
+            if (target == currentScope) return
+            currentScope = target
             allVisits = emptyList()
             rowViewCache.clear()
             rowsBuiltFor = null
             hasLoadedOnce = false
+            applyPillStyles(root)
             loadVisits()
         }
+        root.findViewById<TextView>(R.id.pillMy).setOnClickListener {
+            selectScope(CpVisitListScope.MY)
+        }
+        root.findViewById<TextView>(R.id.pillTeam).setOnClickListener {
+            selectScope(CpVisitListScope.TEAM)
+        }
+        updateScopeAvailability(root, available = false)
     }
 
     private fun updateScopeAvailability(root: View, available: Boolean) {
-        root.findViewById<View>(R.id.cpvScopeFilter).visibility =
-            if (session.isAdmin || available || currentScope == CpVisitListScope.TEAM) {
-                View.VISIBLE
-            } else {
-                View.GONE
-            }
+        val canChooseOwnership = session.isAdmin || available || currentScope == CpVisitListScope.TEAM
+        root.findViewById<View>(R.id.pillMy).visibility =
+            if (canChooseOwnership) View.VISIBLE else View.GONE
+        root.findViewById<View>(R.id.pillTeam).visibility =
+            if (canChooseOwnership) View.VISIBLE else View.GONE
+        applyPillStyles(root)
     }
 
     private fun pillsAndFilters(root: View): List<Pair<TextView, Filter>> = listOf(
@@ -537,6 +533,22 @@ class CpVisitsFragment : Fragment() {
             pill.typeface = ResourcesCompat.getFont(
                 pill.context,
                 if (isActive) R.font.inter_semibold else R.font.inter_medium
+            )
+        }
+        listOf(
+            root.findViewById<TextView>(R.id.pillMy) to CpVisitListScope.MY,
+            root.findViewById<TextView>(R.id.pillTeam) to CpVisitListScope.TEAM,
+        ).forEach { (pill, scope) ->
+            val isActive = currentScope == scope
+            pill.background = ContextCompat.getDrawable(
+                pill.context,
+                if (isActive) R.drawable.bg_cpv_filter_pill_active
+                else R.drawable.bg_cpv_filter_pill_inactive,
+            )
+            pill.setTextColor(Color.parseColor(if (isActive) "#FFFFFF" else "#475467"))
+            pill.typeface = ResourcesCompat.getFont(
+                pill.context,
+                if (isActive) R.font.inter_semibold else R.font.inter_medium,
             )
         }
     }

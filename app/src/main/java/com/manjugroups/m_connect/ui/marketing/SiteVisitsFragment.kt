@@ -16,6 +16,7 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
+import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.TodayVisit
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
@@ -47,6 +48,7 @@ import com.manjugroups.m_connect.ui.common.showOnce
  */
 class SiteVisitsFragment : Fragment() {
     private val geoApi = GeoTrackApi.create()
+    private val api = ApiService.create()
     private lateinit var session: SessionManager
     private var rootView: View? = null
 
@@ -62,6 +64,8 @@ class SiteVisitsFragment : Fragment() {
     // flash already-rendered rows back to placeholders.
     private var hasLoadedOnce = false
     private var currentFilter: Filter = Filter.ALL
+    private var currentScope: CpVisitListScope = CpVisitListScope.ALL
+    private var directReportIds: Set<String> = emptySet()
     private var searchQuery: String = ""
     private var searchReloadJob: kotlinx.coroutines.Job? = null
     // Active date-range filter (yyyy-MM-dd). Null = default −30/+30 window.
@@ -77,13 +81,14 @@ class SiteVisitsFragment : Fragment() {
     private var svVisibleCount = 0
     private var svNextCursor: String? = null
     private var svHasMore = false
+    private var svTotal: Int? = null
     private var svLoadingMore = false
     private var svLoadGeneration = 0
     private var svAutoFillPages = 0
     private var filterOptions: com.manjugroups.m_connect.network.SiteVisitFilterOptionsResponse? = null
     private var activeServerQuery: SiteVisitServerQuery? = null
     private val svPager = com.manjugroups.m_connect.ui.common.InfiniteScrollPager(
-        onLoadMore = { renderList() },
+        onLoadMore = { rootView?.post { renderList() } },
         onEndReached = { loadMoreSiteVisits() },
     )
 
@@ -119,8 +124,10 @@ class SiteVisitsFragment : Fragment() {
         ) { _, _ -> loadVisits() }
 
         setupSearch(view)
+        setupScopeFilter(view)
         setupFilterPills(view)
         setupAdvancedFilter(view)
+        loadOwnershipDirectory()
         // Infinite scroll: render the next 20 rows as the user nears the end.
         view.findViewById<androidx.core.widget.NestedScrollView>(R.id.cpvScroll)?.let { scroll ->
             svPager.bindNestedScroll(scroll, totalCount = { svVisibleCount })
@@ -343,6 +350,39 @@ class SiteVisitsFragment : Fragment() {
 
     // ---------- Filter pills ----------
 
+    private fun setupScopeFilter(root: View) {
+        fun selectScope(scope: CpVisitListScope) {
+            currentScope = if (currentScope == scope) CpVisitListScope.ALL else scope
+            applyPillStyles(root)
+            renderList()
+        }
+        root.findViewById<TextView>(R.id.pillMy).apply {
+            visibility = View.VISIBLE
+            setOnClickListener { selectScope(CpVisitListScope.MY) }
+        }
+        root.findViewById<TextView>(R.id.pillTeam).apply {
+            visibility = if (session.isAdmin) View.VISIBLE else View.GONE
+            setOnClickListener { selectScope(CpVisitListScope.TEAM) }
+        }
+    }
+
+    private fun loadOwnershipDirectory() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val staff = runCatching {
+                api.getStaff(session.bearerToken, status = "active")
+            }.getOrNull()?.takeIf { it.success }?.staff.orEmpty()
+            val viewerIds = setOfNotNull(session.staffId).filter(String::isNotBlank).toSet()
+            directReportIds = staff.mapNotNull { person ->
+                person.id?.takeIf {
+                    person.reportingTo in viewerIds || person.reportingToId in viewerIds
+                }
+            }.toSet()
+            rootView?.findViewById<View>(R.id.pillTeam)?.visibility =
+                if (session.isAdmin || directReportIds.isNotEmpty()) View.VISIBLE else View.GONE
+            renderList()
+        }
+    }
+
     private fun pillsAndFilters(root: View): List<Pair<TextView, Filter>> = listOf(
         root.findViewById<TextView>(R.id.pillAll) to Filter.ALL,
         root.findViewById<TextView>(R.id.pillFixed) to Filter.FIXED,
@@ -382,6 +422,22 @@ class SiteVisitsFragment : Fragment() {
             pill.typeface = ResourcesCompat.getFont(
                 pill.context,
                 if (isActive) R.font.inter_semibold else R.font.inter_medium
+            )
+        }
+        listOf(
+            root.findViewById<TextView>(R.id.pillMy) to CpVisitListScope.MY,
+            root.findViewById<TextView>(R.id.pillTeam) to CpVisitListScope.TEAM,
+        ).forEach { (pill, scope) ->
+            val isActive = currentScope == scope
+            pill.background = ContextCompat.getDrawable(
+                pill.context,
+                if (isActive) R.drawable.bg_cpv_filter_pill_active
+                else R.drawable.bg_cpv_filter_pill_inactive,
+            )
+            pill.setTextColor(Color.parseColor(if (isActive) "#FFFFFF" else "#475467"))
+            pill.typeface = ResourcesCompat.getFont(
+                pill.context,
+                if (isActive) R.font.inter_semibold else R.font.inter_medium,
             )
         }
     }
@@ -522,6 +578,7 @@ class SiteVisitsFragment : Fragment() {
         activeServerQuery = query
         svNextCursor = null
         svHasMore = false
+        svTotal = null
         svLoadingMore = false
         svAutoFillPages = 0
         svPager.reset()
@@ -567,7 +624,10 @@ class SiteVisitsFragment : Fragment() {
                             .thenByDescending { it.scheduledDate }
                     )
                 svNextCursor = resp.nextCursor
-                svHasMore = resp.hasMore == true && !svNextCursor.isNullOrBlank()
+                svTotal = resp.total
+                svHasMore = SiteVisitListRules.hasUsableNextPage(
+                    resp.hasMore, null, svNextCursor, svTotal,
+                )
                 renderList()
                 // The endpoint also carries legacy CP field visits. If those
                 // dominate page one, progressively fill the first visible SV
@@ -610,7 +670,10 @@ class SiteVisitsFragment : Fragment() {
                         .thenByDescending { it.scheduledDate },
                 )
                 svNextCursor = resp.nextCursor
-                svHasMore = resp.hasMore == true && !svNextCursor.isNullOrBlank() && svNextCursor != cursor
+                svTotal = resp.total ?: svTotal
+                svHasMore = SiteVisitListRules.hasUsableNextPage(
+                    resp.hasMore, cursor, svNextCursor, svTotal,
+                )
                 renderList()
             } catch (_: Exception) {
                 // Keep the pages already rendered. Pull-to-refresh remains the
@@ -668,6 +731,16 @@ class SiteVisitsFragment : Fragment() {
         list.removeAllViews()
 
         val visible = allVisits
+            .filter { visit ->
+                when (currentScope) {
+                    CpVisitListScope.ALL -> true
+                    CpVisitListScope.MY -> SiteVisitListRules.belongsToAny(
+                        visit,
+                        setOfNotNull(session.staffId).filter(String::isNotBlank).toSet(),
+                    )
+                    CpVisitListScope.TEAM -> SiteVisitListRules.belongsToAny(visit, directReportIds)
+                }
+            }
             .filter { matchesFilter(it, currentFilter) }
             .filter { inDateRange(it) }
             .filter { matchesFacet(filterProject, it.projectId, it.projectName ?: it.placeName, "project") }
@@ -677,7 +750,7 @@ class SiteVisitsFragment : Fragment() {
         svVisibleCount = visible.size
 
         // Reset the scroll window whenever the filter / search / data changes.
-        val windowCtx = "$currentFilter|$filterProject|$filterLmo|$filterFieldStaff|" +
+        val windowCtx = "$currentScope|$currentFilter|$filterProject|$filterLmo|$filterFieldStaff|" +
             "$searchQuery|${System.identityHashCode(allVisits)}"
         if (windowCtx != svWindowCtx) {
             svWindowCtx = windowCtx

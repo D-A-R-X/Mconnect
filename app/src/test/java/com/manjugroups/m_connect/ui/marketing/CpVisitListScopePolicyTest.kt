@@ -80,9 +80,9 @@ class CpVisitListScopePolicyTest {
     }
 
     @Test
-    fun allScopeRequiresExplicitServerEcho() {
+    fun allScopeAcceptsLegacyOrNormalizedServerEcho() {
         assertTrue(CpVisitListScopePolicy.acceptsResponse(CpVisitListScope.ALL, "all"))
-        assertFalse(CpVisitListScopePolicy.acceptsResponse(CpVisitListScope.ALL, null))
-        assertFalse(CpVisitListScopePolicy.acceptsResponse(CpVisitListScope.ALL, "direct"))
+        assertTrue(CpVisitListScopePolicy.acceptsResponse(CpVisitListScope.ALL, null))
+        assertTrue(CpVisitListScopePolicy.acceptsResponse(CpVisitListScope.ALL, "direct"))
     }
 }

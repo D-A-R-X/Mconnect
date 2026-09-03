@@ -13,4 +13,18 @@ internal object SiteVisitListRules {
         loadedExtraPages: Int,
         maxExtraPages: Int,
     ): Boolean = visitCount < pageSize && hasMore && loadedExtraPages < maxExtraPages
+
+    fun belongsToAny(visit: TodayVisit, staffIds: Set<String>): Boolean =
+        staffIds.isNotEmpty() && (visit.bdoStaffId in staffIds || visit.lmoStaffId in staffIds)
+
+    fun hasUsableNextPage(
+        hasMore: Boolean?,
+        currentCursor: String?,
+        nextCursor: String?,
+        total: Int?,
+    ): Boolean {
+        if (hasMore != true || nextCursor.isNullOrBlank() || nextCursor == currentCursor) return false
+        val offset = nextCursor.toIntOrNull()
+        return offset == null || total == null || offset < total
+    }
 }
