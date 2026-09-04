@@ -37,6 +37,7 @@ import com.manjugroups.m_connect.ui.common.SearchableSelectionDialog
 import com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -70,9 +71,8 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var selectedLmo: StaffData? = null
     private var selectedDate: String = ""
     private var selectedTime: String = ""
-    // CP Type — visit intent enum (sv_cum_cp / follow_up / booking_cp /
-    // collection_cp / old_client / gift_distribution). Optional; null
-    // means no type was picked and the server stores the row without it.
+    // CP Type is selected before submit and converted into the canonical API
+    // contract. The nullable UI state never reaches the request model.
     private var selectedCpType: CpTypeOption? = null
 
     // Joint CP is an independent visit mode. The normal CP type remains the
@@ -263,12 +263,6 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         etCpType.setOnClickListener { pickCpType(etCpType) }
         switchJointCp.setOnCheckedChangeListener { _, checked ->
             isJointCp = checked
-            // The current server contract does not support New Client CP as
-            // a joint category. Clear it rather than allowing a doomed submit.
-            if (checked && selectedCpType?.id == "new_client_cp") {
-                selectedCpType = null
-                etCpType.setText("")
-            }
             applyCpConditionalVisibility()
         }
         etReferralSource.setOnClickListener { pickReferralSource(etReferralSource) }
@@ -489,15 +483,17 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
 
             // A Joint CP is meaningless with one person on it.
             val jointPartnerId = selectedJointPartner?.id
+            val authoritativePrimary = staffCache.firstOrNull { it.id == staff.id } ?: staff
+            var jointParticipantIds: List<String>? = null
             if (isJointCp) {
-                if (jointPartnerId.isNullOrBlank()) {
-                    toast("Select the second staff for this Joint CP")
+                JointCpTemplateGuard.rejection(authoritativePrimary, selectedJointPartner)?.let {
+                    toast(it)
                     return@setOnClickListener
                 }
-                if (jointPartnerId == staff.id) {
-                    toast("Pick two different staff for a Joint CP")
-                    return@setOnClickListener
-                }
+                jointParticipantIds = JointCpTemplateGuard.participantIds(
+                    authoritativePrimary,
+                    selectedJointPartner,
+                )
             }
 
             val project = selectedProject
@@ -652,6 +648,12 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                         toast(duplicate)
                         return@launch
                     }
+                    val typeContract = CpCreateTypeContract.from(selectedCpType?.id, isJointCp)
+                    if (typeContract == null) {
+                        btnSubmit.isEnabled = true
+                        toast("Select a valid CP type")
+                        return@launch
+                    }
                     val requestFingerprint = listOf(
                         phone, clientNameInput, staff.id, lmo.id, selectedDate,
                         selectedTime, compiledAddress, project.id,
@@ -678,10 +680,8 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                             googleMapsLink = maps.takeIf { it.isNotBlank() },
                             notes = notesVal.takeIf { it.isNotBlank() },
                             projectId = project.id,
-                            // Keep the established API representation so old
-                            // and new clients share one backend behavior.
-                            cpType = if (isJointCp) "joint_cp" else selectedCpType?.id,
-                            jointCpCategory = selectedCpType?.id.takeIf { isJointCp },
+                            cpType = typeContract.cpType,
+                            jointCpCategory = typeContract.jointCpCategory,
                             referralSourceType = selectedReferralSource?.id
                                 ?.takeIf { isNewClientCpPurpose() },
                             referringClientId = selectedReferringClient?.id
@@ -692,11 +692,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                             pincode = pincode,
                             // Only sent for a Joint CP; the server ignores it
                             // for every other type.
-                            jointStaffIds = if (isJointCp) {
-                                listOfNotNull(jointPartnerId)
-                            } else {
-                                null
-                            },
+                            jointStaffIds = jointParticipantIds,
                         )
                     )
                     btnSubmit.isEnabled = true
@@ -704,14 +700,26 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                         toast(cleanServerErrorMessage(resp.error ?: "Failed to create CP visit"))
                         return@launch
                     }
-                    if (resp.id.isNullOrBlank() || resp.requestId != createRequestId) {
+                    val createdId = resp.id?.trim()
+                    if (createdId.isNullOrBlank() || resp.requestId != createRequestId) {
                         toast("The server did not confirm the created CP. Tap Create visit again to resume safely.")
                         return@launch
+                    }
+                    when (verifyCreatedCpType(createdId, typeContract, resp.cpType, resp.jointCpCategory)) {
+                        CpTypeVerification.CONFIRMED -> Unit
+                        CpTypeVerification.MISMATCH -> {
+                            toast("CP was created, but the server did not retain its selected type. Admin repair is required.")
+                            return@launch
+                        }
+                        CpTypeVerification.UNAVAILABLE -> {
+                            toast("CP was created, but its type could not be confirmed from the server. Refresh before continuing.")
+                            return@launch
+                        }
                     }
                     toast("CP visit created successfully")
                     setFragmentResult(
                         RESULT_KEY_CREATED,
-                        bundleOf("success" to true, "visitId" to resp.id),
+                        bundleOf("success" to true, "visitId" to createdId),
                     )
                     createRequestId = UUID.randomUUID().toString()
                     createRequestFingerprint = null
@@ -728,6 +736,11 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                         findCreatedVisitByRequestId(createRequestId, selectedDate)
                     } else null
                     if (recovered != null) {
+                        val typeContract = CpCreateTypeContract.from(selectedCpType?.id, isJointCp)
+                        if (typeContract == null || !typeContract.matches(recovered.cpType, recovered.jointCpCategory)) {
+                            toast("CP was created, but the server did not retain its selected type. Admin repair is required.")
+                            return@launch
+                        }
                         toast("CP visit created successfully")
                         setFragmentResult(
                             RESULT_KEY_CREATED,
@@ -924,7 +937,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val resp = api.getStaff(session.bearerToken)
+                val resp = api.getStaff(session.bearerToken, status = "active")
                 if (!resp.success) {
                     toast("Failed to load staff list")
                     return@launch
@@ -946,7 +959,8 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
     private fun pickJointPartner(label: EditText) {
         val show = { items: List<StaffData> ->
             val primaryId = selectedStaff?.id
-            val eligible = items.filter { it.id != null && it.id != primaryId }
+            val primary = items.firstOrNull { it.id == primaryId } ?: selectedStaff
+            val eligible = items.filter { it.id != null && JointCpTemplateGuard.canPair(primary, it) }
             SearchableSelectionDialog.show(
                 context = requireContext(),
                 title = "Select the second staff",
@@ -954,13 +968,17 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                     SearchableOption(
                         item = st,
                         title = st.name ?: "Unnamed Staff",
-                        subtitle = listOfNotNull(st.employeeId, st.role).joinToString(" - "),
+                        subtitle = listOfNotNull(st.employeeId, st.iamTemplateName, st.role).joinToString(" - "),
                         keywords = listOfNotNull(
-                            st.id, st.name, st.employeeId, st.role, st.department,
+                            st.id, st.name, st.employeeId, st.iamTemplateName, st.role, st.department,
                         ).joinToString(" "),
                     )
                 },
-                emptyMessage = if (primaryId == null) "No staff found" else "No other staff available",
+                emptyMessage = if (primaryId == null) {
+                    "Select the first staff before choosing a partner"
+                } else {
+                    "No staff from a different IAM template are available"
+                },
             ) { staff ->
                 selectedJointPartner = staff
                 label.setText(staff.name ?: "Selected")
@@ -972,7 +990,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val resp = api.getStaff(session.bearerToken)
+                val resp = api.getStaff(session.bearerToken, status = "active")
                 if (!resp.success) {
                     toast("Failed to load staff list")
                     return@launch
@@ -1001,6 +1019,10 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         ) { staff ->
             selectedStaff = staff
             label.setText(staff.name ?: "Selected")
+            if (selectedJointPartner?.let { !JointCpTemplateGuard.canPair(staff, it) } == true) {
+                selectedJointPartner = null
+                view?.findViewById<EditText>(R.id.etJointPartner)?.setText("")
+            }
         }
     }
 
@@ -1033,7 +1055,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val resp = api.getStaff(session.bearerToken)
+                val resp = api.getStaff(session.bearerToken, status = "active")
                 if (!isAdded || !resp.success) return@launch
                 staffCache = resp.staff
                 apply(resp.staff)
@@ -1051,7 +1073,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val resp = api.getStaff(session.bearerToken)
+                val resp = api.getStaff(session.bearerToken, status = "active")
                 if (!resp.success) {
                     toast("Failed to load staff list")
                     return@launch
@@ -1146,9 +1168,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         SearchableSelectionDialog.show(
             context = requireContext(),
             title = "Select CP type",
-            options = cpTypeOptions
-                .filterNot { isJointCp && it.id == "new_client_cp" }
-                .map { opt ->
+            options = cpTypeOptions.map { opt ->
                 SearchableOption(
                     item = opt,
                     title = opt.label,
@@ -1529,6 +1549,41 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             ?.firstOrNull { it.requestId == requestId }
     } catch (_: Exception) {
         null
+    }
+
+    private enum class CpTypeVerification { CONFIRMED, MISMATCH, UNAVAILABLE }
+
+    private suspend fun verifyCreatedCpType(
+        visitId: String,
+        expected: CpCreateTypeContract,
+        responseCpType: String?,
+        responseJointCpCategory: String?,
+    ): CpTypeVerification {
+        repeat(3) { attempt ->
+            try {
+                val response = geoApi.getCpVisitDetail(session.bearerToken, visitId)
+                val visit = response.visit
+                if (response.success && visit != null) {
+                    return if (expected.matches(visit.cpType, visit.jointCpCategory)) {
+                        CpTypeVerification.CONFIRMED
+                    } else {
+                        CpTypeVerification.MISMATCH
+                    }
+                }
+            } catch (_: Exception) {
+                // A just-created row can briefly lag behind its mutation response.
+            }
+            if (attempt < 2) delay(350L * (attempt + 1))
+        }
+        return if (!responseCpType.isNullOrBlank()) {
+            if (expected.matches(responseCpType, responseJointCpCategory)) {
+                CpTypeVerification.CONFIRMED
+            } else {
+                CpTypeVerification.MISMATCH
+            }
+        } else {
+            CpTypeVerification.UNAVAILABLE
+        }
     }
 
 }

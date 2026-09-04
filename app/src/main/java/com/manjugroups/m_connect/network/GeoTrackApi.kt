@@ -591,6 +591,32 @@ interface GeoTrackApi {
         @Query("id") id: String
     ): CpVisitDetailResponse
 
+    @GET("api/marketing/clientPlaceVisits/joint-workflow")
+    suspend fun getJointCpWorkflow(
+        @Header("Authorization") token: String,
+        @Query("id") id: String,
+    ): JointCpWorkflowResponse
+
+    @POST("api/marketing/clientPlaceVisits/joint-arrival-preflight")
+    suspend fun preflightJointCpArrival(
+        @Header("Authorization") token: String,
+        @Body body: JointCpLocationRequest,
+    ): JointCpWorkflowResponse
+
+    @POST("api/marketing/clientPlaceVisits/joint-submit-review")
+    suspend fun submitJointCpReview(
+        @Header("Authorization") token: String,
+        @Header("Idempotency-Key") requestId: String,
+        @Body body: JointCpSubmitReviewRequest,
+    ): JointCpWorkflowResponse
+
+    @POST("api/marketing/clientPlaceVisits/joint-complete-review")
+    suspend fun completeJointCpReview(
+        @Header("Authorization") token: String,
+        @Header("Idempotency-Key") requestId: String,
+        @Body body: JointCpCompleteReviewRequest,
+    ): JointCpWorkflowResponse
+
     // Marketing CP visits assigned to the bearer or their immediate reports.
     // Used by Home's "Today's Trip" merge so visits that exist in
     // `clientPlaceVisits` but have no companion fieldVisits row yet
@@ -1157,10 +1183,9 @@ data class CreateCpVisitRequest(
     val googleMapsLink: String? = null,
     val notes: String? = null,
     val projectId: String? = null,
-    // CP Type — visit intent. Includes new_client_cp for manually entered
-    // clients. Optional so older
-    // builds without the picker still create successfully.
-    val cpType: String? = null,
+    // CP Type is mandatory: an untyped row cannot be routed or labelled
+    // correctly by either mobile completion or the web CP list.
+    val cpType: String,
     val jointCpCategory: String? = null,
     // New Client CP only. The server derives Own Referral's staff identity
     // from the first authenticated attendance; mobile never sends a staff id.
@@ -1177,6 +1202,7 @@ data class CreateCpVisitRequest(
 
 data class CreateCpVisitResponse(
     val success: Boolean,
+    @com.google.gson.annotations.SerializedName(value = "id", alternate = ["visitId"])
     val id: String? = null,
     val requestId: String? = null,
     val alreadyCreated: Boolean? = null,
@@ -1184,6 +1210,8 @@ data class CreateCpVisitResponse(
     val followupId: String? = null,
     val clientPlaceId: String? = null,
     val clientId: String? = null,
+    val cpType: String? = null,
+    val jointCpCategory: String? = null,
     val error: String? = null,
 )
 
@@ -1852,6 +1880,12 @@ data class JointCpParticipant(
     val completedAt: Long? = null,
     val distanceMeters: Double? = null,
     val outOfGeofence: Boolean = false,
+    val templateId: String? = null,
+    val templateName: String? = null,
+    val templateLevel: Int? = null,
+    val workflowRole: String? = null,
+    val routeColor: String? = null,
+    val fieldVisitId: String? = null,
 )
 
 /**
@@ -1860,12 +1894,69 @@ data class JointCpParticipant(
  */
 data class JointCpSummary(
     val participants: List<JointCpParticipant>? = null,
-    // The senior staff, who enters the OTP and records the one outcome.
+    // Legacy display aliases only. Workflow authority comes from each
+    // participant's server-resolved IAM template role, never staff order.
     val leadStaffName: String? = null,
     val leadStaffId: String? = null,
     // The other participant, who travels but records no outcome.
     val companionNames: List<String>? = null,
     val totalCount: Int = 0,
+    val workflow: JointCpWorkflow? = null,
+)
+
+data class JointCpWorkflowResponse(
+    val success: Boolean,
+    val workflow: JointCpWorkflow? = null,
+    val error: String? = null,
+    val code: String? = null,
+)
+
+data class JointCpWorkflow(
+    val state: String? = null,
+    val actorRole: String? = null,
+    val outcomeOwnerStaffId: String? = null,
+    val outcomeOwnerName: String? = null,
+    val reviewerStaffId: String? = null,
+    val reviewerName: String? = null,
+    val reviewerTemplateName: String? = null,
+    val canRequestOtp: Boolean = false,
+    val canSubmitOutcome: Boolean = false,
+    val canReview: Boolean = false,
+    val canCompleteReview: Boolean = false,
+    val separationMeters: Double? = null,
+    val isWithinCompletionRadius: Boolean = false,
+    val requiredRadiusMeters: Double = 50.0,
+    val outcomeRevision: Long? = null,
+    val outcome: String? = null,
+    val outcomeSummary: String? = null,
+    val reviewedByName: String? = null,
+    val reviewedByTemplateName: String? = null,
+    val completedAt: Long? = null,
+)
+
+data class JointCpLocationRequest(
+    val id: String,
+    val fieldVisitId: String,
+    val lat: Double,
+    val lng: Double,
+    val accuracyMeters: Float? = null,
+    val capturedAt: Long = System.currentTimeMillis(),
+)
+
+data class JointCpSubmitReviewRequest(
+    val id: String,
+    val fieldVisitId: String,
+    val lat: Double,
+    val lng: Double,
+    val accuracyMeters: Float? = null,
+    val capturedAt: Long = System.currentTimeMillis(),
+    val arrivalPhotoStorageId: String? = null,
+    val expectedOutcomeRevision: Long? = null,
+)
+
+data class JointCpCompleteReviewRequest(
+    val id: String,
+    val expectedOutcomeRevision: Long,
 )
 
 data class CpVisitDetailResponse(

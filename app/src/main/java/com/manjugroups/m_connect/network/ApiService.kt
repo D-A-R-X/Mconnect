@@ -1543,6 +1543,14 @@ data class StaffData(
     val status: String?,
     val employeeId: String?,
     val department: String?,
+    @SerializedName(value = "iamTemplateId", alternate = ["templateId", "permissionTemplateId"])
+    val iamTemplateId: String? = null,
+    @SerializedName(value = "iamTemplateName", alternate = ["templateName", "permissionTemplateName"])
+    val iamTemplateName: String? = null,
+    @SerializedName(value = "iamTemplateLevel", alternate = ["templateLevel", "roleLevel"])
+    val iamTemplateLevel: Int? = null,
+    @SerializedName(value = "jointCpWorkflowRole", alternate = ["jointCpRole"])
+    val jointCpWorkflowRole: String? = null,
     val reportingTo: String? = null,
     val reportingToId: String? = null,
     val geoTrackingEnabled: Boolean = false,
