@@ -186,7 +186,7 @@
                                     android:layout_height="20dp"
                                     android:contentDescription="@null"
                                     android:src="@drawable/ic_retake_refresh"
-                                    android:tint="#FFFFFF" />
+                                    app:tint="#FFFFFF" />
 
                                 <TextView
                                     android:layout_width="wrap_content"

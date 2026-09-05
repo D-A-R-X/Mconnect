@@ -42,7 +42,7 @@
                 android:background="@drawable/bg_overview_icon_blue"
                 android:src="@drawable/ic_phone_outline"
                 android:padding="8dp"
-                android:tint="#0B61CA"
+                app:tint="#0B61CA"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
 
@@ -117,7 +117,7 @@
                 android:background="@drawable/bg_overview_icon_green"
                 android:src="@drawable/ic_outcome_phone"
                 android:padding="8dp"
-                android:tint="#059669"
+                app:tint="#059669"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
 
@@ -202,7 +202,7 @@
                 android:background="@drawable/bg_overview_icon_blue"
                 android:src="@drawable/ic_phone_outline"
                 android:padding="8dp"
-                android:tint="#0B61CA"
+                app:tint="#0B61CA"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
 
@@ -277,7 +277,7 @@
                 android:background="@drawable/bg_overview_icon_red"
                 android:src="@drawable/ic_task_illustration"
                 android:padding="8dp"
-                android:tint="#DC2626"
+                app:tint="#DC2626"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
 
@@ -361,7 +361,7 @@
                 android:background="@drawable/bg_overview_icon_orange"
                 android:src="@drawable/ic_outcome_site_visit"
                 android:padding="6dp"
-                android:tint="#EA580C"
+                app:tint="#EA580C"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
 
@@ -435,7 +435,7 @@
                 android:background="@drawable/bg_overview_icon_gray"
                 android:src="@drawable/ic_outcome_person"
                 android:padding="6dp"
-                android:tint="#64748B"
+                app:tint="#64748B"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
 
@@ -518,7 +518,7 @@
                 android:background="@drawable/bg_overview_icon_blue"
                 android:src="@drawable/ic_task_note"
                 android:padding="6dp"
-                android:tint="#0B61CA"
+                app:tint="#0B61CA"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
 
@@ -592,7 +592,7 @@
                 android:background="@drawable/bg_overview_icon_green"
                 android:src="@drawable/ic_nav_home"
                 android:padding="6dp"
-                android:tint="#059669"
+                app:tint="#059669"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
 

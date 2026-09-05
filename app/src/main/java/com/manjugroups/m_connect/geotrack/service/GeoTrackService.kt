@@ -362,6 +362,7 @@ class GeoTrackService : Service() {
         }.isSuccess
     }
 
+    @SuppressLint("MissingPermission")
     override fun onDestroy() {
         Log.i(TAG, "onDestroy — flushing ${pointsCaptured.get() - pointsSynced.get()} pending points")
         isRunning = false
@@ -1196,6 +1197,7 @@ class GeoTrackService : Service() {
         com.manjugroups.m_connect.notifications.PermissionAlertNotification.update(this, missing)
     }
 
+    @SuppressLint("MissingPermission")
     private suspend fun buildEventMetadata(): Map<String, Any?> {
         val metadata = mutableMapOf<String, Any?>(
             "batteryPct" to getBatteryLevel(),

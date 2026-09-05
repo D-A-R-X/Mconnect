@@ -6,6 +6,7 @@ import android.os.Build
 import android.os.Bundle
 import android.text.InputType
 import android.view.View
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -84,6 +85,14 @@ class ForcePasswordChangeActivity : AppCompatActivity() {
         }
 
         binding.btnUpdatePassword.setOnClickListener { submit() }
+        onBackPressedDispatcher.addCallback(
+            this,
+            object : OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+                    // Force-change flow blocks navigation until the password is updated.
+                }
+            },
+        )
     }
 
     private fun setPasswordVisibility(view: android.widget.EditText, visible: Boolean) {
@@ -314,9 +323,6 @@ class ForcePasswordChangeActivity : AppCompatActivity() {
         else SkeletonUtils.stopSkeletonPulse(binding.skeletonUpdatePassword)
     }
 
-    override fun onBackPressed() {
-        // Force-change flow blocks navigation until the password is updated.
-    }
 }
 
 /**

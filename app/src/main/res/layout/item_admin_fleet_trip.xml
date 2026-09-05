@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_marginBottom="10dp"
@@ -21,7 +22,7 @@
             android:layout_height="20dp"
             android:layout_gravity="center"
             android:src="@drawable/ic_custom_trip_route"
-            android:tint="#FFFFFF" />
+            app:tint="#FFFFFF" />
     </FrameLayout>
 
     <!-- Right: All content stacked vertically -->
@@ -43,7 +44,7 @@
                 android:layout_width="14dp"
                 android:layout_height="14dp"
                 android:src="@drawable/ic_clock"
-                android:tint="#0B61CA" />
+                app:tint="#0B61CA" />
 
             <TextView
                 android:id="@+id/tvTripTime"
@@ -125,7 +126,7 @@
                     android:layout_width="13dp"
                     android:layout_height="13dp"
                     android:src="@drawable/ic_chat_users"
-                    android:tint="#0B61CA" />
+                    app:tint="#0B61CA" />
 
                 <TextView
                     android:id="@+id/tvAttendeesTag"
@@ -155,7 +156,7 @@
                     android:layout_width="13dp"
                     android:layout_height="13dp"
                     android:src="@drawable/ic_auth_user"
-                    android:tint="#0B61CA" />
+                    app:tint="#0B61CA" />
 
                 <TextView
                     android:id="@+id/tvLmoTag"

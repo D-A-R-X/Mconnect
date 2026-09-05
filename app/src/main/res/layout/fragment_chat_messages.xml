@@ -269,7 +269,7 @@
                     android:layout_gravity="center"
                     android:contentDescription="Cancel"
                     android:src="@drawable/ic_back_chevron"
-                    android:tint="#FFFFFF" />
+                    app:tint="#FFFFFF" />
             </FrameLayout>
 
             <TextView
@@ -298,7 +298,7 @@
                     android:layout_gravity="center"
                     android:contentDescription="Reply"
                     android:src="@drawable/ic_chat_reply"
-                    android:tint="#FFFFFF" />
+                    app:tint="#FFFFFF" />
             </FrameLayout>
 
             <FrameLayout
@@ -316,7 +316,7 @@
                     android:layout_gravity="center"
                     android:contentDescription="Star"
                     android:src="@drawable/ic_chat_star"
-                    android:tint="#FFFFFF" />
+                    app:tint="#FFFFFF" />
             </FrameLayout>
 
             <FrameLayout
@@ -334,7 +334,7 @@
                     android:layout_gravity="center"
                     android:contentDescription="Info"
                     android:src="@drawable/ic_chat_info"
-                    android:tint="#FFFFFF" />
+                    app:tint="#FFFFFF" />
             </FrameLayout>
 
             <FrameLayout
@@ -352,7 +352,7 @@
                     android:layout_gravity="center"
                     android:contentDescription="Delete"
                     android:src="@drawable/ic_chat_delete"
-                    android:tint="#FFFFFF" />
+                    app:tint="#FFFFFF" />
             </FrameLayout>
 
             <FrameLayout
@@ -370,7 +370,7 @@
                     android:layout_gravity="center"
                     android:contentDescription="Forward"
                     android:src="@drawable/ic_chat_forward"
-                    android:tint="#FFFFFF" />
+                    app:tint="#FFFFFF" />
             </FrameLayout>
         </LinearLayout>
 

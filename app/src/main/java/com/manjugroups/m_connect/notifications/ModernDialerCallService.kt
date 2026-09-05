@@ -45,17 +45,11 @@ class ModernDialerCallService : Service() {
         when (intent.action) {
             ModernDialerCallController.ACTION_KEEP_ACTIVE -> {
                 ModernDialerCallController.clearIncoming(this)
-                startForeground(
-                    ModernDialerCallController.ACTIVE_NOTIFICATION_ID,
-                    ModernDialerCallController.activeCallNotification(this, callId, displayName, number),
-                )
+                ModernDialerCallController.showActiveCall(this, callId, displayName, number)
             }
             ModernDialerCallController.ACTION_PICKUP -> {
                 ModernDialerCallController.clearIncoming(this)
-                startForeground(
-                    ModernDialerCallController.ACTIVE_NOTIFICATION_ID,
-                    ModernDialerCallController.activeCallNotification(this, callId, displayName, number),
-                )
+                ModernDialerCallController.showActiveCall(this, callId, displayName, number)
                 performCallAction(callId, "pickup", eventId, startId)
             }
             ModernDialerCallController.ACTION_REJECT -> {
@@ -80,7 +74,7 @@ class ModernDialerCallService : Service() {
     }
 
     override fun onDestroy() {
-        stopForeground(STOP_FOREGROUND_REMOVE)
+        ModernDialerCallController.clearActive(applicationContext)
         stopCallAudio()
         scope.cancel()
         super.onDestroy()
@@ -205,7 +199,7 @@ class ModernDialerCallService : Service() {
                 }
                 succeeded = true
                 if (action != "pickup") {
-                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    ModernDialerCallController.clearActive(applicationContext)
                 }
             } catch (e: Exception) {
                 mainHandler.post {
@@ -216,11 +210,11 @@ class ModernDialerCallService : Service() {
                     ).show()
                 }
                 if (action != "pickup") {
-                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    ModernDialerCallController.clearActive(applicationContext)
                 }
             } finally {
                 if (action != "pickup" || !succeeded) {
-                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    ModernDialerCallController.clearActive(applicationContext)
                     stopSelf(startId)
                 }
             }

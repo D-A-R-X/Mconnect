@@ -146,8 +146,21 @@ object ModernDialerCallController {
             .build()
     }
 
+    @SuppressLint("MissingPermission")
+    fun showActiveCall(context: Context, callId: String, displayName: String?, number: String?) {
+        if (!canPostNotifications(context)) return
+        NotificationManagerCompat.from(context).notify(
+            ACTIVE_NOTIFICATION_ID,
+            activeCallNotification(context, callId, displayName, number),
+        )
+    }
+
     fun clearIncoming(context: Context) {
         NotificationManagerCompat.from(context).cancel(INCOMING_NOTIFICATION_ID)
+    }
+
+    fun clearActive(context: Context) {
+        NotificationManagerCompat.from(context).cancel(ACTIVE_NOTIFICATION_ID)
     }
 
     fun clearCallNotifications(context: Context) {

@@ -609,6 +609,7 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
         )
     }
 
+    @android.annotation.SuppressLint("MissingPermission")
     private suspend fun fetchLocationOrNull(): Location? {
         if (!isAdded) return lastGoodFix
         val fusedClient = LocationServices.getFusedLocationProviderClient(requireContext())

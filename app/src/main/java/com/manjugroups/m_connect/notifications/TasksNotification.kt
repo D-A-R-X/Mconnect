@@ -1,5 +1,6 @@
 package com.manjugroups.m_connect.notifications
 
+import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -44,6 +45,7 @@ object TasksNotification {
     }
 
     /** Post/refresh the reminder when [pending] > 0, or clear it when 0. */
+    @SuppressLint("MissingPermission")
     fun update(context: Context, pending: Int, dueSoon: Int, topTitle: String?) {
         val appCtx = context.applicationContext
         if (pending <= 0) {

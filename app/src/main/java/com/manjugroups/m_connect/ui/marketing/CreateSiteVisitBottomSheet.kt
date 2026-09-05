@@ -280,7 +280,7 @@ class CreateSiteVisitBottomSheet : BottomSheetDialogFragment() {
             val container = root.findViewById<LinearLayout>(R.id.svVisitorsContainer)
             while (visitorFields.size < count) addVisitor(container, visitorFields.size)
             while (visitorFields.size > count) {
-                container.removeView(visitorFields.removeLast().root)
+                container.removeView(visitorFields.removeAt(visitorFields.lastIndex).root)
             }
         }
     }

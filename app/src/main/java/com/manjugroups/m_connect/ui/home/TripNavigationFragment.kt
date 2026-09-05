@@ -1649,6 +1649,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         }
     }
 
+    @android.annotation.SuppressLint("MissingPermission")
     private suspend fun fetchCurrentLocation(): Location? {
         if (!hasLocationPermission()) return null
         return try {

@@ -1206,6 +1206,7 @@ class HrDashboardFragment : Fragment() {
         return null
     }
 
+    @android.annotation.SuppressLint("MissingPermission")
     private suspend fun fetchLocationOrNull(): Location? {
         return try {
             val client = LocationServices.getFusedLocationProviderClient(requireContext())
@@ -1231,6 +1232,7 @@ class HrDashboardFragment : Fragment() {
      * a slow GPS fix can never stall the (now already-cleared) flow — it
      * just falls back to the last known location or null.
      */
+    @android.annotation.SuppressLint("MissingPermission")
     private suspend fun fetchLocationForContextOrNull(ctx: android.content.Context): Location? {
         return try {
             kotlinx.coroutines.withTimeoutOrNull(4000L) {

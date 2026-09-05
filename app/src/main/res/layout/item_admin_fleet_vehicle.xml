@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_marginBottom="12dp"
@@ -21,7 +22,7 @@
             android:layout_height="24dp"
             android:layout_gravity="center"
             android:src="@drawable/ic_admin_tab_vehicles"
-            android:tint="#FFFFFF" />
+            app:tint="#FFFFFF" />
     </FrameLayout>
 
     <!-- Center: Content stacked vertically -->
@@ -88,7 +89,7 @@
                 android:layout_width="14dp"
                 android:layout_height="14dp"
                 android:src="@drawable/ic_custom_user"
-                android:tint="#6B7280" />
+                app:tint="#6B7280" />
 
             <TextView
             android:ellipsize="end"
@@ -118,7 +119,7 @@
                 android:layout_width="14dp"
                 android:layout_height="14dp"
                 android:src="@drawable/ic_custom_phone"
-                android:tint="#6B7280" />
+                app:tint="#6B7280" />
 
             <TextView
             android:ellipsize="end"
@@ -142,7 +143,7 @@
         android:layout_gravity="center_vertical"
         android:layout_marginStart="8dp"
         android:src="@drawable/ic_chevron_right"
-        android:tint="#D1D5DB" />
+        app:tint="#D1D5DB" />
 
     <!-- Compile-compatibility views hidden from UI -->
     <TextView

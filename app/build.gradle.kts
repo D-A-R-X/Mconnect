@@ -102,7 +102,7 @@ android {
         applicationId = "com.manjugroups.mconnect"
         minSdk = 24
         targetSdk = 36
-        versionCode = 11
+        versionCode = 70
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -120,7 +120,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

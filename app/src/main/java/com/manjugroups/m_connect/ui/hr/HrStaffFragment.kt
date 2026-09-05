@@ -12,6 +12,7 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
+import androidx.core.content.res.ResourcesCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
@@ -155,7 +156,7 @@ class HrStaffFragment : Fragment() {
             val label = TextView(requireContext()).apply {
                 text = "Load More"
                 textSize = 14f
-                typeface = resources.getFont(R.font.inter_semibold)
+                typeface = ResourcesCompat.getFont(requireContext(), R.font.inter_semibold)
                 setTextColor(resolveColor(R.attr.colorAccentPrimary))
                 gravity = android.view.Gravity.CENTER
                 isClickable = !state.isLoadingMore

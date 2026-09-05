@@ -2,6 +2,7 @@ package com.manjugroups.m_connect.ui.common
 
 import android.content.Context
 import android.graphics.Color
+import android.os.Build
 import android.text.Editable
 import android.text.InputType
 import android.text.TextWatcher
@@ -90,7 +91,9 @@ object SearchableSelectionDialog {
             hint = searchHint
             isSingleLine = true
             inputType = InputType.TYPE_CLASS_TEXT
-            importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
+            }
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
             setPadding(dp(context, 16), dp(context, 12), dp(context, 16), dp(context, 12))
             setBackgroundResource(R.drawable.bg_sheet_search_field)
