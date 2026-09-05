@@ -586,7 +586,7 @@ class CpVisitsFragment : Fragment() {
             Filter.ALL -> true
             Filter.POSTPONED -> isPostponed(visit) && !isCancelled(status) && !isCompleted(status)
             Filter.IN_PROGRESS -> isInProgress(status) && !isCancelled(status) && !isCompleted(status)
-            Filter.COMPLETED -> isCompleted(status)
+            Filter.COMPLETED -> isCompleted(status) && visit.cpVisit?.outcomePending != true
             Filter.CANCELLED -> isCancelled(status)
             Filter.PENDING_GM_APPROVAL -> status == "pending_gm_approval" || status == "pending-gm-approval"
             Filter.SCHEDULED -> !isInProgress(status) && !isCompleted(status) &&
@@ -889,10 +889,8 @@ class CpVisitsFragment : Fragment() {
         // Enroute, and the action that records the missing outcome vanished -
         // the "sometimes disappearing" Pending button. Deciding it from BOTH
         // signals means a missing fieldVisit can no longer hide it.
-        val tripFinished = listOf(this.status, this.fieldVisit?.status)
-            .any { isCompleted((it ?: "").lowercase(Locale.US)) }
         val cpState = CpVisitState(
-            outcomePending = tripFinished && effectiveOutcome.isNullOrBlank(),
+            outcomePending = isCpOutcomePending(this.status, this.fieldVisit?.status, effectiveOutcome),
             clientMet = this.clientMet,
             clientMetAt = this.clientMetAt,
             clientNoShowReason = this.clientNoShowReason,
@@ -1224,8 +1222,7 @@ class CpVisitsFragment : Fragment() {
         // visits open in the default Booking-tab flow.
         // Additive on purpose: the mapper's flag can only ever ADD the Pending
         // action, never remove one the old rule would have shown.
-        val isOutcomePending = visit.cpVisit?.outcomePending == true ||
-            (completed && visit.cpVisit?.outcome.isNullOrBlank())
+        val isOutcomePending = visit.cpVisit?.outcomePending == true
 
         // Three click outcomes: open the trip flow, open the completed-visit
         // detail (read-only summary), or no-op (cancelled cards stay inert).

@@ -585,7 +585,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             btnSubmit.isEnabled = false
             viewLifecycleOwner.lifecycleScope.launch {
                 try {
-                    if (isNewClientCpPurpose()) {
+                    if (isNewClientCpPurpose() && createRequestFingerprint == null) {
                         val existingResponse = api.searchClientByPhone(
                             session.bearerToken,
                             phone,
@@ -642,32 +642,13 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                     }
                     // Give immediate feedback for a duplicate on the selected
                     // day. The mutation repeats this authoritatively.
-                    val duplicate = duplicateDeferred.await()
-                    if (duplicate != null) {
-                        btnSubmit.isEnabled = true
-                        toast(duplicate)
-                        return@launch
-                    }
                     val typeContract = CpCreateTypeContract.from(selectedCpType?.id, isJointCp)
                     if (typeContract == null) {
                         btnSubmit.isEnabled = true
                         toast("Select a valid CP type")
                         return@launch
                     }
-                    val requestFingerprint = listOf(
-                        phone, clientNameInput, staff.id, lmo.id, selectedDate,
-                        selectedTime, compiledAddress, project.id,
-                        selectedCpType?.id, isJointCp,
-                        jointPartnerId, resolvedLat, resolvedLng,
-                    ).joinToString("|")
-                    if (createRequestFingerprint != requestFingerprint) {
-                        createRequestId = UUID.randomUUID().toString()
-                        createRequestFingerprint = requestFingerprint
-                    }
-                    val resp = geoApi.createCpVisit(
-                        session.bearerToken,
-                        createRequestId,
-                        CreateCpVisitRequest(
+                    val request = CreateCpVisitRequest(
                             clientName = clientNameInput,
                             mobileNumber = phone,
                             assignedStaffId = staff.id,
@@ -693,9 +674,21 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                             // Only sent for a Joint CP; the server ignores it
                             // for every other type.
                             jointStaffIds = jointParticipantIds,
-                        )
                     )
-                    btnSubmit.isEnabled = true
+                    val requestFingerprint = com.google.gson.Gson().toJson(request)
+                    if (createRequestFingerprint != requestFingerprint) {
+                        createRequestId = UUID.randomUUID().toString()
+                        createRequestFingerprint = requestFingerprint
+                    }
+                    val duplicate = OpenCpVisitGuard.blockReason(
+                        duplicateDeferred.await(), phone, selectedDate, createRequestId,
+                    )
+                    if (duplicate != null) {
+                        btnSubmit.isEnabled = true
+                        toast(duplicate)
+                        return@launch
+                    }
+                    val resp = geoApi.createCpVisit(session.bearerToken, createRequestId, request)
                     if (!resp.success) {
                         toast(cleanServerErrorMessage(resp.error ?: "Failed to create CP visit"))
                         return@launch
@@ -724,8 +717,9 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                     createRequestId = UUID.randomUUID().toString()
                     createRequestFingerprint = null
                     dismissAllowingStateLoss()
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
                 } catch (e: Exception) {
-                    btnSubmit.isEnabled = true
                     duplicateClientFromException(e)?.let { existing ->
                         applyClientAutofill(view, existing)
                         rememberExistingClient(existing, phone)
@@ -761,6 +755,8 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                         e.message ?: "Failed to create CP visit"
                     }
                     toast(message)
+                } finally {
+                    btnSubmit.isEnabled = true
                 }
             }
         }
@@ -1505,16 +1501,15 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
     }
 
     /**
-     * Returns a message when this client already has a non-cancelled CP visit
-     * on [scheduledDate], or null when the create may proceed.
+     * Loads candidates so duplicate checks can exclude an exact idempotent replay.
      *
      * Fails OPEN: if the lookup itself errors (offline, backend hiccup) we
-     * return null and let the create through. A guard that blocked on a
+     * return an empty list and let the create through. A guard that blocked on a
      * transient network failure would break CP creation in the field, which is
      * safe because the backend mutation enforces the same rule.
      */
-    private suspend fun findSameDayCpVisitFor(phone: String, scheduledDate: String): String? {
-        if (OpenCpVisitGuard.normalizePhone(phone).length < 10) return null
+    private suspend fun findSameDayCpVisitFor(phone: String, scheduledDate: String): List<com.manjugroups.m_connect.network.CpVisitDetail> {
+        if (OpenCpVisitGuard.normalizePhone(phone).length < 10) return emptyList()
         val existing = try {
             geoApi.getMyMarketingCpVisits(
                 token = session.bearerToken,
@@ -1523,11 +1518,13 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                 search = OpenCpVisitGuard.normalizePhone(phone),
                 limit = 50,
             )
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
         } catch (_: Exception) {
-            return null
+            return emptyList()
         }
-        if (!existing.success) return null
-        return OpenCpVisitGuard.blockReason(existing.visits, phone, scheduledDate)
+        if (!existing.success) return emptyList()
+        return existing.visits.orEmpty()
     }
 
     private fun isAmbiguousCreateFailure(error: Throwable): Boolean {
@@ -1559,6 +1556,9 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         responseCpType: String?,
         responseJointCpCategory: String?,
     ): CpTypeVerification {
+        if (expected.matches(responseCpType, responseJointCpCategory)) {
+            return CpTypeVerification.CONFIRMED
+        }
         repeat(3) { attempt ->
             try {
                 val response = geoApi.getCpVisitDetail(session.bearerToken, visitId)

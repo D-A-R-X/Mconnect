@@ -17,6 +17,31 @@ import org.junit.Test
 class CpVisitStatusTest {
 
     @Test
+    fun `legacy completed CP with missing outcome stays completed`() {
+        for (cp in listOf("completed", "complete", "done", "closed", " COMPLETED ")) {
+            for (trip in listOf("enroute", "in-progress", "completed")) {
+                assertEquals(cp.trim(), resolveCpEffectiveStatus(cp, trip))
+                assertEquals(false, isCpOutcomePending(cp, trip, null))
+            }
+        }
+    }
+
+    @Test
+    fun `trip completed without CP decision still requires outcome`() {
+        assertEquals(true, isCpOutcomePending("in_progress", "completed", null))
+        assertEquals(true, isCpOutcomePending("scheduled", "completed", "  "))
+        assertEquals(false, isCpOutcomePending("in_progress", "enroute", null))
+        assertEquals(false, isCpOutcomePending("in_progress", "completed", "other"))
+    }
+
+    @Test
+    fun `approval cancellation and postponement cannot be reopened as missing outcome`() {
+        for (cp in listOf("pending_gm_approval", "cancelled", "canceled", "postponed")) {
+            assertEquals(false, isCpOutcomePending(cp, "completed", null))
+        }
+    }
+
+    @Test
     fun `a live trip is described by the field visit, not the CP row`() {
         // Only the field visit tracks "arrived". Preferring the CP row here
         // would drop the user back on Start Trip after they verified arrival.

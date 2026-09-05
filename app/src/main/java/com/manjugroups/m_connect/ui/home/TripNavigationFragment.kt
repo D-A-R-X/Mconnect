@@ -3367,6 +3367,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     // it, then mark the visit as not-met with the existing API. No OTP and no
     // outcome form for this branch.
     private fun startCpNoPath() {
+        isGiftDistributionPostOtpPhotoCapture = false
         cpNoPathPhotoCapture = true
         if (ContextCompat.checkSelfPermission(
                 requireContext(),
@@ -3494,8 +3495,13 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 cpClientMet = false
                 cpOutcome = terminalOutcome
                 cpVisitDecisionCaptured = true
-                showClientNotSeenCompletion = true
                 cpNoPathPhotoCapture = false
+                if (isJointCpWorkflow()) {
+                    arrivalInProgress = false
+                    submitJointCpForReview()
+                    return@launch
+                }
+                showClientNotSeenCompletion = true
                 finalizeCompleteVisit()
             } catch (e: Exception) {
                 arrivalInProgress = false

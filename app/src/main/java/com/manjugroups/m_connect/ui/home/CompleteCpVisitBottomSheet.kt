@@ -6476,6 +6476,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     // same Edit-toggle semantics, same target lead row.
                     pushClientEditsToLeadIfAny()
                     clearDraftAfterSubmit()
+                    if (staffSaveAs == SaveAs.DRAFT) {
+                        dismissAllowingStateLoss()
+                        return@launch
+                    }
                     setFragmentResult(
                         RESULT_KEY,
                         bundleOf(KEY_CLIENT_MET to met, KEY_OUTCOME to OUTCOME_BOOKING),
@@ -6518,6 +6522,11 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 // already saved, so failures here just get logged.
                 pushClientEditsToLeadIfAny()
                 clearDraftAfterSubmit()
+
+                if (staffSaveAs == SaveAs.DRAFT) {
+                    dismissAllowingStateLoss()
+                    return@launch
+                }
 
                 setFragmentResult(
                     RESULT_KEY,
