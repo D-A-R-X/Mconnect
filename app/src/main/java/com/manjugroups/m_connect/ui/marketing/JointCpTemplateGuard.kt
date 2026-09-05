@@ -34,7 +34,7 @@ object JointCpTemplateGuard {
             partner?.jointCpWorkflowRole?.trim()?.lowercase(),
         )
         if (roles != setOf("outcome_owner", "reviewer")) {
-            return "Choose one BDO outcome owner and one reviewer from their IAM templates"
+            return "Choose one outcome owner and one reviewer from their IAM templates"
         }
         return null
     }

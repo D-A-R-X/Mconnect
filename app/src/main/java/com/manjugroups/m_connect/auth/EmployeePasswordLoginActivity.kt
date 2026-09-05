@@ -19,7 +19,10 @@ import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.EmployeePasswordLoginResponse
 import com.manjugroups.m_connect.notifications.PushTokenManager
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withTimeoutOrNull
 import retrofit2.HttpException
 import java.net.ConnectException
 import java.net.NoRouteToHostException
@@ -39,10 +42,7 @@ class EmployeePasswordLoginActivity : AppCompatActivity() {
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
     ) { _ ->
         session.notificationPermissionPrompted = true
-        lifecycleScope.launch {
-            syncPushTokenIfPossible()
-            goNext()
-        }
+        goNext()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -110,18 +110,23 @@ class EmployeePasswordLoginActivity : AppCompatActivity() {
         // Bind this login to the device, same as the OTP path, so the password
         // login can't sidestep the single-device lock.
         val deviceInfo = LoginDeviceInfo.capture(applicationContext)
+        val request = com.manjugroups.m_connect.network.EmployeePasswordLoginRequest(
+            employeeId = employeeId,
+            password = password,
+            deviceId = deviceInfo?.deviceId,
+            devicePlatform = deviceInfo?.platform,
+            deviceModel = deviceInfo?.model,
+            batteryPct = deviceInfo?.batteryPct,
+        )
         lifecycleScope.launch {
             runCatching {
-                api.loginWithEmployeeId(
-                    com.manjugroups.m_connect.network.EmployeePasswordLoginRequest(
-                        employeeId = employeeId,
-                        password = password,
-                        deviceId = deviceInfo?.deviceId,
-                        devicePlatform = deviceInfo?.platform,
-                        deviceModel = deviceInfo?.model,
-                        batteryPct = deviceInfo?.batteryPct,
-                    )
-                )
+                try {
+                    api.loginWithEmployeeId(request)
+                } catch (error: Throwable) {
+                    if (!EmployeeLoginRetryPolicy.shouldRetryInitialConnection(error)) throw error
+                    delay(EmployeeLoginRetryPolicy.RETRY_DELAY_MS)
+                    api.loginWithEmployeeId(request)
+                }
             }.onSuccess { response ->
                 if (!response.success || response.token.isNullOrBlank() || response.user == null) {
                     showError(response.error ?: "Login failed")
@@ -146,6 +151,9 @@ class EmployeePasswordLoginActivity : AppCompatActivity() {
             )
             session.staffId = user.staffId
             session.employeeId = user.employeeId
+            session.role = user.role
+            session.isAdmin = user.isAdmin
+            session.externalFleetCanBill = user.canBill
             session.mustChangePassword = response.mustChangePassword || user.mustChangePassword
             if (session.mustChangePassword) {
                 PendingPasswordChangeCredential.set(verifiedPassword)
@@ -172,41 +180,43 @@ class EmployeePasswordLoginActivity : AppCompatActivity() {
                 session.department = it
             }
 
-            // Backend fleet-driver probe — see OtpActivity for context.
-            // Lets the app honour the backend's "fleetDrivers row by
-            // phone" path even when designation isn't literally "Driver".
-            session.fleetDriverByBackend = runCatching {
-                geoApi.getMmsFleetDriverTrips(session.bearerToken)
-            }.map { response ->
-                response.success &&
-                    response.diagnostics?.notDriver != true &&
-                    response.diagnostics?.reason != "staff_not_driver"
-            }.getOrDefault(false)
-
-            runCatching {
-                api.getMyIamPermissions(session.bearerToken)
-            }.onSuccess { iam ->
-                session.iamPermissions = iam.permissions.toSet()
-                session.isAdmin = iam.isAdmin
-                session.role = iam.role
-            }
-
-            user.staffId?.takeIf { it.isNotBlank() }?.let { staffId ->
-                runCatching {
-                    api.getStaffDetail(session.bearerToken, staffId)
-                }.onSuccess { resp ->
-                    resp.staff?.let { staff ->
-                        session.reportingToId = staff.reportingTo
-                        session.reportingToName = staff.reportingToName
-                        // Refresh designation only if the staff-detail
-                        // call returned a non-blank value; otherwise
-                        // keep the good value already cached from the
-                        // login payload above.
-                        staff.designation?.takeIf { it.isNotBlank() }?.let {
-                            session.designation = it
-                        }
-                        staff.department?.takeIf { it.isNotBlank() }?.let {
-                            session.department = it
+            // These are independent enrichments. Run them together and cap the
+            // pre-navigation wait; MainActivity refreshes IAM/push/tracking again,
+            // so a slow optional service must never trap a valid login onscreen.
+            withTimeoutOrNull(3_000L) {
+                coroutineScope {
+                    launch {
+                        session.fleetDriverByBackend = runCatching {
+                            geoApi.getMmsFleetDriverTrips(session.bearerToken)
+                        }.map { response ->
+                            response.success &&
+                                response.diagnostics?.notDriver != true &&
+                                response.diagnostics?.reason != "staff_not_driver"
+                        }.getOrDefault(false)
+                    }
+                    launch {
+                        runCatching { api.getMyIamPermissions(session.bearerToken) }
+                            .onSuccess { iam ->
+                                session.iamPermissions = iam.permissions.toSet()
+                                session.isAdmin = iam.isAdmin
+                                session.role = iam.role
+                            }
+                    }
+                    launch {
+                        user.staffId?.takeIf { it.isNotBlank() }?.let { staffId ->
+                            runCatching { api.getStaffDetail(session.bearerToken, staffId) }
+                                .onSuccess { resp ->
+                                    resp.staff?.let { staff ->
+                                        session.reportingToId = staff.reportingTo
+                                        session.reportingToName = staff.reportingToName
+                                        staff.designation?.takeIf { it.isNotBlank() }?.let {
+                                            session.designation = it
+                                        }
+                                        staff.department?.takeIf { it.isNotBlank() }?.let {
+                                            session.department = it
+                                        }
+                                    }
+                                }
                         }
                     }
                 }
@@ -229,16 +239,7 @@ class EmployeePasswordLoginActivity : AppCompatActivity() {
             notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
             return
         }
-        lifecycleScope.launch {
-            syncPushTokenIfPossible()
-            goNext()
-        }
-    }
-
-    private suspend fun syncPushTokenIfPossible() {
-        runCatching {
-            PushTokenManager.syncCurrentToken(this@EmployeePasswordLoginActivity, session)
-        }
+        goNext()
     }
 
     private fun goNext() {
@@ -316,4 +317,29 @@ class EmployeePasswordLoginActivity : AppCompatActivity() {
         val error: String? = null,
         val message: String? = null
     )
+}
+
+/**
+ * The first request after process start can lose DNS/socket establishment on
+ * some mobile networks while the same host succeeds immediately afterward.
+ * Retry only failures that happen before an HTTP response exists. Credential,
+ * validation, timeout and server responses must always reach the user once.
+ */
+internal object EmployeeLoginRetryPolicy {
+    const val RETRY_DELAY_MS = 450L
+
+    fun shouldRetryInitialConnection(error: Throwable): Boolean {
+        var current: Throwable? = error
+        while (current != null) {
+            if (
+                current is UnknownHostException ||
+                current is ConnectException ||
+                current is NoRouteToHostException
+            ) {
+                return true
+            }
+            current = current.cause
+        }
+        return false
+    }
 }

@@ -2729,7 +2729,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         view?.findViewById<TextView>(R.id.tvOutcomeTitle)?.text = title
         view?.findViewById<TextView>(R.id.tvOutcomeSubtitle)?.text =
             if (jointCtaMode == JOINT_CTA_COMPLETE && jointOutcomeSummary != null) {
-                "$subtitle · BDO submitted: $jointOutcomeSummary"
+                "$subtitle · Outcome owner submitted: $jointOutcomeSummary"
             } else subtitle
     }
 
@@ -7276,50 +7276,22 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         btnCpLockedConfirm?.isClickable = false
         btnCpLockedConfirm?.text = "Saving…"
         btnCpLockedReject?.isClickable = false
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val metResp = geoApi.markClientMet(
-                    session.bearerToken,
-                    MarkClientMetRequest(id = cpVisitId, clientMet = true),
-                )
-                if (!metResp.success) {
-                    finishCtaLockedConfirm(metResp.error ?: "Failed to record client met")
-                    return@launch
-                }
-                val outcomeResp = geoApi.setCpVisitOutcome(
-                    session.bearerToken,
-                    SetOutcomeRequest(
-                        id = cpVisitId,
-                        outcome = OUTCOME_SITE_VISIT,
-                        notes = "Confirmed by field staff",
-                    ),
-                )
-                if (!outcomeResp.success) {
-                    finishCtaLockedConfirm(outcomeResp.error ?: "Failed to save outcome")
-                    return@launch
-                }
-                val confirmationStatus = outcomeResp.confirmationStatus?.trim()?.lowercase(Locale.US)
-                if (
-                    outcomeResp.siteVisitId != expectedSiteVisitId ||
-                    confirmationStatus !in setOf("confirmed", "pending")
-                ) {
-                    finishCtaLockedConfirm("Site visit confirmation state was not returned by the server. Please retry.")
-                    return@launch
-                }
-                setFragmentResult(
-                    RESULT_KEY,
-                    bundleOf(
-                        KEY_CLIENT_MET to true,
-                        KEY_OUTCOME to OUTCOME_SITE_VISIT,
-                        KEY_OUTCOME_NOTES to "Confirmed by field staff",
-                    ),
-                )
-                dismissAllowingStateLoss()
-            } catch (e: Exception) {
-                val serverMessage = extractHttpErrorMessage(e)
-                finishCtaLockedConfirm(serverMessage ?: e.message ?: "Network error")
-            }
+        if (cpVisitId.isBlank() || expectedSiteVisitId.isBlank()) {
+            finishCtaLockedConfirm("Site visit details are incomplete. Refresh and retry.")
+            return
         }
+        // Do not call setOutcome here. The verified arrival flow forwards this
+        // payload to /api/geotrack/visit/complete, which persists clientMet,
+        // CP outcome, linked-SV confirmation and field-trip completion in order.
+        setFragmentResult(
+            RESULT_KEY,
+            bundleOf(
+                KEY_CLIENT_MET to true,
+                KEY_OUTCOME to OUTCOME_SITE_VISIT,
+                KEY_OUTCOME_NOTES to "Confirmed by field staff",
+            ),
+        )
+        dismissAllowingStateLoss()
     }
 
     private fun finishCtaLockedConfirm(error: String) {

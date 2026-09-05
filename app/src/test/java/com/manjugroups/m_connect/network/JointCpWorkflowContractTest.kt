@@ -26,4 +26,17 @@ class JointCpWorkflowContractTest {
         assertEquals(1_788_500_000_000.0, body["capturedAt"])
         assertTrue(body.containsKey("expectedOutcomeRevision"))
     }
+
+    @Test
+    fun `outcome summary accepts legacy string and structured server object`() {
+        val gson = Gson()
+        val legacy = gson.fromJson("""{"outcomeSummary":"Converted to site visit"}""", JointCpWorkflow::class.java)
+        val structured = gson.fromJson(
+            """{"outcomeSummary":{"outcome":"converted_to_site_visit","notes":"Reviewed"}}""",
+            JointCpWorkflow::class.java,
+        )
+
+        assertEquals("Converted to site visit", legacy.outcomeSummary)
+        assertEquals("converted_to_site_visit", structured.outcomeSummary)
+    }
 }

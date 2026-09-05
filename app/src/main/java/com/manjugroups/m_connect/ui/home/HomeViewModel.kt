@@ -114,13 +114,29 @@ class HomeViewModel : ViewModel() {
                 val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
                 val timeFmt = SimpleDateFormat("hh:mm a", Locale.getDefault())
 
-                val attendance = try { api.getMyAttendanceToday(bearerToken, today) } catch (_: Exception) { null }
-                val daySessions = try { api.getDaySessions(bearerToken, today) } catch (_: Exception) { null }
-
-                // Days present this month: fetch attendance from 1st of month to today
                 val cal = Calendar.getInstance()
                 val monthStart = String.format("%04d-%02d-01", cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1)
-                val myAttendance = try { api.getMyAttendance(bearerToken, fromDate = monthStart, toDate = today) } catch (_: Exception) { null }
+                // These four reads are independent. Running them serially made
+                // Home wait for the sum of every backend response before any
+                // attendance/trip content could render.
+                val attendanceRead = async {
+                    runCatching { api.getMyAttendanceToday(bearerToken, today) }.getOrNull()
+                }
+                val sessionsRead = async {
+                    runCatching { api.getDaySessions(bearerToken, today) }.getOrNull()
+                }
+                val monthRead = async {
+                    runCatching {
+                        api.getMyAttendance(bearerToken, fromDate = monthStart, toDate = today)
+                    }.getOrNull()
+                }
+                val permissionRead = async {
+                    runCatching { api.getPermissionUsage(bearerToken) }.getOrNull()
+                }
+                val attendance = attendanceRead.await()
+                val daySessions = sessionsRead.await()
+                val myAttendance = monthRead.await()
+                val permUsage = permissionRead.await()
                 // Today's row is provisional — the day still has hours to
                 // run, and once midnight passes it enters the RO Team
                 // Approval → HR Review flow before being final. Counting
@@ -133,8 +149,6 @@ class HomeViewModel : ViewModel() {
                     r.approvedAttendance == "present" || r.status == "auto-approved" || r.status == "approved"
                 } ?: 0
 
-                // Permission hours remaining this month
-                val permUsage = try { api.getPermissionUsage(bearerToken) } catch (_: Exception) { null }
                 val permLeft = permUsage?.remainingHours ?: 0
 
                 val att = attendance?.attendance
@@ -235,14 +249,17 @@ class HomeViewModel : ViewModel() {
                 cachedState = loaded
                 _uiState.value = loaded
 
-                if (context != null) {
-                    runCatching {
-                        GeoTrackBootstrapSync.sync(context, allowPromptConsent = true, api = geoApi)
+                coroutineScope {
+                    val bootstrap = context?.let {
+                        launch {
+                            runCatching {
+                                GeoTrackBootstrapSync.sync(it, allowPromptConsent = true, api = geoApi)
+                            }
+                        }
                     }
+                    loadTodayVisitsInternal(bearerToken, context)
+                    bootstrap?.join()
                 }
-
-                // Load today's visits
-                loadTodayVisitsInternal(bearerToken, context)
             } catch (e: Exception) {
                 _uiState.value = HomeUiState.Error(e.message ?: "Failed to load")
             }

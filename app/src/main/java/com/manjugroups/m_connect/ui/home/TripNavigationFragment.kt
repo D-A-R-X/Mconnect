@@ -682,20 +682,24 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         if (visitStarted) renderArrivalPhase(arrivalConfirmedForProgress)
     }
 
-    private fun jointWaitingMessage(workflow: JointCpWorkflow): String = when {
+    private fun jointWaitingMessage(workflow: JointCpWorkflow): String {
+        val owner = workflow.outcomeOwnerName?.trim()?.takeIf { it.isNotEmpty() }
+            ?: "the outcome owner"
+        return when {
         workflow.state == "completed" -> {
             val reviewer = workflow.reviewedByTemplateName ?: workflow.reviewedByName ?: "reviewer"
             "Outcome reviewed by $reviewer"
         }
         workflow.actorRole == "reviewer" && workflow.canReview ->
-            "Review the BDO outcome and make any required changes"
+            "Review $owner's outcome and make any required changes"
         workflow.actorRole == "reviewer" ->
-            "Waiting for ${workflow.outcomeOwnerName ?: "BDO"} outcome"
+            "Waiting for $owner to submit the outcome"
         workflow.actorRole == "outcome_owner" && workflow.canSubmitOutcome ->
             "OTP verified. Complete the outcome and send it for review"
         workflow.actorRole == "outcome_owner" ->
             "Complete OTP and photo while both partners are within 50 metres"
         else -> "Waiting for Joint CP workflow update"
+        }
     }
 
     /** Returns true when Joint CP owns the bottom actions for this phase. */
@@ -715,7 +719,11 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             jointMutationInProgress -> "Updating Joint CP..."
             workflow.actorRole == "reviewer" && workflow.canReview -> "Review outcome"
             workflow.actorRole == "outcome_owner" && workflow.canSubmitOutcome -> "Enter outcome"
-            workflow.actorRole == "reviewer" -> "Waiting for BDO outcome"
+            workflow.actorRole == "reviewer" -> {
+                val owner = workflow.outcomeOwnerName?.trim()?.takeIf { it.isNotEmpty() }
+                    ?: "outcome owner"
+                "Waiting for $owner"
+            }
             else -> "Waiting for partner"
         }
         return true

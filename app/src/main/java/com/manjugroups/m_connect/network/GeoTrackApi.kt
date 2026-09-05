@@ -1,6 +1,10 @@
 package com.manjugroups.m_connect.network
 
 import com.manjugroups.m_connect.BuildConfig
+import com.google.gson.JsonDeserializationContext
+import com.google.gson.JsonDeserializer
+import com.google.gson.JsonElement
+import com.google.gson.annotations.JsonAdapter
 import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody
@@ -9,6 +13,7 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.*
 import java.util.concurrent.TimeUnit
+import java.lang.reflect.Type
 
 interface GeoTrackApi {
 
@@ -1934,11 +1939,38 @@ data class JointCpWorkflow(
     val requiredRadiusMeters: Double = 50.0,
     val outcomeRevision: Long? = null,
     val outcome: String? = null,
+    @JsonAdapter(FlexibleDisplayStringDeserializer::class)
     val outcomeSummary: String? = null,
     val reviewedByName: String? = null,
     val reviewedByTemplateName: String? = null,
     val completedAt: Long? = null,
 )
+
+/** Accepts the legacy string and the newer structured Joint CP summary. */
+class FlexibleDisplayStringDeserializer : JsonDeserializer<String?> {
+    override fun deserialize(
+        json: JsonElement?,
+        typeOfT: Type?,
+        context: JsonDeserializationContext?,
+    ): String? {
+        if (json == null || json.isJsonNull) return null
+        if (json.isJsonPrimitive) return json.asJsonPrimitive.asString
+        if (!json.isJsonObject) return json.toString()
+
+        val objectValue = json.asJsonObject
+        val preferredKeys = listOf("summary", "text", "label", "outcome", "notes", "value")
+        preferredKeys.forEach { key ->
+            objectValue.get(key)?.takeIf { it.isJsonPrimitive }?.asString
+                ?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+        }
+        return objectValue.entrySet()
+            .mapNotNull { (_, value) -> value.takeIf { it.isJsonPrimitive }?.asString?.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .joinToString(" • ")
+            .takeIf { it.isNotEmpty() }
+    }
+}
 
 data class JointCpLocationRequest(
     val id: String,
