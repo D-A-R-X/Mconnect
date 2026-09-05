@@ -51,6 +51,7 @@ class RejectReasonBottomSheet : BottomSheetDialogFragment() {
     private var btnSubmit: LinearLayout? = null
     private var tvSubmitLabel: TextView? = null
     private var tvError: TextView? = null
+    private var resultSent = false
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val dialog = BottomSheetDialog(requireContext(), theme)
@@ -137,10 +138,12 @@ class RejectReasonBottomSheet : BottomSheetDialogFragment() {
                 // Keeping the keys distinct avoids any re-broadcast
                 // loop on a shared key.
                 val payload = bundleOf(
+                    KEY_SUBMITTED to true,
                     KEY_CLIENT_MET to true,
                     KEY_OUTCOME to OUTCOME_REJECTED,
                     KEY_REASON to reason,
                 )
+                resultSent = true
                 setFragmentResult(RESULT_KEY, payload)
                 dismissAllowingStateLoss()
             } catch (e: Exception) {
@@ -165,8 +168,17 @@ class RejectReasonBottomSheet : BottomSheetDialogFragment() {
         tvError?.visibility = View.GONE
     }
 
+    override fun onCancel(dialog: android.content.DialogInterface) {
+        if (!resultSent) {
+            resultSent = true
+            setFragmentResult(RESULT_KEY, bundleOf(KEY_SUBMITTED to false))
+        }
+        super.onCancel(dialog)
+    }
+
     companion object {
         const val RESULT_KEY = "cp_visit_reject_reason_result"
+        const val KEY_SUBMITTED = "submitted"
         const val KEY_CLIENT_MET = "clientMet"
         const val KEY_OUTCOME = "outcome"
         const val KEY_REASON = "reason"

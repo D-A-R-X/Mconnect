@@ -125,6 +125,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     // standalone booking, site-visit outcome, or a caller-provided outcome arg)
     // set this true so they skip the chooser.
     private var outcomeChosen: Boolean = false
+    // Synchronous signal from Trip Details that this is an SV-cum-CP. It lets
+    // the first chooser paint the locked decision set while the detail request
+    // preloads the Site Visit form in the background.
+    private var svFixedHint: Boolean = false
     // True when a caller-supplied STANDARD outcome arg (booking / site_visit /
     // postpone / not_interested) pre-selected the form and skipped the chooser.
     // detectAndApplyLockedSvMode uses this to reopen the "What happened with
@@ -310,6 +314,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
 
     private val cpType: String?
         get() = arguments?.getString(ARG_CP_TYPE)
+    private val jointCtaMode: String?
+        get() = arguments?.getString(ARG_JOINT_CTA_MODE)
+    private val jointOutcomeSummary: String?
+        get() = arguments?.getString(ARG_JOINT_OUTCOME_SUMMARY)?.takeIf { it.isNotBlank() }
 
     /**
      * Cached display name for the visit's lead/client, set when the
@@ -855,13 +863,13 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         // form (the reported glitch). Keeping the sheet on the picker until
         // detect resolves removes the race entirely: the sheet is hidden
         // (alpha 0) behind the picker, so no form paints and nothing flickers.
-        val isSvFixedHint = arguments?.getBoolean(ARG_IS_SV_FIXED_HINT, false) == true
+        svFixedHint = arguments?.getBoolean(ARG_IS_SV_FIXED_HINT, false) == true
 
         // Pre-seed from args if the caller passed a standard outcome (skips the
         // chooser). Suppressed for sv_cum_cp so a caller-supplied / leaked CP
         // outcome cannot skip the picker or re-trigger the reveal-then-picker
         // glitch — the picker (or the SV lock) decides the outcome there.
-        if (!isSvFixedHint) {
+        if (!svFixedHint) {
             arguments?.getString(ARG_CP_OUTCOME)?.takeIf { it.isNotBlank() }
                 ?.let { ext ->
                     outcomeFromArg(ext)?.let {
@@ -923,9 +931,13 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 when (key) {
                     "OTHER" -> showOtherRemarksSheet()
                     "CANCEL" -> showCancelReasonSheet()
+                    "REJECT" -> onLockedRejectTap()
                     else -> {
                         revealSheet()
                         switchOutcome(outcomeFromKey(key))
+                        if (key == "SITE_VISIT" && lockedFromProposedSv) {
+                            configureLockedSiteVisitFooter()
+                        }
                     }
                 }
             },
@@ -962,6 +974,15 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         List<com.manjugroups.m_connect.ui.common.OutcomeSelectionDialog.Option> {
         val opt = com.manjugroups.m_connect.ui.common.OutcomeSelectionDialog::Option
         val list = mutableListOf<com.manjugroups.m_connect.ui.common.OutcomeSelectionDialog.Option>()
+        if (lockedFromProposedSv || svFixedHint) {
+            list.add(opt("BOOKING", "Converted as Booking", R.drawable.ic_outcome_booking))
+            list.add(opt("SITE_VISIT", "Site Visit", R.drawable.ic_outcome_site_visit))
+            list.add(opt("POSTPONE", "Follow-up", R.drawable.ic_outcome_postpone))
+            list.add(opt("NOT_INTERESTED", "Client Not Interested", R.drawable.ic_outcome_not_interested))
+            list.add(opt("REJECT", "Reject SV", R.drawable.ic_outcome_not_interested))
+            list.add(opt("CANCEL", "Cancel SV", R.drawable.ic_outcome_close))
+            return list
+        }
         // An SV-cum-CP completion IS a site visit, so it uses the SV-style
         // outcome set (Booking / Follow up / Not Interested / Others) — the same
         // as pure-SV mode — rather than the CP set. Without this it showed the
@@ -1129,7 +1150,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     false,
                 )
             ) {
-                dismissAllowingStateLoss()
+                maybeShowOutcomePicker()
                 return@setFragmentResultListener
             }
             val reason = result.getString(
@@ -2706,7 +2727,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             Outcome.NOT_INTERESTED -> "Not Interested" to "Client not interested"
         }
         view?.findViewById<TextView>(R.id.tvOutcomeTitle)?.text = title
-        view?.findViewById<TextView>(R.id.tvOutcomeSubtitle)?.text = subtitle
+        view?.findViewById<TextView>(R.id.tvOutcomeSubtitle)?.text =
+            if (jointCtaMode == JOINT_CTA_COMPLETE && jointOutcomeSummary != null) {
+                "$subtitle · BDO submitted: $jointOutcomeSummary"
+            } else subtitle
     }
 
     /** Open the Booking client form pre-filled for a CP already tied to a
@@ -2861,6 +2885,14 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             bookingActive && bookingSub == BookingSub.STAFF -> "Save Booking"
             bookingActive -> "Next"
             else -> "Close"
+        }
+        val isFinalStep = siteVisitActive || postponeActive || notInterestedActive ||
+            (bookingActive && bookingSub == BookingSub.STAFF)
+        if (isFinalStep) {
+            when (jointCtaMode) {
+                JOINT_CTA_SEND_REVIEW -> btnSubmit?.text = "Send Review"
+                JOINT_CTA_COMPLETE -> btnSubmit?.text = "Complete"
+            }
         }
     }
 
@@ -5522,6 +5554,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             otherOutcomeSaving = false
             Toast.makeText(requireContext(), error, Toast.LENGTH_LONG).show()
             if (lockedFromProposedSv) {
+                if (!outcomeChosen) {
+                    maybeShowOutcomePicker()
+                    return
+                }
                 btnCpLockedCancel?.isClickable = true
                 btnCpLockedCancel?.text = "Cancel SV"
                 btnCpLockedReject?.isClickable = true
@@ -6851,15 +6887,17 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     // (Booking / Follow up / Not Interested / Others) opens —
                     // otherwise an sv_cum_cp with no pre-fixed SV stays stuck on a
                     // locked Site Visit with no options to choose.
-                    val hintApplied =
-                        arguments?.getBoolean(ARG_IS_SV_FIXED_HINT, false) == true
-                    if (hintApplied && outcomeChosen && activeOutcome == Outcome.SITE_VISIT) {
-                        outcomeChosen = false
+                    if (svFixedHint) {
+                        svFixedHint = false
                         listOf(tabBooking, tabPostpone, tabNotInterested).forEach { tab ->
                             tab.cell?.isClickable = true
                             tab.cell?.alpha = 1f
                         }
-                        maybeShowOutcomePicker()
+                        if (!outcomeChosen) {
+                            outcomePickerDialog?.dismiss()
+                            outcomePickerDialog = null
+                            maybeShowOutcomePicker()
+                        }
                     } else if (outcomeArgPreselected && !visitAlreadyDecided(visit)) {
                         // A caller-supplied / leaked STANDARD outcome pushed the
                         // sheet straight into a form and skipped the chooser on a
@@ -6978,26 +7016,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         lockedFromProposedSv = true
         lockedCpVisit = visit
 
-        // 1. Force the active outcome to Site Visit and re-render so the
-        //    SV body is the one on screen. If the centre picker happened to be
-        //    up (async lock raced the sync open), close it and restore the
-        //    sheet (it was hidden while the picker showed) — SV is now forced.
-        outcomePickerDialog?.dismiss()
-        outcomePickerDialog = null
-        revealSheet()
-        activeOutcome = Outcome.SITE_VISIT
-        outcomeChosen = true
-        // Header shows the outcome name (top tabs are hidden now).
-        setOutcomeHeader(Outcome.SITE_VISIT)
-        renderState()
+        // Preload fixed-SV data without changing the selected outcome. The
+        // chooser remains visible until the staff explicitly chooses an action.
 
-        // 2. Fade non-SV tabs and make them unclickable.
-        listOf(tabBooking, tabPostpone, tabNotInterested).forEach { tab ->
-            tab.cell?.isClickable = false
-            tab.cell?.alpha = 0.35f
-        }
-
-        // 3. Pre-fill the SV form from `proposedSiteVisit` + visit-level
+        // Pre-fill the SV form from `proposedSiteVisit` + visit-level
         //    fields (attendees, food prefs, pickup address from the
         //    client place if we have it).
         tvSvDate?.text = proposed.scheduledDate ?: visit.scheduledDate ?: ""
@@ -7046,12 +7068,23 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         //    applyReadOnlyToSvBody() here but that contradicted the
         //    field-staff workflow.
 
-        // 5. Swap the single Save button for the Reject / Confirm pair.
+        if (outcomeChosen && activeOutcome == Outcome.SITE_VISIT) {
+            configureLockedSiteVisitFooter()
+        }
+
+        if (!outcomeChosen) {
+            outcomePickerDialog?.dismiss()
+            outcomePickerDialog = null
+            maybeShowOutcomePicker()
+        }
+    }
+
+    private fun configureLockedSiteVisitFooter() {
         btnSubmit?.visibility = View.GONE
         cpLockedFooter?.visibility = View.VISIBLE
-        btnCpLockedReject?.setOnClickListener { onLockedRejectTap() }
+        btnCpLockedReject?.visibility = View.GONE
+        btnCpLockedCancel?.visibility = View.GONE
         btnCpLockedConfirm?.setOnClickListener { onLockedConfirmTap() }
-        btnCpLockedCancel?.setOnClickListener { showCancelReasonSheet() }
     }
 
     private suspend fun prefillProjectIfPossible(projectId: String?) {
@@ -7309,6 +7342,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     ),
                 )
                 dismissAllowingStateLoss()
+            } else if (!outcomeChosen) {
+                maybeShowOutcomePicker()
             }
         }
 
@@ -7333,6 +7368,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         private const val ARG_CP_CLIENT_MET = "arg_cp_client_met"
         private const val ARG_CP_OUTCOME = "arg_cp_outcome"
         private const val ARG_CP_TYPE = "arg_cp_type"
+        private const val ARG_JOINT_CTA_MODE = "arg_joint_cta_mode"
+        private const val ARG_JOINT_OUTCOME_SUMMARY = "arg_joint_outcome_summary"
+        private const val JOINT_CTA_SEND_REVIEW = "send_review"
+        private const val JOINT_CTA_COMPLETE = "complete_review"
         // Pre-pass from TripNavigationFragment when the upstream
         // reconcile already determined this CP came from a telecaller-
         // fixed SV. Lets us avoid the brief Booking-tab flash while the
@@ -7385,6 +7424,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             cpOutcome: String? = null,
             isSvFixedHint: Boolean = false,
             cpType: String? = null,
+            jointCtaMode: String? = null,
+            jointOutcomeSummary: String? = null,
         ): CompleteCpVisitBottomSheet =
             CompleteCpVisitBottomSheet().apply {
                 arguments = Bundle().apply {
@@ -7393,6 +7434,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     if (!cpOutcome.isNullOrBlank()) putString(ARG_CP_OUTCOME, cpOutcome)
                     if (isSvFixedHint) putBoolean(ARG_IS_SV_FIXED_HINT, true)
                     if (!cpType.isNullOrBlank()) putString(ARG_CP_TYPE, cpType)
+                    if (!jointCtaMode.isNullOrBlank()) putString(ARG_JOINT_CTA_MODE, jointCtaMode)
+                    if (!jointOutcomeSummary.isNullOrBlank()) {
+                        putString(ARG_JOINT_OUTCOME_SUMMARY, jointOutcomeSummary)
+                    }
                 }
             }
 
