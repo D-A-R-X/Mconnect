@@ -137,6 +137,10 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     private var cpVisitId: String? = null
     private var cpClientMet: Boolean? = null
     private var cpOutcome: String? = null
+    private var cpOutcomeNotes: String? = null
+    private var cpPostponeReasons: List<String>? = null
+    private var cpFollowUpDate: String? = null
+    private var cpFollowUpTime: String? = null
     private var cpVisitDecisionCaptured: Boolean = false
     // CP Type from the row's cpType field. When this is
     // "gift_distribution" the post-arrival flow finalises directly
@@ -473,6 +477,16 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             cpVisitDecisionCaptured = true
             pendingCpRevisit = CpRevisitConfirmation.fromResult(bundle)
             val outcome = bundle.getString(CompleteCpVisitBottomSheet.KEY_OUTCOME)
+            cpClientMet = if (bundle.containsKey(CompleteCpVisitBottomSheet.KEY_CLIENT_MET)) {
+                bundle.getBoolean(CompleteCpVisitBottomSheet.KEY_CLIENT_MET)
+            } else {
+                cpClientMet
+            }
+            cpOutcome = outcome ?: cpOutcome
+            cpOutcomeNotes = bundle.getString(CompleteCpVisitBottomSheet.KEY_OUTCOME_NOTES)
+            cpPostponeReasons = bundle.getStringArrayList(CompleteCpVisitBottomSheet.KEY_POSTPONE_REASONS)
+            cpFollowUpDate = bundle.getString(CompleteCpVisitBottomSheet.KEY_FOLLOW_UP_DATE)
+            cpFollowUpTime = bundle.getString(CompleteCpVisitBottomSheet.KEY_FOLLOW_UP_TIME)
             if (outcome == "cancelled" || outcome == "rejected") {
                 // These atomic outcome routes already close the CP row, linked
                 // SV, field visit and daily task. Completing the field visit a
@@ -2457,6 +2471,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 pendingCpRevisit = outcomeResp.revisit
                 cpClientMet = true
                 cpOutcome = "other"
+                cpOutcomeNotes = remarks
                 cpVisitDecisionCaptured = true
                 finalizeCompleteVisit()
             } catch (e: Exception) {
@@ -2514,6 +2529,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 pendingCpRevisit = outcomeResp.revisit
                 cpClientMet = true
                 cpOutcome = "old_client_visited"
+                cpOutcomeNotes = remarks
                 cpVisitDecisionCaptured = true
                 finalizeCompleteVisit()
             } catch (e: Exception) {
@@ -2763,6 +2779,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 pendingCpRevisit = outcomeResp.revisit
                 cpClientMet = true
                 cpOutcome = "rejected"
+                cpOutcomeNotes = "Collection CP not eligible — client has no confirmed booking"
                 cpVisitDecisionCaptured = true
                 finalizeCompleteVisit()
             } catch (e: Exception) {
@@ -2883,6 +2900,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 pendingCpRevisit = outcomeResp.revisit
                 cpClientMet = true
                 cpOutcome = "collection_done"
+                cpOutcomeNotes = notes
                 cpVisitDecisionCaptured = true
                 Toast.makeText(
                     requireContext(),
@@ -2957,6 +2975,9 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 pendingCpRevisit = outcomeResp.revisit
                 cpClientMet = true
                 cpOutcome = "not_collected"
+                cpOutcomeNotes = notes
+                cpFollowUpDate = followUpDate
+                cpFollowUpTime = followUpTime
                 cpVisitDecisionCaptured = true
                 Toast.makeText(
                     requireContext(),
@@ -3102,6 +3123,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 pendingCpRevisit = outcomeResp.revisit
                 cpClientMet = true
                 cpOutcome = "gift_distributed"
+                cpOutcomeNotes = "Gift distributed — handover photo attached"
                 cpVisitDecisionCaptured = true
                 isGiftDistributionPostOtpPhotoCapture = false
                 finalizeCompleteVisit()
@@ -3494,6 +3516,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 pendingCpRevisit = outcomeResp.revisit
                 cpClientMet = false
                 cpOutcome = terminalOutcome
+                cpOutcomeNotes = completionNotes
                 cpVisitDecisionCaptured = true
                 cpNoPathPhotoCapture = false
                 if (isJointCpWorkflow()) {
@@ -3567,12 +3590,25 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                         lng = loc?.longitude,
                         remarks = "Arrival verified",
                         arrivalPhotoStorageId = storageId,
+                        clientMet = cpClientMet.takeIf { !cpVisitId.isNullOrBlank() },
+                        outcome = cpOutcome?.takeIf { !cpVisitId.isNullOrBlank() },
+                        cpOutcomeNotes = cpOutcomeNotes?.takeIf { !cpVisitId.isNullOrBlank() },
+                        postponeReasons = cpPostponeReasons?.takeIf { !cpVisitId.isNullOrBlank() },
+                        followUpDate = cpFollowUpDate?.takeIf { !cpVisitId.isNullOrBlank() },
+                        followUpTime = cpFollowUpTime?.takeIf { !cpVisitId.isNullOrBlank() },
                     ),
                 )
                 check(completion.success) {
                     completion.error ?: "Visit completion was rejected"
                 }
-                applyStatusPill("Complete")
+                val isCpBackedVisit = !cpVisitId.isNullOrBlank()
+                val cpStatus = completion.status?.trim()?.lowercase(Locale.US)
+                if (isCpBackedVisit && !cpOutcome.isNullOrBlank()) {
+                    check(cpStatus in setOf("completed", "pending_gm_approval", "postponed", "cancelled", "canceled")) {
+                        "The trip was saved, but the CP outcome state was not confirmed. Refresh before retrying."
+                    }
+                }
+                applyStatusPill(if (cpStatus == "pending_gm_approval") "Pending Approval" else "Complete")
                 // Completion is already committed. A dashboard refresh failure
                 // must not tell staff the visit failed and tempt a duplicate.
                 runCatching {
@@ -3602,7 +3638,12 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     showClientNotSeenCompletion = false
                     CpTripCompletedBottomSheet().showOnce(parentFragmentManager, "cp_trip_completed")
                 } else {
-                    Toast.makeText(requireContext(), "Visit completed", Toast.LENGTH_SHORT).show()
+                    val message = if (cpStatus == "pending_gm_approval") {
+                        "Outcome saved and waiting for GM approval"
+                    } else {
+                        "Visit completed"
+                    }
+                    Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
                     navigateUp()
                 }
             } catch (e: Exception) {

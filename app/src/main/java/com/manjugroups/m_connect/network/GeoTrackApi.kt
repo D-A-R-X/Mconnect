@@ -1086,6 +1086,12 @@ data class CompleteVisitRequest(
     val lng: Double? = null,
     val remarks: String? = null,
     val arrivalPhotoStorageId: String? = null,
+    val clientMet: Boolean? = null,
+    val outcome: String? = null,
+    val cpOutcomeNotes: String? = null,
+    val postponeReasons: List<String>? = null,
+    val followUpDate: String? = null,
+    val followUpTime: String? = null,
 )
 
 data class RouteRequest(

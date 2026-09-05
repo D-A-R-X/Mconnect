@@ -5140,6 +5140,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     bundleOf(
                         KEY_CLIENT_MET to true,
                         KEY_OUTCOME to OUTCOME_SITE_VISIT,
+                        KEY_OUTCOME_NOTES to "Converted to site visit",
                     ),
                 )
                 dismissAllowingStateLoss()
@@ -5475,7 +5476,12 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 val result = bundleOf(
                     KEY_CLIENT_MET to true,
                     KEY_OUTCOME to outcomeEnum,
+                    KEY_OUTCOME_NOTES to notes,
                 )
+                if (outcomeEnum == OUTCOME_POSTPONED) {
+                    result.putStringArrayList(KEY_POSTPONE_REASONS, ArrayList(postponedReasonsFromForm()))
+                    result.putString(KEY_FOLLOW_UP_DATE, followUpDate)
+                }
                 outcomeResp.revisit?.let { revisit ->
                     result.putString(KEY_REVISIT_STATUS, revisit.creationStatus)
                     result.putString(KEY_REVISIT_REASON, revisit.reason)
@@ -6445,6 +6451,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                         bundleOf(
                             KEY_CLIENT_MET to met,
                             KEY_OUTCOME to OUTCOME_BOOKING,
+                            KEY_OUTCOME_NOTES to "Converted to booking",
                         ),
                     )
                     dismissAllowingStateLoss()
@@ -6482,7 +6489,11 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     }
                     setFragmentResult(
                         RESULT_KEY,
-                        bundleOf(KEY_CLIENT_MET to met, KEY_OUTCOME to OUTCOME_BOOKING),
+                        bundleOf(
+                            KEY_CLIENT_MET to met,
+                            KEY_OUTCOME to OUTCOME_BOOKING,
+                            KEY_OUTCOME_NOTES to "Converted to booking",
+                        ),
                     )
                     dismissAllowingStateLoss()
                     return@launch
@@ -6533,6 +6544,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     bundleOf(
                         KEY_CLIENT_MET to met,
                         KEY_OUTCOME to OUTCOME_BOOKING,
+                        KEY_OUTCOME_NOTES to "Converted to booking",
                     ),
                 )
                 dismissAllowingStateLoss()
@@ -7278,7 +7290,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     session.bearerToken,
                     SetOutcomeRequest(
                         id = cpVisitId,
-                        outcome = OUTCOME_INTERESTED,
+                        outcome = OUTCOME_SITE_VISIT,
                         notes = "Confirmed by field staff",
                     ),
                 )
@@ -7286,18 +7298,20 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     finishCtaLockedConfirm(outcomeResp.error ?: "Failed to save outcome")
                     return@launch
                 }
+                val confirmationStatus = outcomeResp.confirmationStatus?.trim()?.lowercase(Locale.US)
                 if (
                     outcomeResp.siteVisitId != expectedSiteVisitId ||
-                    !outcomeResp.confirmationStatus.equals("confirmed", ignoreCase = true)
+                    confirmationStatus !in setOf("confirmed", "pending")
                 ) {
-                    finishCtaLockedConfirm("Site visit confirmation was not returned by the server. Please retry.")
+                    finishCtaLockedConfirm("Site visit confirmation state was not returned by the server. Please retry.")
                     return@launch
                 }
                 setFragmentResult(
                     RESULT_KEY,
                     bundleOf(
                         KEY_CLIENT_MET to true,
-                        KEY_OUTCOME to OUTCOME_INTERESTED,
+                        KEY_OUTCOME to OUTCOME_SITE_VISIT,
+                        KEY_OUTCOME_NOTES to "Confirmed by field staff",
                     ),
                 )
                 dismissAllowingStateLoss()
@@ -7366,6 +7380,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         const val RESULT_KEY = "cp_visit_complete_result"
         const val KEY_CLIENT_MET = "clientMet"
         const val KEY_OUTCOME = "outcome"
+        const val KEY_OUTCOME_NOTES = "outcomeNotes"
+        const val KEY_POSTPONE_REASONS = "postponeReasons"
+        const val KEY_FOLLOW_UP_DATE = "followUpDate"
+        const val KEY_FOLLOW_UP_TIME = "followUpTime"
         const val KEY_REVISIT_STATUS = "revisitStatus"
         const val KEY_REVISIT_REASON = "revisitReason"
         const val KEY_REVISIT_DATE = "revisitDate"
