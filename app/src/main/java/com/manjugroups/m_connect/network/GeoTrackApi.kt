@@ -723,6 +723,12 @@ interface GeoTrackApi {
                         authorizationHeader = request.header("Authorization"),
                         requestHost = request.url.host,
                         sessionAuthorityHost = java.net.URI(BuildConfig.BASE_URL).host.orEmpty(),
+                        requestPath = request.url.encodedPath,
+                        responseBody = if (response.code == 401) {
+                            runCatching { response.peekBody(64 * 1024).string() }.getOrNull()
+                        } else {
+                            null
+                        },
                     )
                 ) {
                     com.manjugroups.m_connect.auth.SessionInvalidationBus

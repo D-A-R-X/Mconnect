@@ -8,15 +8,64 @@ class SessionInvalidationPolicyTest {
     private val mmsHost = "api-mfpl.theairix.com"
 
     @Test
-    fun `authenticated MMS 401 invalidates session`() {
+    fun `explicit expired-session MMS 401 invalidates session`() {
         assertTrue(
             SessionInvalidationPolicy.shouldInvalidate(
                 responseCode = 401,
                 authorizationHeader = "Bearer real-session-token",
                 requestHost = mmsHost,
                 sessionAuthorityHost = mmsHost,
+                requestPath = "/api/hr/attendance/today",
+                responseBody = """{"success":false,"error":"Invalid or expired session"}""",
             ),
         )
+    }
+
+    @Test
+    fun `operation-specific MMS 401 does not invalidate session`() {
+        assertFalse(
+            SessionInvalidationPolicy.shouldInvalidate(
+                responseCode = 401,
+                authorizationHeader = "Bearer real-session-token",
+                requestHost = mmsHost,
+                sessionAuthorityHost = mmsHost,
+                requestPath = "/api/marketing/clientPlaceVisits/list",
+                responseBody = """{"success":false,"error":"You cannot view this team"}""",
+            ),
+        )
+        assertFalse(
+            SessionInvalidationPolicy.shouldInvalidate(
+                responseCode = 401,
+                authorizationHeader = "Bearer real-session-token",
+                requestHost = mmsHost,
+                sessionAuthorityHost = mmsHost,
+                requestPath = "/api/hr/staff/list",
+                responseBody = """{"success":false,"error":"Unauthorized"}""",
+            ),
+        )
+    }
+
+    @Test
+    fun `validate-session MMS 401 remains authoritative without a body`() {
+        assertTrue(
+            SessionInvalidationPolicy.shouldInvalidate(
+                responseCode = 401,
+                authorizationHeader = "Bearer real-session-token",
+                requestHost = mmsHost,
+                sessionAuthorityHost = mmsHost,
+                requestPath = "/api/auth/validate-session",
+                responseBody = null,
+            ),
+        )
+    }
+
+    @Test
+    fun `known terminal session messages and codes invalidate`() {
+        assertTrue(SessionInvalidationResponse.isTerminal("""{"message":"Signed in on another device"}"""))
+        assertTrue(SessionInvalidationResponse.isTerminal("""{"code":"SESSION_REVOKED"}"""))
+        assertTrue(SessionInvalidationResponse.isTerminal("""{"error":"Not authenticated"}"""))
+        assertFalse(SessionInvalidationResponse.isTerminal("""{"error":"Unauthorized"}"""))
+        assertFalse(SessionInvalidationResponse.isTerminal(null))
     }
 
     @Test

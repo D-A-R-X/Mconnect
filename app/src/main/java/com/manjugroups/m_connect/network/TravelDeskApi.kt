@@ -317,8 +317,7 @@ interface TravelDeskApi {
             val logging = HttpLoggingInterceptor().apply {
                 level = HttpLoggingInterceptor.Level.BODY
             }
-            // Auto-logout on 401 — mirrors ApiService / GeoTrackApi so a stale
-            // agency session bounces back to login instead of silently failing.
+            // Only an explicit MMS session rejection can trigger global logout.
             val authWatchdog = okhttp3.Interceptor { chain ->
                 val request = chain.request()
                 val response = chain.proceed(request)
@@ -327,6 +326,12 @@ interface TravelDeskApi {
                         authorizationHeader = request.header("Authorization"),
                         requestHost = request.url.host,
                         sessionAuthorityHost = java.net.URI(BuildConfig.BASE_URL).host.orEmpty(),
+                        requestPath = request.url.encodedPath,
+                        responseBody = if (response.code == 401) {
+                            runCatching { response.peekBody(64 * 1024).string() }.getOrNull()
+                        } else {
+                            null
+                        },
                     )
                 ) {
                     com.manjugroups.m_connect.auth.SessionInvalidationBus

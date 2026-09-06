@@ -1416,7 +1416,8 @@ interface ApiService {
                 level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY
                 else HttpLoggingInterceptor.Level.NONE
             }
-            // Auto-logout on an authenticated MMS 401. Without this, a deployment URL swap
+            // Auto-logout only when an authenticated MMS 401 explicitly rejects the session.
+            // Without this, a deployment URL swap
             // (dev → prod or vice versa) or a server-side session
             // revocation leaves the app stuck with every screen showing
             // empty / errored data and no way back to a working state.
@@ -1430,6 +1431,12 @@ interface ApiService {
                         authorizationHeader = request.header("Authorization"),
                         requestHost = request.url.host,
                         sessionAuthorityHost = java.net.URI(BuildConfig.BASE_URL).host.orEmpty(),
+                        requestPath = request.url.encodedPath,
+                        responseBody = if (response.code == 401) {
+                            runCatching { response.peekBody(64 * 1024).string() }.getOrNull()
+                        } else {
+                            null
+                        },
                     )
                 ) {
                     com.manjugroups.m_connect.auth.SessionInvalidationBus
@@ -1482,14 +1489,14 @@ data class VerifyOtpRequest(
 )
 data class VerifyOtpResponse(val success: Boolean, val token: String?, val user: UserInfo?, val error: String?)
 data class EmployeePasswordLoginRequest(
-    val employeeId: String,
-    val password: String,
+    @SerializedName("employeeId") val employeeId: String,
+    @SerializedName("password") val password: String,
     // Device-binding telemetry — the password login is locked to the same
     // device as the OTP login. Gson omits nulls (grace when unavailable).
-    val deviceId: String? = null,
-    val devicePlatform: String? = null,
-    val deviceModel: String? = null,
-    val batteryPct: Double? = null,
+    @SerializedName("deviceId") val deviceId: String? = null,
+    @SerializedName("devicePlatform") val devicePlatform: String? = null,
+    @SerializedName("deviceModel") val deviceModel: String? = null,
+    @SerializedName("batteryPct") val batteryPct: Double? = null,
 )
 data class EmployeePasswordLoginResponse(
     val success: Boolean,

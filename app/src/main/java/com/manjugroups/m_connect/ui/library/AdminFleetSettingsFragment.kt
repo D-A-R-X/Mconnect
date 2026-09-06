@@ -101,7 +101,7 @@ class AdminFleetSettingsFragment : Fragment() {
         binding.tvProfileName.text = cachedName
         binding.tvProfileAvatar.text = initialsFor(cachedName)
         binding.tvProfilePhone.text = session.userPhone?.trim().orEmpty().ifBlank { "—" }
-        binding.tvAppVersion.text = "v.${BuildConfig.VERSION_NAME}"
+        binding.tvAppVersion.text = "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
 
         val effectiveEnabled = session.isNotificationEnabled &&
             PushTokenManager.hasNotificationPermission(requireContext())

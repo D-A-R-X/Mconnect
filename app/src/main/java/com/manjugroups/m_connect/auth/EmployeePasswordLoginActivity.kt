@@ -12,7 +12,6 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
-import com.google.gson.Gson
 import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.databinding.ActivityEmployeePasswordLoginBinding
 import com.manjugroups.m_connect.network.ApiService
@@ -35,7 +34,6 @@ class EmployeePasswordLoginActivity : AppCompatActivity() {
     private lateinit var session: SessionManager
     private val api = ApiService.create()
     private val geoApi = com.manjugroups.m_connect.network.GeoTrackApi.create()
-    private val gson = Gson()
     private var passwordVisible = false
 
     private val notificationPermissionLauncher = registerForActivityResult(
@@ -291,16 +289,9 @@ class EmployeePasswordLoginActivity : AppCompatActivity() {
         }
         if (error is HttpException) {
             val body = error.response()?.errorBody()?.string()
-            if (!body.isNullOrBlank()) {
-                runCatching {
-                    gson.fromJson(body, EmployeeLoginErrorResponse::class.java)
-                }.getOrNull()?.let { parsed ->
-                    parsed.error?.takeIf { it.isNotBlank() }?.let { return it }
-                    parsed.message?.takeIf { it.isNotBlank() }?.let { return it }
-                }
-            }
+            return EmployeeLoginErrorParser.message(error.code(), body, fallback)
         }
-        return error.message ?: fallback
+        return fallback
     }
 
     private inline fun <reified T : Throwable> Throwable.hasCause(): Boolean {
@@ -312,11 +303,6 @@ class EmployeePasswordLoginActivity : AppCompatActivity() {
         return false
     }
 
-    private data class EmployeeLoginErrorResponse(
-        val success: Boolean? = null,
-        val error: String? = null,
-        val message: String? = null
-    )
 }
 
 /**
