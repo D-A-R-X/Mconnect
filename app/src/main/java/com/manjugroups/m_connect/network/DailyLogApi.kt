@@ -105,7 +105,8 @@ interface DailyLogApi {
                         sessionAuthorityHost = java.net.URI(BuildConfig.BASE_URL).host.orEmpty(),
                     )
                 ) {
-                    com.manjugroups.m_connect.auth.SessionInvalidationBus.reportUnauthorized()
+                    com.manjugroups.m_connect.auth.SessionInvalidationBus
+                        .reportUnauthorized(request.header("Authorization"))
                 }
                 response
             }

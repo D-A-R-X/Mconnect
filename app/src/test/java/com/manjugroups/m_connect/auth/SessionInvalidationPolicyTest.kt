@@ -66,4 +66,21 @@ class SessionInvalidationPolicyTest {
             ),
         )
     }
+
+    @Test
+    fun `late unauthorized response from previous token cannot expire new session`() {
+        val signal = SessionInvalidationSignal("old-session-token")
+
+        assertFalse(signal.matchesCurrentToken("new-session-token"))
+        assertTrue(signal.matchesCurrentToken("old-session-token"))
+        assertFalse(signal.matchesCurrentToken(null))
+    }
+
+    @Test
+    fun `bearer parsing is case insensitive and rejects malformed headers`() {
+        assertTrue(SessionInvalidationToken.extract("bearer token-123") == "token-123")
+        assertTrue(SessionInvalidationToken.extract("  Bearer   token-456  ") == "token-456")
+        assertTrue(SessionInvalidationToken.extract("Basic token-123") == null)
+        assertTrue(SessionInvalidationToken.extract("Bearer") == null)
+    }
 }

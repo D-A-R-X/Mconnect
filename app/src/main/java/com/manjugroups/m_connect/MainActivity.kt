@@ -237,8 +237,11 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 com.manjugroups.m_connect.auth.SessionInvalidationBus
-                    .signals.collect {
-                        if (!session.isLoggedIn) return@collect
+                    .signals.collect { signal ->
+                        // A request started with the previous token can finish
+                        // after a fresh login. Its late 401 must not erase the
+                        // newly saved, valid session.
+                        if (!signal.matchesCurrentToken(session.token)) return@collect
                         android.widget.Toast.makeText(
                             this@MainActivity,
                             "Session expired. Please sign in again.",

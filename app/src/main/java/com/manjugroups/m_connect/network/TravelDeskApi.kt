@@ -330,7 +330,7 @@ interface TravelDeskApi {
                     )
                 ) {
                     com.manjugroups.m_connect.auth.SessionInvalidationBus
-                        .reportUnauthorized()
+                        .reportUnauthorized(request.header("Authorization"))
                 }
                 response
             }

@@ -26,15 +26,32 @@ import kotlinx.coroutines.flow.asSharedFlow
  * the session anyway).
  */
 object SessionInvalidationBus {
-    private val _signals = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    val signals: SharedFlow<Unit> = _signals.asSharedFlow()
+    private val _signals = MutableSharedFlow<SessionInvalidationSignal>(extraBufferCapacity = 1)
+    val signals: SharedFlow<SessionInvalidationSignal> = _signals.asSharedFlow()
 
     /**
      * Called by the OkHttp interceptor on a 401 response. Non-blocking;
      * if nothing is listening the emit is dropped silently.
      */
-    fun reportUnauthorized() {
-        _signals.tryEmit(Unit)
+    fun reportUnauthorized(authorizationHeader: String?) {
+        val failedToken = SessionInvalidationToken.extract(authorizationHeader) ?: return
+        _signals.tryEmit(SessionInvalidationSignal(failedToken))
+    }
+}
+
+class SessionInvalidationSignal internal constructor(
+    private val failedToken: String,
+) {
+    fun matchesCurrentToken(currentToken: String?): Boolean =
+        !currentToken.isNullOrBlank() && failedToken == currentToken
+}
+
+internal object SessionInvalidationToken {
+    fun extract(authorizationHeader: String?): String? {
+        val parts = authorizationHeader?.trim()?.split(Regex("\\s+"), limit = 2)
+            ?: return null
+        if (parts.size != 2 || !parts[0].equals("Bearer", ignoreCase = true)) return null
+        return parts[1].trim().takeIf { it.isNotEmpty() }
     }
 }
 
@@ -52,7 +69,7 @@ internal object SessionInvalidationPolicy {
         if (responseCode != 401 || authorizationHeader.isNullOrBlank()) return false
         if (!requestHost.equals(sessionAuthorityHost, ignoreCase = true)) return false
 
-        val token = authorizationHeader.removePrefix("Bearer ").trim()
-        return token.isNotEmpty() && !AuthBypass.isBypassToken(token)
+        val token = SessionInvalidationToken.extract(authorizationHeader) ?: return false
+        return !AuthBypass.isBypassToken(token)
     }
 }

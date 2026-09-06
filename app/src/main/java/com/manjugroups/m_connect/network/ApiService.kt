@@ -1433,7 +1433,7 @@ interface ApiService {
                     )
                 ) {
                     com.manjugroups.m_connect.auth.SessionInvalidationBus
-                        .reportUnauthorized()
+                        .reportUnauthorized(request.header("Authorization"))
                 }
                 response
             }
