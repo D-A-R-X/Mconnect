@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Debug builds expose only this call surface so QA can exercise the
+         lock-screen activity with adb. The production manifest stays private. -->
+    <application>
+        <activity
+            android:name=".notifications.IncomingCallActivity"
+            android:exported="true"
+            tools:replace="android:exported" />
+
+        <receiver
+            android:name=".debug.DebugDialerPushReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.manjugroups.mconnect.debug.DIALER_INCOMING" />
+                <action android:name="com.manjugroups.mconnect.debug.DIALER_ENDED" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

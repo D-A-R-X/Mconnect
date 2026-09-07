@@ -29,6 +29,7 @@ import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.LegalRejectLoanRequest
 import com.manjugroups.m_connect.network.LegalStaffRow
 import com.manjugroups.m_connect.network.LoanCaseIdBody
+import com.manjugroups.m_connect.network.LoanCaseDocument
 import com.manjugroups.m_connect.network.LoanCaseRow
 import com.manjugroups.m_connect.network.SubmitLoanDocument
 import com.manjugroups.m_connect.network.SubmitLoanRequest
@@ -361,7 +362,49 @@ class LoanDeskFragment : Fragment() {
             if (currentRole != RoleMode.SALES) return@newInstance
             submitLoanFromSales(item, uploads)
         }
+        sheet.setOnDocumentChangedListener { label, document, authoritativeCase ->
+            if (authoritativeCase != null) {
+                replaceCachedLoanCase(authoritativeCase)
+            } else {
+                updateCachedLoanDocument(item.id, label, document)
+            }
+        }
         sheet.showOnce(parentFragmentManager, "LoanDeskUploadBottomSheet")
+    }
+
+    private fun updateCachedLoanDocument(
+        loanCaseId: String,
+        label: String,
+        document: LoanCaseDocument?,
+    ) {
+        val current = rowsByLoanCaseId[loanCaseId] ?: return
+        var matched = false
+        val updatedChecklist = current.documentsChecklist.map { existing ->
+            if (existing.label.equals(label, ignoreCase = true)) {
+                matched = true
+                if (document == null) {
+                    existing.copy(storageId = null, fileName = null, approved = null)
+                } else {
+                    existing.copy(
+                        storageId = document.storageId,
+                        fileName = document.fileName,
+                        approved = null,
+                    )
+                }
+            } else {
+                existing
+            }
+        }.toMutableList()
+        if (!matched && document != null) updatedChecklist += document
+        replaceCachedLoanCase(current.copy(documentsChecklist = updatedChecklist))
+    }
+
+    private fun replaceCachedLoanCase(row: LoanCaseRow) {
+        rowsByLoanCaseId[row.id] = row
+        allItems = allItems.map { item ->
+            if (item.id == row.id) mapRowToItem(row) else item
+        }
+        filterList(etSearchLoanDesk.text?.toString().orEmpty())
     }
 
     private fun submitLoanFromSales(
@@ -400,6 +443,8 @@ class LoanDeskFragment : Fragment() {
                     toast(resp.error ?: "Could not submit loan request")
                     return@launch
                 }
+                resp.loanCase?.let(::replaceCachedLoanCase)
+                LoanDeskUploadBottomSheet.clearRecoveryDraft(requireContext(), item.caseId)
                 toast("Loan request submitted")
                 refreshForRole()
             } catch (e: Exception) {

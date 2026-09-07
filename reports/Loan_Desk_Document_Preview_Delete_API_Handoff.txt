@@ -1,0 +1,145 @@
+MCONNECT MOBILE - LOAN DESK DOCUMENT PREVIEW, DELETE, AND RETRY
+API HANDOFF
+
+Summary
+-------
+Mobile now shows an explicit "Tap to preview" affordance, keeps local recovery
+state across temporary network failures, retries the same file without asking
+staff to scan again, and exposes a confirmed Delete action in editable Sales
+mode. Preview continues to use the existing storage signed-URL API.
+
+The current upload and preview APIs remain valid. One delete endpoint is
+required. Upload idempotency is strongly recommended for lost-response retries.
+
+
+1. PREVIEW - EXISTING API, NO CHANGE
+------------------------------------
+
+GET /api/storage/get-url?storageId=<storageId>
+Authorization: Bearer <token>
+
+Success
+{
+  "success": true,
+  "url": "https://signed-document-url"
+}
+
+The URL must allow viewing/downloading the PDF or image until its expiry.
+
+
+2. DELETE CHECKLIST DOCUMENT - REQUIRED
+----------------------------------------
+
+POST /api/postsales/loans/delete-document
+Authorization: Bearer <token>
+Content-Type: application/json
+
+Request
+{
+  "loanCaseId": "<postSaleLoanCases id>",
+  "label": "PAN Card",
+  "storageId": "<currently attached storage id>"
+}
+
+Required behavior
+- Validate the authenticated user's Loan Desk permission and Sales edit access.
+- Find the checklist item by label using the same case-insensitive matching as
+  upload-document.
+- Require storageId to match the document currently attached to that item.
+  Return 409 if a newer replacement is attached, so a delayed delete cannot
+  remove the wrong file.
+- Clear storageId, fileName, approval metadata, and any per-document review
+  state from that checklist item in one transaction.
+- Return the updated authoritative loan case.
+- The operation must be idempotent. If the exact document is already absent,
+  return success with deleted=false.
+- Delete the underlying storage blob only when it is not referenced elsewhere.
+
+Success
+{
+  "success": true,
+  "deleted": true,
+  "loanCase": {
+    "_id": "<loanCaseId>",
+    "documentsChecklist": [
+      {
+        "label": "PAN Card",
+        "storageId": null,
+        "fileName": null,
+        "approved": null
+      }
+    ]
+  }
+}
+
+Idempotent repeat
+{
+  "success": true,
+  "deleted": false,
+  "loanCase": { "...": "current authoritative case" }
+}
+
+Errors
+400 - missing/invalid loanCaseId, label, or storageId
+401 - unauthenticated
+403 - user cannot edit this loan case/stage
+404 - loan case or checklist item not found
+409 - storageId no longer matches the currently attached document
+500 - mutation failed; no partial checklist update
+
+Error body
+{
+  "success": false,
+  "error": "Human-readable message",
+  "code": "VALIDATION_ERROR | FORBIDDEN | NOT_FOUND | DOCUMENT_CHANGED"
+}
+
+
+3. UPLOAD IDEMPOTENCY - RECOMMENDED ADDITION
+---------------------------------------------
+
+Existing route:
+POST /api/postsales/loans/upload-document
+Authorization: Bearer <token>
+Content-Type: multipart/form-data
+
+Mobile now also sends:
+requestId = "<UUID>"
+
+Required behavior
+- Treat requestId as optional for backward compatibility.
+- Scope idempotency to authenticated user + loanCaseId + requestId.
+- Store or resolve the first successful result for that key.
+- A retry with the same key must return the same document/storageId and must
+  not upload a second blob or append another checklist attachment.
+- A different requestId for the same label is a deliberate replacement.
+- Return the updated loanCase in every attached=true success response.
+
+Recommended success response
+{
+  "success": true,
+  "attached": true,
+  "document": {
+    "loanCaseId": "<id>",
+    "label": "PAN Card",
+    "storageId": "<storageId>",
+    "fileName": "loan_pan_card_20260901_151230.pdf",
+    "contentType": "application/pdf",
+    "size": 245120,
+    "url": "https://signed-document-url"
+  },
+  "loanCase": { "...": "updated authoritative case" }
+}
+
+
+Acceptance checks
+-----------------
+1. Tap an uploaded PDF/image row and preview opens.
+2. Disable network during upload; row remains with Retry and does not vanish.
+3. Restore network and tap Retry; the same local file uploads successfully.
+4. Lose the response after server commit; retry with the same requestId returns
+   the first result without a duplicate blob/checklist entry.
+5. Delete prompts for confirmation and removes the checklist attachment only
+   after a successful server response.
+6. Delete with no network leaves the uploaded row visible and retryable.
+7. A stale delete storageId cannot remove a newer replacement.

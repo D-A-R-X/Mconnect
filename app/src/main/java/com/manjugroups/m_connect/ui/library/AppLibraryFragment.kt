@@ -227,7 +227,15 @@ class AppLibraryFragment : Fragment() {
     override fun onHiddenChanged(hidden: Boolean) {
         super.onHiddenChanged(hidden)
         if (!hidden && _binding != null) {
+            applyLibraryChrome()
             binding.sectionsContainer.post { playLibraryEntryAnimation() }
+        }
+    }
+
+    private fun applyLibraryChrome() {
+        (activity as? com.manjugroups.m_connect.MainActivity)?.let { main ->
+            main.setTabBarVisible(true)
+            main.setTopBarAppearance(Color.parseColor("#0B61CA"), false, fullBleed = true)
         }
     }
 
@@ -956,15 +964,9 @@ class AppLibraryFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
-        (activity as? com.manjugroups.m_connect.MainActivity)?.let { main ->
-            main.setTabBarVisible(true)
-            // The blue header (libraryHeaderFrame) fills from y=0, so draw it
-            // UNDER the status bar (fullBleed=true) — same as Home. This collapses
-            // the status-bar strip (whose background is #FFFFFF) to height 0, so a
-            // white strip left over from a white-header screen can never show as a
-            // top gap here.
-            main.setTopBarAppearance(Color.parseColor("#0B61CA"), false, fullBleed = true)
-        }
+        // Pre-warmed root tabs can reach RESUMED while hidden. They must not
+        // repaint the visible tab's system chrome.
+        if (!isHidden) applyLibraryChrome()
         if (_binding != null) {
             binding.sectionsContainer.post { playLibraryEntryAnimation() }
         }

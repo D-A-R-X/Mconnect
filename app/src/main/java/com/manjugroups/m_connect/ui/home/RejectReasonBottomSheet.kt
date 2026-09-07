@@ -17,7 +17,6 @@ import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.GeoTrackApi
-import com.manjugroups.m_connect.network.MarkClientMetRequest
 import com.manjugroups.m_connect.network.SetOutcomeRequest
 import kotlinx.coroutines.launch
 
@@ -25,15 +24,15 @@ import kotlinx.coroutines.launch
  * RejectReasonBottomSheet — sub-flow opened from
  * [CompleteCpVisitBottomSheet] when the field staff taps "Reject It"
  * on a locked SV-cum-CP. Captures a free-text rejection reason and
- * fires the same `markClientMet` + `setCpVisitOutcome(not_interested)`
- * chain the locked footer used to invoke directly, but with the
- * reason shipped as the outcome notes so the back office has context.
+ * submits the atomic `setCpVisitOutcome(rejected)` mutation with the
+ * reason in outcome notes. The server closes all linked visit/task records
+ * and creates the follow-up call before returning success.
  *
  * Result contract (mirrors CompleteCpVisitBottomSheet so the trip nav
  * doesn't need to know which surface produced the rejection):
  *   RESULT_KEY → bundle {
  *     KEY_CLIENT_MET: Boolean = true,
- *     KEY_OUTCOME:    String  = "not_interested",
+ *     KEY_OUTCOME:    String  = "rejected",
  *     KEY_REASON:     String  = the captured text,
  *   }
  *
@@ -52,6 +51,7 @@ class RejectReasonBottomSheet : BottomSheetDialogFragment() {
     private var btnSubmit: LinearLayout? = null
     private var tvSubmitLabel: TextView? = null
     private var tvError: TextView? = null
+    private var resultSent = false
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val dialog = BottomSheetDialog(requireContext(), theme)
@@ -116,14 +116,6 @@ class RejectReasonBottomSheet : BottomSheetDialogFragment() {
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val metResp = geoApi.markClientMet(
-                    session.bearerToken,
-                    MarkClientMetRequest(id = cpVisitId, clientMet = true),
-                )
-                if (!metResp.success) {
-                    finishWithError(metResp.error ?: "Failed to record client met")
-                    return@launch
-                }
                 val outcomeResp = geoApi.setCpVisitOutcome(
                     session.bearerToken,
                     SetOutcomeRequest(
@@ -136,16 +128,22 @@ class RejectReasonBottomSheet : BottomSheetDialogFragment() {
                     finishWithError(outcomeResp.error ?: "Failed to record rejection")
                     return@launch
                 }
+                if (outcomeResp.status != OUTCOME_REJECTED || outcomeResp.followUpTaskId.isNullOrBlank()) {
+                    finishWithError("Rejection was not confirmed with a follow-up task. Please retry.")
+                    return@launch
+                }
                 // Single result keyed by THIS sheet — the parent sheet
                 // (CompleteCpVisitBottomSheet) listens here, then itself
                 // re-broadcasts on its own RESULT_KEY for the trip nav.
                 // Keeping the keys distinct avoids any re-broadcast
                 // loop on a shared key.
                 val payload = bundleOf(
+                    KEY_SUBMITTED to true,
                     KEY_CLIENT_MET to true,
                     KEY_OUTCOME to OUTCOME_REJECTED,
                     KEY_REASON to reason,
                 )
+                resultSent = true
                 setFragmentResult(RESULT_KEY, payload)
                 dismissAllowingStateLoss()
             } catch (e: Exception) {
@@ -170,8 +168,17 @@ class RejectReasonBottomSheet : BottomSheetDialogFragment() {
         tvError?.visibility = View.GONE
     }
 
+    override fun onCancel(dialog: android.content.DialogInterface) {
+        if (!resultSent) {
+            resultSent = true
+            setFragmentResult(RESULT_KEY, bundleOf(KEY_SUBMITTED to false))
+        }
+        super.onCancel(dialog)
+    }
+
     companion object {
         const val RESULT_KEY = "cp_visit_reject_reason_result"
+        const val KEY_SUBMITTED = "submitted"
         const val KEY_CLIENT_MET = "clientMet"
         const val KEY_OUTCOME = "outcome"
         const val KEY_REASON = "reason"

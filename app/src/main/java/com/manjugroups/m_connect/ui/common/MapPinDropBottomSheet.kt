@@ -4,6 +4,8 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Dialog
 import android.content.pm.PackageManager
+import android.location.Address
+import android.location.Geocoder
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -29,9 +31,14 @@ import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.network.MapAddressResult
 import com.manjugroups.m_connect.network.MapServiceApi
+import com.manjugroups.m_connect.network.MapLatLng
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import java.util.Locale
 
 /**
  * Reusable "drop a pin on the map" picker with address search + live
@@ -67,6 +74,7 @@ class MapPinDropBottomSheet : BottomSheetDialogFragment() {
     private lateinit var pbSearch: ProgressBar
     private lateinit var btnClear: ImageView
     private lateinit var rvSuggestions: RecyclerView
+    private lateinit var tvSearchStatus: TextView
     private lateinit var tvAddress: TextView
     private lateinit var btnConfirm: TextView
 
@@ -117,6 +125,7 @@ class MapPinDropBottomSheet : BottomSheetDialogFragment() {
         pbSearch = view.findViewById(R.id.pbPinSearch)
         btnClear = view.findViewById(R.id.btnPinSearchClear)
         rvSuggestions = view.findViewById(R.id.rvPinSuggestions)
+        tvSearchStatus = view.findViewById(R.id.tvPinSearchStatus)
         tvAddress = view.findViewById(R.id.tvPinAddress)
         btnConfirm = view.findViewById(R.id.btnPinConfirm)
 
@@ -151,6 +160,7 @@ class MapPinDropBottomSheet : BottomSheetDialogFragment() {
         }
         btnClear.setOnClickListener {
             etSearch.setText("")
+            hideSearchStatus()
             hideSuggestions()
         }
         view.findViewById<View>(R.id.btnPinMyLocation).setOnClickListener { moveToDeviceLocation() }
@@ -211,10 +221,11 @@ class MapPinDropBottomSheet : BottomSheetDialogFragment() {
         reverseJob?.cancel()
         reverseJob = viewLifecycleOwner.lifecycleScope.launch {
             tvAddress.text = "Locating…"
-            val address = runCatching {
+            val remoteAddress = runCatching {
                 mapApi.reverseGeocode(center.latitude, center.longitude)
                     .results.firstOrNull()?.address
             }.getOrNull()
+            val address = remoteAddress ?: nativeReverseGeocode(center.latitude, center.longitude)
             if (!isAdded) return@launch
             pickedAddress = address ?: "Pinned location (${fmt(center.latitude)}, ${fmt(center.longitude)})"
             tvAddress.text = pickedAddress
@@ -227,17 +238,34 @@ class MapPinDropBottomSheet : BottomSheetDialogFragment() {
         searchJob?.cancel()
         if (query.length < 2) {
             pbSearch.visibility = View.GONE
+            hideSearchStatus()
             hideSuggestions()
             return
         }
         searchJob = viewLifecycleOwner.lifecycleScope.launch {
             if (!immediate) delay(320) // debounce
             pbSearch.visibility = View.VISIBLE
-            val results = runCatching { mapApi.searchAddress(query).results }.getOrNull().orEmpty()
+            hideSearchStatus()
+            val remote = runCatching { mapApi.searchAddress(query).results }
+            val remoteResults = remote.getOrNull().orEmpty()
+            val results = if (remoteResults.isNotEmpty()) {
+                remoteResults
+            } else {
+                withTimeoutOrNull(6_000) { nativeSearchAddress(query, 6) }.orEmpty()
+            }
             if (!isAdded) return@launch
             pbSearch.visibility = View.GONE
-            if (results.isEmpty()) hideSuggestions()
-            else {
+            if (results.isEmpty()) {
+                hideSuggestions()
+                showSearchStatus(
+                    if (remote.isFailure) {
+                        "No network. Check your connection and try again."
+                    } else {
+                        "No matching places found. Try a more specific address."
+                    }
+                )
+            } else {
+                hideSearchStatus()
                 suggestionAdapter.submit(results)
                 rvSuggestions.visibility = View.VISIBLE
             }
@@ -247,8 +275,13 @@ class MapPinDropBottomSheet : BottomSheetDialogFragment() {
     private fun onSuggestionChosen(result: MapAddressResult) {
         val lat = result.location?.lat
         val lng = result.location?.lng
-        hideSuggestions()
+        hideSearchStatus()
         etSearch.setText(result.displayName)
+        // setText invokes the autocomplete watcher. Cancel that synthetic
+        // search so choosing an item closes the dropdown instead of reopening
+        // it for the selected place name.
+        searchJob?.cancel()
+        hideSuggestions()
         etSearch.clearFocus()
         hideKeyboard()
         pickedAddress = result.address ?: result.displayName
@@ -264,6 +297,67 @@ class MapPinDropBottomSheet : BottomSheetDialogFragment() {
     private fun hideSuggestions() {
         rvSuggestions.visibility = View.GONE
         suggestionAdapter.submit(emptyList())
+    }
+
+    private fun showSearchStatus(message: String) {
+        tvSearchStatus.text = message
+        tvSearchStatus.visibility = View.VISIBLE
+    }
+
+    private fun hideSearchStatus() {
+        tvSearchStatus.visibility = View.GONE
+    }
+
+    @Suppress("DEPRECATION")
+    private suspend fun nativeSearchAddress(query: String, limit: Int): List<MapAddressResult> {
+        val appContext = context?.applicationContext ?: return emptyList()
+        return withContext(Dispatchers.IO) {
+            if (!Geocoder.isPresent()) return@withContext emptyList()
+            runCatching {
+                Geocoder(appContext, Locale.getDefault())
+                    .getFromLocationName(query, limit)
+                    .orEmpty()
+                    .mapNotNull(::toMapAddressResult)
+            }.getOrDefault(emptyList())
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private suspend fun nativeReverseGeocode(lat: Double, lng: Double): String? {
+        val appContext = context?.applicationContext ?: return null
+        return withContext(Dispatchers.IO) {
+            if (!Geocoder.isPresent()) return@withContext null
+            runCatching {
+                Geocoder(appContext, Locale.getDefault())
+                    .getFromLocation(lat, lng, 1)
+                    ?.firstOrNull()
+                    ?.formattedAddress()
+            }.getOrNull()
+        }
+    }
+
+    private fun toMapAddressResult(address: Address): MapAddressResult? {
+        val lat = address.latitude.takeIf { it.isFinite() } ?: return null
+        val lng = address.longitude.takeIf { it.isFinite() } ?: return null
+        val formatted = address.formattedAddress()
+        val name = address.featureName?.takeIf { it.isNotBlank() }
+            ?: address.locality?.takeIf { it.isNotBlank() }
+            ?: formatted.substringBefore(',').trim()
+        return MapAddressResult(
+            placeId = "native:$lat:$lng",
+            name = name,
+            address = formatted,
+            location = MapLatLng(lat, lng),
+            types = listOf("native_geocoder"),
+        )
+    }
+
+    private fun Address.formattedAddress(): String {
+        getAddressLine(0)?.takeIf { it.isNotBlank() }?.let { return it }
+        return listOfNotNull(featureName, thoroughfare, locality, adminArea, postalCode, countryName)
+            .filter { it.isNotBlank() }
+            .distinct()
+            .joinToString(", ")
     }
 
     private fun hideKeyboard() {

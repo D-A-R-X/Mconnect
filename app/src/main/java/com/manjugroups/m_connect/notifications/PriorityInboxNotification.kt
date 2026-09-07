@@ -1,5 +1,6 @@
 package com.manjugroups.m_connect.notifications
 
+import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -54,6 +55,7 @@ object PriorityInboxNotification {
      * Post a tray notification for any unread approval/task not already
      * announced. Safe to call on every poll.
      */
+    @SuppressLint("MissingPermission")
     fun notifyNew(context: Context, items: List<NotificationData>) {
         val appCtx = context.applicationContext
         val prefs = appCtx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

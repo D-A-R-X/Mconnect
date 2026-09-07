@@ -96,9 +96,23 @@ interface DailyLogApi {
                 else HttpLoggingInterceptor.Level.NONE
             }
             val authWatchdog = okhttp3.Interceptor { chain ->
-                val response = chain.proceed(chain.request())
-                if (response.code == 401) {
-                    com.manjugroups.m_connect.auth.SessionInvalidationBus.reportUnauthorized()
+                val request = chain.request()
+                val response = chain.proceed(request)
+                if (com.manjugroups.m_connect.auth.SessionInvalidationPolicy.shouldInvalidate(
+                        responseCode = response.code,
+                        authorizationHeader = request.header("Authorization"),
+                        requestHost = request.url.host,
+                        sessionAuthorityHost = java.net.URI(BuildConfig.BASE_URL).host.orEmpty(),
+                        requestPath = request.url.encodedPath,
+                        responseBody = if (response.code == 401) {
+                            runCatching { response.peekBody(64 * 1024).string() }.getOrNull()
+                        } else {
+                            null
+                        },
+                    )
+                ) {
+                    com.manjugroups.m_connect.auth.SessionInvalidationBus
+                        .reportUnauthorized(request.header("Authorization"))
                 }
                 response
             }

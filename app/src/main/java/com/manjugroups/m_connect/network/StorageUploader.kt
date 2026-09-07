@@ -46,6 +46,9 @@ object StorageUploader {
         // Photos are downscaled before upload to spare field networks; set false
         // for the rare case a caller needs the exact original bytes preserved.
         compressImages: Boolean = true,
+        imageMaxEdge: Int = 1600,
+        imageQuality: Int = 80,
+        imageSkipBelowBytes: Long = 500_000L,
     ): Result {
         // Shrink photos once, up front — never per retry. Only image content is
         // touched (PDFs / other docs pass through). Compression is best-effort:
@@ -53,7 +56,16 @@ object StorageUploader {
         // deleted after the upload; the caller's own file is never removed.
         val isImage = contentType.startsWith("image/", ignoreCase = true)
         val uploadFile = if (compressImages && isImage) {
-            runCatching { withContext(Dispatchers.IO) { ImageCompressor.compress(file) } }
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    ImageCompressor.compress(
+                        source = file,
+                        maxEdge = imageMaxEdge,
+                        quality = imageQuality,
+                        skipBelowBytes = imageSkipBelowBytes,
+                    )
+                }
+            }
                 .getOrDefault(file)
         } else {
             file

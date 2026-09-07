@@ -4,7 +4,6 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.media.ExifInterface
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 
@@ -71,17 +70,22 @@ object ImageCompressor {
                 rotated
             }
 
-            val out = ByteArrayOutputStream()
-            finalBitmap.compress(Bitmap.CompressFormat.JPEG, quality.coerceIn(1, 100), out)
-            finalBitmap.recycle()
-
-            val bytes = out.toByteArray()
-            // If re-encoding didn't actually help (already efficiently encoded),
-            // keep the original rather than shipping a larger file.
-            if (bytes.size >= source.length()) return source
-
             val target = File(source.parentFile, "cmp_${System.currentTimeMillis()}.jpg")
-            FileOutputStream(target).use { it.write(bytes) }
+            val encoded = try {
+                FileOutputStream(target).use { output ->
+                    finalBitmap.compress(
+                        Bitmap.CompressFormat.JPEG,
+                        quality.coerceIn(1, 100),
+                        output,
+                    )
+                }
+            } finally {
+                finalBitmap.recycle()
+            }
+            if (!encoded || target.length() <= 0L || target.length() >= source.length()) {
+                target.delete()
+                return source
+            }
             target
         } catch (_: Throwable) {
             source

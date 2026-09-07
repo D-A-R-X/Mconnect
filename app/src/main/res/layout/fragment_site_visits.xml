@@ -6,7 +6,7 @@
     android:background="#F1F3F8"
     android:orientation="vertical">
 
-    <!-- TOP BAR: back (circle) / centered title / calendar (circle) -->
+    <!-- TOP BAR: back / centered title / calendar + create -->
     <RelativeLayout
         android:id="@+id/cpvTopBar"
         android:layout_width="match_parent"
@@ -49,7 +49,8 @@
             android:id="@+id/btnFilterCalendar"
             android:layout_width="36dp"
             android:layout_height="36dp"
-            android:layout_alignParentEnd="true"
+            android:layout_marginEnd="8dp"
+            android:layout_toStartOf="@id/btnCreateCpVisit"
             android:layout_centerVertical="true"
             android:background="@drawable/bg_sv_header_button"
             android:clickable="true"
@@ -59,17 +60,30 @@
                 android:layout_width="20dp"
                 android:layout_height="20dp"
                 android:layout_gravity="center"
-                android:contentDescription="Calendar"
-                android:src="@drawable/ic_filter_calendar"
+                android:contentDescription="Filter visits"
+                android:src="@drawable/ic_filter_blue"
                 app:tint="#0B61CA" />
         </FrameLayout>
 
-        <!-- Dummy view to avoid breaking btnCreateCpVisit GONE calls -->
-        <View
+        <FrameLayout
             android:id="@+id/btnCreateCpVisit"
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:visibility="gone" />
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            android:background="@drawable/bg_sv_header_button"
+            android:clickable="true"
+            android:contentDescription="Schedule site visit"
+            android:focusable="true">
+
+            <ImageView
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_gravity="center"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_cpv_plus"
+                app:tint="#0B61CA" />
+        </FrameLayout>
     </RelativeLayout>
 
     <View
@@ -147,9 +161,43 @@
             android:orientation="horizontal">
 
             <TextView
+                android:id="@+id/pillMy"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:background="@drawable/bg_cpv_filter_pill_inactive"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:paddingHorizontal="16dp"
+                android:text="My"
+                android:textColor="#475467"
+                android:textSize="13sp"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/pillTeam"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_cpv_filter_pill_inactive"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:paddingHorizontal="16dp"
+                android:text="Team"
+                android:textColor="#475467"
+                android:textSize="13sp"
+                android:visibility="gone" />
+
+            <TextView
                 android:id="@+id/pillAll"
                 android:layout_width="wrap_content"
                 android:layout_height="34dp"
+                android:layout_marginStart="8dp"
                 android:background="@drawable/bg_cpv_filter_pill_active"
                 android:clickable="true"
                 android:focusable="true"

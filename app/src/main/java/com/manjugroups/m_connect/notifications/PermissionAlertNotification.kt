@@ -1,5 +1,6 @@
 package com.manjugroups.m_connect.notifications
 
+import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -56,6 +57,7 @@ object PermissionAlertNotification {
     }
 
     /** Post/refresh the alert for [missing] permission keys, or clear when empty. */
+    @SuppressLint("MissingPermission")
     fun update(context: Context, missing: List<String>) {
         val appCtx = context.applicationContext
         if (missing.isEmpty()) { clear(appCtx); return }

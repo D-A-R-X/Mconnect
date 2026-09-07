@@ -481,6 +481,7 @@
                             android:id="@+id/rowMute"
                             android:layout_width="match_parent"
                             android:layout_height="0dp"
+                            android:orientation="vertical"
                             android:visibility="gone"
                             tools:ignore="UselessLeaf" />
                         <androidx.appcompat.widget.SwitchCompat
@@ -497,6 +498,7 @@
                             android:id="@+id/rowSearch"
                             android:layout_width="match_parent"
                             android:layout_height="0dp"
+                            android:orientation="vertical"
                             android:visibility="gone"
                             tools:ignore="UselessLeaf" />
                     </LinearLayout>

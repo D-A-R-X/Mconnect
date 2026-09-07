@@ -30,7 +30,9 @@ import com.manjugroups.m_connect.network.CpApprovalItem
 import com.manjugroups.m_connect.network.CpApprovalRouteData
 import com.manjugroups.m_connect.network.DirectionsClient
 import com.manjugroups.m_connect.network.GeoTrackApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -169,31 +171,71 @@ class CpApprovalTripDetailDialog : DialogFragment() {
 
     private fun loadRoute() {
         lifecycleScope.launch {
-            val result = runCatching { api.getCpApprovalRoute(session.bearerToken, item.id) }
+            val result = loadDetailedRouteWithRetry()
             if (!isAdded) return@launch
             result.onSuccess { response ->
-                val data = response.data
-                if (!response.success || data == null) {
+                val responseData = response.data
+                val data = responseData
+                    ?.takeIf(::hasRecordedTrail)
+                    ?.also { routeCache.put(item.id, it) }
+                    ?: routeCache.get(item.id)
+                    ?: responseData
+                if (data == null) {
                     progress.visibility = View.GONE
                     showRouteFallback(response.error)
                 } else {
-                    val recorded = data.routePoints.orEmpty().mapNotNull { coordinates(it.lat, it.lng) }
-                    if (recorded.size >= 2) mapStatus.text = "Matching recorded trail to roads…"
-                    val roadMatchedTrail = DirectionsClient.fetchRoadMatchedTrail(
-                        session.bearerToken,
-                        recorded,
-                    )
-                    if (!isAdded) return@launch
-                    progress.visibility = View.GONE
-                    renderRoute(data, roadMatchedTrail)
+                    renderDetailedRoute(data)
                 }
             }.onFailure { error ->
-                progress.visibility = View.GONE
                 Log.w(TAG, "Unable to load detailed CP approval route for ${item.id}", error)
-                showRouteFallback(error.message)
+                val cached = routeCache.get(item.id)
+                if (cached != null) {
+                    renderDetailedRoute(cached)
+                } else {
+                    progress.visibility = View.GONE
+                    showRouteFallback(error.message)
+                }
             }
         }
     }
+
+    private suspend fun renderDetailedRoute(data: CpApprovalRouteData) {
+        val recorded = data.routePoints.orEmpty().mapNotNull { coordinates(it.lat, it.lng) }
+        if (recorded.size >= 2) mapStatus.text = "Matching recorded trail to roads…"
+        val roadMatchedTrail = DirectionsClient.fetchRoadMatchedTrail(
+            session.bearerToken,
+            recorded,
+        )
+        if (!isAdded) return
+        progress.visibility = View.GONE
+        renderRoute(data, roadMatchedTrail)
+    }
+
+    private suspend fun loadDetailedRouteWithRetry() = runCatching {
+        var bestResponse: com.manjugroups.m_connect.network.CpApprovalRouteResponse? = null
+        var lastError: Throwable? = null
+        repeat(ROUTE_LOAD_ATTEMPTS) { attempt ->
+            val response = runCatching {
+                withTimeout(ROUTE_LOAD_TIMEOUT_MS) {
+                    api.getCpApprovalRoute(session.bearerToken, item.id)
+                }
+            }.onFailure { lastError = it }.getOrNull()
+            if (response != null) {
+                val currentCount = validRoutePointCount(response.data)
+                val bestCount = validRoutePointCount(bestResponse?.data)
+                if (bestResponse == null || currentCount > bestCount) bestResponse = response
+                if (response.success && hasRecordedTrail(response.data)) return@runCatching response
+            }
+            if (attempt < ROUTE_LOAD_ATTEMPTS - 1) delay(ROUTE_RETRY_DELAY_MS * (attempt + 1))
+        }
+        bestResponse ?: throw lastError ?: IllegalStateException("Detailed route was unavailable")
+    }
+
+    private fun hasRecordedTrail(data: CpApprovalRouteData?): Boolean =
+        validRoutePointCount(data) >= 2
+
+    private fun validRoutePointCount(data: CpApprovalRouteData?): Int =
+        data?.routePoints.orEmpty().count { coordinates(it.lat, it.lng) != null }
 
     private fun fallbackRoute() = CpApprovalRouteData(
         id = item.id,
@@ -345,9 +387,29 @@ class CpApprovalTripDetailDialog : DialogFragment() {
     companion object {
         const val TAG = "CpApprovalTripDetail"
         private const val ARG_ITEM = "item"
+        private const val ROUTE_LOAD_ATTEMPTS = 3
+        private const val ROUTE_LOAD_TIMEOUT_MS = 10_000L
+        private const val ROUTE_RETRY_DELAY_MS = 500L
+        private val routeCache = CpApprovalRouteMemoryCache(16)
 
         fun newInstance(item: CpApprovalItem) = CpApprovalTripDetailDialog().apply {
             arguments = Bundle().apply { putString(ARG_ITEM, Gson().toJson(item)) }
         }
+    }
+}
+
+internal class CpApprovalRouteMemoryCache(private val capacity: Int) {
+    private val values = object : LinkedHashMap<String, CpApprovalRouteData>(capacity, 0.75f, true) {
+        override fun removeEldestEntry(
+            eldest: MutableMap.MutableEntry<String, CpApprovalRouteData>?,
+        ): Boolean = size > capacity
+    }
+
+    @Synchronized
+    fun get(id: String): CpApprovalRouteData? = values[id]
+
+    @Synchronized
+    fun put(id: String, data: CpApprovalRouteData) {
+        values[id] = data
     }
 }

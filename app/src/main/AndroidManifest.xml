@@ -8,6 +8,7 @@
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <!-- Lets the dialer put the audio system into VoIP communication mode so the
          WebView's WebRTC can acquire the mic + route call audio (fixes
          "Could not start audio source"). -->
@@ -15,11 +16,11 @@
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission
@@ -81,6 +82,7 @@
         <activity
             android:name=".MainActivity"
             android:launchMode="singleTop"
+            android:screenOrientation="portrait"
             android:windowSoftInputMode="adjustResize" />
 
         <activity
@@ -88,6 +90,7 @@
             android:excludeFromRecents="true"
             android:exported="false"
             android:launchMode="singleTop"
+            android:screenOrientation="portrait"
             android:showWhenLocked="true"
             android:theme="@style/Theme.Mconnect"
             android:turnScreenOn="true" />
@@ -111,12 +114,7 @@
 
         <service
             android:name=".notifications.ModernDialerCallService"
-            android:exported="false"
-            android:foregroundServiceType="specialUse">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Modern Dialer call control and active call notification" />
-        </service>
+            android:exported="false" />
 
         <receiver
             android:name=".geotrack.service.BootReceiver"

@@ -1,6 +1,5 @@
 package com.manjugroups.m_connect.ui.telecaller
 
-import android.content.Context
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -14,7 +13,6 @@ import androidx.lifecycle.lifecycleScope
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
-import com.manjugroups.m_connect.network.DialDooctiRequest
 import com.manjugroups.m_connect.network.TelecallerLeadData
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.common.navigateUp
@@ -38,7 +36,6 @@ class MyLeadsFragment : Fragment() {
     private val api = ApiService.create()
     private lateinit var session: SessionManager
     private var mode: Mode = Mode.ALL
-    private var calling: Boolean = false
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -189,71 +186,29 @@ class MyLeadsFragment : Fragment() {
             }
         }
 
-        // Call action is currently a Coming-soon pill — the out-bound
-        // dialer integration isn't ready yet. Keep the pill inert so
-        // taps don't trigger the dial flow; the row itself is also
-        // non-tappable to avoid a confused "I clicked the row and
-        // nothing happened" experience.
         val callPill = row.findViewById<View>(R.id.btnLeadCall)
-        callPill.isClickable = false
-        callPill.isFocusable = false
-        callPill.setOnClickListener(null)
+        val phone = lead.mobileNumber ?: lead.alternateNumber
+        callPill.isClickable = true
+        callPill.isFocusable = true
+        callPill.setOnClickListener { openModernDialer(phone) }
         row.isClickable = false
         row.setOnClickListener(null)
     }
 
-    private fun placeCall(rawPhone: String?) {
-        val phone = rawPhone?.trim()?.filter { it.isDigit() }
-        if (phone.isNullOrEmpty()) {
-            Toast.makeText(requireContext(), "No phone on this lead", Toast.LENGTH_SHORT).show()
-            return
-        }
+    private fun openModernDialer(rawPhone: String?) {
+        val phone = rawPhone?.filter { it.isDigit() }.orEmpty()
         if (phone.length < 10) {
-            Toast.makeText(
-                requireContext(),
-                "Lead phone is too short to dial",
-                Toast.LENGTH_SHORT,
-            ).show()
+            Toast.makeText(requireContext(), "No valid phone number on this lead", Toast.LENGTH_SHORT).show()
             return
         }
-        if (calling) return
-        calling = true
-        val station = requireContext()
-            .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(KEY_STATION, DEFAULT_STATION) ?: DEFAULT_STATION
-        Toast.makeText(requireContext(), "Placing call…", Toast.LENGTH_SHORT).show()
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val resp = api.dialDoocti(
-                    DOOCTI_URL,
-                    DialDooctiRequest(phone_number = phone, station = station),
-                )
-                val ok = resp.ok == true
-                val msg = if (ok) {
-                    "Call placed — your phone will ring shortly"
-                } else {
-                    "Call failed: ${resp.error ?: resp.stage ?: "unknown"}"
-                }
-                Toast.makeText(requireContext(), msg, Toast.LENGTH_LONG).show()
-            } catch (e: Exception) {
-                Toast.makeText(
-                    requireContext(),
-                    "Network error: ${e.message ?: "unknown"}",
-                    Toast.LENGTH_LONG,
-                ).show()
-            } finally {
-                calling = false
-            }
-        }
+        parentFragmentManager.beginTransaction()
+            .replace(R.id.fragmentContainer, DialerFragment.newInstance(phone))
+            .addToBackStack(null)
+            .commit()
     }
 
     companion object {
         private const val ARG_MODE = "arg_mode"
-        private const val PREFS = "mconnect_prefs"
-        private const val KEY_STATION = "dialer.station"
-        private const val DEFAULT_STATION = "6369487527"
-        private val DOOCTI_URL: String
-            get() = com.manjugroups.m_connect.BuildConfig.APP_URL.trimEnd('/') + "/api/doocti-call"
 
         fun newInstance(mode: Mode = Mode.ALL): MyLeadsFragment = MyLeadsFragment().apply {
             arguments = Bundle().apply { putString(ARG_MODE, mode.name) }

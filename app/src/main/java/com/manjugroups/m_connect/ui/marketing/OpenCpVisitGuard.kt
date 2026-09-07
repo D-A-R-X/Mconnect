@@ -22,6 +22,7 @@ object OpenCpVisitGuard {
         visits: List<CpVisitDetail>,
         phone: String,
         scheduledDate: String,
+        retryRequestId: String? = null,
     ): CpVisitDetail? {
         val target = normalizePhone(phone)
         if (target.length < 10) return null
@@ -30,6 +31,7 @@ object OpenCpVisitGuard {
                 visit.lead?.mobileNumber ?: visit.client?.mobileNumber,
             )
             visitPhone == target &&
+                (retryRequestId.isNullOrBlank() || visit.requestId != retryRequestId) &&
                 visit.scheduledDate == scheduledDate &&
                 !visit.status.equals("cancelled", ignoreCase = true)
         }
@@ -40,8 +42,9 @@ object OpenCpVisitGuard {
         visits: List<CpVisitDetail>,
         phone: String,
         scheduledDate: String,
+        retryRequestId: String? = null,
     ): String? {
-        findSameDayVisit(visits, phone, scheduledDate) ?: return null
+        findSameDayVisit(visits, phone, scheduledDate, retryRequestId) ?: return null
         return "This client already has a CP visit on $scheduledDate. " +
             "Only one CP visit per client is allowed per day. Open the existing visit or choose another date."
     }

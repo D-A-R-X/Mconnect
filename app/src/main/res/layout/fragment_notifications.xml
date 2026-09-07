@@ -33,7 +33,7 @@
                     android:layout_height="20dp"
                     android:layout_gravity="center"
                     android:src="@drawable/ic_back_chevron"
-                    android:tint="#004EEB" />
+                    app:tint="#004EEB" />
             </FrameLayout>
 
             <TextView
@@ -80,7 +80,7 @@
                     android:layout_gravity="center"
                     android:contentDescription="Notifications"
                     android:src="@drawable/ic_bell"
-                    android:tint="?attr/colorForegroundPrimary" />
+                    app:tint="?attr/colorForegroundPrimary" />
             </FrameLayout>
 
             <LinearLayout

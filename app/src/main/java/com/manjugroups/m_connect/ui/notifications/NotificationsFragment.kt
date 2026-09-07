@@ -43,8 +43,9 @@ import com.manjugroups.m_connect.ui.marketing.SiteVisitsFragment
 import com.manjugroups.m_connect.ui.tasks.TaskManagerFragment
 import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
-import java.time.Instant
-import java.time.format.DateTimeParseException
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.TimeZone
 import com.manjugroups.m_connect.ui.common.commitOnce
 
 enum class NotificationCategory {
@@ -651,11 +652,10 @@ class NotificationAdapter(
         }
 
         private fun parseIsoMillis(value: String): Long? {
-            return try {
-                Instant.parse(value).toEpochMilli()
-            } catch (_: DateTimeParseException) {
-                null
+            val parser = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
+                timeZone = TimeZone.getTimeZone("UTC")
             }
+            return runCatching { parser.parse(value)?.time }.getOrNull()
         }
     }
 

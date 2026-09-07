@@ -158,7 +158,7 @@ object PushTokenManager {
 
         return try {
             val token = FirebaseMessaging.getInstance().token.await()
-            Log.d("PushTokenManager", "syncCurrentToken: fetched FCM token: $token")
+            Log.d("PushTokenManager", "syncCurrentToken: fetched FCM token (${token.length} chars)")
             val deviceInfo = LoginDeviceInfo.capture(context)
             api.registerPushDevice(
                 session.bearerToken,
@@ -219,7 +219,7 @@ object PushTokenManager {
         session: SessionManager,
         token: String
     ): Boolean {
-        Log.d("PushTokenManager", "registerRefreshedToken: token refreshed to: $token")
+        Log.d("PushTokenManager", "registerRefreshedToken: received refreshed FCM token (${token.length} chars)")
         if (!session.isLoggedIn) {
             Log.w("PushTokenManager", "registerRefreshedToken: skipped (user not logged in)")
             return false

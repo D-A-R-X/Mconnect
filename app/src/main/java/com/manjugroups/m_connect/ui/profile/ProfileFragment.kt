@@ -92,7 +92,7 @@ class ProfileFragment : Fragment() {
         binding.tvProfileName.text = cachedName
         binding.tvProfileAvatar.text = initialsFor(cachedName)
         binding.tvProfilePhone.text = session.userPhone?.trim().orEmpty().ifBlank { "—" }
-        binding.tvAppVersion.text = "v.${BuildConfig.VERSION_NAME}"
+        binding.tvAppVersion.text = "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
         // The toggle is ON only when the user opted in AND the OS still
         // grants notification permission. If permission was revoked in
         // system settings while the flag was on, reconcile the flag so the

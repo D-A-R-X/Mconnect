@@ -73,8 +73,12 @@ object GeoTrackPointFlusher {
 
             var progressed = false
             for ((sid, rows) in sendable) {
+                val deviceId = session.trackingDeviceId ?: "android"
+                val requestId = "geo-batch-$deviceId-${rows.first().id}-${rows.last().id}"
                 val points = rows.map { e ->
                     LocationPoint(
+                        pointId = "$deviceId-${e.recordedAt}-${e.id}",
+                        deviceSequence = e.id,
                         lat = e.lat, lng = e.lng, accuracy = e.accuracy,
                         speed = e.speed, bearing = e.bearing, altitude = e.altitude,
                         activity = e.activity, activityConfidence = e.activityConfidence,
@@ -85,10 +89,12 @@ object GeoTrackPointFlusher {
                 }
                 val resp = try {
                     api.pushBatch(
-                        session.bearerToken,
-                        PushBatchRequest(
+                        token = session.bearerToken,
+                        idempotencyKey = requestId,
+                        body = PushBatchRequest(
                             sessionId = sid,
-                            deviceId = session.trackingDeviceId,
+                            deviceId = deviceId,
+                            requestId = requestId,
                             points = points,
                         ),
                     )
@@ -106,12 +112,12 @@ object GeoTrackPointFlusher {
                     // intentionally skipped are gone by policy (tracking is
                     // strictly clock-in → clock-out); in-window ones are stored.
                     dao.deleteByIds(rows.map { it.id })
-                    flushed += resp.inserted ?: rows.size
+                    flushed += resp.insertedCount ?: resp.inserted ?: rows.size
                     progressed = true
                     // A fully-rejected batch is the "Live but zero GPS" trap —
                     // make the reason visible in logcat (accuracy gate vs
                     // window clamp) instead of silently acking.
-                    if ((resp.inserted ?: 0) == 0 && rows.isNotEmpty()) {
+                    if ((resp.insertedCount ?: resp.inserted ?: 0) == 0 && rows.isNotEmpty()) {
                         Log.w(
                             TAG,
                             "Batch ack'd but stored 0/${rows.size} points " +

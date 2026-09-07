@@ -1,22 +1,19 @@
 package com.manjugroups.m_connect.ui.telecaller
 
 import android.Manifest
-import android.app.AlertDialog
+import android.app.NotificationManager
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
-import android.media.AudioAttributes
-import android.media.AudioFocusRequest
 import android.media.AudioManager
-import android.media.ToneGenerator
 import android.os.Build
 import android.os.Bundle
-import android.text.InputType
+import android.provider.Settings
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -25,36 +22,39 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
-import com.manjugroups.m_connect.network.DialDooctiRequest
 import com.manjugroups.m_connect.network.MobileDialerConfigResponse
 import com.manjugroups.m_connect.notifications.DialerEvent
 import com.manjugroups.m_connect.notifications.ModernDialerWebViewBridge
+import com.manjugroups.m_connect.notifications.ModernDialerCallController
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * Phone dialpad — mirrors the web Telecaller > Dialer screen. It fetches the
  * authenticated Modern Dialer mapping from Convex, then controls the embedded
- * dialer through the same postMessage protocol used by web. The legacy Doocti
- * bridge remains as a temporary fallback.
- *
- * Station is persisted in SharedPreferences keyed by `dialer.station`.
+ * dialer through the same postMessage protocol used by web.
  */
 class DialerFragment : Fragment() {
 
-    private lateinit var prefs: android.content.SharedPreferences
     private val api = ApiService.create()
     private lateinit var session: SessionManager
 
     private var tvNumber: TextView? = null
     private var tvStation: TextView? = null
+    private var tvConnection: TextView? = null
+    private var btnAvailable: TextView? = null
+    private var btnBreak: TextView? = null
     private var btnBackspace: View? = null
     private var btnCall: View? = null
     private var callIcon: View? = null
@@ -66,26 +66,30 @@ class DialerFragment : Fragment() {
     private var btnHangup: TextView? = null
     private var btnMute: TextView? = null
     private var btnHold: TextView? = null
+    private var btnPhoneAudio: TextView? = null
+    private var btnSpeakerAudio: TextView? = null
+    private var btnBluetoothAudio: TextView? = null
+    private var historyList: LinearLayout? = null
+    private var historyEmpty: TextView? = null
 
     private var entered: String = ""
-    private var station: String = DEFAULT_STATION
     private var calling: Boolean = false
     // Fails a call out of the "Connecting" state if the softphone never reports
     // progress (ringing/answered/error) — otherwise a call that can't originate
     // hangs on "Connecting" forever with no feedback.
     private var connectingTimeoutJob: Job? = null
-    // Ringback tone played while the destination is ringing (outbound), so the
-    // agent hears that the call is forwarded and ringing. Stopped on answer/end.
-    private var ringbackTone: ToneGenerator? = null
-    private var audioFocusRequest: AudioFocusRequest? = null
     private var dialerConfig: MobileDialerConfigResponse? = null
     private var pendingModernDialerPhone: String? = null
     private var callStage: CallStage = CallStage.IDLE
     private var activeNumber: String? = null
     private var muted: Boolean = false
     private var held: Boolean = false
+    private var agentStatus: String = "unknown"
+    private var audioRoute: AudioRoute = AudioRoute.PHONE
+    private lateinit var recentCallStore: DialerRecentCallStore
 
     private enum class CallStage { IDLE, INCOMING, CONNECTING, IN_CALL }
+    private enum class AudioRoute { PHONE, SPEAKER, BLUETOOTH }
 
     private val dialerEventListener: (DialerEvent) -> Unit = { event ->
         if (isAdded) {
@@ -99,7 +103,7 @@ class DialerFragment : Fragment() {
         val phone = pendingModernDialerPhone
         pendingModernDialerPhone = null
         if (granted && phone != null) {
-            triggerModernDialerOrFallback(phone)
+            triggerModernDialer(phone, dialerConfig ?: return@registerForActivityResult)
         } else {
             Toast.makeText(
                 requireContext(),
@@ -132,17 +136,21 @@ class DialerFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        prefs = requireContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         session = SessionManager(requireContext())
-        station = prefs.getString(KEY_STATION, DEFAULT_STATION) ?: DEFAULT_STATION
+        recentCallStore = DialerRecentCallStore(requireContext(), session.staffId)
+        entered = arguments?.getString(ARG_PHONE)
+            ?.filter { it.isDigit() }
+            ?.take(15)
+            .orEmpty()
 
         view.findViewById<View>(R.id.btnDialerBack).setOnClickListener {
             navigateUp()
         }
-        view.findViewById<View>(R.id.btnDialerSettings).setOnClickListener { showStationDialog() }
-
         tvNumber = view.findViewById(R.id.tvDialerNumber)
         tvStation = view.findViewById(R.id.tvDialerStation)
+        tvConnection = view.findViewById(R.id.tvDialerConnection)
+        btnAvailable = view.findViewById(R.id.btnDialerAvailable)
+        btnBreak = view.findViewById(R.id.btnDialerBreak)
         btnBackspace = view.findViewById(R.id.btnDialerBackspace)
 
         btnBackspace?.setOnClickListener { onBackspace() }
@@ -163,6 +171,11 @@ class DialerFragment : Fragment() {
         btnHangup = view.findViewById(R.id.btnDialerHangup)
         btnMute = view.findViewById(R.id.btnDialerMute)
         btnHold = view.findViewById(R.id.btnDialerHold)
+        btnPhoneAudio = view.findViewById(R.id.btnDialerPhoneAudio)
+        btnSpeakerAudio = view.findViewById(R.id.btnDialerSpeakerAudio)
+        btnBluetoothAudio = view.findViewById(R.id.btnDialerBluetoothAudio)
+        historyList = view.findViewById(R.id.dialerHistoryList)
+        historyEmpty = view.findViewById(R.id.tvDialerHistoryEmpty)
 
         btnPickup?.setOnClickListener {
             ModernDialerWebViewBridge.pickup()
@@ -171,7 +184,7 @@ class DialerFragment : Fragment() {
         }
         btnHangup?.setOnClickListener {
             ModernDialerWebViewBridge.hangup()
-            resetCallState()
+            resetCallState(if (callStage == CallStage.INCOMING) "missed" else "completed")
         }
         btnMute?.setOnClickListener {
             muted = !muted
@@ -183,11 +196,36 @@ class DialerFragment : Fragment() {
             ModernDialerWebViewBridge.setHold(held)
             renderCallPanel()
         }
+        btnPhoneAudio?.setOnClickListener { selectAudioRoute(AudioRoute.PHONE) }
+        btnSpeakerAudio?.setOnClickListener { selectAudioRoute(AudioRoute.SPEAKER) }
+        btnBluetoothAudio?.setOnClickListener {
+            if (
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
+            ) {
+                requestBluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+            } else {
+                selectAudioRoute(AudioRoute.BLUETOOTH)
+            }
+        }
+        btnAvailable?.setOnClickListener { setAgentStatus("available") }
+        btnBreak?.setOnClickListener { setAgentStatus("break") }
         ModernDialerWebViewBridge.addListener(dialerEventListener)
 
-        renderStation()
+        if (ModernDialerWebViewBridge.hasActiveCall()) {
+            activeNumber = ModernDialerWebViewBridge.activeCallNumber()
+            callStage = if (ModernDialerWebViewBridge.isCallAnswered()) {
+                CallStage.IN_CALL
+            } else {
+                CallStage.CONNECTING
+            }
+        }
+
+        renderDialerIdentity()
+        renderAgentStatus()
         renderNumber()
         renderCallPanel()
+        renderRecentCalls()
         buildDialpad(view.findViewById(R.id.dialpadGrid))
         loadDialerConfig()
     }
@@ -210,10 +248,14 @@ class DialerFragment : Fragment() {
     override fun onDestroyView() {
         ModernDialerWebViewBridge.removeListener(dialerEventListener)
         cancelConnectingTimeout()
-        stopRingback()
-        stopCallAudio()
+        if (!ModernDialerWebViewBridge.hasActiveCall()) {
+            ModernDialerWebViewBridge.detachFromActivity(requireActivity())
+        }
         tvNumber = null
         tvStation = null
+        tvConnection = null
+        btnAvailable = null
+        btnBreak = null
         btnBackspace = null
         btnCall = null
         callIcon = null
@@ -225,6 +267,11 @@ class DialerFragment : Fragment() {
         btnHangup = null
         btnMute = null
         btnHold = null
+        btnPhoneAudio = null
+        btnSpeakerAudio = null
+        btnBluetoothAudio = null
+        historyList = null
+        historyEmpty = null
         super.onDestroyView()
     }
 
@@ -316,14 +363,58 @@ class DialerFragment : Fragment() {
         btnBackspace?.visibility = if (entered.isEmpty()) View.INVISIBLE else View.VISIBLE
     }
 
-    private fun renderStation() {
+    private fun renderDialerIdentity() {
         val extension = dialerConfig?.mapping?.extension?.takeIf { it.isNotBlank() }
-        tvStation?.text = extension ?: station
+        val staffName = dialerConfig?.staff?.name?.takeIf { it.isNotBlank() }
+        tvStation?.text = when {
+            dialerConfig == null -> "Checking your dialer access..."
+            dialerConfig?.configured != true -> "Modern Dialer is not configured for this account"
+            else -> listOfNotNull(staffName, extension?.let { "Extension $it" }).joinToString("  •  ")
+        }
+        tvConnection?.text = when {
+            dialerConfig?.configured != true -> "Unavailable"
+            ModernDialerWebViewBridge.isPhoneReady() -> "Ready"
+            else -> "Connecting"
+        }
+        val enabled = dialerConfig?.configured == true
+        btnAvailable?.isEnabled = enabled
+        btnBreak?.isEnabled = enabled
+        btnAvailable?.alpha = if (enabled) 1f else 0.5f
+        btnBreak?.alpha = if (enabled) 1f else 0.5f
+    }
+
+    private val requestBluetoothPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) selectAudioRoute(AudioRoute.BLUETOOTH)
+        else Toast.makeText(requireContext(), "Bluetooth permission is required to use a headset", Toast.LENGTH_LONG).show()
+    }
+
+    private fun renderAgentStatus() {
+        val available = agentStatus == "available"
+        val onBreak = agentStatus == "break"
+        val configured = dialerConfig?.configured == true
+        btnAvailable?.setBackgroundResource(if (available && configured) R.drawable.bg_attendance_segment_active else 0)
+        btnBreak?.setBackgroundResource(if (onBreak && configured) R.drawable.bg_attendance_segment_active else 0)
+        btnAvailable?.setTextColor(resolveAttr(if (available && configured) R.attr.colorForegroundPrimary else R.attr.colorForegroundMuted))
+        btnBreak?.setTextColor(resolveAttr(if (onBreak && configured) R.attr.colorForegroundPrimary else R.attr.colorForegroundMuted))
+    }
+
+    private fun setAgentStatus(status: String) {
+        if (dialerConfig?.configured != true) {
+            Toast.makeText(requireContext(), "Modern Dialer is not configured for this account", Toast.LENGTH_LONG).show()
+            return
+        }
+        ModernDialerWebViewBridge.setAgentStatus(status)
     }
 
     private fun renderCallPanel() {
         val visible = callStage != CallStage.IDLE
         callPanel?.visibility = if (visible) View.VISIBLE else View.GONE
+        tvNumber?.visibility = if (visible) View.GONE else View.VISIBLE
+        btnBackspace?.visibility = if (visible || entered.isEmpty()) View.INVISIBLE else View.VISIBLE
+        btnCall?.visibility = if (visible) View.GONE else View.VISIBLE
+        view?.findViewById<View>(R.id.dialpadGrid)?.visibility = if (visible) View.GONE else View.VISIBLE
         if (!visible) return
 
         tvCallStatus?.text = when (callStage) {
@@ -341,31 +432,19 @@ class DialerFragment : Fragment() {
         btnHold?.isEnabled = callStage == CallStage.IN_CALL
         btnMute?.alpha = if (callStage == CallStage.IN_CALL) 1f else 0.45f
         btnHold?.alpha = if (callStage == CallStage.IN_CALL) 1f else 0.45f
-    }
-
-    private fun showStationDialog() {
-        val input = EditText(requireContext()).apply {
-            inputType = InputType.TYPE_CLASS_NUMBER
-            hint = DEFAULT_STATION
-            setText(station)
-            setSelection(text.length)
-        }
-        AlertDialog.Builder(requireContext())
-            .setTitle("Station number")
-            .setMessage("Doocti station to bridge calls through.")
-            .setView(input)
-            .setPositiveButton("Save") { _, _ ->
-                val cleaned = input.text.toString().filter { it.isDigit() }.take(15)
-                station = cleaned.ifBlank { DEFAULT_STATION }
-                prefs.edit().putString(KEY_STATION, station).apply()
-                renderStation()
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
+        renderAudioRoute()
     }
 
     private fun onCall() {
         if (calling) return
+        if (agentStatus != "available") {
+            Toast.makeText(
+                requireContext(),
+                "Switch to Available before placing a call",
+                Toast.LENGTH_LONG,
+            ).show()
+            return
+        }
         val digits = entered.filter { it.isDigit() }
         if (digits.length < 10) {
             Toast.makeText(
@@ -375,24 +454,57 @@ class DialerFragment : Fragment() {
             ).show()
             return
         }
-        triggerModernDialerOrFallback(digits)
+        triggerModernDialerWhenReady(digits)
     }
 
     private fun loadDialerConfig() {
         if (!session.isLoggedIn) return
-        tvStation?.text = "Checking mapping..."
+        tvStation?.text = "Checking your dialer access..."
         viewLifecycleOwner.lifecycleScope.launch {
             val cfg = fetchDialerConfigWithRetry()
             dialerConfig = cfg
-            renderStation()
+            renderDialerIdentity()
+            renderAgentStatus()
+            if (cfg?.configured == true) {
+                ModernDialerWebViewBridge.ensureLoaded(requireContext(), cfg)
+                ModernDialerWebViewBridge.requestState()
+                promptForFullScreenCallAccessIfNeeded()
+            }
         }
+    }
+
+    private fun promptForFullScreenCallAccessIfNeeded() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return
+        val manager = requireContext().getSystemService(NotificationManager::class.java)
+        if (manager.canUseFullScreenIntent()) return
+
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Allow incoming call screen")
+            .setMessage(
+                "Enable full-screen notifications so Modern Dialer calls can ring and open when this phone is locked.",
+            )
+            .setNegativeButton("Not now", null)
+            .setPositiveButton("Open settings") { _, _ ->
+                runCatching {
+                    startActivity(
+                        Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT).apply {
+                            data = android.net.Uri.parse("package:${requireContext().packageName}")
+                        },
+                    )
+                }.onFailure {
+                    Toast.makeText(
+                        requireContext(),
+                        "Open app settings and allow full-screen notifications.",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+            }
+            .show()
     }
 
     /** The modern-dialer config is essential: the extension + WebRTC token come
      *  from it. A transient failure (the prod backend was returning 27s
      *  responses, past OkHttp's 30s timeout) must NOT be treated as "no mapping"
-     *  — otherwise a configured account silently drops to the decommissioned
-     *  Doocti endpoint (mms.aivida.in → HTTP 404) and shows the wrong station.
      *  Retry a few times before giving up. */
     private suspend fun fetchDialerConfigWithRetry(
         attempts: Int = 3,
@@ -406,24 +518,26 @@ class DialerFragment : Fragment() {
         return null
     }
 
-    private fun triggerModernDialerOrFallback(phone: String) {
+    private fun triggerModernDialerWhenReady(phone: String) {
         val config = dialerConfig
         if (config != null) {
             routeCall(phone, config)
             return
         }
         // Config hasn't loaded yet (or a prior fetch failed transiently). Fetch
-        // it inline before deciding, so we don't wrongly fall through to Doocti.
+        // it inline before deciding, so a transient failure is not mistaken for
+        // a missing account mapping.
         calling = true
         btnCall?.isEnabled = false
-        tvStation?.text = "Checking mapping..."
+        tvStation?.text = "Checking your dialer access..."
         viewLifecycleOwner.lifecycleScope.launch {
             val fetched = fetchDialerConfigWithRetry()
             calling = false
             btnCall?.isEnabled = true
             if (fetched != null) {
                 dialerConfig = fetched
-                renderStation()
+                renderDialerIdentity()
+                renderAgentStatus()
             }
             routeCall(phone, fetched)
         }
@@ -440,15 +554,18 @@ class DialerFragment : Fragment() {
             }
             triggerModernDialer(phone, config)
         } else if (config == null) {
-            // Couldn't reach the config service at all — don't place a call on
-            // the dead Doocti endpoint; tell the user to retry.
+            // Couldn't reach the config service at all; tell the user to retry.
             Toast.makeText(
                 requireContext(),
                 "Couldn't reach the dialer service. Check your connection and try again.",
                 Toast.LENGTH_LONG,
             ).show()
         } else {
-            triggerDoocti(phone, station)
+            Toast.makeText(
+                requireContext(),
+                "Modern Dialer is not configured for this account. Contact an administrator.",
+                Toast.LENGTH_LONG,
+            ).show()
         }
     }
 
@@ -467,7 +584,6 @@ class DialerFragment : Fragment() {
         callStage = CallStage.CONNECTING
         activeNumber = phone
         renderCallPanel()
-        startCallAudio()
         startConnectingTimeout()
         btnCall?.isEnabled = false
         callIcon?.visibility = View.INVISIBLE
@@ -476,62 +592,22 @@ class DialerFragment : Fragment() {
         Toast.makeText(requireContext(), "Placing call...", Toast.LENGTH_SHORT).show()
         viewLifecycleOwner.lifecycleScope.launch {
             try {
+                keepCallProcessActive(phone)
                 ModernDialerWebViewBridge.ensureLoaded(requireContext(), config)
-                ModernDialerWebViewBridge.call(phone)
+                if (!ModernDialerWebViewBridge.call(phone)) {
+                    Toast.makeText(
+                        requireContext(),
+                        "Another dialer call is already active",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    resetCallState()
+                    return@launch
+                }
+                ModernDialerWebViewBridge.requestState()
                 Toast.makeText(requireContext(), "Calling $phone...", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
-                Toast.makeText(
-                    requireContext(),
-                    "Modern Dialer failed, trying fallback...",
-                    Toast.LENGTH_SHORT,
-                ).show()
-                val fallback = api.dialDoocti(
-                    DOOCTI_URL,
-                    DialDooctiRequest(phone_number = phone, station = station),
-                )
-                val ok = fallback.ok == true
-                val msg = if (ok) {
-                    "Fallback call placed - your phone will ring shortly"
-                } else {
-                    "Fallback failed: ${fallback.error ?: fallback.stage ?: "unknown"}"
-                }
-                Toast.makeText(requireContext(), msg, Toast.LENGTH_LONG).show()
-            } finally {
-                calling = false
-                btnCall?.isEnabled = true
-                callSkeleton?.let { SkeletonUtils.stopSkeletonPulse(it) }
-                callSkeleton?.visibility = View.GONE
-                callIcon?.visibility = View.VISIBLE
-            }
-        }
-    }
-
-    private fun triggerDoocti(phone: String, stationNumber: String) {
-        calling = true
-        btnCall?.isEnabled = false
-        callIcon?.visibility = View.INVISIBLE
-        callSkeleton?.visibility = View.VISIBLE
-        callSkeleton?.let { SkeletonUtils.startSkeletonPulse(it) }
-        Toast.makeText(requireContext(), "Placing call…", Toast.LENGTH_SHORT).show()
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val resp = api.dialDoocti(
-                    DOOCTI_URL,
-                    DialDooctiRequest(phone_number = phone, station = stationNumber),
-                )
-                val ok = resp.ok == true
-                val msg = if (ok) {
-                    "Call placed — your phone will ring shortly"
-                } else {
-                    "Call failed: ${resp.error ?: resp.stage ?: "unknown"}"
-                }
-                Toast.makeText(requireContext(), msg, Toast.LENGTH_LONG).show()
-            } catch (e: Exception) {
-                Toast.makeText(
-                    requireContext(),
-                    "Network error: ${e.message ?: "unknown"}",
-                    Toast.LENGTH_LONG,
-                ).show()
+                Toast.makeText(requireContext(), "Modern Dialer could not start. Please retry.", Toast.LENGTH_LONG).show()
+                resetCallState()
             } finally {
                 calling = false
                 btnCall?.isEnabled = true
@@ -544,7 +620,17 @@ class DialerFragment : Fragment() {
 
     private fun handleDialerEvent(event: DialerEvent) {
         when (event.type) {
-            "ready" -> Unit
+            "ready", "phone:registered" -> tvConnection?.text = "Ready"
+            "phone:unregistered" -> tvConnection?.text = "Offline"
+            "phone:state", "phone:status" -> {
+                val state = event.stringPayload("state") ?: event.stringPayload("status")
+                tvConnection?.text = if (state == "registered") "Ready" else "Connecting"
+            }
+            "agent:status" -> {
+                agentStatus = event.stringPayload("status") ?: agentStatus
+                renderAgentStatus()
+            }
+            "agent:status-error" -> Toast.makeText(requireContext(), "Could not update dialer status", Toast.LENGTH_LONG).show()
             "call:incoming" -> {
                 activeNumber = event.stringPayload("from") ?: "Incoming call"
                 callStage = CallStage.INCOMING
@@ -553,42 +639,71 @@ class DialerFragment : Fragment() {
                 renderCallPanel()
             }
             "call:ringing-out" -> {
-                // The softphone originated and the line is ringing — the call
-                // is progressing, so stop the connect-failure timeout and play
-                // the ringback so the agent hears it forwarding + ringing.
-                cancelConnectingTimeout()
-                startRingback()
+                // The provider supplies the real remote caller tune. Do not
+                // layer a synthetic ringback over it.
                 activeNumber = event.stringPayload("to") ?: activeNumber
                 callStage = CallStage.CONNECTING
                 renderCallPanel()
             }
             "call:picked-up" -> {
                 cancelConnectingTimeout()
-                stopRingback()
                 callStage = CallStage.CONNECTING
                 renderCallPanel()
             }
             "call:answered" -> {
                 cancelConnectingTimeout()
-                stopRingback()
                 activeNumber = event.stringPayload("from")
                     ?: event.stringPayload("to")
                     ?: activeNumber
                 callStage = CallStage.IN_CALL
                 renderCallPanel()
             }
-            "call:ended", "call:error", "call:incoming-suppressed" -> resetCallState()
+            "call:progress" -> {
+                when ((event.stringPayload("status") ?: event.stringPayload("state"))?.lowercase()) {
+                    "answered", "connected", "in-call", "active" -> {
+                        cancelConnectingTimeout()
+                        callStage = CallStage.IN_CALL
+                        renderCallPanel()
+                    }
+                    "ended", "completed", "hangup", "hung-up" -> resetCallState("completed")
+                    "failed", "busy", "rejected", "unavailable" -> resetCallState("failed")
+                }
+            }
+            "call:ended" -> resetCallState("completed")
+            "call:error" -> {
+                event.stringPayload("message")?.let { message ->
+                    Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
+                }
+                resetCallState("failed")
+            }
+            "call:incoming-suppressed" -> resetCallState("missed")
+            "media:restarting" -> {
+                tvConnection?.text = "Reconnecting audio"
+                Toast.makeText(requireContext(), "Reconnecting call audio...", Toast.LENGTH_SHORT).show()
+            }
+            "media:diagnostic-server" -> {
+                val state = event.stringPayload("connectionState")
+                tvConnection?.text = when (state?.lowercase()) {
+                    "connected", "completed" -> "Audio connected"
+                    else -> "Audio reconnecting"
+                }
+            }
+            "media:error" -> {
+                event.stringPayload("message")?.let { message ->
+                    Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
+                }
+                tvConnection?.text = "Audio unavailable"
+            }
         }
     }
 
-    private fun resetCallState() {
+    private fun resetCallState(finalStatus: String? = null) {
         cancelConnectingTimeout()
-        stopRingback()
-        stopCallAudio()
         callStage = CallStage.IDLE
         activeNumber = null
         muted = false
         held = false
+        renderRecentCalls()
         renderCallPanel()
     }
 
@@ -605,10 +720,11 @@ class DialerFragment : Fragment() {
                 btnCall?.isEnabled = true
                 Toast.makeText(
                     requireContext(),
-                    "Call didn't connect. The dialer couldn't reach the line — check the station/registration and try again.",
+                    "Call didn't connect. Check your network and dialer status, then try again.",
                     Toast.LENGTH_LONG,
                 ).show()
-                resetCallState()
+                ModernDialerWebViewBridge.cancelPendingCalls()
+                resetCallState("failed")
             }
         }
     }
@@ -618,60 +734,132 @@ class DialerFragment : Fragment() {
         connectingTimeoutJob = null
     }
 
-    /** Plays the standard ringback tone (looping) while the call is ringing so
-     *  the agent knows it's forwarded and ringing. Safe to call repeatedly. */
-    private fun startRingback() {
-        if (ringbackTone != null) return
-        ringbackTone = runCatching {
-            ToneGenerator(AudioManager.STREAM_VOICE_CALL, 80).apply {
-                startTone(ToneGenerator.TONE_SUP_RINGTONE)
-            }
-        }.getOrNull()
-    }
-
-    private fun stopRingback() {
-        ringbackTone?.let { runCatching { it.stopTone(); it.release() } }
-        ringbackTone = null
-    }
-
-    /** Put the audio system into VoIP call mode + take audio focus so the
-     *  WebView's WebRTC can actually acquire the mic and route call audio. The
-     *  softphone was failing with "Could not start audio source" / "Unable to
-     *  select communication device" because the app never entered this mode
-     *  (OPPO/ColorOS blocks the audio source otherwise). */
-    private fun startCallAudio() {
+    private fun selectAudioRoute(route: AudioRoute) {
         val am = context?.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
-        runCatching {
-            am.mode = AudioManager.MODE_IN_COMMUNICATION
-            val attrs = AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                .build()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val req = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
-                    .setAudioAttributes(attrs)
-                    .build()
-                audioFocusRequest = req
-                am.requestAudioFocus(req)
-            } else {
-                @Suppress("DEPRECATION")
-                am.requestAudioFocus(null, AudioManager.STREAM_VOICE_CALL, AudioManager.AUDIOFOCUS_GAIN)
+        if (!applyAudioRoute(am, route)) {
+            Toast.makeText(requireContext(), "No Bluetooth call device is connected", Toast.LENGTH_SHORT).show()
+            return
+        }
+        audioRoute = route
+        updateCallServiceAudioRoute(route)
+        renderAudioRoute()
+    }
+
+    @Suppress("DEPRECATION")
+    private fun applyAudioRoute(am: AudioManager, route: AudioRoute): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val wantedTypes = when (route) {
+                AudioRoute.PHONE -> setOf(android.media.AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)
+                AudioRoute.SPEAKER -> setOf(android.media.AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)
+                AudioRoute.BLUETOOTH -> setOf(
+                    android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+                    android.media.AudioDeviceInfo.TYPE_BLE_HEADSET,
+                    android.media.AudioDeviceInfo.TYPE_BLE_SPEAKER,
+                )
+            }
+            val device = runCatching {
+                am.availableCommunicationDevices.firstOrNull { it.type in wantedTypes }
+            }.getOrNull() ?: return false
+            return runCatching { am.setCommunicationDevice(device) }.getOrDefault(false)
+        }
+        return when (route) {
+            AudioRoute.PHONE -> {
+                am.stopBluetoothSco()
+                am.isBluetoothScoOn = false
+                am.isSpeakerphoneOn = false
+                true
+            }
+            AudioRoute.SPEAKER -> {
+                am.stopBluetoothSco()
+                am.isBluetoothScoOn = false
+                am.isSpeakerphoneOn = true
+                true
+            }
+            AudioRoute.BLUETOOTH -> {
+                if (!am.isBluetoothScoAvailableOffCall) return false
+                am.isSpeakerphoneOn = false
+                am.startBluetoothSco()
+                am.isBluetoothScoOn = true
+                true
             }
         }
     }
 
-    private fun stopCallAudio() {
-        val am = context?.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
-        runCatching {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                audioFocusRequest?.let { am.abandonAudioFocusRequest(it) }
-            } else {
-                @Suppress("DEPRECATION")
-                am.abandonAudioFocus(null)
-            }
-            audioFocusRequest = null
-            am.mode = AudioManager.MODE_NORMAL
+    private fun renderAudioRoute() {
+        listOf(
+            AudioRoute.PHONE to btnPhoneAudio,
+            AudioRoute.SPEAKER to btnSpeakerAudio,
+            AudioRoute.BLUETOOTH to btnBluetoothAudio,
+        ).forEach { (route, button) ->
+            val selected = route == audioRoute
+            button?.setBackgroundResource(if (selected) R.drawable.bg_attendance_segment_active else 0)
+            button?.setTextColor(
+                resolveAttr(if (selected) R.attr.colorForegroundPrimary else R.attr.colorForegroundMuted),
+            )
         }
+    }
+
+    private fun renderRecentCalls() {
+        val container = historyList ?: return
+        val calls = recentCallStore.read()
+        historyEmpty?.visibility = if (calls.isEmpty()) View.VISIBLE else View.GONE
+        container.removeAllViews()
+        val formatter = SimpleDateFormat("dd MMM, h:mm a", Locale.getDefault())
+        calls.take(8).forEach { call ->
+            val row = TextView(requireContext()).apply {
+                text = "${if (call.direction == "incoming") "Incoming" else "Outgoing"}  ${call.number}\n" +
+                    "${formatter.format(Date(call.startedAt))}  •  ${call.status}  •  ${formatDuration(call.durationSeconds)}"
+                setTextColor(resolveAttr(R.attr.colorForegroundPrimary))
+                textSize = 13f
+                setPadding(dp(12), dp(10), dp(12), dp(10))
+                background = ContextCompat.getDrawable(requireContext(), R.drawable.bg_task_inner_card)
+                isClickable = true
+                isFocusable = true
+                setOnClickListener {
+                    entered = call.number
+                    renderNumber()
+                }
+            }
+            container.addView(
+                row,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ).apply { topMargin = dp(8) },
+            )
+        }
+    }
+
+    private fun formatDuration(seconds: Long): String =
+        if (seconds < 60) "${seconds}s" else "${seconds / 60}m ${seconds % 60}s"
+
+    private fun keepCallProcessActive(phone: String) {
+        val source = Intent().apply {
+            putExtra(ModernDialerCallController.EXTRA_CALL_ID, "outbound-${System.currentTimeMillis()}")
+            putExtra(ModernDialerCallController.EXTRA_DISPLAY_NAME, "Outgoing call")
+            putExtra(ModernDialerCallController.EXTRA_FROM_NUMBER, phone)
+            putExtra(ModernDialerCallController.EXTRA_AUDIO_ROUTE, audioRoute.name)
+        }
+        ContextCompat.startForegroundService(
+            requireContext(),
+            ModernDialerCallController.serviceIntent(
+                requireContext(),
+                source,
+                ModernDialerCallController.ACTION_KEEP_ACTIVE,
+            ),
+        )
+    }
+
+    private fun updateCallServiceAudioRoute(route: AudioRoute) {
+        val intent = Intent(
+            requireContext(),
+            com.manjugroups.m_connect.notifications.ModernDialerCallService::class.java,
+        ).apply {
+            action = ModernDialerCallController.ACTION_SET_AUDIO_ROUTE
+            putExtra(ModernDialerCallController.EXTRA_CALL_ID, activeNumber ?: "active-call")
+            putExtra(ModernDialerCallController.EXTRA_AUDIO_ROUTE, route.name)
+        }
+        requireContext().startService(intent)
     }
 
     private fun DialerEvent.stringPayload(key: String): String? {
@@ -681,13 +869,13 @@ class DialerFragment : Fragment() {
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     companion object {
-        private const val PREFS = "mconnect_prefs"
-        private const val KEY_STATION = "dialer.station"
-        private const val DEFAULT_STATION = "6369487527"
+        private const val ARG_PHONE = "dialer.phone"
         // How long to wait for the softphone to report call progress before
         // giving up on a stuck "Connecting".
         private const val CONNECTING_TIMEOUT_MS = 40_000L
-        private val DOOCTI_URL: String
-            get() = com.manjugroups.m_connect.BuildConfig.APP_URL.trimEnd('/') + "/api/doocti-call"
+
+        fun newInstance(phone: String): DialerFragment = DialerFragment().apply {
+            arguments = Bundle().apply { putString(ARG_PHONE, phone) }
+        }
     }
 }

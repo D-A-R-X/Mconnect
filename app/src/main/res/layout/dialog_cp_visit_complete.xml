@@ -3,7 +3,7 @@
   Outcome Information sheet — full Booking flow.
 
   TOP TAB BAR (Pencil "Tabs" SVG ref):
-    Booking · Site visit · Postpone · Not Interested
+    Booking · Site visit · Follow-up · Not Interested
     36dp gradient-blue circle for the active outcome, white-ish circle
     for inactive. Tab labels use the same gradient when active. A 2dp
     rounded underline sits below the active label, and 1dp vertical
@@ -308,7 +308,7 @@
                     android:layout_marginTop="4dp"
                     android:fontFamily="@font/inter_medium"
                     android:includeFontPadding="false"
-                    android:text="Postpone"
+                    android:text="Follow-up"
                     android:textColor="#6A6D78"
                     android:textSize="11sp" />
 
@@ -588,38 +588,59 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginHorizontal="20dp"
-            android:orientation="horizontal"
+            android:orientation="vertical"
             android:visibility="gone">
 
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/btnCpLockedReject"
+                    android:layout_width="0dp"
+                    android:layout_height="52dp"
+                    android:layout_marginEnd="10dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_outcome_segment_inactive"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:fontFamily="@font/inter_semibold"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:text="Reject It"
+                    android:textColor="?attr/colorError"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:id="@+id/btnCpLockedConfirm"
+                    android:layout_width="0dp"
+                    android:layout_height="52dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_outcome_primary_button"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:fontFamily="@font/inter_semibold"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:text="Confirm It"
+                    android:textColor="?attr/colorForegroundInverse"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
             <TextView
-                android:id="@+id/btnCpLockedReject"
-                android:layout_width="0dp"
+                android:id="@+id/btnCpLockedCancel"
+                android:layout_width="match_parent"
                 android:layout_height="52dp"
-                android:layout_marginEnd="10dp"
-                android:layout_weight="1"
+                android:layout_marginTop="10dp"
                 android:background="@drawable/bg_outcome_segment_inactive"
                 android:clickable="true"
                 android:focusable="true"
                 android:fontFamily="@font/inter_semibold"
                 android:gravity="center"
                 android:includeFontPadding="false"
-                android:text="Reject It"
-                android:textColor="#D92D20"
-                android:textSize="14sp" />
-
-            <TextView
-                android:id="@+id/btnCpLockedConfirm"
-                android:layout_width="0dp"
-                android:layout_height="52dp"
-                android:layout_weight="1"
-                android:background="@drawable/bg_outcome_primary_button"
-                android:clickable="true"
-                android:focusable="true"
-                android:fontFamily="@font/inter_semibold"
-                android:gravity="center"
-                android:includeFontPadding="false"
-                android:text="Confirm It"
-                android:textColor="#FFFFFF"
+                android:text="Cancel SV"
+                android:textColor="?attr/colorError"
                 android:textSize="14sp" />
         </LinearLayout>
     </LinearLayout>

@@ -1,0 +1,92 @@
+MCONNECT MOBILE - RELIABLE CP CREATION + JOINT CP ACCESS
+API HANDOFF
+
+1. IDEMPOTENT, READ-AFTER-WRITE CP CREATION
+--------------------------------------------
+
+POST /api/marketing/clientPlaceVisits/create
+Authorization: Bearer <token>
+Idempotency-Key: <uuid-v4>
+Content-Type: application/json
+
+The existing request body remains backward-compatible:
+{
+  "clientName": "Vinoth",
+  "mobileNumber": "8056390424",
+  "assignedStaffId": "<primary-staff-id>",
+  "jointStaffIds": ["<companion-staff-id>"],
+  "cpType": "joint_cp",
+  "jointCpCategory": "old_client",
+  "scheduledDate": "2026-09-01",
+  "scheduledTime": "14:00"
+}
+
+Validation and transaction rules
+- Idempotency-Key is required, must be a UUID, and is scoped to the authenticated
+  creator. Store a unique key on creatorStaffId + requestId.
+- Create the CP parent, client/client-place links, field visit, daily task, and
+  Joint CP participant legs in one transaction. Never return partial records.
+- A repeat with the same requestId and identical payload returns HTTP 200 and
+  the original ids. It must not create another CP/task/participant leg.
+- A repeat with the same requestId but a different payload returns
+  409 IDEMPOTENCY_CONFLICT.
+- Do not return success until the created parent is visible to the creator and
+  every Joint CP participant through `/clientPlaceVisits/my` and the web read
+  paths. Avoid eventually-consistent/background-only participant insertion.
+
+Success
+{
+  "success": true,
+  "id": "<clientPlaceVisitId>",
+  "fieldVisitId": "<fieldVisitId>",
+  "requestId": "<same-request-id>",
+  "alreadyCreated": false
+}
+
+Idempotent repeat returns the same ids with alreadyCreated: true.
+
+GET /api/marketing/clientPlaceVisits/my must include the stored header value as
+`requestId` on each item.
+Android uses that field only to reconcile a create whose HTTP response was
+lost after commit. It is additive and can be omitted from web display.
+
+2. JOINT CP PARTICIPANT VISIBILITY AND ACCESS
+---------------------------------------------
+
+Creation payload remains:
+- assignedStaffId = primary/senior staff
+- jointStaffIds = array containing only the second/companion staff
+
+Do not require Android to send the primary twice. The server creates exactly
+two participant rows and one parent CP.
+
+Every authenticated CP read/action must treat a staff member as involved when:
+- parent.assignedStaffId == viewerStaffId, OR
+- clientPlaceVisitParticipants contains the parent visit id + viewerStaffId.
+
+Apply this rule to:
+- GET /api/marketing/clientPlaceVisits/my
+- CP detail/get endpoint used by mobile/web
+- field-visit/trip start, refresh, and completion authorization
+- markClientMet, setOutcome, cancel, and proof reads
+- web list, calendar, stats, search, staff filters, and export
+
+Return one de-duplicated parent visit with the existing `joint.participants`
+summary. Both participants may view the shared CP and their own travel leg.
+Keep the existing business rule that only the primary staff submits the shared
+OTP/final outcome if that rule is already enforced; return 403 PRIMARY_ONLY
+for that specific action instead of making the whole CP invisible.
+
+Historical repair
+- Find joint_cp parents with fewer than two participant rows.
+- Backfill only missing participant legs from creation/audit data.
+- Never create a second parent CP during repair.
+
+Acceptance checks
+1. A slow/lost create response followed by the same requestId returns one CP.
+2. The new CP is immediately present in mobile and web list reads.
+3. Joint staff A and B both see/open the same parent id.
+4. Staff filters by A or B return that one parent row.
+5. Both participant travel legs remain independently authorized and visible.
+6. Shared outcome restrictions return a clear PRIMARY_ONLY error where needed.
+7. Any transaction failure leaves no CP, field visit, task, or participant row.

@@ -8,6 +8,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.content.res.ResourcesCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.manjugroups.m_connect.R
@@ -111,7 +112,7 @@ class StaffDetailFragment : Fragment() {
             val chip = TextView(requireContext()).apply {
                 text = tab.label
                 textSize = 13f
-                typeface = resources.getFont(R.font.inter_semibold)
+                typeface = ResourcesCompat.getFont(requireContext(), R.font.inter_semibold)
                 setPadding(dp(16), dp(8), dp(16), dp(8))
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -161,14 +162,14 @@ class StaffDetailFragment : Fragment() {
                 text = label
                 setTextColor(resolveColor(R.attr.colorForegroundMuted))
                 textSize = 12f
-                typeface = resources.getFont(R.font.inter_regular)
+                typeface = ResourcesCompat.getFont(requireContext(), R.font.inter_regular)
             }
 
             val valueTv = TextView(requireContext()).apply {
                 text = value
                 setTextColor(resolveColor(R.attr.colorForegroundPrimary))
                 textSize = 14f
-                typeface = resources.getFont(R.font.inter_medium)
+                typeface = ResourcesCompat.getFont(requireContext(), R.font.inter_medium)
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT

@@ -34,18 +34,44 @@ class PermissionsViewModel : ViewModel() {
     private val _event = MutableSharedFlow<String>()
     val event: SharedFlow<String> = _event.asSharedFlow()
 
-    fun load(bearerToken: String, canApprove: Boolean) {
+    fun load(
+        bearerToken: String,
+        canApprove: Boolean,
+        fromDate: String? = null,
+        toDate: String? = null,
+        status: String? = null,
+        staffId: String? = null,
+    ) {
         _uiState.value = _uiState.value.copy(isLoading = true)
         viewModelScope.launch {
             try {
                 // Independent reads fired in PARALLEL — previously serial, so the
                 // screen blocked on the SUM of up to five round-trips.
                 val usageD = async { runCatching { api.getPermissionUsage(bearerToken) }.getOrNull() }
-                val historyD = async { runCatching { api.getMyPermissions(bearerToken) }.getOrNull() }
+                val historyD = async {
+                    runCatching {
+                        api.getMyPermissions(
+                            bearerToken,
+                            staffId = staffId,
+                            fromDate = fromDate,
+                            toDate = toDate,
+                            status = status,
+                            pageSize = 200,
+                        )
+                    }.getOrNull()
+                }
                 val pendingD = async {
                     if (canApprove) {
                         runCatching {
-                            api.getPendingPermissionApprovals(bearerToken, scope = "direct")
+                            api.getPendingPermissionApprovals(
+                                bearerToken,
+                                scope = "direct",
+                                fromDate = fromDate,
+                                toDate = toDate,
+                                status = status,
+                                staffId = staffId,
+                                pageSize = 200,
+                            )
                         }.getOrNull()
                     } else null
                 }
@@ -58,6 +84,11 @@ class PermissionsViewModel : ViewModel() {
                                 bearerToken,
                                 scope = "direct",
                                 all = true,
+                                fromDate = fromDate,
+                                toDate = toDate,
+                                status = status,
+                                staffId = staffId,
+                                pageSize = 200,
                             )
                         }.getOrNull()
                     } else null

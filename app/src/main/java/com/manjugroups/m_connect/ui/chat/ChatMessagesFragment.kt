@@ -728,7 +728,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         }
     }
 
-    @androidx.media3.common.util.UnstableApi
+    @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
     private fun showVideoPreview(url: String) {
         val view = LayoutInflater.from(requireContext()).inflate(R.layout.popup_video_preview, null)
         val popup = PopupWindow(
@@ -3609,7 +3609,12 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         }
         runCatching {
             audioFile = File(requireContext().cacheDir, "voice_${System.currentTimeMillis()}.m4a")
-            mediaRecorder = MediaRecorder(requireContext()).apply {
+            mediaRecorder = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                MediaRecorder(requireContext())
+            } else {
+                @Suppress("DEPRECATION")
+                MediaRecorder()
+            }.apply {
                 setAudioSource(MediaRecorder.AudioSource.MIC)
                 setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
                 setAudioEncoder(MediaRecorder.AudioEncoder.AAC)

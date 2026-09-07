@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.PackageManager
 import android.view.ViewGroup
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
@@ -20,9 +21,18 @@ import android.webkit.WebViewClient
 import androidx.core.content.ContextCompat
 import com.google.gson.Gson
 import com.manjugroups.m_connect.network.MobileDialerConfigResponse
+import com.manjugroups.m_connect.auth.SessionManager
+import com.manjugroups.m_connect.ui.telecaller.DialerRecentCall
+import com.manjugroups.m_connect.ui.telecaller.DialerRecentCallStore
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.CopyOnWriteArrayList
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import com.manjugroups.m_connect.network.ApiService
 
 object ModernDialerWebViewBridge {
     private const val TAG = "ModernDialer"
@@ -33,13 +43,12 @@ object ModernDialerWebViewBridge {
     // is allowed (https), and control messages are accepted.
     private const val HOST_BASE_URL = "https://mg.theairix.com"
     private const val JS_INTERFACE = "MconnectDialerBridge"
-    // If the softphone never reports registration, flush queued commands anyway
-    // after this long so a call attempt isn't silently stuck "connecting".
-    private const val FALLBACK_FLUSH_MS = 6_000L
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val gson = Gson()
     private val listeners = CopyOnWriteArrayList<(DialerEvent) -> Unit>()
+    private val apiScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val restartedMediaCallIds = mutableSetOf<String>()
 
     private var webView: WebView? = null
     private var loadedUrl: String? = null
@@ -50,8 +59,27 @@ object ModernDialerWebViewBridge {
     // rings. Track both and only flush queued commands once both are true.
     private var pageLoaded: Boolean = false
     private var phoneRegistered: Boolean = false
-    private var fallbackFlushPosted: Boolean = false
     private var pendingCommands = mutableListOf<Pair<String, Map<String, Any>>>()
+    private var applicationContext: Context? = null
+    private var callActive = false
+    private var activeNumber: String? = null
+    private var activeProviderCallId: String? = null
+    private var callDirection = "outgoing"
+    private var callStartedAt: Long? = null
+    private var callAnsweredAt: Long? = null
+    private var recentCallStore: DialerRecentCallStore? = null
+    private val outgoingSetupTimeout = Runnable {
+        if (callActive && callDirection == "outgoing" && callAnsweredAt == null) {
+            if (pageLoaded && phoneRegistered) evaluateCommand("hangup", emptyMap())
+            finishCall("no_answer")
+            emit(DialerEvent("call:error", mapOf("message" to "Call timed out")))
+        }
+    }
+
+    fun isPhoneReady(): Boolean = pageLoaded && phoneRegistered
+    fun hasActiveCall(): Boolean = callActive
+    fun activeCallNumber(): String? = activeNumber
+    fun isCallAnswered(): Boolean = callAnsweredAt != null
 
     fun addListener(listener: (DialerEvent) -> Unit) {
         listeners.add(listener)
@@ -61,6 +89,15 @@ object ModernDialerWebViewBridge {
         listeners.remove(listener)
     }
 
+    fun detachFromActivity(context: Context) {
+        val activity = context.findActivity() ?: return
+        mainHandler.post {
+            val view = webView ?: return@post
+            val parent = view.parent as? ViewGroup ?: return@post
+            if (parent === activity.window?.decorView) parent.removeView(view)
+        }
+    }
+
     fun ensureLoaded(context: Context, config: MobileDialerConfigResponse, onReady: (Result<Unit>) -> Unit = {}) {
         val token = config.mapping?.token?.takeIf { it.isNotBlank() }
         if (token == null) {
@@ -68,6 +105,10 @@ object ModernDialerWebViewBridge {
             return
         }
         val url = buildEmbedUrl(context, token)
+        applicationContext = context.applicationContext
+        if (recentCallStore == null) {
+            recentCallStore = DialerRecentCallStore(context.applicationContext, SessionManager(context).staffId)
+        }
         mainHandler.post {
             try {
                 val view = webView ?: createWebView(context.applicationContext).also { webView = it }
@@ -81,7 +122,6 @@ object ModernDialerWebViewBridge {
                 if (loadedUrl != url) {
                     pageLoaded = false
                     phoneRegistered = false
-                    fallbackFlushPosted = false
                     loadedUrl = url
                     Log.i(TAG, "loading dialer embed (iframe host): $url")
                     // Load a HOST page (origin = HOST_BASE_URL) that embeds the
@@ -124,22 +164,22 @@ object ModernDialerWebViewBridge {
         if (pageLoaded && phoneRegistered) flushPending()
     }
 
-    /** Safety net: if the softphone never reports registration, send any queued
-     *  command anyway after a short delay so a call isn't stuck "connecting"
-     *  forever. Logs when it fires so a stuck registration is visible. */
-    private fun scheduleFallbackFlush() {
-        if (fallbackFlushPosted) return
-        fallbackFlushPosted = true
-        mainHandler.postDelayed({
-            if (!phoneRegistered && pageLoaded && pendingCommands.isNotEmpty()) {
-                Log.w(TAG, "registration not confirmed in ${FALLBACK_FLUSH_MS}ms — flushing ${pendingCommands.size} queued cmd(s) anyway")
-                flushPending()
-            }
-        }, FALLBACK_FLUSH_MS)
-    }
-
-    fun call(destination: String) {
+    fun call(destination: String): Boolean {
+        if (callActive) {
+            Log.w(TAG, "ignoring duplicate outbound call while a session is active")
+            return false
+        }
+        pendingCommands.removeAll { it.first == "call" }
+        callActive = true
+        activeNumber = destination
+        activeProviderCallId = null
+        callDirection = "outgoing"
+        callStartedAt = System.currentTimeMillis()
+        callAnsweredAt = null
+        mainHandler.removeCallbacks(outgoingSetupTimeout)
+        mainHandler.postDelayed(outgoingSetupTimeout, OUTGOING_SETUP_TIMEOUT_MS)
         send("call", mapOf("destination" to destination))
+        return true
     }
 
     fun pickup() {
@@ -148,10 +188,12 @@ object ModernDialerWebViewBridge {
 
     fun reject() {
         send("hangup")
+        scheduleLocalEndFallback("missed")
     }
 
     fun hangup() {
         send("hangup")
+        scheduleLocalEndFallback("completed")
     }
 
     fun setMuted(muted: Boolean) {
@@ -162,15 +204,54 @@ object ModernDialerWebViewBridge {
         send("set-hold", mapOf("held" to held))
     }
 
+    private fun sendStateProbe(type: String) {
+        mainHandler.post {
+            if (pageLoaded) evaluateCommand(type, emptyMap())
+        }
+    }
+
+    fun cancelPendingCalls() {
+        mainHandler.post {
+            pendingCommands.removeAll { it.first == "call" }
+            finishCall("failed")
+        }
+    }
+
+    fun setAgentStatus(status: String) {
+        require(status == "available" || status == "break")
+        send("set-status", mapOf("status" to status))
+    }
+
+    fun requestState() {
+        // Registration probes must reach the iframe before registration. Gating
+        // them behind phoneRegistered creates a deadlock where mobile remains
+        // on "Connecting" forever and a queued call can never be released.
+        sendStateProbe("request-state")
+        sendStateProbe("get-state")
+    }
+
+    fun remoteEnded() {
+        mainHandler.post {
+            pendingCommands.clear()
+            if (pageLoaded && phoneRegistered) evaluateCommand("hangup", emptyMap())
+            finishCall("completed")
+            emit(DialerEvent("call:ended", emptyMap()))
+        }
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     private fun createWebView(context: Context): WebView {
         return WebView(context).apply {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.mediaPlaybackRequiresUserGesture = false
+            settings.offscreenPreRaster = true
             settings.allowContentAccess = true
             settings.allowFileAccess = false
             addJavascriptInterface(AndroidBridge(), JS_INTERFACE)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false)
+            }
             webChromeClient = object : WebChromeClient() {
                 override fun onPermissionRequest(request: PermissionRequest?) {
                     mainHandler.post {
@@ -203,10 +284,8 @@ object ModernDialerWebViewBridge {
                     // The host page's own script relays messages to/from the
                     // iframe — no bridge injection needed here.
                     pageLoaded = true
-                    // Prefer waiting for the softphone's registration event, but
-                    // never stay stuck: if it doesn't arrive, flush anyway.
+                    requestState()
                     maybeFlush()
-                    scheduleFallbackFlush()
                 }
             }
         }
@@ -260,9 +339,9 @@ object ModernDialerWebViewBridge {
 
     /**
      * Attach the softphone WebView (invisibly) to the foreground Activity's
-     * window so WebRTC media works. A detached WebView cannot capture the mic
-     * or play audio, so calls placed from it produce no sound and never
-     * originate. Uses a 1x1, fully-transparent view so the user never sees it.
+     * window so WebRTC media works. A detached or fully transparent WebView can
+     * be deprioritized by Chromium and lose its real-time media pipeline. Keep
+     * a tiny compositor-active host outside the visible content instead.
      * No-op when called from a non-Activity context (e.g. the incoming-call
      * service in the background) — that path needs an overlay-window host.
      */
@@ -272,8 +351,10 @@ object ModernDialerWebViewBridge {
         val currentParent = view.parent as? ViewGroup
         if (currentParent === decor) return
         currentParent?.removeView(view)
-        view.alpha = 0f
-        decor.addView(view, ViewGroup.LayoutParams(1, 1))
+        view.alpha = 0.01f
+        view.translationX = 0f
+        view.translationY = 0f
+        decor.addView(view, ViewGroup.LayoutParams(2, 2))
     }
 
     private tailrec fun Context.findActivity(): Activity? = when (this) {
@@ -340,6 +421,72 @@ object ModernDialerWebViewBridge {
     private fun onDialerMessage(type: String, parsed: Map<String, Any>) {
         Log.i(TAG, "← event from softphone: $type (registered=$phoneRegistered) $parsed")
         when (type) {
+            "call:incoming" -> {
+                callActive = true
+                activeNumber = (parsed["from"] as? String) ?: (parsed["fromNumber"] as? String)
+                callDirection = "incoming"
+                callStartedAt = System.currentTimeMillis()
+                callAnsweredAt = null
+            }
+            "call:ringing-out", "call:picked-up" -> {
+                callActive = true
+                rememberProviderCallId(parsed)
+            }
+            "call:channel" -> rememberProviderCallId(parsed)
+            "call:progress" -> {
+                callActive = true
+                rememberProviderCallId(parsed)
+                val status = ((parsed["status"] as? String) ?: (parsed["state"] as? String))
+                    ?.lowercase()
+                when (status) {
+                    "answered", "connected", "in-call", "active" -> {
+                        callAnsweredAt = callAnsweredAt ?: System.currentTimeMillis()
+                        mainHandler.removeCallbacks(outgoingSetupTimeout)
+                        activateCallAudio()
+                    }
+                    "ended", "completed", "hangup", "hung-up" -> finishCall("completed")
+                    "failed", "busy", "rejected", "unavailable" -> finishCall("failed")
+                }
+            }
+            "call:answered" -> {
+                callActive = true
+                rememberProviderCallId(parsed)
+                callAnsweredAt = callAnsweredAt ?: System.currentTimeMillis()
+                mainHandler.removeCallbacks(outgoingSetupTimeout)
+                activateCallAudio()
+            }
+            "call:ended" -> {
+                if (!eventBelongsToActiveCall(parsed)) {
+                    Log.w(TAG, "ignoring stale call:ended event")
+                    return
+                }
+                finishCall("completed")
+            }
+            "call:error" -> finishCall("failed")
+            "call:incoming-suppressed" -> finishCall("missed")
+            "media:diagnostic" -> {
+                if (!eventBelongsToActiveCall(parsed)) {
+                    Log.w(TAG, "ignoring stale media diagnostic")
+                    return
+                }
+                val diagnostic = parsed["diagnostic"] as? Map<*, *>
+                val connectionState = diagnostic?.get("connectionState") as? String
+                if (connectionState == "failed") {
+                    val callId = (parsed["callId"] as? String)
+                        ?.takeIf { it.isNotBlank() }
+                        ?: activeProviderCallId
+                    if (callId.isNullOrBlank()) {
+                        emit(
+                            DialerEvent(
+                                "media:error",
+                                mapOf("message" to "Call audio needs recovery, but the call ID is missing"),
+                            ),
+                        )
+                    } else {
+                        attemptMediaRestart(callId)
+                    }
+                }
+            }
             "ready" -> {
                 val ps = parsed["phoneState"] as? String
                 phoneRegistered = ps == null || ps == "registered"
@@ -359,6 +506,147 @@ object ModernDialerWebViewBridge {
         emit(DialerEvent(type, parsed))
     }
 
+    private fun finishCall(status: String) {
+        mainHandler.removeCallbacks(outgoingSetupTimeout)
+        if (callActive) {
+            val number = activeNumber?.filter { it.isDigit() }?.takeIf { it.isNotBlank() }
+            val started = callStartedAt ?: System.currentTimeMillis()
+            if (number != null) {
+                val duration = ((System.currentTimeMillis() - (callAnsweredAt ?: started)) / 1_000L).coerceAtLeast(0)
+                val finalStatus = if (status == "completed" && callAnsweredAt == null) {
+                    if (callDirection == "incoming") "missed" else "no_answer"
+                } else {
+                    status
+                }
+                recentCallStore?.add(DialerRecentCall(number, callDirection, finalStatus, started, duration))
+            }
+        }
+        callActive = false
+        activeNumber = null
+        activeProviderCallId?.let { restartedMediaCallIds.remove(it) }
+        activeProviderCallId = null
+        callStartedAt = null
+        callAnsweredAt = null
+        applicationContext?.let { context ->
+            ModernDialerCallController.clearCallNotifications(context)
+            context.stopService(android.content.Intent(context, ModernDialerCallService::class.java))
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
+            runCatching {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                    audioManager?.clearCommunicationDevice()
+                }
+                audioManager?.mode = android.media.AudioManager.MODE_NORMAL
+            }
+        }
+    }
+
+    private fun attemptMediaRestart(callId: String) {
+        if (!restartedMediaCallIds.add(callId)) {
+            return
+        }
+        val context = applicationContext ?: return
+        apiScope.launch {
+            val session = SessionManager(context)
+            if (!session.isLoggedIn) return@launch
+            val api = ApiService.create()
+            val deviceId = MobileDialerApiCoordinator.deviceId(context)
+            val result = runCatching {
+                MobileDialerApiCoordinator.restartMedia(
+                    api = api,
+                    token = session.bearerToken,
+                    callId = callId,
+                    reason = "ice_failed",
+                    deviceId = deviceId,
+                )
+            }
+            result.onSuccess { restart ->
+                if (!restart.success || !restart.iceRestarted) {
+                    emitOnMain(
+                        DialerEvent(
+                            "media:error",
+                            mapOf("message" to (restart.error ?: "Call audio could not restart")),
+                        ),
+                    )
+                    return@onSuccess
+                }
+                emitOnMain(DialerEvent("media:restarting", mapOf("callId" to callId)))
+                delay(1_500L)
+                val diagnostics = runCatching {
+                    api.getMobileDialerMedia(session.bearerToken, callId)
+                }.getOrNull()
+                val state = diagnostics?.media?.iceConnectionState
+                emitOnMain(
+                    DialerEvent(
+                        "media:diagnostic-server",
+                        mapOf(
+                            "callId" to callId,
+                            "connectionState" to (state ?: "checking"),
+                            "candidateType" to (diagnostics?.media?.candidateType ?: "unknown"),
+                        ),
+                    ),
+                )
+                requestState()
+            }.onFailure { error ->
+                emitOnMain(
+                    DialerEvent(
+                        "media:error",
+                        mapOf(
+                            "message" to (
+                                error.message?.takeIf { it.isNotBlank() }
+                                    ?: "Call audio could not restart"
+                                ),
+                        ),
+                    ),
+                )
+            }
+        }
+    }
+
+    private fun emitOnMain(event: DialerEvent) {
+        mainHandler.post { emit(event) }
+    }
+
+    private fun rememberProviderCallId(parsed: Map<String, Any>) {
+        val callId = (parsed["callId"] as? String)?.takeIf { it.isNotBlank() } ?: return
+        if (activeProviderCallId == null) activeProviderCallId = callId
+    }
+
+    private fun eventBelongsToActiveCall(parsed: Map<String, Any>): Boolean {
+        val eventCallId = (parsed["callId"] as? String)?.takeIf { it.isNotBlank() }
+        val diagnosticAt = ((parsed["diagnostic"] as? Map<*, *>)?.get("at") as? Number)?.toLong()
+        return isCurrentDialerEvent(
+            callActive = callActive,
+            activeProviderCallId = activeProviderCallId,
+            eventCallId = eventCallId,
+            callStartedAt = callStartedAt,
+            diagnosticAt = diagnosticAt,
+        )
+    }
+
+    /**
+     * Let Chromium open its WebRTC capture/playback streams before switching the
+     * device into communication mode. On ColorOS, doing this from KEEP_ACTIVE
+     * before getUserMedia caused AAudio to be denied and forced a fragile fallback
+     * path. The service is already foreground; this action only acquires focus and
+     * applies the selected route once the provider confirms the call is answered.
+     */
+    private fun activateCallAudio() {
+        val context = applicationContext ?: return
+        val callId = activeNumber?.takeIf { it.isNotBlank() } ?: return
+        context.startService(
+            android.content.Intent(context, ModernDialerCallService::class.java).apply {
+                action = ModernDialerCallController.ACTION_SET_AUDIO_ROUTE
+                putExtra(ModernDialerCallController.EXTRA_CALL_ID, callId)
+            },
+        )
+    }
+
+    private fun scheduleLocalEndFallback(status: String) {
+        mainHandler.postDelayed({
+            if (callActive) finishCall(status)
+        }, 3_000L)
+    }
+
     private class AndroidBridge {
         @JavascriptInterface
         fun postMessage(raw: String) {
@@ -374,9 +662,29 @@ object ModernDialerWebViewBridge {
             }
         }
     }
+
+    private const val OUTGOING_SETUP_TIMEOUT_MS = 60_000L
 }
 
 data class DialerEvent(
     val type: String,
     val payload: Map<String, Any>,
 )
+
+internal fun isCurrentDialerEvent(
+    callActive: Boolean,
+    activeProviderCallId: String?,
+    eventCallId: String?,
+    callStartedAt: Long?,
+    diagnosticAt: Long?,
+): Boolean {
+    if (!callActive) return false
+    if (
+        activeProviderCallId != null &&
+        eventCallId != null &&
+        activeProviderCallId != eventCallId
+    ) return false
+    return diagnosticAt == null ||
+        callStartedAt == null ||
+        diagnosticAt >= callStartedAt - 2_000L
+}

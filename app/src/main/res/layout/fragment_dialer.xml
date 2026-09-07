@@ -35,45 +35,91 @@
             android:textSize="18sp" />
 
         <TextView
-            android:id="@+id/btnDialerSettings"
+            android:id="@+id/tvDialerConnection"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:clickable="true"
-            android:focusable="true"
             android:fontFamily="@font/inter_medium"
             android:padding="6dp"
-            android:text="Station"
-            android:textColor="?attr/colorAccentPrimary"
-            android:textSize="13sp" />
+            android:text="Connecting"
+            android:textColor="?attr/colorForegroundMuted"
+            android:textSize="12sp" />
     </LinearLayout>
 
-    <!-- Station bar -->
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true"
+        android:overScrollMode="never">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+    <!-- Modern Dialer identity and availability controls. -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginHorizontal="20dp"
         android:background="@drawable/bg_task_inner_card"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:padding="10dp">
+        android:orientation="vertical"
+        android:padding="12dp">
 
         <TextView
+            android:id="@+id/tvDialerAgent"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:fontFamily="@font/inter_regular"
-            android:text="Station:"
-            android:textColor="?attr/colorForegroundMuted"
-            android:textSize="12sp" />
+            android:fontFamily="@font/inter_semibold"
+            android:text="Modern Dialer"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textSize="14sp" />
 
         <TextView
             android:id="@+id/tvDialerStation"
-            android:layout_width="0dp"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
-            android:layout_weight="1"
-            android:fontFamily="@font/geist_mono_semibold"
-            android:textColor="?attr/colorForegroundPrimary"
-            android:textSize="13sp" />
+            android:layout_marginTop="3dp"
+            android:fontFamily="@font/inter_regular"
+            android:text="Checking your dialer access..."
+            android:textColor="?attr/colorForegroundMuted"
+            android:textSize="12sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_attendance_segment_container"
+            android:orientation="horizontal"
+            android:padding="3dp">
+
+            <TextView
+                android:id="@+id/btnDialerAvailable"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@drawable/bg_attendance_segment_active"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_semibold"
+                android:gravity="center"
+                android:text="Available"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/btnDialerBreak"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:text="Break"
+                android:textColor="?attr/colorForegroundMuted"
+                android:textSize="12sp" />
+        </LinearLayout>
     </LinearLayout>
 
     <!-- Modern Dialer live call controls, driven by the same embed events as web. -->
@@ -183,6 +229,56 @@
                 android:textColor="?attr/colorForegroundPrimary"
                 android:textSize="13sp" />
         </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/dialerAudioRoutes"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_attendance_segment_container"
+            android:orientation="horizontal"
+            android:padding="3dp">
+
+            <TextView
+                android:id="@+id/btnDialerPhoneAudio"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@drawable/bg_attendance_segment_active"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:text="Phone"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/btnDialerSpeakerAudio"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:text="Speaker"
+                android:textColor="?attr/colorForegroundMuted"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/btnDialerBluetoothAudio"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:text="Bluetooth"
+                android:textColor="?attr/colorForegroundMuted"
+                android:textSize="12sp" />
+        </LinearLayout>
     </LinearLayout>
 
     <!-- Phone display -->
@@ -255,8 +351,7 @@
                 android:layout_height="28dp"
                 android:layout_gravity="center"
                 android:contentDescription="Call"
-                android:src="@drawable/ic_send"
-                android:rotation="-45"
+                android:src="@drawable/ic_phone_outline"
                 app:tint="@android:color/white" />
 
             <View
@@ -268,5 +363,41 @@
                 android:visibility="gone" />
         </FrameLayout>
     </FrameLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="20dp"
+        android:layout_marginBottom="24dp"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Recent calls"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textSize="15sp" />
+
+        <TextView
+            android:id="@+id/tvDialerHistoryEmpty"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:fontFamily="@font/inter_regular"
+            android:text="No recent calls"
+            android:textColor="?attr/colorForegroundMuted"
+            android:textSize="13sp" />
+
+        <LinearLayout
+            android:id="@+id/dialerHistoryList"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="vertical" />
+    </LinearLayout>
+
+    </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
 
 </LinearLayout>

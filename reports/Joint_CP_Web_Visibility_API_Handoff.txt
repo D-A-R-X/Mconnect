@@ -1,0 +1,181 @@
+JOINT CP - WEB VISIBILITY API / BACKEND HANDOFF
+Date: 2026-09-01
+
+ISSUE
+Completed Joint CP visits created from Android exist and are visible on mobile,
+but the second Joint CP participant (or a web staff filter for that participant)
+cannot see the visit in the web CP list.
+
+CONFIRMED MOBILE CREATE CONTRACT (ALREADY WORKING)
+POST /api/marketing/clientPlaceVisits/create
+Authorization: Bearer <session_token>
+Content-Type: application/json
+
+Joint CP request fields:
+{
+  "clientName": "Vinoth",
+  "mobileNumber": "8056390424",
+  "assignedStaffId": "<first_staff_id>",
+  "jointStaffIds": ["<second_staff_id>"],
+  "cpType": "joint_cp",
+  "jointCpCategory": "old_client",
+  "projectId": "<project_id>",
+  "lmoStaffId": "<lmo_staff_id>",
+  "scheduledDate": "2026-09-01",
+  "scheduledTime": "14:00",
+  "visitAddress": "<full_address_with_pincode>",
+  "pincode": "600000",
+  "visitLat": 13.000000,
+  "visitLng": 80.000000,
+  "googleMapsLink": "<optional_maps_link>"
+}
+
+Expected success:
+HTTP 200
+{
+  "success": true,
+  "visitId": "<clientPlaceVisits_id>"
+}
+
+The server must validate exactly two different active staff, choose the senior
+staff as the parent visit's assignedStaffId, and create one row for each staff
+in clientPlaceVisitParticipants. Android already sends the required fields and
+the current create route already forwards them.
+
+ROOT CAUSE FOUND IN WEB/BACKEND QUERY
+The parent clientPlaceVisits row contains only the primary/senior staff in
+assignedStaffId. The second staff exists in clientPlaceVisitParticipants.
+
+The mobile compact query already calls jointVisitIdsForStaff(...) and merges
+the parent visit IDs found through the participant table. The web queries do
+not consistently do this:
+
+1. api.marketing.clientPlaceVisits.listPaginated (web table)
+2. api.marketing.clientPlaceVisits.list (web calendar)
+3. api.marketing.clientPlaceVisits.stats
+4. CP visit export query/action
+
+Their current staff-scope check only considers parent assignedStaffId,
+telecallerStaffId, and proposedSiteVisit.avpStaffId. It does not consider rows
+in clientPlaceVisitParticipants. Therefore the second Joint CP staff is removed
+by scope filtering, and filtering by that staff also misses the Joint CP.
+
+REQUIRED BACKEND FIX
+Update every web CP read path above to treat a staff member as involved when
+either condition is true:
+
+A. parent.assignedStaffId == staffId
+B. clientPlaceVisitParticipants contains
+   visitId == parent._id AND staffId == staffId
+
+Use the existing indexed participant lookup:
+
+clientPlaceVisitParticipants.by_staffId_and_scheduledDate
+  (staffId, scheduledDate)
+
+Recommended implementation for list/listPaginated:
+
+1. Resolve requester scope exactly as today.
+2. Build jointLookupStaffIds from:
+   - explicit assignedStaffId filter, otherwise
+   - scoped viewer staff IDs.
+3. Call jointVisitIdsForStaff(ctx, jointLookupStaffIds, rangeStart, rangeEnd).
+4. Fetch and merge missing parent clientPlaceVisits rows before pagination.
+5. De-duplicate by parent visit ID.
+6. Apply staff filtering as:
+   parent.assignedStaffId matches OR mergedJointVisitIds contains parent._id.
+7. Apply status, outcome, search, and activity-date filters after merging.
+8. Sort once, then paginate, so a Joint CP does not disappear between pages.
+
+Important: bypass the current direct indexed fast path when an explicit staff
+filter must include Joint CP companions. That fast path only indexes the parent
+assignedStaffId and will always miss the second participant.
+
+REQUIRED WEB QUERY RESPONSE
+Every Joint CP row returned to web must include the normal CP fields plus:
+
+{
+  "_id": "<visit_id>",
+  "cpType": "joint_cp",
+  "jointCpCategory": "old_client",
+  "status": "completed",
+  "assignedStaffId": "<senior_staff_id>",
+  "fieldStaffName": "<senior_staff_name>",
+  "joint": {
+    "isJoint": true,
+    "leadStaffId": "<senior_staff_id>",
+    "leadStaffName": "<senior_staff_name>",
+    "companionNames": ["<second_staff_name>"],
+    "totalCount": 2,
+    "participants": [
+      {
+        "staffId": "<staff_id>",
+        "staffName": "<staff_name>",
+        "isPrimary": true,
+        "status": "completed",
+        "startedAt": 0,
+        "completedAt": 0,
+        "fieldVisitId": "<field_visit_id_or_null>",
+        "distanceMeters": 0,
+        "outOfGeofence": false
+      },
+      {
+        "staffId": "<staff_id>",
+        "staffName": "<staff_name>",
+        "isPrimary": false,
+        "status": "completed",
+        "startedAt": 0,
+        "completedAt": 0,
+        "fieldVisitId": "<field_visit_id_or_null>",
+        "distanceMeters": 0,
+        "outOfGeofence": false
+      }
+    ]
+  }
+}
+
+WEB UI REQUIREMENT
+- Display one parent Joint CP row, not two duplicate rows.
+- CP Type label: "Joint CP".
+- Show both participant names, for example:
+  "Joint: Manohar Raj M & Sathish S".
+- Opening the row must use the parent visit ID.
+- Staff filter must match either participant.
+- Completed filter, search, calendar, stats, and Excel export must return the
+  same visit set as the main list.
+
+DATA REPAIR / DIAGNOSTIC
+For the reported Vinoth (8056390424) and Sekar (9941663136) records:
+
+1. Find parent clientPlaceVisits rows by normalized mobile/search index.
+2. Confirm cpType == "joint_cp".
+3. Confirm exactly two clientPlaceVisitParticipants rows exist per parent.
+4. Confirm both participant rows have the correct scheduledDate and staffId.
+5. If a historical parent has zero/one participant rows, backfill exactly two
+   rows from the original assigned staff plus submitted joint staff audit data.
+6. Do not create another parent CP row; repair participant legs only.
+
+ERROR CONTRACT
+- 400 INVALID_JOINT_CP: missing category, same staff twice, or not exactly two.
+- 401 UNAUTHORIZED: missing/expired session.
+- 403 FORBIDDEN: requester cannot view/create CP visits.
+- 404 STAFF_NOT_FOUND or VISIT_NOT_FOUND.
+- 409 JOINT_PARTICIPANTS_INCOMPLETE: parent exists but participant legs are
+  missing/corrupt; return visitId and current participant count for diagnosis.
+- 500 only for unexpected failures. Do not return partial create records.
+
+MANDATORY ACCEPTANCE TESTS
+1. Create Joint CP with staff A + B. A sees one row in web list.
+2. B sees the same parent row in web list.
+3. Admin filter by A returns it; filter by B also returns it.
+4. Search by client name and mobile returns it for both permitted users.
+5. Calendar, stats, and Excel export include it under the same filters.
+6. Completing both legs keeps one completed parent row visible.
+7. Ordinary non-joint CP visibility and pagination remain unchanged.
+8. No duplicate parent rows appear when both participants are in team scope.
+
+CONCLUSION
+No new Android endpoint is required for this issue. Fix the existing web CP
+read queries so they merge participant-table matches exactly as the mobile
+compact query already does, then repair only any historical visits whose two
+participant rows are missing.

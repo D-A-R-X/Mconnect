@@ -1,12 +1,19 @@
 package com.manjugroups.m_connect.network
 
 import com.manjugroups.m_connect.BuildConfig
+import com.google.gson.JsonDeserializationContext
+import com.google.gson.JsonDeserializer
+import com.google.gson.JsonElement
+import com.google.gson.annotations.JsonAdapter
+import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
+import okhttp3.RequestBody
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.*
 import java.util.concurrent.TimeUnit
+import java.lang.reflect.Type
 
 interface GeoTrackApi {
 
@@ -32,26 +39,54 @@ interface GeoTrackApi {
 
     // ── Location ──
 
-    @POST("api/tracking/location/batch")
+    @POST
     suspend fun pushBatch(
+        @Url url: String = DIRECT_LOCATION_BATCH_URL,
         @Header("Authorization") token: String,
+        @Header("Idempotency-Key") idempotencyKey: String,
         @Body body: PushBatchRequest
     ): GeoTrackResponse
 
     // ── Heartbeat ──
 
-    @POST("api/tracking/heartbeat")
+    @POST
     suspend fun heartbeat(
+        @Url url: String = DIRECT_HEARTBEAT_URL,
         @Header("Authorization") token: String,
+        @Header("Idempotency-Key") idempotencyKey: String,
         @Body body: HeartbeatRequest
     ): GeoTrackResponse
 
     // ── Tamper ──
 
-    @POST("api/geotrack/tamper/report")
+    @POST
     suspend fun reportTamper(
+        @Url url: String = DIRECT_TAMPER_URL,
         @Header("Authorization") token: String,
+        @Header("Idempotency-Key") idempotencyKey: String,
         @Body body: TamperReportRequest
+    ): GeoTrackResponse
+
+    @POST("api/geotrack/tamper/report")
+    suspend fun reportLegacyTamper(
+        @Header("Authorization") token: String,
+        @Body body: TamperReportRequest,
+    ): GeoTrackResponse
+
+    @POST
+    suspend fun startDirectTracking(
+        @Url url: String = DIRECT_START_URL,
+        @Header("Authorization") token: String,
+        @Header("Idempotency-Key") idempotencyKey: String,
+        @Body body: DirectTrackingStartRequest,
+    ): GeoTrackResponse
+
+    @POST
+    suspend fun stopDirectTracking(
+        @Url url: String = DIRECT_STOP_URL,
+        @Header("Authorization") token: String,
+        @Header("Idempotency-Key") idempotencyKey: String,
+        @Body body: DirectTrackingStopRequest = DirectTrackingStopRequest(),
     ): GeoTrackResponse
 
     // ── Consent ──
@@ -84,7 +119,14 @@ interface GeoTrackApi {
     suspend fun getMySiteVisits(
         @Header("Authorization") token: String,
         @Query("fromDate") fromDate: String? = null,
-        @Query("toDate") toDate: String? = null
+        @Query("toDate") toDate: String? = null,
+        @Query("projectId") projectId: String? = null,
+        @Query("telecallerStaffId") telecallerStaffId: String? = null,
+        @Query("assignedStaffId") assignedStaffId: String? = null,
+        @Query("status") status: String? = null,
+        @Query("search") search: String? = null,
+        @Query("cursor") cursor: String? = null,
+        @Query("pageSize") pageSize: Int? = null,
     ): MySiteVisitsResponse
 
     @GET("api/marketing/projects")
@@ -197,8 +239,22 @@ interface GeoTrackApi {
     @POST("api/marketing/clientPlaceVisits/create")
     suspend fun createCpVisit(
         @Header("Authorization") token: String,
+        @Header("Idempotency-Key") requestId: String,
         @Body body: CreateCpVisitRequest
     ): CreateCpVisitResponse
+
+    /**
+     * Mobile-safe SV scheduler. The backend owns the multi-row transaction:
+     * Direct SV creates a visit, Same Area creates its verification CP + SV,
+     * and Outstation/Immediate creates the GM handoff. This must not be split
+     * into several phone-side requests because a dropped connection could
+     * otherwise leave an orphan lead, client, CP, or SV.
+     */
+    @POST("api/marketing/siteVisits/create")
+    suspend fun createSiteVisit(
+        @Header("Authorization") token: String,
+        @Body body: CreateSiteVisitRequest,
+    ): CreateSiteVisitResponse
 
     @POST("api/marketing/clientPlaceVisits/setOutcome")
     suspend fun setCpVisitOutcome(
@@ -214,6 +270,7 @@ interface GeoTrackApi {
     @POST("api/marketing/clientPlaceVisits/referral")
     suspend fun recordCpReferral(
         @Header("Authorization") token: String,
+        @Header("Idempotency-Key") requestId: String,
         @Body body: RecordCpReferralRequest,
     ): GeoTrackResponse
 
@@ -384,6 +441,25 @@ interface GeoTrackApi {
         @Body body: UploadLoanDocumentRequest,
     ): UploadLoanDocumentResponse
 
+    @Multipart
+    @POST("api/postsales/loans/upload-document")
+    suspend fun uploadLoanDocumentFile(
+        @Header("Authorization") token: String,
+        @Part("loanCaseId") loanCaseId: RequestBody?,
+        @Part("label") label: RequestBody,
+        @Part file: MultipartBody.Part,
+        @Part("fileName") fileName: RequestBody,
+        @Part("requestId") requestId: RequestBody?,
+    ): UploadLoanDocumentResponse
+
+    /** Removes one checklist attachment. The backend must update the loan
+     * case atomically and may delete the storage blob when it is unreferenced. */
+    @POST("api/postsales/loans/delete-document")
+    suspend fun deleteLoanDocument(
+        @Header("Authorization") token: String,
+        @Body body: DeleteLoanDocumentRequest,
+    ): LoanDocumentMutationResponse
+
     @GET("api/postsales/loans/forSales")
     suspend fun listLoanDeskForSales(
         @Header("Authorization") token: String,
@@ -520,7 +596,33 @@ interface GeoTrackApi {
         @Query("id") id: String
     ): CpVisitDetailResponse
 
-    // Marketing CP visits assigned to the bearer in a date range.
+    @GET("api/marketing/clientPlaceVisits/joint-workflow")
+    suspend fun getJointCpWorkflow(
+        @Header("Authorization") token: String,
+        @Query("id") id: String,
+    ): JointCpWorkflowResponse
+
+    @POST("api/marketing/clientPlaceVisits/joint-arrival-preflight")
+    suspend fun preflightJointCpArrival(
+        @Header("Authorization") token: String,
+        @Body body: JointCpLocationRequest,
+    ): JointCpWorkflowResponse
+
+    @POST("api/marketing/clientPlaceVisits/joint-submit-review")
+    suspend fun submitJointCpReview(
+        @Header("Authorization") token: String,
+        @Header("Idempotency-Key") requestId: String,
+        @Body body: JointCpSubmitReviewRequest,
+    ): JointCpWorkflowResponse
+
+    @POST("api/marketing/clientPlaceVisits/joint-complete-review")
+    suspend fun completeJointCpReview(
+        @Header("Authorization") token: String,
+        @Header("Idempotency-Key") requestId: String,
+        @Body body: JointCpCompleteReviewRequest,
+    ): JointCpWorkflowResponse
+
+    // Marketing CP visits assigned to the bearer or their immediate reports.
     // Used by Home's "Today's Trip" merge so visits that exist in
     // `clientPlaceVisits` but have no companion fieldVisits row yet
     // still surface on the home screen.
@@ -529,12 +631,9 @@ interface GeoTrackApi {
         @Header("Authorization") token: String,
         @Query("fromDate") fromDate: String? = null,
         @Query("toDate") toDate: String? = null,
-        // Backend gates scope=all on IAM (marketing.cpVisits.viewAll /
-        // .view / projects.viewAll / isAdmin). Non-privileged callers
-        // get scoped assignment-only results regardless of what we
-        // send, so it's safe to default this to "all" — admins and
-        // managers get the full pool, field staff get their own
-        // assignments via the fallback path.
+        // CP list screen sends mine or direct explicitly. Keep the historical
+        // default for Home and create-reconciliation callers until their
+        // separate behavior is migrated intentionally.
         @Query("scope") scope: String = "all",
         // Browsable list screens pass a high limit so client-side search can
         // reach a specific client; Home/today merges leave it null (default).
@@ -542,7 +641,29 @@ interface GeoTrackApi {
         // Server-side full-text search — reaches visits beyond the recency cap
         // (e.g. a super-admin searching for an older client).
         @Query("search") search: String? = null,
+        @Query("assignedStaffId") assignedStaffId: String? = null,
+        @Query("telecallerStaffId") telecallerStaffId: String? = null,
+        @Query("status") status: String? = null,
+        @Query("outcome") outcome: String? = null,
+        @Query("cpType") cpType: String? = null,
+        @Query("cursor") cursor: String? = null,
+        @Query("pageSize") pageSize: Int? = null,
     ): MyMarketingCpVisitsResponse
+
+    @GET("api/marketing/clientPlaceVisits/filter-options")
+    suspend fun getMarketingCpVisitFilterOptions(
+        @Header("Authorization") token: String,
+        @Query("scope") scope: String,
+        @Query("fromDate") fromDate: String? = null,
+        @Query("toDate") toDate: String? = null,
+    ): CpVisitFilterOptionsResponse
+
+    @GET("api/sitevisits/filter-options")
+    suspend fun getSiteVisitFilterOptions(
+        @Header("Authorization") token: String,
+        @Query("fromDate") fromDate: String? = null,
+        @Query("toDate") toDate: String? = null,
+    ): SiteVisitFilterOptionsResponse
 
     // ── Timeline (self-view) ──
 
@@ -572,6 +693,13 @@ interface GeoTrackApi {
     ): TripsResponse
 
     companion object {
+        const val DIRECT_BASE_URL = "https://api-geo.theairix.com"
+        const val DIRECT_LOCATION_BATCH_URL = "$DIRECT_BASE_URL/api/tracking/location/batch"
+        const val DIRECT_HEARTBEAT_URL = "$DIRECT_BASE_URL/api/tracking/heartbeat"
+        const val DIRECT_TAMPER_URL = "$DIRECT_BASE_URL/api/tracking/tamper-events"
+        const val DIRECT_START_URL = "$DIRECT_BASE_URL/api/geotrack/start"
+        const val DIRECT_STOP_URL = "$DIRECT_BASE_URL/api/geotrack/stop"
+
         // Single shared client (see ApiService.create() — same rationale):
         // build once, reuse the connection pool across every trip/visit call
         // instead of rebuilding an OkHttpClient per call site.
@@ -584,18 +712,27 @@ interface GeoTrackApi {
                 level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY
                 else HttpLoggingInterceptor.Level.NONE
             }
-            // Same auto-logout-on-401 watchdog as ApiService.create() —
-            // GeoTrack endpoints also need it because every trip /
-            // visit call goes through this client, and a stale token
-            // would silently fail tracking + outcome flows otherwise.
+            // MMS business endpoints can invalidate the MMS session. Direct
+            // GeoTrack transport is a separate authority: its failures must
+            // retry/fail without clearing an otherwise valid app login.
             val authWatchdog = okhttp3.Interceptor { chain ->
                 val request = chain.request()
                 val response = chain.proceed(request)
-                // Skip auto-logout when the outgoing request used the dev
-                // bypass token (see ApiService.isBypassAuth for context).
-                if (response.code == 401 && !isBypassAuth(request)) {
+                if (com.manjugroups.m_connect.auth.SessionInvalidationPolicy.shouldInvalidate(
+                        responseCode = response.code,
+                        authorizationHeader = request.header("Authorization"),
+                        requestHost = request.url.host,
+                        sessionAuthorityHost = java.net.URI(BuildConfig.BASE_URL).host.orEmpty(),
+                        requestPath = request.url.encodedPath,
+                        responseBody = if (response.code == 401) {
+                            runCatching { response.peekBody(64 * 1024).string() }.getOrNull()
+                        } else {
+                            null
+                        },
+                    )
+                ) {
                     com.manjugroups.m_connect.auth.SessionInvalidationBus
-                        .reportUnauthorized()
+                        .reportUnauthorized(request.header("Authorization"))
                 }
                 response
             }
@@ -619,17 +756,14 @@ interface GeoTrackApi {
                 .create(GeoTrackApi::class.java)
         }
 
-        private fun isBypassAuth(request: okhttp3.Request): Boolean {
-            val header = request.header("Authorization") ?: return false
-            val token = header.removePrefix("Bearer ").trim()
-            return com.manjugroups.m_connect.auth.AuthBypass.isBypassToken(token)
-        }
     }
 }
 
 // ── Request Models ──
 
 data class LocationPoint(
+    val pointId: String,
+    val deviceSequence: Long,
     val lat: Double,
     val lng: Double,
     val accuracy: Float,
@@ -649,12 +783,15 @@ data class LocationPoint(
 data class PushBatchRequest(
     val sessionId: String? = null,
     val deviceId: String? = null,
+    val requestId: String,
     val points: List<LocationPoint>
 )
 
 data class HeartbeatRequest(
     val sessionId: String? = null,
     val deviceId: String? = null,
+    val requestId: String,
+    val deviceSequence: Long,
     val batteryPct: Int,
     val appVersion: String,
     // Client tick time (ms epoch). The server stores this as the heartbeat
@@ -670,12 +807,21 @@ data class HeartbeatRequest(
 )
 
 data class TamperReportRequest(
+    val sessionId: String? = null,
     val eventType: String,
     val metadata: Map<String, Any?> = emptyMap(),
     // Original occurrence time (ms epoch) for offline-queued events, so a
     // replayed GPS_DISABLED/REBOOT surfaces in the feed when it HAPPENED.
     val detectedAt: Long? = null,
+    val requestId: String,
 )
+
+data class DirectTrackingStartRequest(
+    val lat: Double? = null,
+    val lng: Double? = null,
+)
+
+class DirectTrackingStopRequest
 
 data class ConsentRequest(
     val consented: Boolean = true,
@@ -725,8 +871,21 @@ data class TrackingConsentResponse(
 data class GeoTrackResponse(
     val success: Boolean,
     val error: String? = null,
+    val status: String? = null,
+    val clientPlaceVisitId: String? = null,
+    val siteVisitId: String? = null,
+    val confirmationStatus: String? = null,
+    val alreadyCancelled: Boolean? = null,
+    val followUpTaskId: String? = null,
+    val assignedToStaffId: String? = null,
+    val dueAt: Long? = null,
+    val alreadyProcessed: Boolean? = null,
     val revisit: CpRevisitInfo? = null,
     val inserted: Int? = null,
+    val insertedCount: Int? = null,
+    val duplicateCount: Int? = null,
+    val filteredCount: Int? = null,
+    val filteredReasons: Map<String, Int>? = null,
     val tamperDetected: Boolean? = null,
     // Server-side rejection diagnostics for a batch: how many points were
     // dropped by the accuracy gate vs the clock-in→clock-out window clamp.
@@ -938,6 +1097,12 @@ data class CompleteVisitRequest(
     val lng: Double? = null,
     val remarks: String? = null,
     val arrivalPhotoStorageId: String? = null,
+    val clientMet: Boolean? = null,
+    val outcome: String? = null,
+    val cpOutcomeNotes: String? = null,
+    val postponeReasons: List<String>? = null,
+    val followUpDate: String? = null,
+    val followUpTime: String? = null,
 )
 
 data class RouteRequest(
@@ -1035,11 +1200,14 @@ data class CreateCpVisitRequest(
     val googleMapsLink: String? = null,
     val notes: String? = null,
     val projectId: String? = null,
-    // CP Type — visit intent. Includes new_client_cp for manually entered
-    // clients. Optional so older
-    // builds without the picker still create successfully.
-    val cpType: String? = null,
+    // CP Type is mandatory: an untyped row cannot be routed or labelled
+    // correctly by either mobile completion or the web CP list.
+    val cpType: String,
     val jointCpCategory: String? = null,
+    // New Client CP only. The server derives Own Referral's staff identity
+    // from the first authenticated attendance; mobile never sends a staff id.
+    val referralSourceType: String? = null,
+    val referringClientId: String? = null,
     // Explicit 6-digit pincode. The compiled visitAddress already carries it
     // as a "Pincode: NNNNNN" segment, but sending it separately means the
     // server stores it as a real column instead of re-parsing free text.
@@ -1051,11 +1219,57 @@ data class CreateCpVisitRequest(
 
 data class CreateCpVisitResponse(
     val success: Boolean,
+    @com.google.gson.annotations.SerializedName(value = "id", alternate = ["visitId"])
     val id: String? = null,
+    val requestId: String? = null,
+    val alreadyCreated: Boolean? = null,
     val fieldVisitId: String? = null,
     val followupId: String? = null,
     val clientPlaceId: String? = null,
+    val clientId: String? = null,
+    val cpType: String? = null,
+    val jointCpCategory: String? = null,
     val error: String? = null,
+)
+
+data class CreateSiteVisitRequest(
+    val requestId: String,
+    val routing: String,
+    val origin: String,
+    val leadId: String? = null,
+    val clientName: String? = null,
+    val mobileNumber: String,
+    val projectId: String,
+    val scheduledDate: String,
+    val scheduledTime: String,
+    val pickupTime: String? = null,
+    val travelMode: String,
+    val telecallerId: String,
+    val bdoStaffId: String,
+    val inchargeStaffId: String,
+    val fieldStaffId: String? = null,
+    val hodStaffId: String,
+    val avpStaffId: String,
+    val gmStaffId: String,
+    val seniorManagerStaffId: String,
+    val pickupAddress: String,
+    val pickupLat: Double,
+    val pickupLng: Double,
+    val pickupGoogleMapsLink: String? = null,
+    val expectedAttendeeCount: Int? = null,
+    val attendees: List<SiteVisitAttendeeRequest>? = null,
+    val notes: String? = null,
+)
+
+data class CreateSiteVisitResponse(
+    val success: Boolean,
+    val siteVisitId: String? = null,
+    val handoffId: String? = null,
+    val clientPlaceVisitId: String? = null,
+    val mode: String? = null,
+    val message: String? = null,
+    val error: String? = null,
+    val code: String? = null,
 )
 
 data class RecordCpReferralRequest(
@@ -1404,6 +1618,33 @@ data class UploadLoanDocumentRequest(
 data class UploadLoanDocumentResponse(
     val success: Boolean = false,
     val error: String? = null,
+    val attached: Boolean = false,
+    val alreadyUploaded: Boolean = false,
+    val document: UploadedLoanDocument? = null,
+    val loanCase: LoanCaseRow? = null,
+)
+
+data class UploadedLoanDocument(
+    val loanCaseId: String? = null,
+    val label: String = "",
+    val storageId: String = "",
+    val fileName: String = "",
+    val contentType: String? = null,
+    val size: Long? = null,
+    val url: String? = null,
+)
+
+data class DeleteLoanDocumentRequest(
+    val loanCaseId: String,
+    val label: String,
+    val storageId: String,
+)
+
+data class LoanDocumentMutationResponse(
+    val success: Boolean = false,
+    val deleted: Boolean = false,
+    val loanCase: LoanCaseRow? = null,
+    val error: String? = null,
 )
 
 data class LoanCaseDocument(
@@ -1656,6 +1897,12 @@ data class JointCpParticipant(
     val completedAt: Long? = null,
     val distanceMeters: Double? = null,
     val outOfGeofence: Boolean = false,
+    val templateId: String? = null,
+    val templateName: String? = null,
+    val templateLevel: Int? = null,
+    val workflowRole: String? = null,
+    val routeColor: String? = null,
+    val fieldVisitId: String? = null,
 )
 
 /**
@@ -1664,12 +1911,96 @@ data class JointCpParticipant(
  */
 data class JointCpSummary(
     val participants: List<JointCpParticipant>? = null,
-    // The senior staff, who enters the OTP and records the one outcome.
+    // Legacy display aliases only. Workflow authority comes from each
+    // participant's server-resolved IAM template role, never staff order.
     val leadStaffName: String? = null,
     val leadStaffId: String? = null,
     // The other participant, who travels but records no outcome.
     val companionNames: List<String>? = null,
     val totalCount: Int = 0,
+    val workflow: JointCpWorkflow? = null,
+)
+
+data class JointCpWorkflowResponse(
+    val success: Boolean,
+    val workflow: JointCpWorkflow? = null,
+    val error: String? = null,
+    val code: String? = null,
+)
+
+data class JointCpWorkflow(
+    val state: String? = null,
+    val actorRole: String? = null,
+    val outcomeOwnerStaffId: String? = null,
+    val outcomeOwnerName: String? = null,
+    val reviewerStaffId: String? = null,
+    val reviewerName: String? = null,
+    val reviewerTemplateName: String? = null,
+    val canRequestOtp: Boolean = false,
+    val canSubmitOutcome: Boolean = false,
+    val canReview: Boolean = false,
+    val canCompleteReview: Boolean = false,
+    val separationMeters: Double? = null,
+    val isWithinCompletionRadius: Boolean = false,
+    val requiredRadiusMeters: Double = 50.0,
+    val outcomeRevision: Long? = null,
+    val outcome: String? = null,
+    @JsonAdapter(FlexibleDisplayStringDeserializer::class)
+    val outcomeSummary: String? = null,
+    val reviewedByName: String? = null,
+    val reviewedByTemplateName: String? = null,
+    val completedAt: Long? = null,
+)
+
+/** Accepts the legacy string and the newer structured Joint CP summary. */
+class FlexibleDisplayStringDeserializer : JsonDeserializer<String?> {
+    override fun deserialize(
+        json: JsonElement?,
+        typeOfT: Type?,
+        context: JsonDeserializationContext?,
+    ): String? {
+        if (json == null || json.isJsonNull) return null
+        if (json.isJsonPrimitive) return json.asJsonPrimitive.asString
+        if (!json.isJsonObject) return json.toString()
+
+        val objectValue = json.asJsonObject
+        val preferredKeys = listOf("summary", "text", "label", "outcome", "notes", "value")
+        preferredKeys.forEach { key ->
+            objectValue.get(key)?.takeIf { it.isJsonPrimitive }?.asString
+                ?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+        }
+        return objectValue.entrySet()
+            .mapNotNull { (_, value) -> value.takeIf { it.isJsonPrimitive }?.asString?.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .joinToString(" • ")
+            .takeIf { it.isNotEmpty() }
+    }
+}
+
+data class JointCpLocationRequest(
+    val id: String,
+    val fieldVisitId: String,
+    val lat: Double,
+    val lng: Double,
+    val accuracyMeters: Float? = null,
+    val capturedAt: Long = System.currentTimeMillis(),
+)
+
+data class JointCpSubmitReviewRequest(
+    val id: String,
+    val fieldVisitId: String,
+    val lat: Double,
+    val lng: Double,
+    val accuracyMeters: Float? = null,
+    val capturedAt: Long = System.currentTimeMillis(),
+    val arrivalPhotoStorageId: String? = null,
+    val expectedOutcomeRevision: Long? = null,
+)
+
+data class JointCpCompleteReviewRequest(
+    val id: String,
+    val expectedOutcomeRevision: Long,
 )
 
 data class CpVisitDetailResponse(
@@ -1698,11 +2029,58 @@ data class MyMarketingCpVisitsResponse(
     val success: Boolean,
     val total: Int? = null,
     val visits: List<CpVisitDetail> = emptyList(),
+    // Echoed by the server so mobile can fail closed if an older endpoint
+    // ignores scope=direct and returns a wider hierarchy.
+    val scope: String? = null,
+    val viewerStaffId: String? = null,
+    val hasDirectReports: Boolean? = null,
+    val directReportCount: Int? = null,
+    // Nullable because the legacy endpoint can explicitly serialize this
+    // additive field as null. Gson does not apply Kotlin defaults for null.
+    val directReportIds: List<String>? = null,
+    val nextCursor: String? = null,
+    val hasMore: Boolean? = null,
+    val error: String? = null,
+) {
+    val safeDirectReportIds: List<String>
+        get() = directReportIds.orEmpty()
+}
+
+data class CpVisitFilterOption(
+    @com.google.gson.annotations.SerializedName(value = "id", alternate = ["_id", "value"])
+    val id: String? = null,
+    val name: String? = null,
+    val label: String? = null,
+    val employeeId: String? = null,
+    val designation: String? = null,
+    val department: String? = null,
+    val count: Int? = null,
+)
+
+data class CpVisitFilterOptionsResponse(
+    val success: Boolean = false,
+    val fieldStaff: List<CpVisitFilterOption>? = null,
+    val telecallers: List<CpVisitFilterOption>? = null,
+    val statuses: List<CpVisitFilterOption>? = null,
+    val outcomes: List<CpVisitFilterOption>? = null,
+    val cpTypes: List<CpVisitFilterOption>? = null,
+    val error: String? = null,
+)
+
+data class SiteVisitFilterOptionsResponse(
+    val success: Boolean = false,
+    val projects: List<CpVisitFilterOption>? = null,
+    val lmos: List<CpVisitFilterOption>? = null,
+    val fieldStaff: List<CpVisitFilterOption>? = null,
+    val statuses: List<CpVisitFilterOption>? = null,
     val error: String? = null,
 )
 
 data class CpVisitDetail(
     @com.google.gson.annotations.SerializedName("_id") val id: String? = null,
+    // Returned by create and participant-aware list reads so mobile can
+    // reconcile a mutation whose HTTP response was lost after commit.
+    val requestId: String? = null,
     val leadId: String? = null,
     val clientId: String? = null,
     val clientPlaceId: String? = null,
@@ -2110,11 +2488,15 @@ data class TodayVisit(
     // visit. Shown on the SV/CP cards. SV rows get it from the backend list
     // query; CP rows are mapped from the CpVisitDetail's telecaller.
     val lmoName: String? = null,
+    val lmoStaffId: String? = null,
     // BDO (Business Development Officer) — the field officer ASSIGNED to this
     // visit (the visit's own bdoStaffId), supplied by the backend SV list. The
     // card must render THIS, not the signed-in viewer — the old code hardcoded
     // the session user, so every row wrongly showed the logged-in staffer.
     val bdoName: String? = null,
+    val bdoStaffId: String? = null,
+    val projectId: String? = null,
+    val projectName: String? = null,
     // Convex auto-populates `_creationTime` on every doc; we surface it
     // so Today's Trip can sort newest-first regardless of source (legacy
     // fieldVisits route vs CP-merge path). For CP-merge rows where the
@@ -2169,6 +2551,8 @@ data class MySiteVisitsResponse(
     val success: Boolean,
     val total: Int? = null,
     val visits: List<TodayVisit> = emptyList(),
+    val nextCursor: String? = null,
+    val hasMore: Boolean? = null,
     val error: String? = null
 )
 

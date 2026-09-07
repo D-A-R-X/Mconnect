@@ -1,0 +1,326 @@
+M-CONNECT MODERN DIALER - MOBILE API AND PUSH HANDOFF
+Date: 2026-08-30
+
+Scope
+-----
+Android and iOS are Modern Dialer-only. Doocti and the editable Station flow have
+been removed. The existing embedded provider remains:
+
+  https://dialer.theairix.com/embed/agent?token=<token>&deviceId=<deviceId>
+
+Mobile sends the same origin-checked control messages as web: call, pickup,
+hangup, set-muted, set-hold, set-status, request-state, and get-state.
+
+Already available
+-----------------
+1. GET /api/mobile/dialer/config
+   Authorization: Bearer <MMS token>
+
+   The existing response must continue to return configured, provider, mode,
+   apiUrl, staff, mapping.extension, mapping.token, mapping.tokenExpiresAt,
+   mapping.active, and feature flags.
+
+2. POST /api/push/register
+   Authorization: Bearer <MMS token>
+   Content-Type: application/json
+
+   Android body:
+   {
+     "token": "<FCM token>",
+     "platform": "android",
+     "provider": "fcm",
+     "bundleId": "com.manjugroups.mconnect",
+     "deviceId": "<stable Android id>"
+   }
+
+   iOS normal notification body remains platform=ios. The same endpoint must
+   additionally accept the PushKit token:
+   {
+     "token": "<PushKit VoIP token>",
+     "platform": "ios_voip",
+     "provider": "apns_voip",
+     "bundleId": "<iOS bundle id>"
+   }
+
+Required backend work
+---------------------
+1. Extend Modern Dialer device-token sync to iOS.
+
+   Current modernDialerSync resolves only platform=android. It must accept:
+   - android + fcm
+   - ios_voip + apns_voip
+
+   Server-to-server target must use the backend-approved Modern Dialer host
+   under theairix.com (the exact hostname must be supplied by the backend owner):
+   POST https://<approved-modern-dialer-api>.theairix.com/api/mobile/device-tokens
+   X-Service-Secret: <server-only secret>
+
+   Do not configure or fall back to any aivida.in domain for Modern Dialer.
+
+   Never expose X-Service-Secret or provider credentials to either app.
+
+2. Add an authenticated call state endpoint.
+
+   GET /api/mobile/dialer/calls/current?callId=<optional call id>
+   Authorization: Bearer <MMS token>
+
+   Success response:
+   {
+     "success": true,
+     "call": {
+       "callId": "provider-call-id",
+       "direction": "incoming|outbound",
+       "stage": "incoming|connecting|in_call|ended",
+       "fromNumber": "919...",
+       "toNumber": "919...",
+       "displayName": "Client name",
+       "extension": "1001",
+       "requiresPickup": true,
+       "muted": false,
+       "held": false,
+       "startedAt": "ISO-8601",
+       "expiresAt": "ISO-8601"
+     }
+   }
+
+   Return call:null when idle. Authorize the call against the signed-in staff's
+   active Modern Dialer mapping; never allow arbitrary call-id access.
+
+3. Add an authenticated, idempotent call-action endpoint.
+
+   POST /api/mobile/dialer/calls/{callId}/action
+   Authorization: Bearer <MMS token>
+   Idempotency-Key: <UUID>
+   Content-Type: application/json
+
+   Body:
+   {
+     "action": "pickup|reject|hangup",
+     "deviceId": "stable-device-id",
+     "platform": "android|ios",
+     "eventId": "incoming-push-event-id"
+   }
+
+   Response:
+   {
+     "success": true,
+     "callId": "provider-call-id",
+     "stage": "connecting|in_call|ended",
+     "alreadyApplied": false
+   }
+
+   This endpoint is mandatory for reliable accept/reject when the app was killed.
+   A background process cannot depend on a hidden WebView being loaded and SIP-
+   registered. The endpoint should forward the action server-side to the Modern
+   Dialer service and remain idempotent across notification/button retries.
+
+   Errors:
+   - 401 invalid/expired MMS session
+   - 403 call does not belong to the signed-in mapping
+   - 404 unknown call
+   - 409 CALL_ALREADY_ENDED or CALL_ACTION_CONFLICT
+   - 410 CALL_EXPIRED
+   - 422 invalid action/payload
+   - 503 provider unavailable, with a retryable boolean
+
+4. Send call lifecycle pushes.
+
+   Android incoming push must be FCM high-priority, data-only, short TTL (30-60
+   seconds), and collapse by callId. Required string data:
+   {
+     "type": "dialer-call-incoming",
+     "eventId": "unique-event-id",
+     "callId": "provider-call-id",
+     "callUuid": "optional RFC-4122 UUID",
+     "fromNumber": "919...",
+     "clientName": "Client name",
+     "extension": "1001",
+     "requiresPickup": "true",
+     "expiresAt": "ISO-8601 or epoch milliseconds"
+   }
+
+   `clientName` (or `callerName`) must identify the remote client/contact. Do not
+   populate it with the receiving staff/agent name. Mobile intentionally ignores
+   generic `displayName`; without an explicit client/caller name it shows
+   "Unknown caller" alongside the real phone number rather than a wrong name.
+
+   Important: do not include an FCM `notification` block. Android routes a
+   background notification payload directly to the launcher and does not call
+   FirebaseMessagingService, so the app cannot create the native incoming-call
+   notification/full-screen lock-screen UI. The provider must send the data-only
+   payload to the currently registered FCM token and log the FCM message id or
+   invalid-token response for each attempt.
+
+   iOS incoming push must use APNs VoIP/PushKit:
+   - apns-push-type: voip
+   - apns-topic: <bundle-id>.voip
+   - apns-expiration: 0
+   - priority: 10
+   - the same call fields in the payload
+
+   Send a terminal lifecycle push to both platforms:
+   {
+     "type": "dialer-call-ended",
+     "eventId": "unique-event-id",
+     "callId": "provider-call-id",
+     "reason": "remote_hangup|answered_elsewhere|rejected|expired"
+   }
+
+   The terminal push must cancel Android ringing/full-screen notification and end
+   the matching iOS CallKit call immediately.
+
+5. Add staff-scoped recent call history.
+
+   GET /api/mobile/dialer/history?limit=20&cursor=<optional>
+   Authorization: Bearer <MMS token>
+
+   Response:
+   {
+     "success": true,
+     "calls": [{
+       "callId": "provider-call-id",
+       "direction": "incoming|outbound",
+       "status": "completed|missed|rejected|failed",
+       "fromNumber": "919...",
+       "toNumber": "919...",
+       "displayName": "Client name",
+       "startedAt": "ISO-8601",
+       "answeredAt": "ISO-8601 or null",
+       "endedAt": "ISO-8601",
+       "durationSeconds": 45,
+       "talkTimeSeconds": 31
+     }],
+     "nextCursor": null
+   }
+
+   Scope results to the signed-in staff's Modern Dialer mapping. Until this API
+   is deployed, Android and iOS retain the most recent 20 calls locally so the
+   bottom-of-dialer history is immediately useful; server history should replace
+   or merge with that cache once available.
+
+6. Token lifecycle and security.
+
+   - Upsert by staff + platform + provider + bundleId + deviceId.
+   - Remove tokens on logout and provider invalid-token feedback.
+   - Do not send incoming calls to inactive mappings or signed-out devices.
+   - Validate extension ownership on every state/action request.
+   - Audit pickup/reject/hangup with staffId, callId, eventId, deviceId, timestamp,
+     IP/user agent, result, and provider correlation id.
+
+   Android build prerequisite (confirmed 01 Sep 2026):
+   - The installed QA APK had empty FIREBASE_APPLICATION_ID,
+     FIREBASE_PROJECT_ID, FIREBASE_API_KEY, and FIREBASE_GCM_SENDER_ID values.
+     Firebase therefore did not initialize and /api/push/register was never
+     called. No FCM message, notification, or full-screen activity can arrive in
+     that build even though notification/full-screen permissions are allowed.
+   - Supply the M-connect Firebase Android client config for package
+     com.manjugroups.mconnect through app/google-services.json, release CI
+     environment variables, or matching Gradle properties. Android release
+     builds now fail when any required Firebase value is absent instead of
+     silently shipping without incoming calls.
+   - After installing, verify /api/push/register returns 201 and Modern Dialer's
+     POST /api/mobile/device-tokens sync succeeds for the mapped extension.
+     Then send a high-priority data-only dialer-call-incoming payload and verify
+     MconnectFCM receives it while the device is locked.
+
+7. Make the provider WebRTC media path mobile-compatible.
+
+   The embedded provider must return valid, non-expired STUN/TURN credentials
+   that work from Android System WebView and iOS WKWebView on Wi-Fi and mobile
+   data. TURN must support UDP, TCP, and TLS 443 fallback; do not assume direct
+   peer UDP is available. Keep ICE gathering alive long enough to try the TCP/TLS
+   candidates, and report a terminal provider error when ICE reaches `failed`.
+
+   The provider/signaling service must forward trickled ICE candidates in both
+   directions and must not close the peer connection on its current short setup
+   deadline while `iceGatheringState` is still `gathering`. Wait for a selected
+   candidate pair (or a defensible 30-second media timeout), and ensure the remote
+   Asterisk/WebRTC peer advertises a candidate reachable from the allocated TURN
+   relay. This is a provider correction; no additional Android endpoint can create
+   or select the missing remote candidate pair.
+
+   The deployed embed currently refreshes credentials from:
+   GET https://dialer.theairix.com/api/calls/turn-credentials?token=<embed-token>
+   It then calls prepareAudio(), refreshes TURN credentials, and originates the
+   GSM call. Its exposed parent-window controls are call, hangup, answer/pickup,
+   set-muted, set-hold, send-dtmf, and set-status. There is no deployed ICE restart
+   or media-retry command, so Android and iOS cannot recover a failed peer
+   connection without provider support. Add a provider-side ICE restart/re-offer
+   path or repair the initial candidate exchange; do not make mobile redial the
+   customer as an implicit retry.
+
+   Required provider diagnostics per callId:
+   - iceConnectionState / connectionState and selected candidate pair
+   - local/remote candidate types and transport
+   - inbound/outbound audio bytes and packets
+   - TURN allocation/authentication error, without exposing credentials
+
+   Live Android evidence on 30 Aug 2026: the provider emitted `call:answered`,
+   Android microphone capture was active and not silenced, and the remote audio
+   element was ready/unmuted. However ICE remained `checking`, both inbound and
+   outbound audio packets/bytes stayed exactly zero, then connectionState became
+   `failed`. This is why neither party could hear audio. Mobile now detects that
+   terminal media failure, hangs up, releases audio focus, clears the notification,
+   and records a failed call; working two-way media still requires the provider
+   TURN/ICE path above.
+
+   Additional live evidence at 19:13 on 30 Aug 2026: Android successfully gathered
+   a Cloudflare UDP relay candidate at 104.30.150.59 in addition to host and
+   server-reflexive candidates. The provider never emitted a selected pair,
+   remained `iceConnectionState=checking` and `iceGatheringState=gathering`, then
+   changed to `connectionState=failed` after about 16 seconds with all RTP counters
+   still zero. Validate bidirectional trickle forwarding and the remote Asterisk
+   candidate/DTLS path before asking mobile to change speaker or microphone code.
+
+   Confirmed provider failure on 01 Sep 2026 after the outbound route was changed
+   to Airtel GSM / Mobile GSM (Dinstar 3). Call forwarding and destination ringing
+   work, but the provider's remote SDP advertises only one UDP host candidate:
+
+     c=IN IP4 172.168.1.46
+     a=candidate:... 172.168.1.46 10030 typ host
+
+   (another call used UDP port 10024). Android produced valid host, server-reflexive,
+   and Cloudflare TURN relay candidates. A controlled relay-only run successfully
+   restricted the local peer to TURN candidates, but ICE still stayed `checking`,
+   all inbound/outbound RTP packet and byte counters remained zero, and the peer
+   failed after about 16 seconds. This rules out Android microphone permission,
+   Android audio routing, and local direct-NAT candidate selection as the cause.
+
+   Required Modern Dialer/Asterisk media correction:
+   - Make the advertised RTP/ICE address and allocated UDP port reachable from
+     public mobile networks and from Cloudflare TURN relays; verify firewall/NAT
+     forwarding for the configured RTP port range.
+   - Prefer an ICE-aware public SBC/media relay or add a provider-side TURN relay
+     candidate instead of exposing only the current host candidate.
+   - Return/trickle every usable remote candidate and keep the allocation alive
+     until ICE reaches connected/completed.
+   - Validate DTLS traffic and fingerprint negotiation on the advertised media
+     address, and do not report `answered` until the media leg is viable.
+   - Test with callId `f4b04b40-21aa-4869-94c4-c2e387bb13dd`; its local side was
+     relay-only and its RTP counters remained zero.
+   - Do not use the current approximately 8-16 second provider ICE failure as a
+     call timeout. Keep signaling alive through a defensible media setup window,
+     perform provider-side ICE restart/re-offer when possible, and end only after
+     the media path is terminal. Mobile currently ends when the provider emits
+     connectionState=failed because an answered PSTN leg with zero RTP cannot
+     carry speech in either direction.
+
+Mobile acceptance criteria
+--------------------------
+- No Station or Doocti text, settings, requests, or fallback exists.
+- Outbound call waits for phone:registered before sending call.
+- Outbound call is rejected while the agent is on Break or status is not yet
+  known; the staff must switch to Available first.
+- Available/Break, pickup, hangup, mute, hold, and state refresh match web.
+- Phone, Speaker, and connected Bluetooth call-audio routes work on both apps.
+- An answered call reaches ICE connected/completed and transfers non-zero inbound
+  and outbound audio packets on both Wi-Fi and mobile data.
+- No synthetic outbound ringback is played over the provider caller tune.
+- Recent calls appear below the keypad; the server endpoint provides authoritative cross-device history.
+- Android rings with full-screen call notification while locked/asleep/closed.
+- iOS rings through PushKit + CallKit while locked/asleep/terminated.
+- Accept/reject is idempotent and still works from a killed process through the
+  server action endpoint.
+- A call-ended push stops ringing immediately on every device.
+- Existing CP, SV, chat, GeoTrack, HR, fleet, and ordinary notifications remain
+  unchanged.

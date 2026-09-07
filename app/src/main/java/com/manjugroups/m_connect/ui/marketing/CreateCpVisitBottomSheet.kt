@@ -27,16 +27,21 @@ import com.manjugroups.m_connect.util.EditableTimeFormat
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.CreateCpVisitRequest
+import com.manjugroups.m_connect.network.ClientProfile
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.MarketingProject
+import com.manjugroups.m_connect.network.ReferralClientCandidate
 import com.manjugroups.m_connect.network.StaffData
 import com.manjugroups.m_connect.ui.common.SearchableOption
 import com.manjugroups.m_connect.ui.common.SearchableSelectionDialog
 import com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import java.util.UUID
 import com.manjugroups.m_connect.ui.common.showOnce
 
 class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
@@ -44,6 +49,20 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
     private val api = ApiService.create()
     private val geoApi = GeoTrackApi.create()
     private lateinit var session: SessionManager
+    private var createRequestId = UUID.randomUUID().toString()
+    private var createRequestFingerprint: String? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        createRequestId = savedInstanceState?.getString(STATE_REQUEST_ID) ?: createRequestId
+        createRequestFingerprint = savedInstanceState?.getString(STATE_REQUEST_FINGERPRINT)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString(STATE_REQUEST_ID, createRequestId)
+        outState.putString(STATE_REQUEST_FINGERPRINT, createRequestFingerprint)
+        super.onSaveInstanceState(outState)
+    }
 
     // Selected variables
     private var selectedStaff: StaffData? = null
@@ -52,15 +71,16 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var selectedLmo: StaffData? = null
     private var selectedDate: String = ""
     private var selectedTime: String = ""
-    // CP Type — visit intent enum (sv_cum_cp / follow_up / booking_cp /
-    // collection_cp / old_client / gift_distribution). Optional; null
-    // means no type was picked and the server stores the row without it.
+    // CP Type is selected before submit and converted into the canonical API
+    // contract. The nullable UI state never reaches the request model.
     private var selectedCpType: CpTypeOption? = null
 
-    // Joint CP only: the SECOND staff. Cleared whenever the type moves away
-    // from Joint CP so a stale partner can never ride along on another type.
+    // Joint CP is an independent visit mode. The normal CP type remains the
+    // visit purpose while this flag controls whether a second staff is added.
+    private var isJointCp = false
     private var selectedJointPartner: StaffData? = null
-    private var selectedJointCpCategory: CpTypeOption? = null
+    private var selectedReferralSource: ReferralSourceOption? = null
+    private var selectedReferringClient: ReferralClientCandidate? = null
 
     /** CP visit intent enum shared with the web form. The `id` is the
      *  wire value sent to convex; `label` is what the picker shows. */
@@ -68,6 +88,13 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         val id: String,
         val label: String,
         val sublabel: String,
+    )
+
+    private data class ReferralSourceOption(val id: String, val label: String)
+
+    private val referralSourceOptions = listOf(
+        ReferralSourceOption("own_referral", "Own Referral"),
+        ReferralSourceOption("client_referral", "Client Referral"),
     )
 
     private val cpTypeOptions = listOf(
@@ -81,7 +108,6 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         CpTypeOption("old_client", "Old Client", "Re-engagement touch"),
         CpTypeOption("gift_distribution", "Gift Distribution", "Loyalty drop-off"),
         CpTypeOption("other_cp", "Other CP", "Miscellaneous client work"),
-        CpTypeOption("joint_cp", "Joint CP", "Two staff visit the same client"),
     )
 
     // Caches for fast display
@@ -105,6 +131,8 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
     // web's `createLastEnrichedPin` guard but keyed on the phone tail
     // rather than the pincode.
     private var lastAutofilledPhone: String? = null
+    private var existingClientProfile: ClientProfile? = null
+    private var existingClientPhone: String? = null
 
     // Pin-drop state — populated when the user picks a spot from the
     // (forthcoming) map widget. The web equivalent stores these on
@@ -181,7 +209,9 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         val etProj = view.findViewById<EditText>(R.id.etProject)
         val etLmo = view.findViewById<EditText>(R.id.etLmo)
         val etCpType = view.findViewById<EditText>(R.id.etCpType)
-        val etJointCpCategory = view.findViewById<EditText>(R.id.etJointCpCategory)
+        val switchJointCp = view.findViewById<com.google.android.material.switchmaterial.SwitchMaterial>(R.id.switchJointCp)
+        val etReferralSource = view.findViewById<EditText>(R.id.etReferralSource)
+        val etReferringClient = view.findViewById<EditText>(R.id.etReferringClient)
         val etDateTime = view.findViewById<EditText>(R.id.etDateTime)
 
         // ── Canonical address fields (7) ───────────────────────────
@@ -231,7 +261,14 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         etProj.setOnClickListener { pickProject(etProj) }
         etLmo.setOnClickListener { pickLmo(etLmo) }
         etCpType.setOnClickListener { pickCpType(etCpType) }
-        etJointCpCategory.setOnClickListener { pickJointCpCategory(etJointCpCategory) }
+        switchJointCp.setOnCheckedChangeListener { _, checked ->
+            isJointCp = checked
+            applyCpConditionalVisibility()
+        }
+        etReferralSource.setOnClickListener { pickReferralSource(etReferralSource) }
+        etReferringClient.setOnClickListener {
+            pickReferringClient(etReferringClient, etPhone.text?.toString().orEmpty())
+        }
         etDateTime.setOnClickListener { pickDateTime(etDateTime) }
 
         // Lead-autofill — when the phone field hits 10 digits we hit
@@ -244,6 +281,10 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) {
                 val digits = s?.toString().orEmpty().filter { it.isDigit() }.takeLast(10)
+                if (digits != existingClientPhone) {
+                    existingClientProfile = null
+                    existingClientPhone = null
+                }
                 if (digits.length == 10 && digits != lastAutofilledPhone) {
                     lastAutofilledPhone = digits
                     autofillFromLead(
@@ -420,21 +461,39 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                 return@setOnClickListener
             }
 
+            if (isNewClientCpPurpose()) {
+                val source = selectedReferralSource
+                if (source == null) {
+                    toast("Select Own Referral or Client Referral")
+                    return@setOnClickListener
+                }
+                if (source.id == "client_referral") {
+                    val referrer = selectedReferringClient
+                    if (referrer == null) {
+                        toast("Select the referring client")
+                        return@setOnClickListener
+                    }
+                    val referrerPhone = referrer.mobileNumber.filter { it.isDigit() }.takeLast(10)
+                    if (referrerPhone == phone) {
+                        toast("A client cannot refer themselves")
+                        return@setOnClickListener
+                    }
+                }
+            }
+
             // A Joint CP is meaningless with one person on it.
             val jointPartnerId = selectedJointPartner?.id
-            if (selectedCpType?.id == "joint_cp") {
-                if (selectedJointCpCategory == null) {
-                    toast("Select the Joint CP category")
+            val authoritativePrimary = staffCache.firstOrNull { it.id == staff.id } ?: staff
+            var jointParticipantIds: List<String>? = null
+            if (isJointCp) {
+                JointCpTemplateGuard.rejection(authoritativePrimary, selectedJointPartner)?.let {
+                    toast(it)
                     return@setOnClickListener
                 }
-                if (jointPartnerId.isNullOrBlank()) {
-                    toast("Select the second staff for this Joint CP")
-                    return@setOnClickListener
-                }
-                if (jointPartnerId == staff.id) {
-                    toast("Pick two different staff for a Joint CP")
-                    return@setOnClickListener
-                }
+                jointParticipantIds = JointCpTemplateGuard.participantIds(
+                    authoritativePrimary,
+                    selectedJointPartner,
+                )
             }
 
             val project = selectedProject
@@ -506,11 +565,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             // phone number after picking a booking-dependent CP type.
             // Never let collection_cp / booking_cp ship with a mobile
             // that has no cached booking-found result.
-            val effectiveCpPurpose = if (selectedCpType?.id == "joint_cp") {
-                selectedJointCpCategory?.id
-            } else {
-                selectedCpType?.id
-            }
+            val effectiveCpPurpose = selectedCpType?.id
             val isBookingDependent = effectiveCpPurpose == "collection_cp" ||
                 effectiveCpPurpose == "booking_cp"
             if (isBookingDependent &&
@@ -519,7 +574,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                 AlertDialog.Builder(requireContext())
                     .setTitle("The client has no bookings")
                     .setMessage(
-                        "${selectedJointCpCategory?.label ?: selectedCpType?.label ?: "This CP type"} needs a confirmed booking for this mobile. " +
+                        "${selectedCpType?.label ?: "This CP type"} needs a confirmed booking for this mobile. " +
                             "Re-pick the CP type or use a number that already has a booking."
                     )
                     .setPositiveButton("OK", null)
@@ -530,6 +585,34 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             btnSubmit.isEnabled = false
             viewLifecycleOwner.lifecycleScope.launch {
                 try {
+                    if (isNewClientCpPurpose() && createRequestFingerprint == null) {
+                        val existingResponse = api.searchClientByPhone(
+                            session.bearerToken,
+                            phone,
+                        )
+                        if (!isAdded) return@launch
+                        existingResponse.client?.let { existing ->
+                            applyClientAutofill(view, existing)
+                            rememberExistingClient(existing, phone)
+                            blockNewClientCpForExistingClient(view)
+                            btnSubmit.isEnabled = true
+                            return@launch
+                        }
+                        if (!existingResponse.success &&
+                            !existingResponse.error.orEmpty().contains("not found", ignoreCase = true)
+                        ) {
+                            btnSubmit.isEnabled = true
+                            toast(existingResponse.error ?: "Couldn't verify whether this client already exists")
+                            return@launch
+                        }
+                    }
+                    // Start the duplicate read while resolving a missing pin.
+                    // These calls are independent and used to run serially,
+                    // making a normal create feel unnecessarily slow.
+                    val duplicateDeferred = async {
+                        findSameDayCpVisitFor(phone, selectedDate)
+                    }
+
                     // A CP MUST carry coordinates so the trip map can pin the
                     // client location (without them the trip screen tries to
                     // geocode the free-text address, and a vague/junk address
@@ -559,15 +642,13 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                     }
                     // Give immediate feedback for a duplicate on the selected
                     // day. The mutation repeats this authoritatively.
-                    val duplicate = findSameDayCpVisitFor(phone, selectedDate)
-                    if (duplicate != null) {
+                    val typeContract = CpCreateTypeContract.from(selectedCpType?.id, isJointCp)
+                    if (typeContract == null) {
                         btnSubmit.isEnabled = true
-                        toast(duplicate)
+                        toast("Select a valid CP type")
                         return@launch
                     }
-                    val resp = geoApi.createCpVisit(
-                        session.bearerToken,
-                        CreateCpVisitRequest(
+                    val request = CreateCpVisitRequest(
                             clientName = clientNameInput,
                             mobileNumber = phone,
                             assignedStaffId = staff.id,
@@ -580,35 +661,102 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                             googleMapsLink = maps.takeIf { it.isNotBlank() },
                             notes = notesVal.takeIf { it.isNotBlank() },
                             projectId = project.id,
-                            cpType = selectedCpType?.id,
-                            jointCpCategory = if (selectedCpType?.id == "joint_cp") {
-                                selectedJointCpCategory?.id
-                            } else null,
+                            cpType = typeContract.cpType,
+                            jointCpCategory = typeContract.jointCpCategory,
+                            referralSourceType = selectedReferralSource?.id
+                                ?.takeIf { isNewClientCpPurpose() },
+                            referringClientId = selectedReferringClient?.id
+                                ?.takeIf {
+                                    isNewClientCpPurpose() &&
+                                        selectedReferralSource?.id == "client_referral"
+                                },
                             pincode = pincode,
                             // Only sent for a Joint CP; the server ignores it
                             // for every other type.
-                            jointStaffIds = if (selectedCpType?.id == "joint_cp") {
-                                listOfNotNull(jointPartnerId)
-                            } else {
-                                null
-                            },
-                        )
+                            jointStaffIds = jointParticipantIds,
                     )
-                    btnSubmit.isEnabled = true
+                    val requestFingerprint = com.google.gson.Gson().toJson(request)
+                    if (createRequestFingerprint != requestFingerprint) {
+                        createRequestId = UUID.randomUUID().toString()
+                        createRequestFingerprint = requestFingerprint
+                    }
+                    val duplicate = OpenCpVisitGuard.blockReason(
+                        duplicateDeferred.await(), phone, selectedDate, createRequestId,
+                    )
+                    if (duplicate != null) {
+                        btnSubmit.isEnabled = true
+                        toast(duplicate)
+                        return@launch
+                    }
+                    val resp = geoApi.createCpVisit(session.bearerToken, createRequestId, request)
                     if (!resp.success) {
                         toast(cleanServerErrorMessage(resp.error ?: "Failed to create CP visit"))
                         return@launch
                     }
+                    val createdId = resp.id?.trim()
+                    if (createdId.isNullOrBlank() || resp.requestId != createRequestId) {
+                        toast("The server did not confirm the created CP. Tap Create visit again to resume safely.")
+                        return@launch
+                    }
+                    when (verifyCreatedCpType(createdId, typeContract, resp.cpType, resp.jointCpCategory)) {
+                        CpTypeVerification.CONFIRMED -> Unit
+                        CpTypeVerification.MISMATCH -> {
+                            toast("CP was created, but the server did not retain its selected type. Admin repair is required.")
+                            return@launch
+                        }
+                        CpTypeVerification.UNAVAILABLE -> {
+                            toast("CP was created, but its type could not be confirmed from the server. Refresh before continuing.")
+                            return@launch
+                        }
+                    }
                     toast("CP visit created successfully")
-                    setFragmentResult(RESULT_KEY_CREATED, bundleOf("success" to true))
+                    setFragmentResult(
+                        RESULT_KEY_CREATED,
+                        bundleOf("success" to true, "visitId" to createdId),
+                    )
+                    createRequestId = UUID.randomUUID().toString()
+                    createRequestFingerprint = null
                     dismissAllowingStateLoss()
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
                 } catch (e: Exception) {
-                    btnSubmit.isEnabled = true
+                    duplicateClientFromException(e)?.let { existing ->
+                        applyClientAutofill(view, existing)
+                        rememberExistingClient(existing, phone)
+                        blockNewClientCpForExistingClient(view)
+                        return@launch
+                    }
+                    val recovered = if (isAmbiguousCreateFailure(e)) {
+                        findCreatedVisitByRequestId(createRequestId, selectedDate)
+                    } else null
+                    if (recovered != null) {
+                        val typeContract = CpCreateTypeContract.from(selectedCpType?.id, isJointCp)
+                        if (typeContract == null || !typeContract.matches(recovered.cpType, recovered.jointCpCategory)) {
+                            toast("CP was created, but the server did not retain its selected type. Admin repair is required.")
+                            return@launch
+                        }
+                        toast("CP visit created successfully")
+                        setFragmentResult(
+                            RESULT_KEY_CREATED,
+                            bundleOf("success" to true, "visitId" to recovered.id),
+                        )
+                        createRequestId = UUID.randomUUID().toString()
+                        createRequestFingerprint = null
+                        dismissAllowingStateLoss()
+                        return@launch
+                    }
                     // The create route returns real reasons (staff busy, duplicate
                     // slot, "Collection CP requires a booking", etc.) in a JSON
                     // { error } body. Read it for current 4xx responses and older
                     // deployments that still return HTTP 500.
-                    toast(serverErrorMessage(e) ?: e.message ?: "Failed to create CP visit")
+                    val message = serverErrorMessage(e) ?: if (isAmbiguousCreateFailure(e)) {
+                        "Couldn't confirm creation. Check your network and tap Create visit again; the same request will be resumed safely."
+                    } else {
+                        e.message ?: "Failed to create CP visit"
+                    }
+                    toast(message)
+                } finally {
+                    btnSubmit.isEnabled = true
                 }
             }
         }
@@ -637,6 +785,10 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                 val client = resp.client
                 if (isAdded && resp.success && client != null) {
                     applyClientAutofill(view, client)
+                    rememberExistingClient(client, phone)
+                    if (isNewClientCpPurpose()) {
+                        blockNewClientCpForExistingClient(view)
+                    }
                 }
             } catch (_: Exception) {
                 // Silent — fallback is opportunistic too.
@@ -781,7 +933,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val resp = api.getStaff(session.bearerToken)
+                val resp = api.getStaff(session.bearerToken, status = "active")
                 if (!resp.success) {
                     toast("Failed to load staff list")
                     return@launch
@@ -803,7 +955,8 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
     private fun pickJointPartner(label: EditText) {
         val show = { items: List<StaffData> ->
             val primaryId = selectedStaff?.id
-            val eligible = items.filter { it.id != null && it.id != primaryId }
+            val primary = items.firstOrNull { it.id == primaryId } ?: selectedStaff
+            val eligible = items.filter { it.id != null && JointCpTemplateGuard.canPair(primary, it) }
             SearchableSelectionDialog.show(
                 context = requireContext(),
                 title = "Select the second staff",
@@ -811,13 +964,17 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                     SearchableOption(
                         item = st,
                         title = st.name ?: "Unnamed Staff",
-                        subtitle = listOfNotNull(st.employeeId, st.role).joinToString(" - "),
+                        subtitle = listOfNotNull(st.employeeId, st.iamTemplateName, st.role).joinToString(" - "),
                         keywords = listOfNotNull(
-                            st.id, st.name, st.employeeId, st.role, st.department,
+                            st.id, st.name, st.employeeId, st.iamTemplateName, st.role, st.department,
                         ).joinToString(" "),
                     )
                 },
-                emptyMessage = if (primaryId == null) "No staff found" else "No other staff available",
+                emptyMessage = if (primaryId == null) {
+                    "Select the first staff before choosing a partner"
+                } else {
+                    "No staff from a different IAM template are available"
+                },
             ) { staff ->
                 selectedJointPartner = staff
                 label.setText(staff.name ?: "Selected")
@@ -829,7 +986,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val resp = api.getStaff(session.bearerToken)
+                val resp = api.getStaff(session.bearerToken, status = "active")
                 if (!resp.success) {
                     toast("Failed to load staff list")
                     return@launch
@@ -858,6 +1015,10 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         ) { staff ->
             selectedStaff = staff
             label.setText(staff.name ?: "Selected")
+            if (selectedJointPartner?.let { !JointCpTemplateGuard.canPair(staff, it) } == true) {
+                selectedJointPartner = null
+                view?.findViewById<EditText>(R.id.etJointPartner)?.setText("")
+            }
         }
     }
 
@@ -890,7 +1051,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val resp = api.getStaff(session.bearerToken)
+                val resp = api.getStaff(session.bearerToken, status = "active")
                 if (!isAdded || !resp.success) return@launch
                 staffCache = resp.staff
                 apply(resp.staff)
@@ -908,7 +1069,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val resp = api.getStaff(session.bearerToken)
+                val resp = api.getStaff(session.bearerToken, status = "active")
                 if (!resp.success) {
                     toast("Failed to load staff list")
                     return@launch
@@ -1024,80 +1185,177 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                 gateBookingDependentCpSelection(picked, label)
                 return@show
             }
-            selectedCpType = picked
-            label.setText(picked.label)
-            applyJointPartnerVisibility()
-        }
-    }
-
-    private fun pickJointCpCategory(label: EditText) {
-        SearchableSelectionDialog.show(
-            context = requireContext(),
-            title = "Select Joint CP category",
-            options = cpTypeOptions
-                .filterNot { it.id == "joint_cp" }
-                .map { opt ->
-                    SearchableOption(
-                        item = opt,
-                        title = opt.label,
-                        subtitle = opt.sublabel,
-                        keywords = opt.id + " " + opt.label + " " + opt.sublabel,
-                    )
-                },
-            emptyMessage = "No Joint CP categories available",
-        ) { picked ->
-            if (picked.id == "collection_cp" || picked.id == "booking_cp") {
-                gateJointCpCategorySelection(picked, label)
+            if (picked.id == "new_client_cp" && hasCurrentExistingClient()) {
+                blockNewClientCpForExistingClient(view ?: return@show)
                 return@show
             }
-            selectedJointCpCategory = picked
+            selectedCpType = picked
             label.setText(picked.label)
+            applyCpConditionalVisibility()
         }
     }
 
-    /**
-     * Shows the partner field only for a Joint CP, and clears the choice when
-     * the type moves away. Without the clear, picking Joint CP, choosing a
-     * partner, then switching type would still submit a second participant.
-     */
-    private fun applyJointPartnerVisibility() {
+    /** Shows the partner field only while Joint CP mode is enabled. */
+    private fun applyCpConditionalVisibility() {
         val root = view ?: return
-        val isJoint = selectedCpType?.id == "joint_cp"
+        val isJoint = isJointCp
         root.findViewById<View>(R.id.blockJointPartner)?.visibility =
-            if (isJoint) View.VISIBLE else View.GONE
-        root.findViewById<View>(R.id.blockJointCpCategory)?.visibility =
             if (isJoint) View.VISIBLE else View.GONE
         if (!isJoint) {
             selectedJointPartner = null
-            selectedJointCpCategory = null
             root.findViewById<EditText>(R.id.etJointPartner)?.setText("")
-            root.findViewById<EditText>(R.id.etJointCpCategory)?.setText("")
+        }
+        val isNewClient = isNewClientCpPurpose()
+        root.findViewById<View>(R.id.blockNewClientReferralSource)?.visibility =
+            if (isNewClient) View.VISIBLE else View.GONE
+        if (!isNewClient) {
+            selectedReferralSource = null
+            selectedReferringClient = null
+            root.findViewById<EditText>(R.id.etReferralSource)?.setText("")
+            root.findViewById<EditText>(R.id.etReferringClient)?.setText("")
+        }
+        applyReferringClientVisibility()
+    }
+
+    private fun isNewClientCpPurpose(): Boolean =
+        selectedCpType?.id == "new_client_cp"
+
+    private fun rememberExistingClient(client: ClientProfile, phone: String) {
+        existingClientProfile = client
+        existingClientPhone = phone.filter { it.isDigit() }.takeLast(10)
+    }
+
+    private fun hasCurrentExistingClient(): Boolean {
+        val currentPhone = view?.findViewById<EditText>(R.id.etClientPhone)
+            ?.text?.toString().orEmpty().filter { it.isDigit() }.takeLast(10)
+        return existingClientProfile != null && currentPhone.length == 10 &&
+            currentPhone == existingClientPhone
+    }
+
+    private fun blockNewClientCpForExistingClient(root: View) {
+        val existing = existingClientProfile ?: return
+        applyClientAutofill(root, existing)
+        selectedCpType = null
+        root.findViewById<EditText>(R.id.etCpType)?.setText("")
+        applyCpConditionalVisibility()
+        AlertDialog.Builder(requireContext())
+            .setTitle("Client already exists")
+            .setMessage(
+                "This number already exists as a client. Convert to another type of CP. " +
+                    "The existing client details have been filled in."
+            )
+            .setCancelable(false)
+            .setPositiveButton("Choose CP type") { _, _ ->
+                root.findViewById<EditText>(R.id.etCpType)?.performClick()
+            }
+            .show()
+    }
+
+    private fun applyReferringClientVisibility() {
+        val showClient = isNewClientCpPurpose() &&
+            selectedReferralSource?.id == "client_referral"
+        view?.findViewById<View>(R.id.blockReferringClient)?.visibility =
+            if (showClient) View.VISIBLE else View.GONE
+        if (!showClient) {
+            selectedReferringClient = null
+            view?.findViewById<EditText>(R.id.etReferringClient)?.setText("")
         }
     }
 
-    private fun gateJointCpCategorySelection(picked: CpTypeOption, label: EditText) {
-        val phone = view?.findViewById<EditText>(R.id.etClientPhone)
-            ?.text?.toString().orEmpty().filter { it.isDigit() }.takeLast(10)
-        if (phone.length != 10) {
-            toast("Enter the client mobile before selecting ${picked.label}")
-            return
+    private fun pickReferralSource(label: EditText) {
+        SearchableSelectionDialog.show(
+            context = requireContext(),
+            title = "Select referral source",
+            options = referralSourceOptions.map { option ->
+                SearchableOption(
+                    item = option,
+                    title = option.label,
+                    subtitle = if (option.id == "own_referral") {
+                        "Referred by the staff who first attends this CP"
+                    } else {
+                        "Referred by an existing client"
+                    },
+                    keywords = option.id,
+                )
+            },
+        ) { picked ->
+            selectedReferralSource = picked
+            label.setText(picked.label)
+            applyReferringClientVisibility()
         }
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val resp = geoApi.getPostSaleCasesByMobile(session.bearerToken, phone)
-                if (!resp.success || resp.cases.isEmpty()) {
-                    collectionCasesPhone = phone
-                    collectionCasesCache = emptyList()
-                    toast("${picked.label} requires an active booking for this mobile")
-                    return@launch
+    }
+
+    private fun pickReferringClient(label: EditText, newClientPhoneInput: String) {
+        val newClientPhone = newClientPhoneInput.filter(Char::isDigit).takeLast(10)
+        SearchableSelectionDialog.showRemote(
+            context = requireContext(),
+            scope = viewLifecycleOwner.lifecycleScope,
+            title = "Select referring client",
+            subtitle = "Search existing clients by name or mobile number.",
+            searchHint = "Name or mobile number",
+            idleMessage = "Start typing a client name or mobile number",
+            emptyMessage = "No matching existing clients",
+            searchRequest = { query ->
+                val clients = try {
+                    val response = api.searchReferralClientCandidates(
+                        session.bearerToken,
+                        query,
+                    )
+                    if (!response.success) {
+                        throw IllegalStateException(response.error ?: "Failed to search clients")
+                    }
+                    response.clients
+                } catch (error: retrofit2.HttpException) {
+                    val digits = query.filter(Char::isDigit).takeLast(10)
+                    if (error.code() != 404 || digits.length != 10) throw error
+                    val exact = api.searchClientByPhone(session.bearerToken, digits)
+                    val client = exact.client
+                    if (!exact.success || client?.id.isNullOrBlank()) {
+                        emptyList()
+                    } else {
+                        listOf(
+                            ReferralClientCandidate(
+                                id = requireNotNull(client.id),
+                                name = client.clientName?.takeIf(String::isNotBlank) ?: "Client",
+                                mobileNumber = client.mobileNumber?.takeIf(String::isNotBlank) ?: digits,
+                                formattedAddress = client.formattedAddress
+                                    ?: client.homeAddress
+                                    ?: client.addressLine1,
+                            )
+                        )
+                    }
                 }
-                collectionCasesPhone = phone
-                collectionCasesCache = resp.cases
-                selectedJointCpCategory = picked
-                label.setText(picked.label)
-            } catch (e: Exception) {
-                toast("Network error: ${e.message}")
-            }
+                clients
+                    .filterNot { client ->
+                        client.mobileNumber.filter(Char::isDigit).takeLast(10) == newClientPhone
+                    }
+                    .map { client ->
+                        SearchableOption(
+                            item = client,
+                            title = client.name,
+                            subtitle = listOfNotNull(
+                                client.mobileNumber.takeIf(String::isNotBlank),
+                                client.formattedAddress?.takeIf(String::isNotBlank),
+                            ).joinToString(" • "),
+                            keywords = listOf(
+                                client.name,
+                                client.mobileNumber,
+                                client.formattedAddress.orEmpty(),
+                            ).joinToString(" "),
+                        )
+                    }
+            },
+            errorMessage = { error ->
+                when ((error as? retrofit2.HttpException)?.code()) {
+                    404 -> "Client name search is not available yet. Try a full mobile number."
+                    401 -> "Your session has expired. Sign in again."
+                    403 -> "You don't have permission to search clients."
+                    else -> serverErrorMessage(error) ?: "Couldn't search clients. Check your network and try again."
+                }
+            },
+        ) { client ->
+            selectedReferringClient = client
+            label.setText("${client.name} • ${client.mobileNumber}")
         }
     }
 
@@ -1149,7 +1407,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                 collectionCasesCache = resp.cases
                 selectedCpType = picked
                 label.setText(picked.label)
-                applyJointPartnerVisibility()
+                applyCpConditionalVisibility()
             } catch (e: Exception) {
                 toast("Network error: ${e.message}")
             }
@@ -1193,14 +1451,36 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
     /** Pull the backend's real error out of an HTTP failure body. Business errors
      *  use a JSON { error } body; Retrofit otherwise exposes only the status. */
     private fun serverErrorMessage(e: Throwable): String? {
-        val httpEx = e as? retrofit2.HttpException ?: return null
-        val raw = runCatching { httpEx.response()?.errorBody()?.string() }.getOrNull()
-            ?: return null
+        val raw = httpErrorBody(e) ?: return null
         return runCatching {
             val obj = com.google.gson.JsonParser.parseString(raw).asJsonObject
             (obj.get("error")?.asString ?: obj.get("message")?.asString)
                 ?.let(::cleanServerErrorMessage)
                 ?.takeIf { it.isNotBlank() }
+        }.getOrNull()
+    }
+
+    /** Handles the authoritative create-time duplicate guard. The pre-submit
+     * lookup catches the normal case, but another request may create the client
+     * between that lookup and this mutation. */
+    private fun duplicateClientFromException(e: Throwable): ClientProfile? {
+        val httpEx = e as? retrofit2.HttpException ?: return null
+        if (httpEx.code() != 409) return null
+        val raw = httpErrorBody(e) ?: return null
+        return runCatching {
+            val obj = com.google.gson.JsonParser.parseString(raw).asJsonObject
+            if (obj.get("code")?.asString != "NEW_CLIENT_ALREADY_EXISTS") return@runCatching null
+            obj.getAsJsonObject("client")?.let { client ->
+                com.google.gson.Gson().fromJson(client, ClientProfile::class.java)
+            }
+        }.getOrNull()
+    }
+
+    private fun httpErrorBody(e: Throwable): String? {
+        val body = (e as? retrofit2.HttpException)?.response()?.errorBody() ?: return null
+        return runCatching {
+            body.source().request(Long.MAX_VALUE)
+            body.source().buffer.clone().readUtf8()
         }.getOrNull()
     }
 
@@ -1214,21 +1494,22 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
     companion object {
         const val RESULT_KEY_CREATED = "cp_visit_created_result"
         private const val RESULT_KEY_DATE = "cp_visit_create_date_calendar"
+        private const val STATE_REQUEST_ID = "cp_visit_create_request_id"
+        private const val STATE_REQUEST_FINGERPRINT = "cp_visit_create_request_fingerprint"
 
         fun newInstance(): CreateCpVisitBottomSheet = CreateCpVisitBottomSheet()
     }
 
     /**
-     * Returns a message when this client already has a non-cancelled CP visit
-     * on [scheduledDate], or null when the create may proceed.
+     * Loads candidates so duplicate checks can exclude an exact idempotent replay.
      *
      * Fails OPEN: if the lookup itself errors (offline, backend hiccup) we
-     * return null and let the create through. A guard that blocked on a
+     * return an empty list and let the create through. A guard that blocked on a
      * transient network failure would break CP creation in the field, which is
      * safe because the backend mutation enforces the same rule.
      */
-    private suspend fun findSameDayCpVisitFor(phone: String, scheduledDate: String): String? {
-        if (OpenCpVisitGuard.normalizePhone(phone).length < 10) return null
+    private suspend fun findSameDayCpVisitFor(phone: String, scheduledDate: String): List<com.manjugroups.m_connect.network.CpVisitDetail> {
+        if (OpenCpVisitGuard.normalizePhone(phone).length < 10) return emptyList()
         val existing = try {
             geoApi.getMyMarketingCpVisits(
                 token = session.bearerToken,
@@ -1237,11 +1518,72 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                 search = OpenCpVisitGuard.normalizePhone(phone),
                 limit = 50,
             )
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
         } catch (_: Exception) {
-            return null
+            return emptyList()
         }
-        if (!existing.success) return null
-        return OpenCpVisitGuard.blockReason(existing.visits, phone, scheduledDate)
+        if (!existing.success) return emptyList()
+        return existing.visits.orEmpty()
+    }
+
+    private fun isAmbiguousCreateFailure(error: Throwable): Boolean {
+        val http = error as? retrofit2.HttpException
+        return http?.code()?.let { it >= 500 } ?: (error is java.io.IOException)
+    }
+
+    private suspend fun findCreatedVisitByRequestId(
+        requestId: String,
+        scheduledDate: String,
+    ) = try {
+        geoApi.getMyMarketingCpVisits(
+            token = session.bearerToken,
+            fromDate = scheduledDate,
+            toDate = scheduledDate,
+            limit = 50,
+        ).takeIf { it.success }
+            ?.visits
+            ?.firstOrNull { it.requestId == requestId }
+    } catch (_: Exception) {
+        null
+    }
+
+    private enum class CpTypeVerification { CONFIRMED, MISMATCH, UNAVAILABLE }
+
+    private suspend fun verifyCreatedCpType(
+        visitId: String,
+        expected: CpCreateTypeContract,
+        responseCpType: String?,
+        responseJointCpCategory: String?,
+    ): CpTypeVerification {
+        if (expected.matches(responseCpType, responseJointCpCategory)) {
+            return CpTypeVerification.CONFIRMED
+        }
+        repeat(3) { attempt ->
+            try {
+                val response = geoApi.getCpVisitDetail(session.bearerToken, visitId)
+                val visit = response.visit
+                if (response.success && visit != null) {
+                    return if (expected.matches(visit.cpType, visit.jointCpCategory)) {
+                        CpTypeVerification.CONFIRMED
+                    } else {
+                        CpTypeVerification.MISMATCH
+                    }
+                }
+            } catch (_: Exception) {
+                // A just-created row can briefly lag behind its mutation response.
+            }
+            if (attempt < 2) delay(350L * (attempt + 1))
+        }
+        return if (!responseCpType.isNullOrBlank()) {
+            if (expected.matches(responseCpType, responseJointCpCategory)) {
+                CpTypeVerification.CONFIRMED
+            } else {
+                CpTypeVerification.MISMATCH
+            }
+        } else {
+            CpTypeVerification.UNAVAILABLE
+        }
     }
 
 }

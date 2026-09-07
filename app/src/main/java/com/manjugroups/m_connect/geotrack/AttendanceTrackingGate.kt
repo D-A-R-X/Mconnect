@@ -1,6 +1,7 @@
 package com.manjugroups.m_connect.geotrack
 
 import com.manjugroups.m_connect.network.ApiService
+import com.manjugroups.m_connect.network.SessionData
 
 /**
  * Decides whether the staff member counts as "clocked in for today" so trip
@@ -19,6 +20,26 @@ import com.manjugroups.m_connect.network.ApiService
  *    work as long as the day is open.
  */
 object AttendanceTrackingGate {
+    /** A cold service start must never rely on stale local tracking state. */
+    fun mayStartTracking(openSession: Boolean?): Boolean = openSession == true
+
+    /** Once verified and running, a temporary outage must not break the route. */
+    fun mayContinueTracking(openSession: Boolean?): Boolean = openSession != false
+
+    /**
+     * Resolve the live attendance state from both representations returned by
+     * the attendance APIs. Some responses contain the canonical open session
+     * row before their denormalized `hasOpenSession` flag catches up.
+     */
+    fun hasOpenSession(
+        hasOpenSession: Boolean?,
+        sessions: List<SessionData>?,
+    ): Boolean {
+        return hasOpenSession == true || sessions.orEmpty().any { session ->
+            !session.punchInTime.isNullOrBlank() && session.punchOutTime.isNullOrBlank()
+        }
+    }
+
     fun isClockedInForToday(
         firstPunchIn: String?,
         hasOpenSession: Boolean,
@@ -38,8 +59,13 @@ object AttendanceTrackingGate {
         // already closed (e.g. someone punched in then out at the gate).
         val firstPunchIn = dayResp?.firstPunchIn?.takeIf { it.isNotBlank() }
             ?: attendance?.firstPunchIn?.takeIf { !it.isNullOrBlank() }
-        val hasOpenSession = attendance?.hasOpenSession == true ||
-            dayResp?.hasOpenSession == true
+        val hasOpenSession = hasOpenSession(
+            attendance?.hasOpenSession,
+            attendance?.sessions,
+        ) || hasOpenSession(
+            dayResp?.hasOpenSession,
+            dayResp?.sessions,
+        )
         return isClockedInForToday(firstPunchIn, hasOpenSession)
     }
 
@@ -72,7 +98,12 @@ object AttendanceTrackingGate {
         val dayOk = dayResp?.success == true
         // Neither endpoint answered authoritatively → unknown, don't act.
         if (!todayOk && !dayOk) return null
-        return todayResp?.attendance?.hasOpenSession == true ||
-            dayResp?.hasOpenSession == true
+        return hasOpenSession(
+            todayResp?.attendance?.hasOpenSession,
+            todayResp?.attendance?.sessions,
+        ) || hasOpenSession(
+            dayResp?.hasOpenSession,
+            dayResp?.sessions,
+        )
     }
 }

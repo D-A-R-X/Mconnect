@@ -10,6 +10,21 @@ import org.junit.Test
 
 class OpenCpVisitGuardTest {
 
+    @Test
+    fun `same idempotent request can resume but another request still blocks`() {
+        val created = visit("9876543210", "scheduled").copy(requestId = "request-a")
+        assertNull(OpenCpVisitGuard.blockReason(listOf(created), "9876543210", "2026-08-27", "request-a"))
+        assertNotNull(OpenCpVisitGuard.blockReason(listOf(created), "9876543210", "2026-08-27", "request-b"))
+        assertNotNull(OpenCpVisitGuard.blockReason(listOf(created), "9876543210", "2026-08-27", ""))
+    }
+
+    @Test
+    fun `missing request identity never bypasses duplicate detection`() {
+        val created = visit("9876543210", "completed")
+        assertNotNull(OpenCpVisitGuard.blockReason(listOf(created), "9876543210", "2026-08-27", "request-a"))
+        assertNotNull(OpenCpVisitGuard.blockReason(listOf(created), "9876543210", "2026-08-27"))
+    }
+
     private fun visit(
         phone: String?,
         status: String?,
