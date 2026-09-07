@@ -18,7 +18,6 @@ import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.EmployeePasswordLoginResponse
 import com.manjugroups.m_connect.notifications.PushTokenManager
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withTimeoutOrNull
@@ -118,11 +117,7 @@ class EmployeePasswordLoginActivity : AppCompatActivity() {
         )
         lifecycleScope.launch {
             runCatching {
-                try {
-                    api.loginWithEmployeeId(request)
-                } catch (error: Throwable) {
-                    if (!EmployeeLoginRetryPolicy.shouldRetryInitialConnection(error)) throw error
-                    delay(EmployeeLoginRetryPolicy.RETRY_DELAY_MS)
+                withAuthInitialConnectionRetry {
                     api.loginWithEmployeeId(request)
                 }
             }.onSuccess { response ->
@@ -303,29 +298,4 @@ class EmployeePasswordLoginActivity : AppCompatActivity() {
         return false
     }
 
-}
-
-/**
- * The first request after process start can lose DNS/socket establishment on
- * some mobile networks while the same host succeeds immediately afterward.
- * Retry only failures that happen before an HTTP response exists. Credential,
- * validation, timeout and server responses must always reach the user once.
- */
-internal object EmployeeLoginRetryPolicy {
-    const val RETRY_DELAY_MS = 450L
-
-    fun shouldRetryInitialConnection(error: Throwable): Boolean {
-        var current: Throwable? = error
-        while (current != null) {
-            if (
-                current is UnknownHostException ||
-                current is ConnectException ||
-                current is NoRouteToHostException
-            ) {
-                return true
-            }
-            current = current.cause
-        }
-        return false
-    }
 }

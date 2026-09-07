@@ -11,11 +11,11 @@ import java.net.UnknownHostException
 class EmployeeLoginRetryPolicyTest {
     @Test
     fun `retries only initial host and connection failures`() {
-        assertTrue(EmployeeLoginRetryPolicy.shouldRetryInitialConnection(UnknownHostException()))
-        assertTrue(EmployeeLoginRetryPolicy.shouldRetryInitialConnection(ConnectException()))
-        assertTrue(EmployeeLoginRetryPolicy.shouldRetryInitialConnection(NoRouteToHostException()))
+        assertTrue(AuthInitialConnectionRetryPolicy.shouldRetry(UnknownHostException()))
+        assertTrue(AuthInitialConnectionRetryPolicy.shouldRetry(ConnectException()))
+        assertTrue(AuthInitialConnectionRetryPolicy.shouldRetry(NoRouteToHostException()))
         assertTrue(
-            EmployeeLoginRetryPolicy.shouldRetryInitialConnection(
+            AuthInitialConnectionRetryPolicy.shouldRetry(
                 IllegalStateException("wrapped", ConnectException()),
             ),
         )
@@ -23,7 +23,7 @@ class EmployeeLoginRetryPolicyTest {
 
     @Test
     fun `does not retry timeouts or unrelated failures`() {
-        assertFalse(EmployeeLoginRetryPolicy.shouldRetryInitialConnection(SocketTimeoutException()))
-        assertFalse(EmployeeLoginRetryPolicy.shouldRetryInitialConnection(IllegalArgumentException()))
+        assertFalse(AuthInitialConnectionRetryPolicy.shouldRetry(SocketTimeoutException()))
+        assertFalse(AuthInitialConnectionRetryPolicy.shouldRetry(IllegalArgumentException()))
     }
 }

@@ -62,7 +62,9 @@ class AuthViewModel : ViewModel() {
         }
         viewModelScope.launch {
             try {
-                val response = api.sendOtp(SendOtpRequest(phone))
+                val response = withAuthInitialConnectionRetry {
+                    api.sendOtp(SendOtpRequest(phone))
+                }
                 if (response.success) {
                     _uiState.value = AuthUiState.OtpSent(response.message ?: "OTP sent")
                 } else if (isNotRegistered(response.message)) {
@@ -96,7 +98,9 @@ class AuthViewModel : ViewModel() {
         // its driver-specific "ask your agency to add you as a driver" text.
         val neutralNotRegistered = "Phone number not registered. Contact admin."
         try {
-            val td = travelDeskApi.sendOtp(TravelDeskSendOtpRequest(phone))
+            val td = withAuthInitialConnectionRetry {
+                travelDeskApi.sendOtp(TravelDeskSendOtpRequest(phone))
+            }
             if (td.success) {
                 _uiState.value = AuthUiState.OtpSent(td.message ?: "OTP sent", agencyDriver = true)
             } else {
@@ -136,16 +140,18 @@ class AuthViewModel : ViewModel() {
                 return@launch
             }
             try {
-                val response = api.verifyOtp(
-                    VerifyOtpRequest(
-                        phone = phone,
-                        otp = otp,
-                        deviceId = deviceInfo?.deviceId,
-                        devicePlatform = deviceInfo?.platform,
-                        deviceModel = deviceInfo?.model,
-                        batteryPct = deviceInfo?.batteryPct,
-                    ),
-                )
+                val response = withAuthInitialConnectionRetry {
+                    api.verifyOtp(
+                        VerifyOtpRequest(
+                            phone = phone,
+                            otp = otp,
+                            deviceId = deviceInfo?.deviceId,
+                            devicePlatform = deviceInfo?.platform,
+                            deviceModel = deviceInfo?.model,
+                            batteryPct = deviceInfo?.batteryPct,
+                        ),
+                    )
+                }
                 if (response.success && response.token != null) {
                     _uiState.value = AuthUiState.Verified(response)
                 } else {
@@ -159,7 +165,9 @@ class AuthViewModel : ViewModel() {
 
     private suspend fun verifyAgencyDriverOtp(phone: String, otp: String) {
         try {
-            val td = travelDeskApi.verifyOtp(TravelDeskVerifyOtpRequest(phone, otp))
+            val td = withAuthInitialConnectionRetry {
+                travelDeskApi.verifyOtp(TravelDeskVerifyOtpRequest(phone, otp))
+            }
             if (!td.success || td.token == null) {
                 _uiState.value = AuthUiState.Error(td.error ?: "Invalid OTP")
                 return
