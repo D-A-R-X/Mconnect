@@ -197,9 +197,13 @@ class IssuesFragment : Fragment() {
                     if (file.exists()) {
                         val bytes = withContext(Dispatchers.IO) { file.readBytes() }
                         audioSize = bytes.size.toLong()
-                        val up = api.uploadStorageFile(
-                            session.bearerToken,
-                            bytes.toRequestBody("audio/mp4".toMediaTypeOrNull()),
+                        val up = com.manjugroups.m_connect.network.StorageUploader.uploadRequestBody(
+                            api = api,
+                            token = session.bearerToken,
+                            body = bytes.toRequestBody("audio/mp4".toMediaTypeOrNull()),
+                            fileName = file.name,
+                            contentType = "audio/mp4",
+                            purpose = com.manjugroups.m_connect.network.MobileStoragePurpose.PROJECT_MEDIA,
                         )
                         if (up.success) audioStorageId = up.storageId
                     }

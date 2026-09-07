@@ -767,11 +767,12 @@
                 </LinearLayout>
 
                 <TextView
+                    android:id="@+id/tvJointRoleAssignment"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
                     android:fontFamily="@font/inter_regular"
-                    android:text="Both staff travel separately and record their own outcome."
+                    android:text="Select staff at different IAM levels to assign the Joint CP workflow."
                     android:textColor="#667085"
                     android:textSize="11sp" />
             </LinearLayout>

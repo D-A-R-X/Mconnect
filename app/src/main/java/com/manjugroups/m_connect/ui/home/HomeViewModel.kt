@@ -948,7 +948,12 @@ class HomeViewModel : ViewModel() {
     private suspend fun uploadPhoto(bearerToken: String, file: File): String? {
         // Retries transient failures; punch selfies from field locations
         // regularly hit flaky networks and a single attempt loses the punch.
-        return StorageUploader.upload(api, bearerToken, file).storageId
+        return StorageUploader.upload(
+            api,
+            bearerToken,
+            file,
+            purpose = com.manjugroups.m_connect.network.MobileStoragePurpose.ATTENDANCE_PHOTO,
+        ).storageId
     }
 
     private fun applyTrackingBootstrap(

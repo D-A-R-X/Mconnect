@@ -23,6 +23,7 @@ import com.manjugroups.m_connect.BuildConfig
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.geotrack.AttendanceTrackingGate
 import com.manjugroups.m_connect.geotrack.GeoTrackEventQueue
+import com.manjugroups.m_connect.geotrack.AttendanceDayBoundary
 import com.manjugroups.m_connect.geotrack.GeoTrackFlushWorker
 import com.manjugroups.m_connect.geotrack.GeoTrackPointFlusher
 import com.manjugroups.m_connect.geotrack.data.GeoTrackDatabase
@@ -135,6 +136,7 @@ class GeoTrackService : Service() {
     private var syncJob: Job? = null
     private var heartbeatJob: Job? = null
     private var startupGateJob: Job? = null
+    private var attendanceDayBoundaryJob: Job? = null
     // Last flight-mode / location-off state we reported a tamper for. Lets the
     // heartbeat loop catch a change whose system broadcast was missed (app
     // killed + restarted, or the toggle flipped while backgrounded) so a
@@ -159,6 +161,7 @@ class GeoTrackService : Service() {
     @Volatile private var sessionOpen = false
     @Volatile private var clockGateStopped = false
     @Volatile private var trackingInitialized = false
+    @Volatile private var verifiedAttendanceDay: String? = null
     private val offlineStartedAt = AtomicLong(0L)
     private var consecutiveSyncFailures = 0
 
@@ -296,6 +299,8 @@ class GeoTrackService : Service() {
                 return@launch
             }
             sessionOpen = true
+            verifiedAttendanceDay = AttendanceDayBoundary.dateKey()
+            scheduleAttendanceDayBoundaryStop()
             queueDirectTrackingCommand(start = true)
             initializeTracking()
         }
@@ -398,6 +403,7 @@ class GeoTrackService : Service() {
         syncJob?.cancel()
         heartbeatJob?.cancel()
         startupGateJob?.cancel()
+        attendanceDayBoundaryJob?.cancel()
         cleanupJob?.cancel()
         serviceScope.cancel()
         super.onDestroy()
@@ -638,6 +644,10 @@ class GeoTrackService : Service() {
         // window. `sessionOpen` flips false as soon as enforceClockInGate() sees
         // a closed session, so pre-clock-in and post-clock-out travel is dropped
         // before it ever reaches the local buffer or the server.
+        if (!isInsideVerifiedAttendanceDay()) {
+            stopForClosedAttendance("India attendance day ended")
+            return
+        }
         if (!sessionOpen || clockGateStopped) return
         // Dedup: skip if less than 3 seconds since last processed point (atomic)
         val now = System.currentTimeMillis()
@@ -843,10 +853,36 @@ class GeoTrackService : Service() {
      */
     private suspend fun enforceClockInGate(): Boolean {
         if (clockGateStopped) return false
+        if (!isInsideVerifiedAttendanceDay()) {
+            stopForClosedAttendance("India attendance day ended")
+            return false
+        }
         val open = AttendanceTrackingGate.hasOpenSessionNow(session.bearerToken)
         if (AttendanceTrackingGate.mayContinueTracking(open)) return true
+        stopForClosedAttendance("Attendance session closed (clocked out)")
+        return false
+    }
+
+    private fun isInsideVerifiedAttendanceDay(): Boolean {
+        val verifiedDay = verifiedAttendanceDay ?: return false
+        return AttendanceDayBoundary.dateKey() == verifiedDay
+    }
+
+    private fun scheduleAttendanceDayBoundaryStop() {
+        attendanceDayBoundaryJob?.cancel()
+        val verifiedDay = verifiedAttendanceDay ?: return
+        attendanceDayBoundaryJob = serviceScope.launch {
+            delay(AttendanceDayBoundary.millisUntilNextDay())
+            if (!clockGateStopped && verifiedAttendanceDay == verifiedDay) {
+                stopForClosedAttendance("India attendance day finalized at midnight")
+            }
+        }
+    }
+
+    private suspend fun stopForClosedAttendance(reason: String) {
+        if (clockGateStopped) return
         sessionOpen = false
-        Log.i(TAG, "Attendance session closed (clocked out) — stopping GeoTrack")
+        Log.i(TAG, "$reason — stopping GeoTrack")
         clockGateStopped = true
         queueDirectTrackingCommand(start = false)
         // Clear the bootstrap flags so START_STICKY / a later bootstrap sync
@@ -856,7 +892,6 @@ class GeoTrackService : Service() {
             session.activeTrackingSessionId = null
         }
         stopSelf()
-        return false
     }
 
     private suspend fun queueDirectTrackingCommand(start: Boolean) {
@@ -974,6 +1009,10 @@ class GeoTrackService : Service() {
     private fun startHeartbeatLoop() {
         heartbeatJob = serviceScope.launch {
             while (isActive) {
+                if (!isInsideVerifiedAttendanceDay()) {
+                    stopForClosedAttendance("India attendance day ended")
+                    break
+                }
                 // Self-heal the ongoing permission alert every tick: clears it
                 // the moment the staff grants the last missing permission, and
                 // re-posts it if the OS dropped it (Android 14+ can).

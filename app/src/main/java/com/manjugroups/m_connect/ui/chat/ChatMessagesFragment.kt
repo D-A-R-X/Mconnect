@@ -3914,9 +3914,13 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                 it.readBytes()
             } ?: error("Unable to read ${attachment.fileName}")
 
-            val response = api.uploadStorageFile(
+            val response = com.manjugroups.m_connect.network.StorageUploader.uploadRequestBody(
+                api = api,
                 token = session.bearerToken,
-                body = bytes.toRequestBody(attachment.fileType.toMediaTypeOrNull())
+                body = bytes.toRequestBody(attachment.fileType.toMediaTypeOrNull()),
+                fileName = attachment.fileName,
+                contentType = attachment.fileType,
+                purpose = com.manjugroups.m_connect.network.MobileStoragePurpose.CHAT_ATTACHMENT,
             )
 
             if (!response.success || response.storageId.isNullOrBlank()) {

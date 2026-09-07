@@ -31,6 +31,21 @@ interface ApiService {
     @POST("api/auth/login-with-employee-id")
     suspend fun loginWithEmployeeId(@Body body: EmployeePasswordLoginRequest): EmployeePasswordLoginResponse
 
+    @POST("api/auth/device-binding/recovery/request")
+    suspend fun requestDeviceBindingRecovery(
+        @Body body: DeviceBindingRecoveryRequest
+    ): DeviceBindingRecoveryRequestResponse
+
+    @POST("api/auth/device-binding/recovery/confirm")
+    suspend fun confirmDeviceBindingRecovery(
+        @Body body: DeviceBindingRecoveryConfirmRequest
+    ): DeviceBindingRecoveryConfirmResponse
+
+    @POST("api/auth/device-binding/recovery/confirm-verified-otp")
+    suspend fun confirmVerifiedOtpDeviceRecovery(
+        @Body body: VerifiedOtpDeviceRecoveryConfirmRequest
+    ): DeviceBindingRecoveryConfirmResponse
+
     @POST("api/auth/change-own-password")
     suspend fun changeOwnPassword(
         @Header("Authorization") token: String,
@@ -444,9 +459,6 @@ interface ApiService {
     ): TodayShiftResponse
 
     // Storage
-    @POST("api/storage/generate-upload-url")
-    suspend fun generateUploadUrl(@Header("Authorization") token: String): UploadUrlResponse
-
     @GET("api/storage/get-url")
     suspend fun getStorageUrl(
         @Header("Authorization") token: String,
@@ -456,6 +468,8 @@ interface ApiService {
     @POST("api/storage/upload")
     suspend fun uploadStorageFile(
         @Header("Authorization") token: String,
+        @Header("X-Storage-Purpose") purpose: String = "mobile.generic",
+        @Header("X-File-Name") fileName: String = "mobile-upload.bin",
         @Body body: RequestBody
     ): StorageUploadResponse
 
@@ -1120,22 +1134,6 @@ interface ApiService {
         @Query("taskId") taskId: String
     ): TaskResourcesResponse
 
-    // ── Storage: generate signed upload URL (Convex storage) ──
-
-    @POST("api/storage/generate-upload-url")
-    suspend fun generateStorageUploadUrl(
-        @Header("Authorization") token: String
-    ): StorageUploadUrlResponse
-
-    // PUT the file bytes to the signed URL returned above. Convex returns
-    // a JSON body with the storageId once the upload completes.
-    @PUT
-    suspend fun uploadFileToStorage(
-        @Url url: String,
-        @Header("Content-Type") contentType: String,
-        @Body body: okhttp3.RequestBody
-    ): StorageUploadResultResponse
-
     // ── Project Expenses ──
 
     @GET("api/projects/expenses")
@@ -1474,11 +1472,24 @@ interface ApiService {
 }
 
 // Auth models
-data class SendOtpRequest(val phone: String)
-data class SendOtpResponse(val success: Boolean, val message: String?)
+data class SendOtpRequest(
+    val phone: String,
+    val deviceType: String = "mobile",
+    val deviceId: String? = null,
+    val devicePlatform: String? = null,
+    val deviceModel: String? = null,
+)
+data class SendOtpResponse(
+    val success: Boolean,
+    val message: String? = null,
+    val error: String? = null,
+    val code: String? = null,
+    val boundAccountName: String? = null,
+)
 data class VerifyOtpRequest(
     val phone: String,
     val otp: String,
+    val deviceType: String = "mobile",
     // Single-mobile-device binding telemetry. Null on the agency-driver /
     // fallback paths and on older flows; Gson omits nulls so the backend treats
     // them as absent (grace — no lockout). deviceId = Settings.Secure.ANDROID_ID.
@@ -1487,10 +1498,20 @@ data class VerifyOtpRequest(
     val deviceModel: String? = null,
     val batteryPct: Double? = null,
 )
-data class VerifyOtpResponse(val success: Boolean, val token: String?, val user: UserInfo?, val error: String?)
+data class VerifyOtpResponse(
+    val success: Boolean,
+    val token: String? = null,
+    val user: UserInfo? = null,
+    val error: String? = null,
+    val code: String? = null,
+    val recoveryToken: String? = null,
+    val recoveryExpiresInSeconds: Int? = null,
+    val boundAccountName: String? = null,
+)
 data class EmployeePasswordLoginRequest(
     @SerializedName("employeeId") val employeeId: String,
     @SerializedName("password") val password: String,
+    @SerializedName("deviceType") val deviceType: String = "mobile",
     // Device-binding telemetry — the password login is locked to the same
     // device as the OTP login. Gson omits nulls (grace when unavailable).
     @SerializedName("deviceId") val deviceId: String? = null,
@@ -1503,7 +1524,55 @@ data class EmployeePasswordLoginResponse(
     val token: String? = null,
     val user: UserInfo? = null,
     val mustChangePassword: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val code: String? = null,
+    val boundAccountName: String? = null,
+)
+data class DeviceBindingRecoveryRequest(
+    val employeeId: String,
+    val password: String,
+    val deviceId: String,
+    val devicePlatform: String,
+    val deviceModel: String,
+    val attestationToken: String? = null,
+)
+data class DeviceBindingRecoveryDelivery(
+    val channel: String? = null,
+    val maskedDestination: String? = null,
+)
+data class DeviceBindingRecoveryRequestResponse(
+    val success: Boolean = false,
+    val challengeId: String? = null,
+    val expiresInSeconds: Int? = null,
+    val delivery: DeviceBindingRecoveryDelivery? = null,
+    val error: String? = null,
+    val code: String? = null,
+    val boundAccountName: String? = null,
+)
+data class DeviceBindingRecoveryConfirmRequest(
+    val challengeId: String,
+    val otp: String,
+    val deviceId: String,
+    val devicePlatform: String,
+    val deviceModel: String,
+    val attestationToken: String? = null,
+)
+data class VerifiedOtpDeviceRecoveryConfirmRequest(
+    val recoveryToken: String,
+    val deviceId: String,
+    val devicePlatform: String,
+    val deviceModel: String,
+    val attestationToken: String? = null,
+)
+data class DeviceBindingRecoveryConfirmResponse(
+    val success: Boolean = false,
+    val recovered: Boolean = false,
+    val bindingStatus: String? = null,
+    val token: String? = null,
+    val user: UserInfo? = null,
+    val mustChangePassword: Boolean = false,
+    val error: String? = null,
+    val code: String? = null,
 )
 data class ChangeOwnPasswordRequest(
     val currentPassword: String? = null,
@@ -2000,7 +2069,6 @@ data class PunchResponse(
 )
 
 // Storage models
-data class UploadUrlResponse(val success: Boolean, val uploadUrl: String?)
 data class StorageUrlResponse(val success: Boolean, val url: String?)
 
 /** GET /api/hr/staff/digital-sign — the caller's saved signature, if any. */
@@ -2360,7 +2428,12 @@ data class PushRegisterRequest(
     // instead of showing as "Unknown · android" in the Security tab.
     val deviceModel: String? = null
 )
-data class PushRegisterResponse(val success: Boolean, val deviceTokenId: String? = null, val error: String? = null)
+data class PushRegisterResponse(
+    val success: Boolean,
+    val deviceTokenId: String? = null,
+    val bindingStatus: String? = null,
+    val error: String? = null,
+)
 data class PushUnregisterRequest(val token: String)
 data class NotificationUnreadCountResponse(
     val success: Boolean,
@@ -3011,18 +3084,6 @@ data class TaskResourcesResponse(
     val total: Int? = null,
     val resources: List<TaskResourceEntry> = emptyList(),
     val error: String? = null
-)
-
-// ── Storage (Convex upload URL flow) ───────────────────────────────────────
-
-data class StorageUploadUrlResponse(
-    val success: Boolean,
-    val uploadUrl: String? = null,
-    val error: String? = null
-)
-
-data class StorageUploadResultResponse(
-    val storageId: String? = null
 )
 
 // ── Project Expenses ───────────────────────────────────────────────────────

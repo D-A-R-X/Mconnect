@@ -956,28 +956,38 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         val show = { items: List<StaffData> ->
             val primaryId = selectedStaff?.id
             val primary = items.firstOrNull { it.id == primaryId } ?: selectedStaff
-            val eligible = items.filter { it.id != null && JointCpTemplateGuard.canPair(primary, it) }
             SearchableSelectionDialog.show(
                 context = requireContext(),
                 title = "Select the second staff",
-                options = eligible.map { st ->
+                options = items.filter { !it.id.isNullOrBlank() }.map { st ->
                     SearchableOption(
                         item = st,
                         title = st.name ?: "Unnamed Staff",
-                        subtitle = listOfNotNull(st.employeeId, st.iamTemplateName, st.role).joinToString(" - "),
+                        subtitle = listOfNotNull(
+                            st.employeeId,
+                            st.iamTemplateName,
+                            st.iamTemplateLevel?.let { "Level $it" },
+                            st.role,
+                        ).joinToString(" - "),
                         keywords = listOfNotNull(
-                            st.id, st.name, st.employeeId, st.iamTemplateName, st.role, st.department,
+                            st.id, st.name, st.employeeId, st.iamTemplateName,
+                            st.iamTemplateLevel?.toString(), st.role, st.department,
                         ).joinToString(" "),
                     )
                 },
                 emptyMessage = if (primaryId == null) {
                     "Select the first staff before choosing a partner"
                 } else {
-                    "No staff from a different IAM template are available"
+                    "No staff are available"
                 },
             ) { staff ->
+                JointCpTemplateGuard.rejection(primary, staff)?.let { reason ->
+                    toast(reason)
+                    return@show
+                }
                 selectedJointPartner = staff
                 label.setText(staff.name ?: "Selected")
+                renderJointRoleAssignment()
             }
         }
         if (staffCache.isNotEmpty()) {
@@ -1016,9 +1026,24 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             selectedStaff = staff
             label.setText(staff.name ?: "Selected")
             if (selectedJointPartner?.let { !JointCpTemplateGuard.canPair(staff, it) } == true) {
+                val reason = JointCpTemplateGuard.rejection(staff, selectedJointPartner)
                 selectedJointPartner = null
                 view?.findViewById<EditText>(R.id.etJointPartner)?.setText("")
+                reason?.let(::toast)
             }
+            renderJointRoleAssignment()
+        }
+    }
+
+    private fun renderJointRoleAssignment() {
+        val label = view?.findViewById<android.widget.TextView>(R.id.tvJointRoleAssignment) ?: return
+        val assignment = JointCpTemplateGuard.assignment(selectedStaff, selectedJointPartner)
+        label.text = if (assignment == null) {
+            "Select staff at different IAM levels to assign the Joint CP workflow."
+        } else {
+            val owner = assignment.outcomeOwner.name?.takeIf { it.isNotBlank() } ?: "Lower-level staff"
+            val reviewer = assignment.reviewer.name?.takeIf { it.isNotBlank() } ?: "Higher-level staff"
+            "Outcome & OTP: $owner\nRemarks, review & complete: $reviewer"
         }
     }
 

@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.gson.Gson
 import com.manjugroups.m_connect.network.ApiService
+import com.manjugroups.m_connect.network.DeviceBindingRecoveryConfirmResponse
 import com.manjugroups.m_connect.network.SendOtpRequest
 import com.manjugroups.m_connect.network.TravelDeskApi
 import com.manjugroups.m_connect.network.TravelDeskSendOtpRequest
@@ -11,6 +12,7 @@ import com.manjugroups.m_connect.network.TravelDeskVerifyOtpRequest
 import com.manjugroups.m_connect.network.UserInfo
 import com.manjugroups.m_connect.network.VerifyOtpRequest
 import com.manjugroups.m_connect.network.VerifyOtpResponse
+import com.manjugroups.m_connect.network.VerifiedOtpDeviceRecoveryConfirmRequest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -27,13 +29,24 @@ sealed interface AuthUiState {
      */
     data class OtpSent(val message: String, val agencyDriver: Boolean = false) : AuthUiState
     data class Verified(val response: VerifyOtpResponse) : AuthUiState
+    data class OtpDeviceRecoveryRequired(
+        val message: String,
+        val recoveryToken: String,
+        val expiresInSeconds: Int,
+        val deviceInfo: LoginDeviceInfo,
+    ) : AuthUiState
+    data class DeviceLinkedToAnotherAccount(
+        val message: String = "This phone is already linked to another staff account. Sign in with that account or contact admin.",
+    ) : AuthUiState
     data class Error(val message: String) : AuthUiState
 }
 
 private data class ApiErrorResponse(
     val success: Boolean? = null,
     val error: String? = null,
-    val message: String? = null
+    val message: String? = null,
+    val code: String? = null,
+    val boundAccountName: String? = null,
 )
 
 class AuthViewModel : ViewModel() {
@@ -49,12 +62,13 @@ class AuthViewModel : ViewModel() {
         const val AGENCY_DRIVER_DESIGNATION = "External Fleet Driver"
         const val AGENCY_STAFF_DESIGNATION = "External Fleet Staff"
         const val AGENCY_DRIVER_DEPARTMENT = "Fleet"
+        const val DEVICE_LINKED_TO_ANOTHER_ACCOUNT = "DEVICE_BOUND_TO_ANOTHER_ACCOUNT"
     }
 
     private val _uiState = MutableStateFlow<AuthUiState>(AuthUiState.Idle)
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
 
-    fun sendOtp(phone: String) {
+    fun sendOtp(phone: String, deviceInfo: LoginDeviceInfo? = null) {
         _uiState.value = AuthUiState.Loading
         if (AuthBypass.matchesPhone(phone)) {
             _uiState.value = AuthUiState.OtpSent("OTP sent (Bypass Mode)")
@@ -63,22 +77,49 @@ class AuthViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val response = withAuthInitialConnectionRetry {
-                    api.sendOtp(SendOtpRequest(phone))
+                    api.sendOtp(
+                        SendOtpRequest(
+                            phone = phone,
+                            deviceId = deviceInfo?.deviceId,
+                            devicePlatform = deviceInfo?.platform,
+                            deviceModel = deviceInfo?.model,
+                        )
+                    )
                 }
                 if (response.success) {
                     _uiState.value = AuthUiState.OtpSent(response.message ?: "OTP sent")
-                } else if (isNotRegistered(response.message)) {
+                } else if (response.code.equals(DEVICE_LINKED_TO_ANOTHER_ACCOUNT, ignoreCase = true)) {
+                    _uiState.value = deviceAccountConflict(response.boundAccountName)
+                } else if (isNotRegistered(response.error ?: response.message)) {
                     // Not a staff/agency phone — it may be an agency driver,
                     // whom only the travel-desk auth path knows.
                     sendAgencyDriverOtp(phone)
                 } else {
-                    _uiState.value = AuthUiState.Error(response.message ?: "Failed to send OTP")
+                    _uiState.value = AuthUiState.Error(response.error ?: response.message ?: "Failed to send OTP")
                 }
             } catch (e: Exception) {
                 // Parse ONCE — an HttpException's error body is a one-shot stream,
                 // so calling parseErrorMessage twice leaves the second read empty
                 // and collapses a real reason (e.g. "Your account is inactive.
                 // Contact admin.") into the generic 4xx message.
+                if (e is HttpException) {
+                    val body = e.response()?.errorBody()?.string()
+                    val decoded = runCatching {
+                        gson.fromJson(body, ApiErrorResponse::class.java)
+                    }.getOrNull()
+                    if (decoded?.code.equals(DEVICE_LINKED_TO_ANOTHER_ACCOUNT, ignoreCase = true)) {
+                        _uiState.value = deviceAccountConflict(decoded?.boundAccountName)
+                        return@launch
+                    }
+                    val parsed = decoded?.error ?: decoded?.message
+                        ?: EmployeeLoginErrorParser.message(e.code(), body, "Unable to send OTP")
+                    if (isNotRegistered(parsed)) {
+                        sendAgencyDriverOtp(phone)
+                    } else {
+                        _uiState.value = AuthUiState.Error(parsed)
+                    }
+                    return@launch
+                }
                 val parsed = parseErrorMessage(e, "Network error. Please try again.")
                 if (isNotRegistered(parsed)) {
                     sendAgencyDriverOtp(phone)
@@ -120,6 +161,17 @@ class AuthViewModel : ViewModel() {
     private fun isNotRegistered(message: String?): Boolean =
         message?.contains("not registered", ignoreCase = true) == true
 
+    private fun deviceAccountConflict(accountName: String?): AuthUiState.DeviceLinkedToAnotherAccount {
+        val owner = accountName?.trim()?.takeIf(String::isNotEmpty)
+        return AuthUiState.DeviceLinkedToAnotherAccount(
+            if (owner != null) {
+                "This phone is already linked to $owner. Sign in with that account or contact admin."
+            } else {
+                "This phone is already linked to another staff account. Sign in with that account or contact admin."
+            }
+        )
+    }
+
     fun verifyOtp(
         phone: String,
         otp: String,
@@ -152,16 +204,113 @@ class AuthViewModel : ViewModel() {
                         ),
                     )
                 }
-                if (response.success && response.token != null) {
-                    _uiState.value = AuthUiState.Verified(response)
-                } else {
-                    _uiState.value = AuthUiState.Error(response.error ?: "Invalid OTP")
-                }
+                handleOtpVerificationResponse(response, deviceInfo)
             } catch (e: Exception) {
-                _uiState.value = AuthUiState.Error(parseErrorMessage(e, "Network error. Please try again."))
+                handleOtpVerificationFailure(e, deviceInfo)
             }
         }
     }
+
+    private fun handleOtpVerificationResponse(
+        response: VerifyOtpResponse,
+        deviceInfo: LoginDeviceInfo?,
+    ) {
+        if (response.success && response.token != null) {
+            _uiState.value = AuthUiState.Verified(response)
+            return
+        }
+        if (response.code.equals(DEVICE_LINKED_TO_ANOTHER_ACCOUNT, ignoreCase = true)) {
+            _uiState.value = deviceAccountConflict(response.boundAccountName)
+            return
+        }
+        val isBound = response.code.equals("DEVICE_BOUND_TO_OTHER_DEVICE", ignoreCase = true)
+        val recoveryToken = response.recoveryToken?.trim().orEmpty()
+        if (isBound && recoveryToken.isNotEmpty() && deviceInfo != null) {
+            _uiState.value = AuthUiState.OtpDeviceRecoveryRequired(
+                message = "Your OTP is verified. Please verify this phone to continue.",
+                recoveryToken = recoveryToken,
+                expiresInSeconds = response.recoveryExpiresInSeconds ?: 300,
+                deviceInfo = deviceInfo,
+            )
+            return
+        }
+        val message = response.error ?: "Invalid OTP"
+        _uiState.value = AuthUiState.Error(
+            if (isBound) "$message Use Employee ID sign-in and verify this device." else message
+        )
+    }
+
+    private fun handleOtpVerificationFailure(error: Exception, deviceInfo: LoginDeviceInfo?) {
+        if (error is HttpException) {
+            val body = error.response()?.errorBody()?.string()
+            val decoded = runCatching {
+                gson.fromJson(body, VerifyOtpResponse::class.java)
+            }.getOrNull()
+            if (decoded?.code.equals(DEVICE_LINKED_TO_ANOTHER_ACCOUNT, ignoreCase = true)) {
+                _uiState.value = deviceAccountConflict(decoded?.boundAccountName)
+                return
+            }
+            val isBound = decoded?.code.equals("DEVICE_BOUND_TO_OTHER_DEVICE", ignoreCase = true) ||
+                EmployeeLoginErrorParser.isDeviceBound(body)
+            val recoveryToken = decoded?.recoveryToken?.trim().orEmpty()
+            if (isBound && recoveryToken.isNotEmpty() && deviceInfo != null) {
+                _uiState.value = AuthUiState.OtpDeviceRecoveryRequired(
+                    message = "Your OTP is verified. Please verify this phone to continue.",
+                    recoveryToken = recoveryToken,
+                    expiresInSeconds = decoded?.recoveryExpiresInSeconds ?: 300,
+                    deviceInfo = deviceInfo,
+                )
+                return
+            }
+            val message = decoded?.error
+                ?: EmployeeLoginErrorParser.message(error.code(), body, "Unable to verify OTP")
+            _uiState.value = AuthUiState.Error(
+                if (isBound) "$message Use Employee ID sign-in and verify this device." else message
+            )
+            return
+        }
+        _uiState.value = AuthUiState.Error(parseErrorMessage(error, "Network error. Please try again."))
+    }
+
+    fun confirmVerifiedOtpDeviceRecovery(
+        recoveryToken: String,
+        deviceInfo: LoginDeviceInfo,
+    ) {
+        _uiState.value = AuthUiState.Loading
+        viewModelScope.launch {
+            runCatching {
+                api.confirmVerifiedOtpDeviceRecovery(
+                    VerifiedOtpDeviceRecoveryConfirmRequest(
+                        recoveryToken = recoveryToken,
+                        deviceId = deviceInfo.deviceId,
+                        devicePlatform = deviceInfo.platform,
+                        deviceModel = deviceInfo.model,
+                    )
+                )
+            }.onSuccess { response ->
+                if (response.isUsableRecoverySession()) {
+                    _uiState.value = AuthUiState.Verified(
+                        VerifyOtpResponse(
+                            success = true,
+                            token = response.token,
+                            user = response.user,
+                        )
+                    )
+                } else {
+                    _uiState.value = AuthUiState.Error(
+                        response.error ?: "Device recovery failed. Please retry login."
+                    )
+                }
+            }.onFailure { failure ->
+                _uiState.value = AuthUiState.Error(
+                    parseErrorMessage(failure, "Device recovery failed. Please retry login.")
+                )
+            }
+        }
+    }
+
+    private fun DeviceBindingRecoveryConfirmResponse.isUsableRecoverySession(): Boolean =
+        success && recovered && !token.isNullOrBlank() && user != null
 
     private suspend fun verifyAgencyDriverOtp(phone: String, otp: String) {
         try {

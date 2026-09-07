@@ -84,11 +84,20 @@ val baseUrl = ensureTrailingSlash(
     envOrDefault("MCONNECT_BASE_URL", defaultBaseUrl)
 )
 val defaultAppUrl = ensureTrailingSlash(
-    envOrDefault("NEXT_PUBLIC_APP_URL", "https://mms.aivida.in/")
+    envOrDefault("NEXT_PUBLIC_APP_URL", "https://mg.theairix.com/")
 )
 val appUrl = ensureTrailingSlash(
     envOrDefault("MCONNECT_APP_URL", defaultAppUrl)
 )
+val storageBaseUrl = ensureTrailingSlash(
+    envOrDefault("MFPL_API_BASE_URL", "https://mg.theairix.com/")
+)
+val storageUploadsEnabled = envOrDefault("MFPL_STORAGE_UPLOADS_ENABLED", "true")
+    .equals("true", ignoreCase = true)
+val storageMaxFileBytes = envOrDefault("MFPL_STORAGE_MAX_FILE_BYTES", "104857600")
+    .toLongOrNull()
+    ?.coerceAtLeast(1L)
+    ?: 104857600L
 
 android {
     namespace = "com.manjugroups.m_connect"
@@ -109,6 +118,9 @@ android {
 
         buildConfigField("String", "BASE_URL", "\"${baseUrl}\"")
         buildConfigField("String", "APP_URL", "\"${appUrl}\"")
+        buildConfigField("String", "STORAGE_BASE_URL", "\"${storageBaseUrl}\"")
+        buildConfigField("boolean", "STORAGE_UPLOADS_ENABLED", storageUploadsEnabled.toString())
+        buildConfigField("long", "STORAGE_MAX_FILE_BYTES", "${storageMaxFileBytes}L")
         buildConfigField("String", "FIREBASE_APPLICATION_ID", "\"${firebaseConfig("FIREBASE_APPLICATION_ID")}\"")
         buildConfigField("String", "FIREBASE_PROJECT_ID", "\"${firebaseConfig("FIREBASE_PROJECT_ID")}\"")
         buildConfigField("String", "FIREBASE_API_KEY", "\"${firebaseConfig("FIREBASE_API_KEY")}\"")

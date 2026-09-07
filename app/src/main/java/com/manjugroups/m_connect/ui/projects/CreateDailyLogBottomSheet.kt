@@ -639,7 +639,13 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
                     } ?: false
                     if (!copied) { f.delete(); null } else f
                 }.getOrNull() ?: return@withContext null
-                val result = StorageUploader.upload(api, session.bearerToken, tmp, contentType = mime)
+                val result = StorageUploader.upload(
+                    api,
+                    session.bearerToken,
+                    tmp,
+                    contentType = mime,
+                    purpose = com.manjugroups.m_connect.network.MobileStoragePurpose.PROJECT_MEDIA,
+                )
                 tmp.delete()
                 val id = result.storageId ?: return@withContext null
                 out.add(DailyLogAttachment(storageId = id, type = if (m.isVideo) "video" else "image"))

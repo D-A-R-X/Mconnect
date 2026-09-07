@@ -590,7 +590,14 @@ class BookingCreateFragment : Fragment() {
                     ?: return@launch toast("Could not read file")
                 val type = ctx.contentResolver.getType(uri) ?: "application/octet-stream"
                 val body = bytes.toRequestBody(type.toMediaTypeOrNull())
-                val resp = api.uploadStorageFile(session.bearerToken, body)
+                val resp = com.manjugroups.m_connect.network.StorageUploader.uploadRequestBody(
+                    api = api,
+                    token = session.bearerToken,
+                    body = body,
+                    fileName = fileName,
+                    contentType = type,
+                    purpose = com.manjugroups.m_connect.network.MobileStoragePurpose.STAFF_DOCUMENT,
+                )
                 if (!resp.success || resp.storageId == null) {
                     uploadRowView(slot)?.setUploading(false)
                     toast(resp.error ?: "Upload failed"); return@launch

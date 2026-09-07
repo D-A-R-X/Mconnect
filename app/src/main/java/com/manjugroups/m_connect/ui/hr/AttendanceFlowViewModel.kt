@@ -386,7 +386,12 @@ class AttendanceFlowViewModel(
                 val compressed = withContext(Dispatchers.IO) {
                     runCatching { compressSelfie(selfieFile) }.getOrDefault(selfieFile)
                 }
-                val upload = StorageUploader.upload(api, token, compressed)
+                val upload = StorageUploader.upload(
+                    api,
+                    token,
+                    compressed,
+                    purpose = com.manjugroups.m_connect.network.MobileStoragePurpose.ATTENDANCE_PHOTO,
+                )
                 val storageId = upload.storageId
                 if (storageId.isNullOrBlank()) {
                     // The selfie upload couldn't reach the server → we're offline.

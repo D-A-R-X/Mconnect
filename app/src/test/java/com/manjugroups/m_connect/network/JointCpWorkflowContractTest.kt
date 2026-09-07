@@ -39,4 +39,19 @@ class JointCpWorkflowContractTest {
         assertEquals("Converted to site visit", legacy.outcomeSummary)
         assertEquals("converted_to_site_visit", structured.outcomeSummary)
     }
+
+    @Test
+    fun `review completion sends required remarks and outcome revision`() {
+        val json = Gson().toJson(
+            JointCpCompleteReviewRequest(
+                id = "cp-1",
+                expectedOutcomeRevision = 4,
+                reviewerRemark = "Outcome reviewed with the client",
+            ),
+        )
+        val body = Gson().fromJson(json, Map::class.java)
+
+        assertEquals(4.0, body["expectedOutcomeRevision"])
+        assertEquals("Outcome reviewed with the client", body["reviewerRemark"])
+    }
 }

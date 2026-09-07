@@ -4,6 +4,9 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonParser
 
 internal object EmployeeLoginErrorParser {
+    private const val DEVICE_BOUND_CODE = "DEVICE_BOUND_TO_OTHER_DEVICE"
+    private const val DEVICE_ACCOUNT_CONFLICT_CODE = "DEVICE_BOUND_TO_ANOTHER_ACCOUNT"
+
     fun message(statusCode: Int, responseBody: String?, fallback: String): String {
         parseResponseMessage(responseBody)?.let { return it }
         return when (statusCode) {
@@ -21,6 +24,34 @@ internal object EmployeeLoginErrorParser {
         val root = runCatching { JsonParser.parseString(responseBody) }.getOrNull()
             ?: return null
         return findMessage(root)?.trim()?.takeIf(String::isNotEmpty)
+    }
+
+    fun isDeviceBound(responseBody: String?): Boolean =
+        parseResponseCode(responseBody)?.equals(DEVICE_BOUND_CODE, ignoreCase = true) == true ||
+            isCanonicalDeviceBoundMessage(parseResponseMessage(responseBody))
+
+    fun isDeviceLinkedToAnotherAccount(responseBody: String?): Boolean =
+        parseResponseCode(responseBody)?.equals(DEVICE_ACCOUNT_CONFLICT_CODE, ignoreCase = true) == true
+
+    fun isCanonicalDeviceBoundMessage(message: String?): Boolean {
+        val normalized = message?.trim()?.lowercase().orEmpty()
+        return normalized.startsWith("this account is already locked to another device") ||
+            normalized.startsWith("this account is bound to another device")
+    }
+
+    fun parseResponseCode(responseBody: String?): String? {
+        if (responseBody.isNullOrBlank()) return null
+        val root = runCatching { JsonParser.parseString(responseBody) }.getOrNull()
+            ?.takeIf(JsonElement::isJsonObject)
+            ?.asJsonObject
+            ?: return null
+        return root.entrySet()
+            .firstOrNull { it.key.equals("code", ignoreCase = true) }
+            ?.value
+            ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }
+            ?.asString
+            ?.trim()
+            ?.takeIf(String::isNotEmpty)
     }
 
     private fun findMessage(element: JsonElement): String? {

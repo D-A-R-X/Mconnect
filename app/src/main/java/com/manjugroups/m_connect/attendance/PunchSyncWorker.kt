@@ -63,7 +63,14 @@ class PunchSyncWorker(
                 val storageId = p.photoPath?.let { path ->
                     val f = File(path)
                     if (f.exists()) {
-                        runCatching { StorageUploader.upload(api, token, f).storageId }.getOrNull()
+                        runCatching {
+                            StorageUploader.upload(
+                                api,
+                                token,
+                                f,
+                                purpose = com.manjugroups.m_connect.network.MobileStoragePurpose.ATTENDANCE_PHOTO,
+                            ).storageId
+                        }.getOrNull()
                     } else null
                 }
                 val request = PunchRequest(

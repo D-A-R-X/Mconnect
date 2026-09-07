@@ -439,9 +439,12 @@ class CollectionsFragment : Fragment() {
                 }
                 val bytes = upload.readBytes()
                 if (upload !== file) runCatching { upload.delete() }
-                val resp = storage.uploadStorageFile(
+                val resp = com.manjugroups.m_connect.network.StorageUploader.uploadRequestBody(
+                    api = storage,
                     token = session.bearerToken,
                     body = bytes.toRequestBody((mime ?: "application/octet-stream").toMediaTypeOrNull()),
+                    fileName = file.name,
+                    contentType = mime ?: "application/octet-stream",
                 )
                 if (resp.success) resp.storageId else null
             }

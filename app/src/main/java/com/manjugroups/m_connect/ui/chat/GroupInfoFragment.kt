@@ -537,6 +537,7 @@ class GroupInfoFragment : Fragment() {
                     }
                     val uploaded = StorageUploader.upload(
                         api, session.bearerToken, tmp, contentType = "image/jpeg",
+                        purpose = com.manjugroups.m_connect.network.MobileStoragePurpose.CHAT_ATTACHMENT,
                     )
                     tmp.delete()
                     uploaded

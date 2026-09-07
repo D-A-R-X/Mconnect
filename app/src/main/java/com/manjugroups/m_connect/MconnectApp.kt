@@ -6,6 +6,7 @@ import android.os.Build
 import android.app.Application
 import androidx.appcompat.app.AppCompatDelegate
 import com.manjugroups.m_connect.auth.SessionManager
+import com.manjugroups.m_connect.auth.LoginDeviceInfo
 import com.manjugroups.m_connect.notifications.PushTokenManager
 import coil.ImageLoader
 import coil.ImageLoaderFactory
@@ -54,6 +55,11 @@ class MconnectApp : Application(), ImageLoaderFactory {
         // thread to prevent heavy Keystore operations from blocking the main thread during startup.
         java.lang.Thread {
             try {
+                // Materialize the OS-scoped identity on every cold start. After
+                // reinstall Android removes our local file, but returns the same
+                // ANDROID_ID for the same signing key/user/device; capture()
+                // immediately restores the dedicated non-session record.
+                LoginDeviceInfo.capture(this@MconnectApp)
                 SessionManager(this@MconnectApp).purgeIfBaseUrlChanged()
             } catch (e: Exception) {
                 android.util.Log.e("MconnectApp", "Failed to preheat/purge SessionManager", e)

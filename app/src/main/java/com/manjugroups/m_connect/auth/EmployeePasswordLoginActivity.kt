@@ -127,11 +127,34 @@ class EmployeePasswordLoginActivity : AppCompatActivity() {
                     return@onSuccess
                 }
                 bootstrapSession(response, password)
-            }.onFailure {
-                showError(parseErrorMessage(it, "Unable to sign in"))
+            }.onFailure { error ->
+                handleLoginFailure(error)
                 setLoading(false)
             }
         }
+    }
+
+    private fun handleLoginFailure(error: Throwable) {
+        if (error is HttpException) {
+            val body = error.response()?.errorBody()?.string()
+            if (EmployeeLoginErrorParser.isDeviceLinkedToAnotherAccount(body)) {
+                showError(
+                    EmployeeLoginErrorParser.parseResponseMessage(body)
+                        ?: "This phone is already linked to another staff account. Sign in with that account or contact admin."
+                )
+                return
+            }
+            if (EmployeeLoginErrorParser.isDeviceBound(body)) {
+                showError(
+                    EmployeeLoginErrorParser.parseResponseMessage(body)
+                        ?: "This account is linked to another device. Contact admin to change the registered device."
+                )
+                return
+            }
+            showError(EmployeeLoginErrorParser.message(error.code(), body, "Unable to sign in"))
+            return
+        }
+        showError(parseErrorMessage(error, "Unable to sign in"))
     }
 
     private fun bootstrapSession(response: EmployeePasswordLoginResponse, verifiedPassword: String) {

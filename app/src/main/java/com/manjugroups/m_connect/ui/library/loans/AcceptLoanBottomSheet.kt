@@ -128,7 +128,14 @@ class AcceptLoanBottomSheet(
                     }
                     val requestBody = file.asRequestBody("image/png".toMediaType())
                     val uploadResp = withContext(Dispatchers.IO) {
-                        api.uploadStorageFile(token, requestBody)
+                        com.manjugroups.m_connect.network.StorageUploader.uploadRequestBody(
+                            api = api,
+                            token = token,
+                            body = requestBody,
+                            fileName = file.name,
+                            contentType = "image/png",
+                            purpose = com.manjugroups.m_connect.network.MobileStoragePurpose.STAFF_DOCUMENT,
+                        )
                     }
                     val newId = uploadResp.storageId
                         ?: throw Exception("Upload failed, storage ID is null")

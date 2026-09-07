@@ -1882,8 +1882,9 @@ data class SiteVisitIdRequest(val id: String)
 // Gson from blowing up when a key is missing.
 
 /**
- * One participant of a Joint CP. Each travels separately and records their own
- * outcome, so status/times are per-person rather than shared with the visit.
+ * One participant of a Joint CP. Each trip/path is tracked separately, while
+ * the lower-level participant owns the shared outcome and the higher level
+ * reviews it.
  */
 data class JointCpParticipant(
     val staffId: String? = null,
@@ -2001,6 +2002,7 @@ data class JointCpSubmitReviewRequest(
 data class JointCpCompleteReviewRequest(
     val id: String,
     val expectedOutcomeRevision: Long,
+    val reviewerRemark: String,
 )
 
 data class CpVisitDetailResponse(

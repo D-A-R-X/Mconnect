@@ -353,7 +353,14 @@ class ExpenseCreateBottomSheet : BottomSheetDialogFragment() {
         // Receipts are photos — downscale before upload.
         val upload = com.manjugroups.m_connect.util.ImageCompressor.compress(file)
         val body = upload.asRequestBody("image/jpeg".toMediaType())
-        val resp = api.uploadStorageFile(session.bearerToken, body)
+        val resp = com.manjugroups.m_connect.network.StorageUploader.uploadRequestBody(
+            api = api,
+            token = session.bearerToken,
+            body = body,
+            fileName = file.name,
+            contentType = "image/jpeg",
+            purpose = com.manjugroups.m_connect.network.MobileStoragePurpose.PROJECT_MEDIA,
+        )
         if (upload !== file) runCatching { upload.delete() }
         resp.storageId?.let { ExpenseReceipt(storageId = it, name = file.name) }
     } catch (_: Exception) {

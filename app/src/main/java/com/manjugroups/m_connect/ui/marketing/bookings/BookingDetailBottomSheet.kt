@@ -703,7 +703,13 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
                             requireNotNull(input) { "Unable to read selected file" }
                             temp.outputStream().use { output -> input.copyTo(output) }
                         }
-                        StorageUploader.upload(api, session.bearerToken, temp, contentType = mime)
+                        StorageUploader.upload(
+                            api,
+                            session.bearerToken,
+                            temp,
+                            contentType = mime,
+                            purpose = com.manjugroups.m_connect.network.MobileStoragePurpose.STAFF_DOCUMENT,
+                        )
                     } finally {
                         temp.delete()
                     }

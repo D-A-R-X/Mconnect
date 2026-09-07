@@ -2891,7 +2891,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         if (isFinalStep) {
             when (jointCtaMode) {
                 JOINT_CTA_SEND_REVIEW -> btnSubmit?.text = "Send Review"
-                JOINT_CTA_COMPLETE -> btnSubmit?.text = "Complete"
+                JOINT_CTA_COMPLETE -> btnSubmit?.text = "Review & continue"
             }
         }
     }
@@ -5646,6 +5646,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     }
                     val uploaded = StorageUploader.upload(
                         api, session.bearerToken, tmp, contentType = mime,
+                        purpose = com.manjugroups.m_connect.network.MobileStoragePurpose.MOBILE_GENERIC,
                     )
                     tmp.delete()
                     uploaded
@@ -5719,7 +5720,13 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                             requireNotNull(input) { "Unable to read selected file" }
                             temp.outputStream().use { output -> input.copyTo(output) }
                         }
-                        StorageUploader.upload(api, session.bearerToken, temp, contentType = mime)
+                        StorageUploader.upload(
+                            api,
+                            session.bearerToken,
+                            temp,
+                            contentType = mime,
+                            purpose = com.manjugroups.m_connect.network.MobileStoragePurpose.STAFF_DOCUMENT,
+                        )
                     } finally {
                         temp.delete()
                     }

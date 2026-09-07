@@ -411,9 +411,12 @@ class CollectionPaymentEntryBottomSheet : BottomSheetDialogFragment() {
                         runCatching { tmp.delete() }
                     }
                 }
-                api.uploadStorageFile(
+                com.manjugroups.m_connect.network.StorageUploader.uploadRequestBody(
+                    api = api,
                     token = session.bearerToken,
                     body = bytes.toRequestBody(mime?.toMediaTypeOrNull()),
+                    fileName = "collection-proof-${System.currentTimeMillis()}.jpg",
+                    contentType = mime ?: "image/jpeg",
                 )
             }
             if (!resp.success || resp.storageId.isNullOrBlank()) {

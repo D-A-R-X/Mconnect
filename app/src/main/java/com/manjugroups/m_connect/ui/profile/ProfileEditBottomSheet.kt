@@ -147,9 +147,13 @@ class ProfileEditBottomSheet : BottomSheetDialogFragment() {
                         bitmap.compress(Bitmap.CompressFormat.JPEG, 92, it)
                     }.toByteArray()
                     val mime = "image/jpeg"
-                    val storageResp = api.uploadStorageFile(
+                    val storageResp = com.manjugroups.m_connect.network.StorageUploader.uploadRequestBody(
+                        api = api,
                         token = session.bearerToken,
-                        body = bytes.toRequestBody(mime.toMediaTypeOrNull())
+                        body = bytes.toRequestBody(mime.toMediaTypeOrNull()),
+                        fileName = "profile-photo.jpg",
+                        contentType = mime,
+                        purpose = com.manjugroups.m_connect.network.MobileStoragePurpose.STAFF_DOCUMENT,
                     )
                     val storageId = storageResp.storageId
                         ?: error(storageResp.error ?: "Upload failed")

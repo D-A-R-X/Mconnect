@@ -2,6 +2,7 @@ package com.manjugroups.m_connect.ui.home
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.Intent
@@ -15,6 +16,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -504,7 +506,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             } else if (isJointCpWorkflow() && jointWorkflow?.actorRole == "outcome_owner") {
                 submitJointCpForReview()
             } else if (isJointCpWorkflow() && jointWorkflow?.actorRole == "reviewer") {
-                completeJointCpReview()
+                view?.post { requestJointReviewerRemarkThenComplete() }
             } else {
                 finalizeCompleteVisit()
             }
@@ -670,7 +672,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
 
     private fun applyJointWorkflowPresentation(view: View, workflow: JointCpWorkflow) {
         view.findViewById<TextView>(R.id.tvJointPendingFor)?.apply {
-            text = jointWaitingMessage(workflow)
+            text = jointWorkflowCardMessage(workflow)
             visibility = View.VISIBLE
         }
         if (workflow.state == "completed") {
@@ -700,6 +702,14 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             "Complete OTP and photo while both partners are within 50 metres"
         else -> "Waiting for Joint CP workflow update"
         }
+    }
+
+    private fun jointWorkflowCardMessage(workflow: JointCpWorkflow): String {
+        val owner = workflow.outcomeOwnerName?.trim()?.takeIf { it.isNotEmpty() }
+            ?: "Lower-level staff"
+        val reviewer = workflow.reviewerName?.trim()?.takeIf { it.isNotEmpty() }
+            ?: "Higher-level staff"
+        return "Outcome & OTP: $owner\nRemarks, review & complete: $reviewer\n${jointWaitingMessage(workflow)}"
     }
 
     /** Returns true when Joint CP owns the bottom actions for this phase. */
@@ -822,7 +832,43 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         }
     }
 
-    private fun completeJointCpReview() {
+    private fun requestJointReviewerRemarkThenComplete() {
+        if (jointMutationInProgress) return
+        val input = EditText(requireContext()).apply {
+            hint = "Enter review remarks"
+            minLines = 3
+            maxLines = 5
+            setPadding(dpToPx(16), dpToPx(12), dpToPx(16), dpToPx(12))
+        }
+        val container = android.widget.FrameLayout(requireContext()).apply {
+            setPadding(dpToPx(20), 0, dpToPx(20), 0)
+            addView(input, android.widget.FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ))
+        }
+        val dialog = AlertDialog.Builder(requireContext())
+            .setTitle("Complete Joint CP")
+            .setMessage("Add the higher-level staff review remarks. Completion will close the trip for both staff.")
+            .setView(container)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Complete", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val remarks = input.text?.toString()?.trim().orEmpty()
+                if (remarks.isEmpty()) {
+                    input.error = "Review remarks are required"
+                    return@setOnClickListener
+                }
+                dialog.dismiss()
+                completeJointCpReview(remarks)
+            }
+        }
+        dialog.show()
+    }
+
+    private fun completeJointCpReview(reviewerRemarks: String) {
         if (jointMutationInProgress) return
         val cpId = cpVisitId ?: return
         val revision = jointWorkflow?.outcomeRevision ?: run {
@@ -836,9 +882,9 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 val response = geoApi.completeJointCpReview(
                     session.bearerToken,
                     java.util.UUID.randomUUID().toString(),
-                    JointCpCompleteReviewRequest(cpId, revision),
+                    JointCpCompleteReviewRequest(cpId, revision, reviewerRemarks),
                 )
-                check(response.success && response.workflow != null) {
+                check(response.success && response.workflow?.state == "completed") {
                     response.error ?: "Could not complete Joint CP review"
                 }
                 jointWorkflow = response.workflow
@@ -860,7 +906,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
      * Renders a Joint CP onto the field-staff card: both participants with
      * their own progress, and who the visit is still waiting on.
      *
-     * A Joint CP is two independent trips against one client place, so a
+     * A Joint CP has two independently tracked trips against one client place, so a
      * single "Field Staff" name would be actively misleading — the person
      * reading this screen may be either participant, or a manager looking at
      * both. Called with null for every other cpType, which restores the plain
@@ -904,7 +950,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             pending?.visibility = View.GONE
         } else {
             jointWorkflow = workflow
-            pending?.text = jointWaitingMessage(workflow)
+            pending?.text = jointWorkflowCardMessage(workflow)
             pending?.visibility = View.VISIBLE
         }
     }

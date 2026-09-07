@@ -318,9 +318,13 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
         val result = withContext(Dispatchers.IO) {
             runCatching {
                 val mime = "image/jpeg"
-                api.uploadStorageFile(
+                com.manjugroups.m_connect.network.StorageUploader.uploadRequestBody(
+                    api = api,
                     token = session.bearerToken,
-                    body = bytes.toRequestBody(mime.toMediaTypeOrNull())
+                    body = bytes.toRequestBody(mime.toMediaTypeOrNull()),
+                    fileName = "fine-proof-${System.currentTimeMillis()}.jpg",
+                    contentType = mime,
+                    purpose = com.manjugroups.m_connect.network.MobileStoragePurpose.STAFF_DOCUMENT,
                 )
             }
         }

@@ -77,7 +77,7 @@ class LoginActivity : AppCompatActivity() {
             when {
                 phone.isEmpty() -> showPhoneError(getString(R.string.phone_required))
                 !isValidIndianMobile(phone) -> showPhoneError(getString(R.string.phone_invalid))
-                else -> viewModel.sendOtp(phone)
+                else -> viewModel.sendOtp(phone, LoginDeviceInfo.capture(applicationContext))
             }
         }
     }
@@ -116,6 +116,15 @@ class LoginActivity : AppCompatActivity() {
                             if (!msg.contains("otp sent", ignoreCase = true)) {
                                 Toast.makeText(this@LoginActivity, msg, Toast.LENGTH_SHORT).show()
                             }
+                            viewModel.resetState()
+                        }
+                        is AuthUiState.DeviceLinkedToAnotherAccount -> {
+                            resetButton()
+                            androidx.appcompat.app.AlertDialog.Builder(this@LoginActivity)
+                                .setTitle("Device linked to another account")
+                                .setMessage(state.message)
+                                .setPositiveButton("OK", null)
+                                .show()
                             viewModel.resetState()
                         }
                         else -> resetButton()

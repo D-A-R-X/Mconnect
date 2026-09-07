@@ -164,7 +164,10 @@ class OtpActivity : AppCompatActivity() {
 
         binding.tvResend.setOnClickListener {
             if (canResend) {
-                viewModel.sendOtp(phone)
+                viewModel.sendOtp(
+                    phone,
+                    if (agencyDriver) null else LoginDeviceInfo.capture(applicationContext),
+                )
                 startTimer()
             }
         }
@@ -208,6 +211,23 @@ class OtpActivity : AppCompatActivity() {
                                     requestNotificationAccessThenContinue()
                                 }
                             }
+                            viewModel.resetState()
+                        }
+                        is AuthUiState.OtpDeviceRecoveryRequired -> {
+                            resetButton()
+                            binding.tvOtpError.text =
+                                "This account is linked to another device. Contact admin to change the registered device."
+                            binding.tvOtpError.visibility = View.VISIBLE
+                            viewModel.resetState()
+                        }
+                        is AuthUiState.DeviceLinkedToAnotherAccount -> {
+                            resetButton()
+                            androidx.appcompat.app.AlertDialog.Builder(this@OtpActivity)
+                                .setTitle("Device linked to another account")
+                                .setMessage(state.message)
+                                .setPositiveButton("Back to sign in") { _, _ -> finish() }
+                                .setCancelable(false)
+                                .show()
                             viewModel.resetState()
                         }
                         is AuthUiState.Error -> {

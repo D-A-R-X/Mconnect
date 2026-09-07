@@ -20,17 +20,37 @@ data class LoginDeviceInfo(
 ) {
     companion object {
         fun capture(context: Context): LoginDeviceInfo? {
-            val deviceId = runCatching {
+            val appContext = context.applicationContext
+            val platformDeviceId = runCatching {
                 Settings.Secure.getString(
-                    context.contentResolver,
+                    appContext.contentResolver,
                     Settings.Secure.ANDROID_ID,
                 )
             }.getOrNull()?.trim().orEmpty()
             // No usable id → return null so the request omits binding fields and
             // the backend applies the grace path rather than binding "unknown".
-            if (deviceId.isEmpty() || deviceId == "9774d56d682e549c") return null
+            if (platformDeviceId.isEmpty() || platformDeviceId == "9774d56d682e549c") return null
+
+            // Keep the identity in a preference file that is deliberately
+            // separate from SessionManager. Logging out clears the session
+            // file, but never this device record. Seed with ANDROID_ID so
+            // already-bound production users keep the exact same backend id.
+            // If Android reports a different value (factory reset, signing-key
+            // change, or a backup restored to another phone), trust the current
+            // OS-scoped identity and replace the stale local copy.
+            val identityPrefs = appContext.getSharedPreferences(
+                DEVICE_IDENTITY_PREFS,
+                Context.MODE_PRIVATE,
+            )
+            val storedDeviceId = identityPrefs.getString(KEY_DEVICE_ID, null)?.trim()
+            val deviceId = if (storedDeviceId == platformDeviceId) {
+                storedDeviceId
+            } else {
+                identityPrefs.edit().putString(KEY_DEVICE_ID, platformDeviceId).apply()
+                platformDeviceId
+            }
             val battery = runCatching {
-                (context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager)
+                (appContext.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager)
                     ?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
                     ?.takeIf { it in 0..100 }
                     ?.toDouble()
@@ -46,5 +66,8 @@ data class LoginDeviceInfo(
                 batteryPct = battery,
             )
         }
+
+        private const val DEVICE_IDENTITY_PREFS = "mconnect_device_identity"
+        private const val KEY_DEVICE_ID = "platform_device_id"
     }
 }

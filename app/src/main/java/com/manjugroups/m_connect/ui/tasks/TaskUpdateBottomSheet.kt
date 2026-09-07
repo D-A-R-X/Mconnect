@@ -450,7 +450,14 @@ class TaskUpdateBottomSheet : BottomSheetDialogFragment() {
                 tmp
             }
             val body = upload.asRequestBody(mime.toMediaTypeOrNull())
-            val resp = api.uploadStorageFile(bearer, body)
+            val resp = com.manjugroups.m_connect.network.StorageUploader.uploadRequestBody(
+                api = api,
+                token = bearer,
+                body = body,
+                fileName = tmp.name,
+                contentType = mime,
+                purpose = com.manjugroups.m_connect.network.MobileStoragePurpose.PROJECT_MEDIA,
+            )
             if (upload !== tmp) runCatching { upload.delete() }
             tmp.delete()
             val sid = resp.storageId ?: return@withContext null
