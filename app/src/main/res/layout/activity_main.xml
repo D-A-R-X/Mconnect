@@ -13,6 +13,104 @@
         android:layout_height="0dp"
         android:background="#FFFFFF" />
 
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/appUpdateCard"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginEnd="12dp"
+        android:layout_marginBottom="4dp"
+        android:elevation="4dp"
+        android:visibility="gone"
+        app:cardBackgroundColor="?attr/colorSurfacePrimary"
+        app:cardCornerRadius="8dp"
+        app:cardElevation="4dp"
+        app:strokeColor="?attr/colorBorderLight"
+        app:strokeWidth="1dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="58dp"
+            android:orientation="horizontal"
+            android:paddingStart="12dp"
+            android:paddingTop="9dp"
+            android:paddingEnd="10dp"
+            android:paddingBottom="9dp">
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:contentDescription="App update"
+                android:src="@drawable/ic_update_download"
+                app:tint="?attr/colorAccentPrimary" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/appUpdateTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/inter_semibold"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:text="Updating MConnect"
+                    android:textColor="?attr/colorForegroundPrimary"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/appUpdateSubtitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:ellipsize="end"
+                    android:fontFamily="@font/inter_regular"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:text="Preparing download"
+                    android:textColor="?attr/colorForegroundSecondary"
+                    android:textSize="11sp" />
+
+                <ProgressBar
+                    android:id="@+id/appUpdateProgress"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="match_parent"
+                    android:layout_height="3dp"
+                    android:layout_marginTop="6dp"
+                    android:indeterminateTint="?attr/colorAccentPrimary"
+                    android:max="100"
+                    android:progress="0"
+                    android:progressTint="?attr/colorAccentPrimary"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/appUpdateAction"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:layout_marginStart="10dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/inter_semibold"
+                android:gravity="center"
+                android:minWidth="72dp"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:text="Restart"
+                android:textColor="?attr/colorAccentPrimary"
+                android:textSize="12sp"
+                android:visibility="gone" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
     <!-- Content area: fragment fills below status bar; tab bar overlays at bottom -->
     <FrameLayout
         android:layout_width="match_parent"

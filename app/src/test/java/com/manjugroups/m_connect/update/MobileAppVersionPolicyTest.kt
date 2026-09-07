@@ -2,10 +2,21 @@ package com.manjugroups.m_connect.update
 
 import com.manjugroups.m_connect.network.MobileAppVersionResponse
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MobileAppVersionPolicyTest {
+    @Test
+    fun `download progress is bounded and handles unknown totals`() {
+        assertEquals(0, downloadProgressPercentage(0, 100))
+        assertEquals(42, downloadProgressPercentage(42, 100))
+        assertEquals(100, downloadProgressPercentage(120, 100))
+        assertNull(downloadProgressPercentage(10, 0))
+        assertNull(downloadProgressPercentage(-1, 100))
+    }
+
     @Test
     fun `blocks only below the minimum numeric build`() {
         val policy = MobileAppVersionResponse(

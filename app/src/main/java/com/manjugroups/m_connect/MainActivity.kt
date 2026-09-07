@@ -9,6 +9,7 @@ import androidx.core.view.ViewCompat
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
@@ -31,6 +32,7 @@ import com.manjugroups.m_connect.network.TrackingBootstrapData
 import com.manjugroups.m_connect.notifications.PushTokenManager
 import com.manjugroups.m_connect.notifications.WorkflowNotificationRoute
 import com.manjugroups.m_connect.update.InAppUpdateManager
+import com.manjugroups.m_connect.update.InAppUpdateUiState
 import com.manjugroups.m_connect.update.OperationalUpdateGate
 import com.manjugroups.m_connect.ui.chat.ChatListFragment
 import com.manjugroups.m_connect.ui.chat.ChatMessagesFragment
@@ -205,17 +207,6 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        // Updates are offered only on an idle root tab. The
-        // operational gate separately verifies attendance, tracking, field
-        // work, calls, and offline queues before any update action is allowed.
-        val updateGate = OperationalUpdateGate(this, session, api)
-        inAppUpdateManager = InAppUpdateManager(
-            activity = this,
-            api = api,
-            isUiIdle = ::isUpdateUiIdle,
-            isOperationallyIdle = updateGate::isSafeToUpdate,
-        ).also { it.start() }
-
         // Surface the POST_NOTIFICATIONS system prompt on Android 13+ so
         // the user gets push notifications for chats / tasks / approvals.
         // Guarded on the persisted `notificationPermissionPrompted` flag
@@ -277,6 +268,20 @@ class MainActivity : AppCompatActivity() {
         tabBar = findViewById(R.id.tabBar)
         swipePager = findViewById(R.id.fragmentContainer)
         bottomNavFadeOverlay = findViewById(R.id.bottomNavFadeOverlay)
+
+        // The update coordinator can emit immediately, so it must start only
+        // after activity_main and its update views have been inflated.
+        val updateGate = OperationalUpdateGate(this, session, api)
+        inAppUpdateManager = InAppUpdateManager(
+            activity = this,
+            api = api,
+            isUiIdle = ::isUpdateUiIdle,
+            isOperationallyIdle = updateGate::isSafeToUpdate,
+            onUiStateChanged = ::renderAppUpdateState,
+        ).also { it.start() }
+        findViewById<TextView>(R.id.appUpdateAction)?.setOnClickListener {
+            inAppUpdateManager?.performPrimaryAction()
+        }
 
         // Pending-tasks nudge docked on the nav — count of incomplete My
         // Tasks; the Complete chip routes the newest task to where it's DONE
@@ -1271,6 +1276,76 @@ class MainActivity : AppCompatActivity() {
         // network + battery for UI nobody can see. onResume restarts.
         iamPollJob?.cancel()
         iamPollJob = null
+    }
+
+    private fun renderAppUpdateState(state: InAppUpdateUiState) {
+        val card = findViewById<View>(R.id.appUpdateCard) ?: return
+        val title = findViewById<TextView>(R.id.appUpdateTitle) ?: return
+        val subtitle = findViewById<TextView>(R.id.appUpdateSubtitle) ?: return
+        val progress = findViewById<ProgressBar>(R.id.appUpdateProgress) ?: return
+        val action = findViewById<TextView>(R.id.appUpdateAction) ?: return
+
+        if (state == InAppUpdateUiState.Hidden) {
+            card.visibility = View.GONE
+            return
+        }
+        card.visibility = View.VISIBLE
+        progress.visibility = View.GONE
+        action.visibility = View.GONE
+        action.isEnabled = true
+
+        when (state) {
+            InAppUpdateUiState.Hidden -> Unit
+            is InAppUpdateUiState.Available -> {
+                title.text = if (state.required) "Update required" else "Update available"
+                subtitle.text = "Download the latest MConnect version"
+                action.text = if (state.required) "Update now" else "Update"
+                action.visibility = View.VISIBLE
+            }
+            InAppUpdateUiState.Preparing -> {
+                title.text = "Updating MConnect"
+                subtitle.text = "Preparing download"
+                progress.isIndeterminate = true
+                progress.visibility = View.VISIBLE
+            }
+            is InAppUpdateUiState.Downloading -> {
+                title.text = "Updating MConnect"
+                subtitle.text = state.progressPercent?.let { "Downloading $it%" } ?: "Downloading update"
+                progress.isIndeterminate = state.progressPercent == null
+                state.progressPercent?.let { progress.progress = it }
+                progress.visibility = View.VISIBLE
+            }
+            InAppUpdateUiState.ReadyToRestart -> {
+                title.text = "Update ready"
+                subtitle.text = "Restart to install the new version"
+                action.text = "Restart"
+                action.visibility = View.VISIBLE
+            }
+            InAppUpdateUiState.CheckingRestartSafety -> {
+                title.text = "Update ready"
+                subtitle.text = "Checking that your work is safely synced"
+                progress.isIndeterminate = true
+                progress.visibility = View.VISIBLE
+            }
+            InAppUpdateUiState.WaitingForIdle -> {
+                title.text = "Update ready"
+                subtitle.text = "Finish active work, then restart"
+                action.text = "Retry"
+                action.visibility = View.VISIBLE
+            }
+            InAppUpdateUiState.Installing -> {
+                title.text = "Installing update"
+                subtitle.text = "MConnect will restart shortly"
+                progress.isIndeterminate = true
+                progress.visibility = View.VISIBLE
+            }
+            is InAppUpdateUiState.ExternalRequired -> {
+                title.text = "Update required"
+                subtitle.text = "MConnect ${state.version} is available"
+                action.text = "Open Store"
+                action.visibility = View.VISIBLE
+            }
+        }
     }
 
     override fun onStop() {
