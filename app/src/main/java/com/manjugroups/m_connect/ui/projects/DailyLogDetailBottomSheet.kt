@@ -198,8 +198,9 @@ class DailyLogDetailBottomSheet : BottomSheetDialogFragment() {
         }
         val row = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
         atts.forEach { a ->
-            val url = a.url?.takeIf { it.isNotBlank() }
-                ?: (BuildConfig.BASE_URL + "api/storage/serve?storageId=" + a.storageId)
+            val url = com.manjugroups.m_connect.network.MobileStorageFiles.resolve(
+                a.url?.takeIf { it.isNotBlank() } ?: a.storageId,
+            ) ?: return@forEach
             val frame = FrameLayout(ctx).apply {
                 layoutParams = LinearLayout.LayoutParams(dp(96), dp(96)).apply { marginEnd = dp(8) }
             }

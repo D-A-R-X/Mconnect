@@ -76,4 +76,89 @@ class AttendanceTrackingGateTest {
 
         assertFalse(AttendanceTrackingGate.hasOpenSession(null, sessions))
     }
+
+    @Test
+    fun `biometric punch out keeps mobile work session active`() {
+        val sessions = listOf(
+            SessionData(
+                punchInTime = "2026-09-08T09:00:00.000+05:30",
+                punchOutTime = "2026-09-08T13:00:00.000+05:30",
+                source = "biometric",
+                punchOutSource = "biometric",
+            ),
+        )
+
+        assertTrue(
+            AttendanceTrackingGate.isMobileWorkSessionActive(
+                firstPunchIn = sessions.first().punchInTime,
+                hasOpenSession = false,
+                sessions = sessions,
+            ),
+        )
+    }
+
+    @Test
+    fun `explicit mobile clock out ends mobile work session`() {
+        val sessions = listOf(
+            SessionData(
+                punchInTime = "2026-09-08T09:00:00.000+05:30",
+                punchOutTime = "2026-09-08T18:00:00.000+05:30",
+                source = "biometric",
+                punchOutSource = "mobile",
+            ),
+        )
+
+        assertFalse(
+            AttendanceTrackingGate.isMobileWorkSessionActive(
+                firstPunchIn = sessions.first().punchInTime,
+                hasOpenSession = false,
+                sessions = sessions,
+            ),
+        )
+    }
+
+    @Test
+    fun `legacy biometric close without out source remains active`() {
+        val sessions = listOf(
+            SessionData(
+                punchInTime = "2026-09-08T09:00:00.000+05:30",
+                punchOutTime = "2026-09-08T13:00:00.000+05:30",
+                source = "mobile",
+                punchOutSource = null,
+            ),
+        )
+
+        assertTrue(
+            AttendanceTrackingGate.isMobileWorkSessionActive(
+                firstPunchIn = sessions.first().punchInTime,
+                hasOpenSession = false,
+                sessions = sessions,
+            ),
+        )
+    }
+
+    @Test
+    fun `later punch in reopens after mobile clock out`() {
+        val sessions = listOf(
+            SessionData(
+                punchInTime = "2026-09-08T09:00:00.000+05:30",
+                punchOutTime = "2026-09-08T12:00:00.000+05:30",
+                source = "mobile",
+                punchOutSource = "mobile",
+            ),
+            SessionData(
+                punchInTime = "2026-09-08T13:00:00.000+05:30",
+                punchOutTime = null,
+                source = "biometric",
+            ),
+        )
+
+        assertTrue(
+            AttendanceTrackingGate.isMobileWorkSessionActive(
+                firstPunchIn = sessions.first().punchInTime,
+                hasOpenSession = true,
+                sessions = sessions,
+            ),
+        )
+    }
 }

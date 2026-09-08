@@ -405,7 +405,7 @@ class AdminFleetTripManageSheet : BottomSheetDialogFragment() {
         image.visibility = View.VISIBLE
         empty.visibility = View.GONE
         box?.setBackgroundResource(R.drawable.bg_trip_detail_map_card)
-        val url = "${BuildConfig.BASE_URL}api/storage/serve?storageId=$storageId"
+        val url = com.manjugroups.m_connect.network.MobileStorageFiles.resolve(storageId) ?: return
         image.load(url)
     }
 

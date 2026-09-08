@@ -84,9 +84,8 @@ class AcceptLoanBottomSheet(
             runCatching {
                 val resp = withContext(Dispatchers.IO) { api.getDigitalSign(token) }
                 if (resp.success && resp.hasSignature && !resp.storageId.isNullOrBlank()) {
-                    // Public serve endpoint — /api/storage/get-url can return an
-                    // internal URL the device can't reach, leaving the pad blank.
-                    val url = "${com.manjugroups.m_connect.BuildConfig.BASE_URL}api/storage/serve?storageId=${resp.storageId}"
+                    val url = com.manjugroups.m_connect.network.MobileStorageFiles.resolve(resp.storageId)
+                        ?: error("Storage resolver URL is unavailable")
                     val bmp = withContext(Dispatchers.IO) {
                         val client = okhttp3.OkHttpClient()
                         val request = okhttp3.Request.Builder().url(url).build()

@@ -355,8 +355,8 @@ interface ApiService {
     // correct their OWN clock, so the app only decides whether to SHOW the
     // action — it never decides whether it is allowed.
     // ── Staff security (mobile parity with the web Security tab) ──
-    // All three are gated server-side by `staff.resetDeviceBinding`; the app
-    // only decides whether to SHOW the section.
+    // Device-security actions are gated server-side by
+    // `staff.resetDeviceBinding`; the app only decides whether to show them.
     @GET("api/hr/staff/security")
     suspend fun getStaffSecurity(
         @Header("Authorization") token: String,
@@ -368,6 +368,22 @@ interface ApiService {
         @Header("Authorization") token: String,
         @Body body: StaffIdRequest,
     ): StaffSecurityActionResponse
+
+    @POST("api/hr/staff/device-reset/bulk")
+    suspend fun resetStaffDevicesBulk(
+        @Header("Authorization") token: String,
+        @Body body: BulkDeviceResetRequest,
+    ): BulkDeviceResetResponse
+
+    @GET("api/hr/staff/selectable-ids")
+    suspend fun getSelectableStaffIds(
+        @Header("Authorization") token: String,
+        @Query("status") status: String? = null,
+        @Query("role") role: String? = null,
+        @Query("designation") designation: String? = null,
+        @Query("department") department: String? = null,
+        @Query("query") query: String? = null,
+    ): SelectableStaffIdsResponse
 
     @POST("api/hr/staff/force-logout")
     suspend fun forceStaffMobileLogout(
@@ -461,12 +477,6 @@ interface ApiService {
     ): TodayShiftResponse
 
     // Storage
-    @GET("api/storage/get-url")
-    suspend fun getStorageUrl(
-        @Header("Authorization") token: String,
-        @Query("storageId") storageId: String
-    ): StorageUrlResponse
-
     @POST("api/storage/upload")
     suspend fun uploadStorageFile(
         @Header("Authorization") token: String,
@@ -1996,6 +2006,26 @@ data class StaffSecurityActionResponse(
     val error: String? = null,
 )
 
+data class BulkDeviceResetRequest(
+    val staffIds: List<String>,
+)
+
+data class BulkDeviceResetResponse(
+    val success: Boolean = false,
+    val selectedStaffCount: Int = 0,
+    val staffWithBindings: Int = 0,
+    val bindingsCleared: Int = 0,
+    val mobileSessionsSignedOut: Int = 0,
+    val error: String? = null,
+)
+
+data class SelectableStaffIdsResponse(
+    val success: Boolean = false,
+    val total: Int = 0,
+    val staffIds: List<String> = emptyList(),
+    val error: String? = null,
+)
+
 /** Mirrors getDeviceBindingStatus: `bound=false` when no device is locked. */
 data class StaffBoundDevice(
     val bound: Boolean = false,
@@ -2097,9 +2127,6 @@ data class PunchResponse(
     val trackingBootstrap: TrackingBootstrapData? = null,
     val error: String? = null
 )
-
-// Storage models
-data class StorageUrlResponse(val success: Boolean, val url: String?)
 
 /** GET /api/hr/staff/digital-sign — the caller's saved signature, if any. */
 data class DigitalSignResponse(

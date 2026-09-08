@@ -16,7 +16,6 @@ import coil.load
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentPostSalesVerificationBinding
-import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.ApproveCollectionRequest
 import com.manjugroups.m_connect.network.CustomerCollectionRow
 import com.manjugroups.m_connect.network.GeoTrackApi
@@ -51,7 +50,6 @@ class PostSalesVerificationFragment : Fragment() {
     private val binding get() = _binding!!
 
     private val api = GeoTrackApi.create()
-    private val storage = ApiService.create()
     private lateinit var session: SessionManager
 
     private lateinit var adapter: CollectionsAdapter
@@ -140,19 +138,10 @@ class PostSalesVerificationFragment : Fragment() {
             target.load(cached) { crossfade(true) }
             return
         }
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val resp = withContext(Dispatchers.IO) {
-                    storage.getStorageUrl(session.bearerToken, storageId)
-                }
-                val url = resp.url
-                if (resp.success && !url.isNullOrBlank()) {
-                    proofUrlCache[storageId] = url
-                    target.load(url) { crossfade(true) }
-                }
-            } catch (_: Exception) {
-                // Silent.
-            }
+        val url = com.manjugroups.m_connect.network.MobileStorageFiles.resolve(storageId)
+        if (url != null) {
+            proofUrlCache[storageId] = url
+            target.load(url) { crossfade(true) }
         }
     }
 

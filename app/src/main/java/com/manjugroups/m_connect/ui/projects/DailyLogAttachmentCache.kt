@@ -10,7 +10,7 @@ import com.manjugroups.m_connect.network.DailyLogAttachment
  *
  * Bridges the gap until the backend's `attachments` field is deployed to
  * production: the media itself IS already in Convex storage (the upload works
- * and /api/storage/serve streams it), we just remember which storage ids
+ * and /api/storage/files/{storageId} redirects to it), we just remember which storage ids
  * belong to which log so the app can render them on this device.
  *
  * Limitation: per-device only. The web and other phones need the server-side

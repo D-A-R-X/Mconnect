@@ -5134,6 +5134,21 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     finishCtaSiteVisit(convertResp.error ?: "Failed to create site visit")
                     return@launch
                 }
+                val siteVisitId = convertResp.siteVisitId
+                if (siteVisitId.isNullOrBlank()) {
+                    finishCtaSiteVisit("Site visit was created without a confirmation ID. Refresh the CP before retrying.")
+                    return@launch
+                }
+                geoApi.confirmCpConversion(
+                    token = session.bearerToken,
+                    cpVisitId = cpVisitId,
+                    expectedOutcome = OUTCOME_SITE_VISIT,
+                    expectedLinkedId = siteVisitId,
+                    siteVisit = true,
+                )?.let { error ->
+                    finishCtaSiteVisit(error)
+                    return@launch
+                }
 
                 setFragmentResult(
                     RESULT_KEY,
@@ -5453,7 +5468,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     finishCtaSave(metResp.error ?: "Failed to record client met")
                     return@launch
                 }
-                val outcomeResp = geoApi.setCpVisitOutcome(
+                val outcomeResp = geoApi.setCpVisitOutcomeConfirmed(
                     session.bearerToken,
                     SetOutcomeRequest(
                         id = cpVisitId,
@@ -5468,6 +5483,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                         notes = notes,
                         followUpDate = followUpDate,
                     ),
+                    actingStaffId = session.staffId,
+                    jointCp = cpType == "joint_cp",
                 )
                 if (!outcomeResp.success) {
                     finishCtaSave(outcomeResp.error ?: "Failed to save outcome")
@@ -5682,7 +5699,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         if (hasImage && local != null) {
             img.load(local)
         } else if (hasImage && !clientImageStorageId.isNullOrBlank()) {
-            val url = "${com.manjugroups.m_connect.BuildConfig.BASE_URL}api/storage/serve?storageId=$clientImageStorageId"
+            val url = com.manjugroups.m_connect.network.MobileStorageFiles.resolve(clientImageStorageId)
             img.load(url) {
                 placeholder(R.drawable.ic_outcome_person)
                 error(R.drawable.ic_outcome_person)
@@ -6531,6 +6548,21 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 )
                 if (!outcomeResp.success) {
                     finishCta(error = outcomeResp.error ?: "Failed to save booking")
+                    return@launch
+                }
+                val bookingId = outcomeResp.id
+                if (bookingId.isNullOrBlank()) {
+                    finishCta(error = "Booking was created without a confirmation ID. Refresh the CP before retrying.")
+                    return@launch
+                }
+                geoApi.confirmCpConversion(
+                    token = session.bearerToken,
+                    cpVisitId = cpVisitId,
+                    expectedOutcome = OUTCOME_BOOKING,
+                    expectedLinkedId = bookingId,
+                    siteVisit = false,
+                )?.let { error ->
+                    finishCta(error = error)
                     return@launch
                 }
 

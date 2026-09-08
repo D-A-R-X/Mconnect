@@ -59,9 +59,8 @@ class CollectionsFragment : Fragment() {
     private lateinit var adapter: CollectionsAdapter
     private val masterList = mutableListOf<CollectionItem>()
     private val rowsById = mutableMapOf<String, CustomerCollectionRow>()
-    // Storage-id → signed URL cache. /api/storage/get-url issues signed
-    // URLs with TTLs comfortably longer than a screen session, so a
-    // single fetch per id covers all scroll rebinds.
+    // Storage-id -> stable resolver URL cache. Coil follows the short-lived
+    // redirect, so one resolver URL covers all scroll rebinds.
     private val proofUrlCache = mutableMapOf<String, String>()
 
     // Infinite scroll: render 20 rows, extend by 20 as the list nears its
@@ -157,19 +156,10 @@ class CollectionsFragment : Fragment() {
             target.load(cached) { crossfade(true) }
             return
         }
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val resp = withContext(Dispatchers.IO) {
-                    storage.getStorageUrl(session.bearerToken, storageId)
-                }
-                val url = resp.url
-                if (resp.success && !url.isNullOrBlank()) {
-                    proofUrlCache[storageId] = url
-                    target.load(url) { crossfade(true) }
-                }
-            } catch (_: Exception) {
-                // Silent — one row's failure shouldn't toast on every scroll.
-            }
+        val url = com.manjugroups.m_connect.network.MobileStorageFiles.resolve(storageId)
+        if (url != null) {
+            proofUrlCache[storageId] = url
+            target.load(url) { crossfade(true) }
         }
     }
 

@@ -111,6 +111,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     private var mapView: MapView? = null
     private var googleMap: GoogleMap? = null
     private var routePolyline: Polyline? = null
+    private var routeRequestGeneration: Long = 0
 
     // Full-screen map expand/collapse. We reparent the single MapView between
     // the small preview card and the full-screen host so all markers/camera
@@ -635,6 +636,15 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     private fun isJointCpWorkflow(): Boolean =
         cpType?.equals("joint_cp", ignoreCase = true) == true || jointWorkflow != null
 
+    private suspend fun setConfirmedCpOutcome(
+        request: com.manjugroups.m_connect.network.SetOutcomeRequest,
+    ) = geoApi.setCpVisitOutcomeConfirmed(
+        token = session.bearerToken,
+        request = request,
+        actingStaffId = session.staffId,
+        jointCp = isJointCpWorkflow(),
+    )
+
     private fun startJointWorkflowPolling() {
         if (!isJointCpWorkflow() || cpVisitId.isNullOrBlank() || jointWorkflowPollJob != null) return
         jointWorkflowPollJob = viewLifecycleOwner.lifecycleScope.launch {
@@ -650,10 +660,10 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         runCatching { geoApi.getJointCpWorkflow(session.bearerToken, cpId) }
             .onSuccess { response ->
                 if (!response.success || response.workflow == null || !isAdded) return@onSuccess
-                jointWorkflow = response.workflow
-                view?.let { applyJointWorkflowPresentation(it, response.workflow) }
-                val workflow = response.workflow
-                if (workflow.actorRole == "reviewer" && workflow.canReview &&
+                val workflow = verifiedJointCpWorkflowForActor(response.workflow, session.staffId)
+                jointWorkflow = workflow
+                view?.let { applyJointWorkflowPresentation(it, workflow) }
+                if (workflow.actorRole == "reviewer" && workflow.actorReady != false && workflow.canReview &&
                     workflow.outcomeRevision != null &&
                     autoOpenedJointReviewRevision != workflow.outcomeRevision &&
                     !isOpeningOutcomeSheet
@@ -692,6 +702,13 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             val reviewer = workflow.reviewedByTemplateName ?: workflow.reviewedByName ?: "reviewer"
             "Outcome reviewed by $reviewer"
         }
+        workflow.state == "pending_review" && workflow.actorRole == "outcome_owner" -> {
+            val reviewer = workflow.reviewerName?.trim()?.takeIf { it.isNotEmpty() }
+                ?: "the higher-level partner"
+            "Waiting for $reviewer to add remarks and complete"
+        }
+        workflow.actorRole == "reviewer" && workflow.actorReady == false ->
+            "Swipe to confirm both partners are within 50 metres"
         workflow.actorRole == "reviewer" && workflow.canReview ->
             "Review $owner's outcome and make any required changes"
         workflow.actorRole == "reviewer" ->
@@ -700,6 +717,8 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             "OTP verified. Complete the outcome and send it for review"
         workflow.actorRole == "outcome_owner" ->
             "Complete OTP and photo while both partners are within 50 metres"
+        workflow.outcomeOwnerStaffId != null || workflow.reviewerStaffId != null ->
+            "Joint CP role assignment is out of sync. Refresh this visit or ask admin to repair it"
         else -> "Waiting for Joint CP workflow update"
         }
     }
@@ -719,6 +738,13 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
 
         if (!alreadyArrived && workflow.actorRole == "outcome_owner" && workflow.canRequestOtp) {
             return false
+        }
+
+        if (workflow.actorRole == "reviewer" && workflow.actorReady == false) {
+            btnCompleteCpDetails?.visibility = View.GONE
+            swipeArrived?.visibility = View.VISIBLE
+            swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+            return true
         }
 
         swipeArrived?.visibility = View.GONE
@@ -743,6 +769,10 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         val cpId = cpVisitId ?: return
         val fieldId = visitId ?: return
         val workflow = jointWorkflow
+        if (workflow?.actorRole == "reviewer") {
+            preflightJointCpReviewerReady()
+            return
+        }
         if (workflow != null && !workflow.canRequestOtp) {
             swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
             Toast.makeText(requireContext(), jointWaitingMessage(workflow), Toast.LENGTH_LONG).show()
@@ -769,7 +799,9 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                         capturedAt = location.time.takeIf { it > 0L } ?: System.currentTimeMillis(),
                     ),
                 )
-                val refreshed = response.workflow
+                val refreshed = response.workflow?.let {
+                    verifiedJointCpWorkflowForActor(it, session.staffId)
+                }
                 if (!response.success || refreshed == null || !refreshed.isWithinCompletionRadius) {
                     jointWorkflow = refreshed ?: jointWorkflow
                     arrivalInProgress = false
@@ -789,6 +821,58 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 arrivalInProgress = false
                 swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
                 Toast.makeText(requireContext(), serverErrorMessage(e) ?: "Could not verify both staff locations", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun preflightJointCpReviewerReady() {
+        val cpId = cpVisitId ?: return
+        val fieldId = visitId ?: return
+        swipeArrived?.lockAsBusy("Checking both staff locations...")
+        viewLifecycleOwner.lifecycleScope.launch {
+            val location = fetchCurrentLocation()
+            if (location == null) {
+                arrivalInProgress = false
+                swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                Toast.makeText(requireContext(), "Could not read your GPS. Try again in open sky.", Toast.LENGTH_LONG).show()
+                return@launch
+            }
+            try {
+                val response = geoApi.markJointCpParticipantReady(
+                    session.bearerToken,
+                    JointCpLocationRequest(
+                        id = cpId,
+                        fieldVisitId = fieldId,
+                        lat = location.latitude,
+                        lng = location.longitude,
+                        accuracyMeters = location.accuracy.takeIf { location.hasAccuracy() },
+                        capturedAt = location.time.takeIf { it > 0L } ?: System.currentTimeMillis(),
+                    ),
+                )
+                val refreshed = response.workflow?.let {
+                    verifiedJointCpWorkflowForActor(it, session.staffId)
+                }
+                check(response.success && refreshed != null && refreshed.actorReady == true &&
+                    refreshed.isWithinCompletionRadius) {
+                    response.error ?: "Both Joint CP staff must be within 50 metres to continue"
+                }
+                jointWorkflow = refreshed
+                arrivalConfirmedForProgress = true
+                arrivalInProgress = false
+                applyJointWorkflowPresentation(requireView(), refreshed)
+                Toast.makeText(
+                    requireContext(),
+                    "Presence confirmed. Waiting for ${refreshed.outcomeOwnerName ?: "the outcome owner"}.",
+                    Toast.LENGTH_LONG,
+                ).show()
+            } catch (e: Exception) {
+                arrivalInProgress = false
+                swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                Toast.makeText(
+                    requireContext(),
+                    serverErrorMessage(e) ?: e.message ?: "Could not verify both staff locations",
+                    Toast.LENGTH_LONG,
+                ).show()
             }
         }
     }
@@ -820,7 +904,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 check(response.success && response.workflow != null) {
                     response.error ?: "Could not send outcome for review"
                 }
-                jointWorkflow = response.workflow
+                jointWorkflow = verifiedJointCpWorkflowForActor(response.workflow, session.staffId)
                 clearVisitLocallyStarted()
                 Toast.makeText(requireContext(), "Outcome sent for review", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
@@ -871,14 +955,20 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     private fun completeJointCpReview(reviewerRemarks: String) {
         if (jointMutationInProgress) return
         val cpId = cpVisitId ?: return
-        val revision = jointWorkflow?.outcomeRevision ?: run {
-            Toast.makeText(requireContext(), "Refresh the submitted outcome before completing", Toast.LENGTH_LONG).show()
-            return
-        }
         jointMutationInProgress = true
         renderArrivalPhase(alreadyArrived = true)
         viewLifecycleOwner.lifecycleScope.launch {
             try {
+                // Reviewing can edit the outcome and increment its revision. Fetch the
+                // authoritative revision immediately before completing to avoid a stale write.
+                val latest = geoApi.getJointCpWorkflow(session.bearerToken, cpId)
+                check(latest.success && latest.workflow != null) {
+                    latest.error ?: "Could not refresh the submitted outcome"
+                }
+                val workflow = verifiedJointCpWorkflowForActor(latest.workflow, session.staffId)
+                jointWorkflow = workflow
+                val revision = jointCpReviewRevision(workflow)
+                    ?: error("The submitted outcome is not ready for review completion")
                 val response = geoApi.completeJointCpReview(
                     session.bearerToken,
                     java.util.UUID.randomUUID().toString(),
@@ -887,7 +977,16 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 check(response.success && response.workflow?.state == "completed") {
                     response.error ?: "Could not complete Joint CP review"
                 }
-                jointWorkflow = response.workflow
+                val expectedCredits = setOfNotNull(
+                    workflow.outcomeOwnerStaffId,
+                    workflow.reviewerStaffId,
+                )
+                val returnedCredits = response.creditedStaffIds
+                    ?: response.workflow.creditedStaffIds
+                check(returnedCredits == null || returnedCredits.toSet().containsAll(expectedCredits)) {
+                    "Joint CP completed without crediting both participants"
+                }
+                jointWorkflow = verifiedJointCpWorkflowForActor(response.workflow, session.staffId)
                 clearVisitLocallyStarted()
                 val reviewedBy = response.workflow.reviewedByTemplateName
                     ?: response.workflow.reviewedByName
@@ -949,8 +1048,9 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         if (workflow == null) {
             pending?.visibility = View.GONE
         } else {
-            jointWorkflow = workflow
-            pending?.text = jointWorkflowCardMessage(workflow)
+            val verified = verifiedJointCpWorkflowForActor(workflow, session.staffId)
+            jointWorkflow = verified
+            pending?.text = jointWorkflowCardMessage(verified)
             pending?.visibility = View.VISIBLE
         }
     }
@@ -1070,7 +1170,9 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 val cp = resp.visits.firstOrNull { it.id == cpId } ?: return@launch
                 if (!isAdded) return@launch
                 cpType = cp.cpType ?: cpType
-                cp.joint?.workflow?.let { jointWorkflow = it }
+                cp.joint?.workflow?.let {
+                    jointWorkflow = verifiedJointCpWorkflowForActor(it, session.staffId)
+                }
                 startJointWorkflowPolling()
 
                 // Detect SV-fix mode from the same three signals the
@@ -1119,7 +1221,11 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 // spawned fieldVisits row (where "arrived" lives) over
                 // the CP-side lifecycle (which only tracks
                 // scheduled/in_progress/completed).
-                val effective = (cp.fieldVisit?.status ?: cp.status).orEmpty()
+                val effective = com.manjugroups.m_connect.ui.marketing.resolveServerCpEffectiveStatus(
+                    cp.effectiveStatus,
+                    cp.status,
+                    cp.fieldVisit?.status,
+                )
                     .lowercase(Locale.getDefault())
                 when (effective) {
                     "arrived", "arrival_verified", "arrival-verified", "on_site", "on-site" -> {
@@ -1743,6 +1849,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
 
     private fun renderMapMarkersAndRoute() {
         val map = googleMap ?: return
+        val requestGeneration = ++routeRequestGeneration
         val dest = destination
         if (dest == null) {
             tvDistance?.text = "—"
@@ -1782,7 +1889,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             updateDistanceAndEtaFromHaversine(origin, dest)
             val bounds = LatLngBounds.Builder().include(origin).include(dest).build()
             map.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, 160))
-            fetchAndRenderRoadRoute(origin, dest)
+            fetchAndRenderRoadRoute(origin, dest, requestGeneration)
         } else {
             map.animateCamera(CameraUpdateFactory.newLatLngZoom(dest, 14f))
             tvDistance?.text = "—"
@@ -1830,10 +1937,15 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         )
     }
 
-    private fun fetchAndRenderRoadRoute(origin: LatLng, dest: LatLng) {
+    private fun fetchAndRenderRoadRoute(
+        origin: LatLng,
+        dest: LatLng,
+        requestGeneration: Long,
+    ) {
         viewLifecycleOwner.lifecycleScope.launch {
             val result = DirectionsClient.fetchDriving(session.bearerToken, origin, dest)
                 ?: return@launch
+            if (requestGeneration != routeRequestGeneration) return@launch
             val map = googleMap ?: return@launch
             if (result.polyline.size < 2) return@launch
             routePolyline?.remove()
@@ -2043,6 +2155,10 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             val effLat = freshLocation.latitude
             val effLng = freshLocation.longitude
             currentLocation = LatLng(effLat, effLng)
+            // Keep the displayed line and distance aligned with the same fresh
+            // fix used for the arrival decision. The live blue dot moves on its
+            // own, but the road polyline otherwise remains at the older origin.
+            renderMapMarkersAndRoute()
 
             // Continue into the normal completion flow (client-seen → photo →
             // OTP). Extracted so the out-of-geofence warning below can gate it.
@@ -2504,8 +2620,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     ).show()
                     return@launch
                 }
-                val outcomeResp = geoApi.setCpVisitOutcome(
-                    session.bearerToken,
+                val outcomeResp = setConfirmedCpOutcome(
                     com.manjugroups.m_connect.network.SetOutcomeRequest(
                         id = cpId,
                         outcome = "other",
@@ -2563,8 +2678,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     ).show()
                     return@launch
                 }
-                val outcomeResp = geoApi.setCpVisitOutcome(
-                    session.bearerToken,
+                val outcomeResp = setConfirmedCpOutcome(
                     com.manjugroups.m_connect.network.SetOutcomeRequest(
                         id = cpId,
                         outcome = "old_client_visited",
@@ -2813,8 +2927,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     ).show()
                     return@launch
                 }
-                val outcomeResp = geoApi.setCpVisitOutcome(
-                    session.bearerToken,
+                val outcomeResp = setConfirmedCpOutcome(
                     com.manjugroups.m_connect.network.SetOutcomeRequest(
                         id = cpId,
                         outcome = "rejected",
@@ -2930,8 +3043,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     refNo = submitResp.collectionRefNo,
                     notes = notes,
                 )
-                val outcomeResp = geoApi.setCpVisitOutcome(
-                    session.bearerToken,
+                val outcomeResp = setConfirmedCpOutcome(
                     com.manjugroups.m_connect.network.SetOutcomeRequest(
                         id = cpId,
                         outcome = "collection_done",
@@ -3006,8 +3118,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     ).show()
                     return@launch
                 }
-                val outcomeResp = geoApi.setCpVisitOutcome(
-                    session.bearerToken,
+                val outcomeResp = setConfirmedCpOutcome(
                     com.manjugroups.m_connect.network.SetOutcomeRequest(
                         id = cpId,
                         outcome = "not_collected",
@@ -3152,8 +3263,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     ).show()
                     return@launch
                 }
-                val outcomeResp = geoApi.setCpVisitOutcome(
-                    session.bearerToken,
+                val outcomeResp = setConfirmedCpOutcome(
                     com.manjugroups.m_connect.network.SetOutcomeRequest(
                         id = cpId,
                         outcome = "gift_distributed",
@@ -3315,7 +3425,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     private fun onCompleteCpDetailsClicked() {
         val workflow = jointWorkflow
         if (isJointCpWorkflow() && workflow != null) {
-            if (workflow.actorRole == "reviewer" && workflow.canReview) {
+            if (workflow.actorRole == "reviewer" && workflow.actorReady != false && workflow.canReview) {
                 showCpCompletionSheet()
             } else if (workflow.actorRole == "outcome_owner" && workflow.canSubmitOutcome) {
                 showCpCompletionSheet()
@@ -3546,8 +3656,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     Toast.makeText(requireContext(), metResp.error ?: "Failed to record client status", Toast.LENGTH_LONG).show()
                     return@launch
                 }
-                val outcomeResp = geoApi.setCpVisitOutcome(
-                    session.bearerToken,
+                val outcomeResp = setConfirmedCpOutcome(
                     com.manjugroups.m_connect.network.SetOutcomeRequest(
                         id = cpId,
                         outcome = terminalOutcome,
@@ -3658,7 +3767,12 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 val isCpBackedVisit = !cpVisitId.isNullOrBlank()
                 val cpStatus = completion.status?.trim()?.lowercase(Locale.US)
                 if (isCpBackedVisit && !cpOutcome.isNullOrBlank()) {
-                    check(cpStatus in setOf("completed", "pending_gm_approval", "postponed", "cancelled", "canceled")) {
+                    // Older/current backends confirm the field-visit mutation with
+                    // { success:true, fieldVisitId } and omit `status`. The CP
+                    // outcome was already committed immediately before this call,
+                    // so a missing status must not turn a successful completion
+                    // into an error or invite the staff to submit it twice.
+                    check(isCompatibleCpCompletionStatus(cpStatus)) {
                         "The trip was saved, but the CP outcome state was not confirmed. Refresh before retrying."
                     }
                 }

@@ -32,6 +32,7 @@ import com.manjugroups.m_connect.network.SetSiteVisitOutcomeRequest
 // Trip-state advancement is web-only now (see wireStepperReadOnlyHint).
 import com.manjugroups.m_connect.network.TodayVisit
 import com.manjugroups.m_connect.ui.home.CompleteCpVisitBottomSheet
+import com.manjugroups.m_connect.ui.home.setCpVisitOutcomeConfirmed
 import com.manjugroups.m_connect.ui.common.preferredCpClientName
 import com.manjugroups.m_connect.ui.common.preferredCpClientPhone
 import kotlinx.coroutines.launch
@@ -1454,13 +1455,15 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
                     if (!metResp.success) {
                         throw Exception(metResp.error ?: "Failed to mark client status")
                     }
-                    val outcomeResp = geoApi.setCpVisitOutcome(
+                    val outcomeResp = geoApi.setCpVisitOutcomeConfirmed(
                         session.bearerToken,
                         SetOutcomeRequest(
                             id = cpId,
                             outcome = outcomeValue,
                             notes = "Outcome: $label recorded via mobile details",
                         ),
+                        actingStaffId = session.staffId,
+                        jointCp = false,
                     )
                     if (!outcomeResp.success) {
                         throw Exception(outcomeResp.error ?: "Failed to set outcome")

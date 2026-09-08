@@ -116,13 +116,15 @@ class RejectReasonBottomSheet : BottomSheetDialogFragment() {
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val outcomeResp = geoApi.setCpVisitOutcome(
+                val outcomeResp = geoApi.setCpVisitOutcomeConfirmed(
                     session.bearerToken,
                     SetOutcomeRequest(
                         id = cpVisitId,
                         outcome = OUTCOME_REJECTED,
                         notes = reason,
                     ),
+                    actingStaffId = session.staffId,
+                    jointCp = false,
                 )
                 if (!outcomeResp.success) {
                     finishWithError(outcomeResp.error ?: "Failed to record rejection")

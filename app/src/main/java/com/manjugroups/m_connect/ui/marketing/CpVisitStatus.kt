@@ -53,9 +53,26 @@ fun resolveCpEffectiveStatus(
     return cp.ifEmpty { "scheduled" }
 }
 
+/** Prefer the backend's normalized status while remaining compatible with older responses. */
+fun resolveServerCpEffectiveStatus(
+    serverEffectiveStatus: String?,
+    cpStatus: String?,
+    fieldVisitStatus: String?,
+): String = serverEffectiveStatus?.trim()?.takeIf { it.isNotEmpty() }
+    ?: resolveCpEffectiveStatus(cpStatus, fieldVisitStatus)
+
 /** Missing legacy outcome text does not reopen an authoritative closed CP. */
 fun isCpOutcomePending(cpStatus: String?, fieldVisitStatus: String?, outcome: String?): Boolean {
     val cp = cpStatus?.trim()?.lowercase(Locale.US).orEmpty()
     if (cp in TERMINAL_CP_STATUSES || !outcome.isNullOrBlank()) return false
     return fieldVisitStatus?.trim()?.lowercase(Locale.US) in setOf("completed", "complete", "done", "closed")
 }
+
+/** CP list/count attribution always belongs to the assigned visit date. */
+@Suppress("UNUSED_PARAMETER")
+fun resolveCpActivityDate(
+    scheduledDate: String,
+    serverActivityDate: String?,
+    cpCompletedAt: Long?,
+    fieldVisitCompletedAt: Long?,
+): String = scheduledDate

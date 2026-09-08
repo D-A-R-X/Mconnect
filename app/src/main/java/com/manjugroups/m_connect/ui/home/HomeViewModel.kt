@@ -151,7 +151,9 @@ class HomeViewModel : ViewModel() {
 
                 val permLeft = permUsage?.remainingHours ?: 0
 
-                val att = attendance?.attendance
+                val validAttendance = attendance?.takeIf { it.success }
+                val validDaySessions = daySessions?.takeIf { it.success }
+                val att = validAttendance?.attendance
                 val sessions = mutableListOf<SessionItem>()
                 var hasOpen = false
                 var openNow = false
@@ -163,34 +165,40 @@ class HomeViewModel : ViewModel() {
                 // Did EITHER attendance source answer? When both fail (a network
                 // blip, a slow backend) we must not conclude "not clocked in" —
                 // see the copy below.
-                val attendanceKnown = att != null || daySessions != null
+                val attendanceKnown = validAttendance != null || validDaySessions != null
 
-                if (att == null && daySessions != null) {
+                if (att == null && validDaySessions != null) {
                     // The today-summary call failed but the sessions call
                     // answered. Sessions alone still prove an open session, so
                     // derive from them rather than falling through as "not
                     // clocked in".
-                    openNow = AttendanceTrackingGate.hasOpenSession(
-                        daySessions.hasOpenSession,
-                        daySessions.sessions,
+                    openNow = AttendanceTrackingGate.isMobileWorkSessionActive(
+                        firstPunchIn = validDaySessions.firstPunchIn,
+                        hasOpenSession = validDaySessions.hasOpenSession,
+                        sessions = validDaySessions.sessions,
                     )
                     hasOpen = AttendanceTrackingGate.isClockedInForToday(
-                        firstPunchIn = daySessions.firstPunchIn,
+                        firstPunchIn = validDaySessions.firstPunchIn,
                         hasOpenSession = openNow,
                     )
-                    firstPunchInMillis = daySessions.firstPunchIn?.let { parseMillis(it) } ?: 0L
+                    firstPunchInMillis = validDaySessions.firstPunchIn?.let { parseMillis(it) } ?: 0L
                 }
 
                 if (att != null) {
-                    val firstPunchIn = daySessions?.firstPunchIn ?: att.firstPunchIn
-                    // Raw "open session right now" — kept separately from the
-                    // lenient day gate so trip-start can require a live session.
-                    openNow = AttendanceTrackingGate.hasOpenSession(
+                    val firstPunchIn = validDaySessions?.firstPunchIn ?: att.firstPunchIn
+                    val sourceSessions = validDaySessions?.sessions?.takeIf { it.isNotEmpty() }
+                        ?: att.sessions
+                    val rawOpenSession = AttendanceTrackingGate.hasOpenSession(
                         att.hasOpenSession,
                         att.sessions,
                     ) || AttendanceTrackingGate.hasOpenSession(
-                        daySessions?.hasOpenSession,
-                        daySessions?.sessions,
+                        validDaySessions?.hasOpenSession,
+                        validDaySessions?.sessions,
+                    )
+                    openNow = AttendanceTrackingGate.isMobileWorkSessionActive(
+                        firstPunchIn = firstPunchIn,
+                        hasOpenSession = rawOpenSession,
+                        sessions = sourceSessions,
                     )
                     hasOpen = AttendanceTrackingGate.isClockedInForToday(
                         firstPunchIn = firstPunchIn,
@@ -647,7 +655,11 @@ class HomeViewModel : ViewModel() {
         // so a completed CP whose field visit was left open showed as Enroute
         // with a Start action and never closed.
         val effectiveStatus = com.manjugroups.m_connect.ui.marketing
-            .resolveCpEffectiveStatus(this.status, this.fieldVisit?.status)
+            .resolveServerCpEffectiveStatus(
+                this.effectiveStatus,
+                this.status,
+                this.fieldVisit?.status,
+            )
         // Detect "this CP was an SV-fix routed through CP first" using
         // the same three signals the outcome sheet uses for its locked
         // mode. Any one of these is enough: an explicit proposed SV

@@ -10,6 +10,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
+import android.widget.CheckBox
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -37,6 +38,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
+import org.json.JSONObject
 import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -47,6 +49,8 @@ import com.manjugroups.m_connect.network.StaffLoginSession
 import com.manjugroups.m_connect.network.StaffIdRequest
 import com.manjugroups.m_connect.network.ActiveStaffSession
 import com.manjugroups.m_connect.network.LogoutStaffDeviceRequest
+import com.manjugroups.m_connect.network.BulkDeviceResetRequest
+import com.manjugroups.m_connect.network.BulkDeviceResetResponse
 import java.util.Locale
 
 /**
@@ -94,6 +98,12 @@ class SecurityFragment : Fragment() {
 
     private var designationFilter: String? = null
     private var departmentFilter: String? = null
+    private val selectedForDeviceReset = linkedSetOf<String>()
+    private var bulkResetInFlight = false
+    private var selectAllJob: Job? = null
+    private var selectAllInFlight = false
+    private var selectedAllScope: SelectAllScope? = null
+    private var selectedAllScopeIds: Set<String> = emptySet()
 
     // Staff Login shows a different dataset: who currently HAS a session, not
     // the staff directory. Loaded once (the endpoint returns the whole set) and
@@ -186,6 +196,13 @@ class SecurityFragment : Fragment() {
             pageRetryRound = 0
             loadNextPage(first = loaded.isEmpty())
         }
+        binding.btnClearBulkReset.setOnClickListener {
+            selectedForDeviceReset.clear()
+            selectedAllScope = null
+            selectedAllScopeIds = emptySet()
+            render()
+        }
+        binding.btnBulkResetDevices.setOnClickListener { confirmBulkDeviceReset() }
 
         // A staff action taken in the sheet can change what the list shows.
         parentFragmentManager.setFragmentResultListener(
@@ -215,7 +232,10 @@ class SecurityFragment : Fragment() {
         searchJob?.cancel()
         dataLoadJob?.cancel()
         pageRetryJob?.cancel()
+        selectAllJob?.cancel()
         pageRetryJob = null
+        bulkResetInFlight = false
+        selectAllInFlight = false
         _binding = null
         super.onDestroyView()
     }
@@ -843,13 +863,21 @@ class SecurityFragment : Fragment() {
         }
         binding.tvSecurityTabHint.text =
             tabs.firstOrNull { it.action == selectedTab }?.hint.orEmpty()
+        renderBulkResetBar()
+        renderSelectAllStaff()
         renderChips()
 
         securityAdapter.submitList(
             if (selectedTab == Action.STAFF_LOGIN) {
                 loginRows.map(SecurityListRow::Login)
             } else {
-                staffRows.map(SecurityListRow::Staff)
+                staffRows.map { staff ->
+                    SecurityListRow.Staff(
+                        value = staff,
+                        action = selectedTab,
+                        selected = staff.id in selectedForDeviceReset,
+                    )
+                }
             },
         )
         val hasRows = if (selectedTab == Action.STAFF_LOGIN) loginRows.isNotEmpty()
@@ -919,6 +947,27 @@ class SecurityFragment : Fragment() {
         val isSelf = staff.id != null && staff.id == session.staffId
         row.alpha = if (isSelf) 0.5f else 1f
         row.isClickable = !isSelf
+        val selector = row.findViewById<CheckBox>(R.id.cbStaffSelected)
+        val bulkSelectable = selectedTab == Action.DEVICE_RESET && !isSelf && staff.id != null
+        selector.visibility = if (bulkSelectable) View.VISIBLE else View.GONE
+        row.findViewById<TextView>(R.id.tvStaffStatus)?.visibility =
+            if (bulkSelectable) View.GONE else View.VISIBLE
+        selector.setOnCheckedChangeListener(null)
+        selector.isChecked = staff.id in selectedForDeviceReset
+        selector.contentDescription = if (selector.isChecked) {
+            "Deselect $name"
+        } else {
+            "Select $name"
+        }
+        selector.setOnCheckedChangeListener { _, checked ->
+            val id = staff.id ?: return@setOnCheckedChangeListener
+            if (checked) selectedForDeviceReset.add(id) else selectedForDeviceReset.remove(id)
+            selector.contentDescription = if (checked) "Deselect $name" else "Select $name"
+            renderBulkResetBar()
+            // Commit the selection into the adapter's immutable row model so
+            // Clear selection and tab switches always trigger a rebind.
+            selector.post { if (_binding != null) render() }
+        }
         row.setOnClickListener {
             if (isSelf) {
                 Toast.makeText(
@@ -978,6 +1027,13 @@ class SecurityFragment : Fragment() {
                         dataLoadJob = null
                         isLoading = false
                         isSearching = false
+                        if (selectedTab == Action.DEVICE_RESET && tab.action != Action.DEVICE_RESET) {
+                            selectedForDeviceReset.clear()
+                            selectedAllScope = null
+                            selectedAllScopeIds = emptySet()
+                            selectAllJob?.cancel()
+                            selectAllInFlight = false
+                        }
                         selectedTab = tab.action
                         buildTabs()
                         if (tab.action == Action.STAFF_LOGIN && !loginsLoaded) {
@@ -1073,13 +1129,231 @@ class SecurityFragment : Fragment() {
         }
     }
 
+    private fun renderBulkResetBar() {
+        if (_binding == null) return
+        val visible = selectedTab == Action.DEVICE_RESET && selectedForDeviceReset.isNotEmpty()
+        binding.bulkResetBar.visibility = if (visible) View.VISIBLE else View.GONE
+        binding.tvBulkResetSelection.text = "${selectedForDeviceReset.size} staff selected"
+        binding.btnBulkResetDevices.isEnabled = visible && !bulkResetInFlight
+        binding.btnBulkResetDevices.alpha = if (bulkResetInFlight) 0.7f else 1f
+        binding.btnBulkResetDevices.text = if (bulkResetInFlight) "" else "Reset devices"
+        binding.bulkResetProgress.visibility = if (bulkResetInFlight) View.VISIBLE else View.GONE
+        binding.btnClearBulkReset.isEnabled = !bulkResetInFlight
+    }
+
+    private data class SelectAllScope(
+        val designation: String?,
+        val department: String?,
+        val query: String?,
+    )
+
+    private fun currentSelectAllScope() = SelectAllScope(
+        designation = designationFilter?.trim()?.takeIf { it.isNotEmpty() },
+        department = departmentFilter?.trim()?.takeIf { it.isNotEmpty() },
+        query = searchQuery.trim().takeIf { it.isNotEmpty() },
+    )
+
+    private fun renderSelectAllStaff() {
+        if (_binding == null) return
+        val visible = selectedTab == Action.DEVICE_RESET
+        binding.selectAllStaffRow.visibility = if (visible) View.VISIBLE else View.GONE
+        if (!visible) return
+
+        val scope = currentSelectAllScope()
+        val matchingIds = if (selectedAllScope == scope) selectedAllScopeIds else emptySet()
+        val allMatchingSelected = matchingIds.isNotEmpty() &&
+            matchingIds.all(selectedForDeviceReset::contains)
+
+        binding.cbSelectAllStaff.setOnCheckedChangeListener(null)
+        binding.cbSelectAllStaff.isChecked = allMatchingSelected
+        binding.cbSelectAllStaff.isEnabled = !selectAllInFlight && !bulkResetInFlight
+        binding.cbSelectAllStaff.text =
+            if (selectAllInFlight) "Selecting matching staff..." else "Select all matching staff"
+        binding.selectAllStaffProgress.visibility =
+            if (selectAllInFlight) View.VISIBLE else View.GONE
+        binding.cbSelectAllStaff.setOnCheckedChangeListener { _, checked ->
+            if (checked) {
+                selectAllMatchingStaff(scope)
+            } else if (selectedAllScope == scope) {
+                selectedForDeviceReset.removeAll(selectedAllScopeIds)
+                selectedAllScope = null
+                selectedAllScopeIds = emptySet()
+                render()
+            }
+        }
+    }
+
+    private fun selectAllMatchingStaff(scope: SelectAllScope) {
+        if (selectAllInFlight || bulkResetInFlight) return
+        selectAllJob?.cancel()
+        selectAllInFlight = true
+        renderSelectAllStaff()
+        selectAllJob = viewLifecycleOwner.lifecycleScope.launch {
+            val result = try {
+                Result.success(
+                    api.getSelectableStaffIds(
+                        token = session.bearerToken,
+                        status = null,
+                        role = null,
+                        designation = scope.designation,
+                        department = scope.department,
+                        query = scope.query,
+                    ),
+                )
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                Result.failure(error)
+            }
+            if (!isAdded || _binding == null) return@launch
+            selectAllInFlight = false
+
+            val response = result.getOrNull()
+            if (response?.success == true && currentSelectAllScope() == scope) {
+                val normalizedIds = response.staffIds
+                    .asSequence()
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+                    .distinct()
+                    .toList()
+                val returnedIds = normalizedIds.take(MAX_SELECTABLE_STAFF_IDS)
+                val selectableIds = returnedIds
+                    .filterNot { it == session.staffId }
+                    .toSet()
+
+                if (selectableIds.isEmpty()) {
+                    selectedAllScope = null
+                    selectedAllScopeIds = emptySet()
+                    Toast.makeText(
+                        requireContext(),
+                        "No selectable staff match the current filters",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                } else {
+                    selectedAllScope = scope
+                    selectedAllScopeIds = selectableIds
+                    selectedForDeviceReset.addAll(selectableIds)
+                    val capped = response.total > returnedIds.size ||
+                        normalizedIds.size > returnedIds.size
+                    Toast.makeText(
+                        requireContext(),
+                        if (capped) {
+                            "Selected ${selectableIds.size} of ${response.total}. Narrow the filters to select the rest."
+                        } else {
+                            "Selected ${selectableIds.size} matching staff"
+                        },
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+            } else if (currentSelectAllScope() == scope) {
+                Toast.makeText(
+                    requireContext(),
+                    response?.error ?: selectableStaffErrorMessage(result.exceptionOrNull())
+                        ?: "Couldn't select matching staff. Please retry.",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+            render()
+        }
+    }
+
+    private fun confirmBulkDeviceReset() {
+        val staffIds = selectedForDeviceReset.toList()
+        if (staffIds.isEmpty() || bulkResetInFlight) return
+        val count = staffIds.size
+        val dialog = AlertDialog.Builder(requireContext())
+            .setTitle("Reset devices for $count staff?")
+            .setMessage(
+                "This clears device locks for $count staff and signs out their active mobile sessions. " +
+                    "Their next mobile login can bind a new device. Web sessions stay active.",
+            )
+            .setPositiveButton("Reset devices", null)
+            .setNegativeButton("Cancel", null)
+            .create()
+        dialog.setOnShowListener {
+            val confirm = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+            confirm.setOnClickListener {
+                if (bulkResetInFlight) return@setOnClickListener
+                bulkResetInFlight = true
+                dialog.setCancelable(false)
+                confirm.isEnabled = false
+                dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.isEnabled = false
+                confirm.text = "Resetting..."
+                renderBulkResetBar()
+                viewLifecycleOwner.lifecycleScope.launch {
+                    val result = runCatching {
+                        api.resetStaffDevicesBulk(
+                            session.bearerToken,
+                            BulkDeviceResetRequest(staffIds),
+                        )
+                    }
+                    if (!isAdded || _binding == null) return@launch
+                    bulkResetInFlight = false
+                    val response = result.getOrNull()
+                    if (response?.success == true) {
+                        selectedForDeviceReset.clear()
+                        selectedAllScope = null
+                        selectedAllScopeIds = emptySet()
+                        dialog.dismiss()
+                        Toast.makeText(
+                            requireContext(),
+                            bulkResetSuccessMessage(response),
+                            Toast.LENGTH_LONG,
+                        ).show()
+                        resetAndLoad()
+                    } else {
+                        confirm.isEnabled = true
+                        confirm.text = "Reset devices"
+                        dialog.setCancelable(true)
+                        dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.isEnabled = true
+                        renderBulkResetBar()
+                        Toast.makeText(
+                            requireContext(),
+                            response?.error ?: apiErrorMessage(result.exceptionOrNull())
+                                ?: "Couldn't reset selected devices",
+                            Toast.LENGTH_LONG,
+                        ).show()
+                    }
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun bulkResetSuccessMessage(response: BulkDeviceResetResponse): String {
+        return "Reset device locks for ${response.selectedStaffCount} staff. " +
+            "Signed out ${response.mobileSessionsSignedOut} mobile sessions."
+    }
+
+    private fun apiErrorMessage(error: Throwable?): String? {
+        if (error !is HttpException) return error?.message
+        val raw = runCatching { error.response()?.errorBody()?.string() }.getOrNull()
+        if (raw.isNullOrBlank()) return error.message
+        return runCatching {
+            val json = JSONObject(raw)
+            json.optString("error").takeIf { it.isNotBlank() }
+                ?: json.optString("message").takeIf { it.isNotBlank() }
+        }.getOrNull() ?: error.message
+    }
+
+    private fun selectableStaffErrorMessage(error: Throwable?): String? =
+        if (error is HttpException && error.code() == 404) {
+            "Select All is not available on the server yet. Please retry after deployment."
+        } else {
+            apiErrorMessage(error)
+        }
+
     private fun dp(value: Int): Int =
         (value * resources.displayMetrics.density).toInt()
 
     private sealed interface SecurityListRow {
         val stableId: String
 
-        data class Staff(val value: StaffData) : SecurityListRow {
+        data class Staff(
+            val value: StaffData,
+            val action: Action,
+            val selected: Boolean,
+        ) : SecurityListRow {
             override val stableId = "staff:${value.id}"
         }
 
@@ -1131,6 +1405,7 @@ class SecurityFragment : Fragment() {
         private const val PAGE_SIZE = 25
         private const val PAGE_PREFETCH_ROWS = 8
         private const val PAGE_LOAD_ATTEMPTS = 3
+        private const val MAX_SELECTABLE_STAFF_IDS = 2_000
         private val PAGE_RETRY_DELAYS_MS = longArrayOf(300L, 900L)
         private val AUTO_PAGE_RETRY_DELAYS_MS = longArrayOf(4_000L, 10_000L, 20_000L, 30_000L)
         /** Long enough that typing a name is one request, not eight. */
