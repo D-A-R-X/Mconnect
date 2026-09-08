@@ -2,6 +2,7 @@ package com.manjugroups.m_connect.auth
 
 import com.google.gson.Gson
 import com.google.gson.JsonParser
+import com.manjugroups.m_connect.BuildConfig
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.EmployeePasswordLoginRequest
 import com.manjugroups.m_connect.network.EmployeePasswordLoginResponse
@@ -34,6 +35,8 @@ class EmployeeLoginContractTest {
         assertEquals("mobile", request["deviceType"].asString)
         assertEquals("android-id", request["deviceId"].asString)
         assertEquals("android", request["devicePlatform"].asString)
+        assertEquals(BuildConfig.VERSION_NAME, request["appVersion"].asString)
+        assertEquals(BuildConfig.VERSION_CODE, request["appBuild"].asInt)
 
         val response = Gson().fromJson(
             """{"success":false,"code":"DEVICE_BOUND_TO_ANOTHER_ACCOUNT","error":"conflict"}""",
@@ -64,6 +67,8 @@ class EmployeeLoginContractTest {
         assertEquals("android", objectValue["devicePlatform"].asString)
         assertEquals("Test phone", objectValue["deviceModel"].asString)
         assertEquals(80.0, objectValue["batteryPct"].asDouble, 0.0)
+        assertEquals(BuildConfig.VERSION_NAME, objectValue["appVersion"].asString)
+        assertEquals(BuildConfig.VERSION_CODE, objectValue["appBuild"].asInt)
         assertFalse(objectValue.has("a"))
     }
 
@@ -78,6 +83,8 @@ class EmployeeLoginContractTest {
         ).asJsonObject
 
         assertEquals("mobile", request["deviceType"].asString)
+        assertEquals(BuildConfig.VERSION_NAME, request["appVersion"].asString)
+        assertEquals(BuildConfig.VERSION_CODE, request["appBuild"].asInt)
     }
 
     @Test
@@ -94,6 +101,38 @@ class EmployeeLoginContractTest {
         assertEquals("SARA.R", response.boundAccountName)
         assertTrue(EmployeeLoginErrorParser.isDeviceLinkedToAnotherAccount(body))
         assertFalse(EmployeeLoginErrorParser.isDeviceBound(body))
+    }
+
+    @Test
+    fun `employee login parser tolerates string role level in release response`() {
+        val response = EmployeePasswordLoginResponseParser.parse(
+            """{
+                "success":true,
+                "token":"session-token",
+                "mustChangePassword":false,
+                "user":{
+                    "_id":"staff-id",
+                    "employeeId":"22026",
+                    "name":"Test Staff",
+                    "phone":9876543210,
+                    "role":"staff",
+                    "roleLevel":"40",
+                    "isAdmin":"false",
+                    "geoTrackingEnabled":"true"
+                }
+            }""".trimIndent(),
+        )
+
+        assertTrue(response?.success == true)
+        assertEquals("session-token", response?.token)
+        assertEquals("9876543210", response?.user?.phone)
+        assertEquals(40, response?.user?.roleLevel)
+        assertTrue(response?.user?.geoTrackingEnabled == true)
+    }
+
+    @Test
+    fun `employee login parser rejects non json success response`() {
+        assertEquals(null, EmployeePasswordLoginResponseParser.parse("<html>gateway error</html>"))
     }
 
     @Test

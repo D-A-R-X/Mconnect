@@ -58,7 +58,12 @@ function normalizedStatus(value) {
 
 const args = parseArgs(process.argv.slice(2));
 const command = args._[0] ?? "contracts";
-const baseUrl = new URL(args["base-url"] ?? process.env.MCONNECT_BASE_URL ?? DEFAULT_BASE_URL);
+const baseUrl = new URL(
+  args["base-url"]
+    ?? process.env.MCONNECT_BASE_URL
+    ?? process.env.MOBILE_API_BASE_URL
+    ?? DEFAULT_BASE_URL,
+);
 const results = [];
 
 async function request(method, path, options = {}) {
@@ -189,6 +194,111 @@ async function authRecoveryContracts() {
     verifiedOtpConfirmResult.data?.code === "DEVICE_RECOVERY_FAILED",
     "verified-OTP recovery confirmation returns the stable generic failure code",
   );
+}
+
+async function deviceLoginContracts() {
+  const buildMetadata = {
+    deviceType: "mobile",
+    deviceId: "contract-probe",
+    devicePlatform: "android",
+    deviceModel: "Contract probe",
+    appVersion: "1.0",
+    appBuild: 72,
+  };
+  const routes = [
+    ["/api/auth/send-otp", { phone: "", ...buildMetadata }],
+    ["/api/auth/verify-otp", { phone: "", otp: "", ...buildMetadata }],
+    ["/api/auth/login-with-employee-id", { employeeId: "", password: "", ...buildMetadata }],
+  ];
+  for (const [path, body] of routes) {
+    const result = await request("POST", path, { body });
+    assert(
+      result.status === 400 || result.status === 401,
+      `${path} rejects empty credentials with HTTP 400 or 401`,
+    );
+    assert(
+      result.data && typeof result.data === "object",
+      `${path} returned structured JSON`,
+    );
+  }
+}
+
+async function deviceRolloutContracts() {
+  const mode = String(args["rollout-mode"] ?? "compatibility").toLowerCase();
+  assert(
+    mode === "compatibility" || mode === "enforced",
+    "rollout mode is compatibility or enforced",
+  );
+  const platform = String(args.platform ?? "android").toLowerCase();
+  const legacyBuild = Number(args["legacy-build"] ?? 71);
+  const targetBuild = Number(args["target-build"] ?? 72);
+  assert(Number.isInteger(legacyBuild) && legacyBuild > 0, "legacy build is a positive integer");
+  assert(Number.isInteger(targetBuild) && targetBuild > legacyBuild, "target build is newer than legacy build");
+
+  const versionResult = await request(
+    "GET",
+    `/api/mobile/app-version?platform=${encodeURIComponent(platform)}&currentVersion=1.0&buildNumber=${legacyBuild}`,
+    {
+      headers: {
+        "X-App-Version": "1.0",
+        "X-App-Build": String(legacyBuild),
+      },
+    },
+  );
+  expectStatus(versionResult, 200, true);
+  const minimumBuild = Number(versionResult.data?.minimumSupportedBuildNumber);
+  assert(Number.isInteger(minimumBuild), "app-version returns minimumSupportedBuildNumber");
+  if (mode === "compatibility") {
+    assert(minimumBuild <= legacyBuild, "compatibility mode still supports the legacy APK build");
+  } else {
+    assert(minimumBuild >= targetBuild, "enforced mode requires the target build or newer");
+  }
+
+  const buildMetadata = (appBuild) => ({
+    deviceType: "mobile",
+    deviceId: "contract-probe",
+    devicePlatform: platform,
+    deviceModel: "Contract probe",
+    appVersion: "1.0",
+    appBuild,
+  });
+  const authBodies = [
+    // Values are non-empty so the HTTP wrapper cannot reject them before the
+    // rollout gate, but deliberately invalid so no OTP/session can be created.
+    ["/api/auth/send-otp", (build) => ({ phone: "1000000000", ...buildMetadata(build) })],
+    ["/api/auth/verify-otp", (build) => ({ phone: "1000000000", otp: "000000", ...buildMetadata(build) })],
+    ["/api/auth/login-with-employee-id", (build) => ({ employeeId: "contract-probe", password: "invalid-contract-probe", ...buildMetadata(build) })],
+  ];
+  for (const [path, bodyForBuild] of authBodies) {
+    const legacyResult = await request("POST", path, { body: bodyForBuild(legacyBuild) });
+    if (mode === "enforced") {
+      expectStatus(legacyResult, 426, true);
+      assert(legacyResult.data?.code === "UPDATE_REQUIRED", `${path} returns UPDATE_REQUIRED for the legacy build`);
+      assert(Number(legacyResult.data?.minimumBuild) >= targetBuild, `${path} returns the enforced minimum build`);
+    } else {
+      expectStatus(legacyResult, [400, 401], true);
+      assert(legacyResult.data?.code !== "UPDATE_REQUIRED", `${path} leaves the legacy build usable in compatibility mode`);
+    }
+
+    const targetResult = await request("POST", path, { body: bodyForBuild(targetBuild) });
+    expectStatus(targetResult, [400, 401], true);
+    assert(targetResult.data?.code !== "UPDATE_REQUIRED", `${path} accepts the target build contract`);
+  }
+
+  const invalidToken = "contract-probe-invalid-token";
+  const protectedRoutes = [
+    ["GET", "/api/auth/validate-session", undefined, 401],
+    // Logout is intentionally idempotent on the current backend: an already
+    // invalid token may return a structured success without changing data.
+    ["POST", "/api/auth/logout", {}, [200, 401]],
+    ["POST", "/api/push/register", { token: "contract-probe", platform, deviceId: "contract-probe" }, 401],
+    ["GET", "/api/hr/staff/security?staffId=contract-probe", undefined, 401],
+    ["POST", "/api/hr/staff/device-reset", { staffId: "contract-probe" }, 401],
+  ];
+  for (const [method, path, body, expectedStatus] of protectedRoutes) {
+    const result = await request(method, path, { token: invalidToken, body });
+    expectStatus(result, expectedStatus, true);
+  }
 }
 
 function workflowFrom(result, who) {
@@ -376,6 +486,9 @@ function printHelp() {
   console.log(`Usage:
   node scripts/check-mobile-api.mjs contracts
   node scripts/check-mobile-api.mjs storage-contracts [--storage-base-url https://mg.theairix.com/]
+  node scripts/check-mobile-api.mjs device-login-contracts
+  node scripts/check-mobile-api.mjs device-rollout-contracts --rollout-mode compatibility [--legacy-build 71 --target-build 72]
+  node scripts/check-mobile-api.mjs device-rollout-contracts --rollout-mode enforced [--legacy-build 71 --target-build 72]
   node scripts/check-mobile-api.mjs auth-recovery-contracts
   node scripts/check-mobile-api.mjs joint-read
   node scripts/check-mobile-api.mjs joint-flow --allow-write
@@ -384,6 +497,8 @@ function printHelp() {
 Safe defaults:
   contracts performs unauthenticated route/auth-contract probes only.
   storage-contracts verifies preferred storage routes reject unauthenticated calls and never uploads bytes.
+  device-login-contracts verifies build-aware login routes using empty credentials and never sends an OTP.
+  device-rollout-contracts verifies app-version, legacy/target auth gating, and protected support routes without real credentials.
   auth-recovery-contracts validates the two pre-login routes using empty, non-mutating bodies.
   joint-read requires MCONNECT_JOINT_CP_ID, MCONNECT_LOW_TOKEN and MCONNECT_SENIOR_TOKEN.
 
@@ -401,6 +516,8 @@ try {
   if (args.help) printHelp();
   else if (command === "contracts") await contracts();
   else if (command === "storage-contracts") await storageContracts();
+  else if (command === "device-login-contracts") await deviceLoginContracts();
+  else if (command === "device-rollout-contracts") await deviceRolloutContracts();
   else if (command === "auth-recovery-contracts") await authRecoveryContracts();
   else if (command === "joint-read") await jointReadAudit();
   else if (command === "joint-flow") await jointFullFlow();

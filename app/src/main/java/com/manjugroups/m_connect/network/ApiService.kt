@@ -4,7 +4,9 @@ import com.google.gson.annotations.SerializedName
 import com.manjugroups.m_connect.BuildConfig
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody
+import okhttp3.ResponseBody
 import okhttp3.logging.HttpLoggingInterceptor
+import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.*
@@ -29,7 +31,7 @@ interface ApiService {
     suspend fun verifyOtp(@Body body: VerifyOtpRequest): VerifyOtpResponse
 
     @POST("api/auth/login-with-employee-id")
-    suspend fun loginWithEmployeeId(@Body body: EmployeePasswordLoginRequest): EmployeePasswordLoginResponse
+    suspend fun loginWithEmployeeId(@Body body: EmployeePasswordLoginRequest): Response<ResponseBody>
 
     @POST("api/auth/device-binding/recovery/request")
     suspend fun requestDeviceBindingRecovery(
@@ -1442,6 +1444,27 @@ interface ApiService {
                 }
                 response
             }
+            val mobileAuthContract = okhttp3.Interceptor { chain ->
+                val originalRequest = chain.request()
+                if (!AuthNetworkPolicy.usesMobileEntryContract(originalRequest.url.encodedPath)) {
+                    return@Interceptor chain.proceed(originalRequest)
+                }
+
+                // Login requests already include these values in JSON. Headers
+                // keep the release compatible with gateways that enforce the
+                // minimum build before parsing the request body.
+                val request = originalRequest.newBuilder()
+                    .header("X-App-Version", BuildConfig.VERSION_NAME)
+                    .header("X-App-Build", BuildConfig.VERSION_CODE.toString())
+                    .build()
+
+                // Production auth occasionally has a slow cold response. Keep
+                // the larger window isolated to login/recovery so CP, SV and
+                // every authenticated business call retain their current
+                // timeout behavior.
+                chain.withReadTimeout(AuthNetworkPolicy.READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .proceed(request)
+            }
             val client = OkHttpClient.Builder()
                 // Offline support: store GET responses and replay the last
                 // known one when the device has no network, so screens keep
@@ -1450,6 +1473,7 @@ interface ApiService {
                 .apply { OfflineHttpCache.cache()?.let { cache(it) } }
                 .addInterceptor(OfflineHttpCache.serveStaleWhenOffline)
                 .addNetworkInterceptor(OfflineHttpCache.storeResponses)
+                .addInterceptor(mobileAuthContract)
                 .addInterceptor(authWatchdog)
                 .addInterceptor(logging)
                 .connectTimeout(30, TimeUnit.SECONDS)
@@ -1478,6 +1502,8 @@ data class SendOtpRequest(
     val deviceId: String? = null,
     val devicePlatform: String? = null,
     val deviceModel: String? = null,
+    val appVersion: String = BuildConfig.VERSION_NAME,
+    val appBuild: Int = BuildConfig.VERSION_CODE,
 )
 data class SendOtpResponse(
     val success: Boolean,
@@ -1497,6 +1523,8 @@ data class VerifyOtpRequest(
     val devicePlatform: String? = null,
     val deviceModel: String? = null,
     val batteryPct: Double? = null,
+    val appVersion: String = BuildConfig.VERSION_NAME,
+    val appBuild: Int = BuildConfig.VERSION_CODE,
 )
 data class VerifyOtpResponse(
     val success: Boolean,
@@ -1518,6 +1546,8 @@ data class EmployeePasswordLoginRequest(
     @SerializedName("devicePlatform") val devicePlatform: String? = null,
     @SerializedName("deviceModel") val deviceModel: String? = null,
     @SerializedName("batteryPct") val batteryPct: Double? = null,
+    @SerializedName("appVersion") val appVersion: String = BuildConfig.VERSION_NAME,
+    @SerializedName("appBuild") val appBuild: Int = BuildConfig.VERSION_CODE,
 )
 data class EmployeePasswordLoginResponse(
     val success: Boolean,

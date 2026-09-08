@@ -120,7 +120,28 @@ class EmployeePasswordLoginActivity : AppCompatActivity() {
                 withAuthInitialConnectionRetry {
                     api.loginWithEmployeeId(request)
                 }
-            }.onSuccess { response ->
+            }.onSuccess { httpResponse ->
+                val responseBody = runCatching {
+                    (if (httpResponse.isSuccessful) httpResponse.body() else httpResponse.errorBody())
+                        ?.string()
+                }.getOrNull()
+                if (!httpResponse.isSuccessful) {
+                    showError(
+                        EmployeeLoginErrorParser.message(
+                            httpResponse.code(),
+                            responseBody,
+                            "Unable to sign in",
+                        )
+                    )
+                    setLoading(false)
+                    return@onSuccess
+                }
+                val response = EmployeePasswordLoginResponseParser.parse(responseBody)
+                if (response == null) {
+                    showError("The sign-in service returned an invalid response. Please retry.")
+                    setLoading(false)
+                    return@onSuccess
+                }
                 if (!response.success || response.token.isNullOrBlank() || response.user == null) {
                     showError(response.error ?: "Login failed")
                     setLoading(false)
