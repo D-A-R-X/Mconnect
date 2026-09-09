@@ -2,6 +2,9 @@ package com.manjugroups.m_connect.geotrack
 
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.SessionData
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.TimeZone
 
 /**
  * Decides whether the staff member counts as "clocked in for today" so trip
@@ -47,6 +50,54 @@ object AttendanceTrackingGate {
         return hasOpenSession || !firstPunchIn.isNullOrBlank()
     }
 
+    /**
+     * Resolve the attendance state that the mobile app should use for CP/SV
+     * starts and GeoTrack. A biometric punch-out closes the raw attendance
+     * pair, but the backend deliberately keeps the mobile work session alive;
+     * only an explicit mobile Clock Out ends it before day finalization.
+     */
+    fun isMobileWorkSessionActive(
+        firstPunchIn: String?,
+        hasOpenSession: Boolean?,
+        sessions: List<SessionData>?,
+    ): Boolean {
+        if (hasOpenSession(hasOpenSession, sessions)) return true
+        if (firstPunchIn.isNullOrBlank()) return false
+        return !wasClockedOutOnMobile(sessions.orEmpty())
+    }
+
+    /** True when the newest relevant attendance event is a mobile Clock Out. */
+    fun wasClockedOutOnMobile(sessions: List<SessionData>): Boolean {
+        var latestMobileOutMs: Long? = null
+        var latestOtherActivityMs: Long? = null
+
+        sessions.forEach { session ->
+            session.punchInTime?.takeIf { it.isNotBlank() }?.let { iso ->
+                parseMillis(iso)?.let { timestamp ->
+                    if (latestOtherActivityMs == null || timestamp > latestOtherActivityMs!!) {
+                        latestOtherActivityMs = timestamp
+                    }
+                }
+            }
+            session.punchOutTime?.takeIf { it.isNotBlank() }?.let { iso ->
+                parseMillis(iso)?.let { timestamp ->
+                    if (session.punchOutSource.equals("mobile", ignoreCase = true)) {
+                        if (latestMobileOutMs == null || timestamp > latestMobileOutMs!!) {
+                            latestMobileOutMs = timestamp
+                        }
+                    } else if (latestOtherActivityMs == null || timestamp > latestOtherActivityMs!!) {
+                        // Missing punchOutSource is intentionally treated as
+                        // non-mobile for legacy biometric rows.
+                        latestOtherActivityMs = timestamp
+                    }
+                }
+            }
+        }
+
+        val mobileOut = latestMobileOutMs ?: return false
+        return latestOtherActivityMs == null || mobileOut >= latestOtherActivityMs!!
+    }
+
     suspend fun isClockedInForToday(
         token: String,
         api: ApiService = ApiService.create(),
@@ -73,16 +124,12 @@ object AttendanceTrackingGate {
      * Live "is a session open RIGHT NOW?" check, used **only** to bound
      * GeoTrack location collection to the clock-in → clock-out window.
      *
-     * This is deliberately stricter than [isClockedInForToday]: that gate
-     * stays true for the rest of the day after the first punch (so trips / CP
-     * cards keep working through a mid-day break), but GeoTrack must capture
-     * a staffer's travel ONLY between punch-in and punch-out. So here we look
-     * at the open-session flag alone — a closed day (clocked out) returns
-     * false even though they punched in earlier.
+     * Biometric out-events close their raw attendance pair but do not end the
+     * mobile work session on the backend. An explicit mobile Clock Out does.
      *
      * Returns:
-     *  - `true`  → an open session exists; keep tracking.
-     *  - `false` → no open session (clocked out, or not punched in yet); stop.
+     *  - `true`  → the mobile work session is active; keep tracking.
+     *  - `false` → mobile clocked out, or not punched in yet; stop.
      *  - `null`  → couldn't determine (network/server error). Callers must NOT
      *    stop tracking on null — doing so would drop a legitimate in-window
      *    journey during a transient outage. Buffered points sync later.
@@ -98,12 +145,36 @@ object AttendanceTrackingGate {
         val dayOk = dayResp?.success == true
         // Neither endpoint answered authoritatively → unknown, don't act.
         if (!todayOk && !dayOk) return null
-        return hasOpenSession(
-            todayResp?.attendance?.hasOpenSession,
-            todayResp?.attendance?.sessions,
+        val attendance = todayResp?.attendance.takeIf { todayOk }
+        val validDayResp = dayResp.takeIf { dayOk }
+        val sessions = validDayResp?.sessions?.takeIf { it.isNotEmpty() }
+            ?: attendance?.sessions
+        val rawOpenSession = hasOpenSession(
+            attendance?.hasOpenSession,
+            attendance?.sessions,
         ) || hasOpenSession(
-            dayResp?.hasOpenSession,
-            dayResp?.sessions,
+            validDayResp?.hasOpenSession,
+            validDayResp?.sessions,
         )
+        val firstPunchIn = validDayResp?.firstPunchIn?.takeIf { it.isNotBlank() }
+            ?: attendance?.firstPunchIn
+        return isMobileWorkSessionActive(firstPunchIn, rawOpenSession, sessions)
+    }
+
+    private fun parseMillis(iso: String): Long? {
+        for (pattern in listOf("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", "yyyy-MM-dd'T'HH:mm:ssXXX")) {
+            try {
+                return SimpleDateFormat(pattern, Locale.US).parse(iso)?.time
+            } catch (_: Exception) {
+                // Try the next server timestamp shape.
+            }
+        }
+        return try {
+            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).apply {
+                timeZone = TimeZone.getTimeZone("UTC")
+            }.parse(iso.substringBefore('Z'))?.time
+        } catch (_: Exception) {
+            null
+        }
     }
 }

@@ -35,6 +35,27 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.Calendar
 import java.util.Locale
 
+internal data class CollectionProofUploadMetadata(
+    val contentType: String,
+    val extension: String,
+)
+
+internal fun collectionProofUploadMetadata(
+    originalContentType: String?,
+    imageCompressedToJpeg: Boolean,
+): CollectionProofUploadMetadata {
+    if (imageCompressedToJpeg) {
+        return CollectionProofUploadMetadata("image/jpeg", "jpg")
+    }
+    return when (originalContentType?.lowercase(Locale.US)) {
+        "application/pdf" -> CollectionProofUploadMetadata("application/pdf", "pdf")
+        "image/jpeg", "image/jpg" -> CollectionProofUploadMetadata("image/jpeg", "jpg")
+        "image/png" -> CollectionProofUploadMetadata("image/png", "png")
+        "image/webp" -> CollectionProofUploadMetadata("image/webp", "webp")
+        else -> CollectionProofUploadMetadata("application/octet-stream", "bin")
+    }
+}
+
 /**
  * Payment Entry sheet — Collection CP Yes path.
  *
@@ -42,7 +63,7 @@ import java.util.Locale
  * arrival OTP. The sheet mirrors the web `Payment Entry` dialog from
  * the post-sales workbench: pick the booking, enter amount + mode,
  * (optional) reference + proof attachment + notes, submit. On submit
- * the proof is uploaded to Convex storage, then the collection row is
+ * the proof is uploaded through the mobile storage service, then the collection row is
  * written via /api/postsales/collections/submit and the {caseId,
  * collectionRefNo, summary} payload is returned via FragmentResult so
  * the host can close the CP visit with outcome="collection_done".
@@ -400,23 +421,27 @@ class CollectionPaymentEntryBottomSheet : BottomSheetDialogFragment() {
                 var bytes = cr.openInputStream(uri)?.use { it.readBytes() }
                     ?: error("Unable to read proof file")
                 // Downscale photo proofs (field networks); non-images pass through.
-                if ((mime ?: "").startsWith("image/", ignoreCase = true)) {
+                val isImage = (mime ?: "").startsWith("image/", ignoreCase = true)
+                var imageCompressedToJpeg = false
+                if (isImage) {
                     val tmp = java.io.File.createTempFile("coll_proof_", ".jpg", ctx.cacheDir)
                     try {
                         tmp.writeBytes(bytes)
                         val cmp = com.manjugroups.m_connect.util.ImageCompressor.compress(tmp)
                         bytes = cmp.readBytes()
+                        imageCompressedToJpeg = cmp !== tmp
                         if (cmp !== tmp) runCatching { cmp.delete() }
                     } finally {
                         runCatching { tmp.delete() }
                     }
                 }
+                val uploadMetadata = collectionProofUploadMetadata(mime, imageCompressedToJpeg)
                 com.manjugroups.m_connect.network.StorageUploader.uploadRequestBody(
                     api = api,
                     token = session.bearerToken,
-                    body = bytes.toRequestBody(mime?.toMediaTypeOrNull()),
-                    fileName = "collection-proof-${System.currentTimeMillis()}.jpg",
-                    contentType = mime ?: "image/jpeg",
+                    body = bytes.toRequestBody(uploadMetadata.contentType.toMediaTypeOrNull()),
+                    fileName = "collection-proof-${System.currentTimeMillis()}.${uploadMetadata.extension}",
+                    contentType = uploadMetadata.contentType,
                 )
             }
             if (!resp.success || resp.storageId.isNullOrBlank()) {

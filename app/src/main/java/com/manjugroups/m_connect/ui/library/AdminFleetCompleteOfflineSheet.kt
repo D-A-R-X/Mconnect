@@ -494,7 +494,7 @@ class AdminFleetCompleteOfflineSheet : BottomSheetDialogFragment() {
         }
         image.visibility = View.VISIBLE
         empty.visibility = View.GONE
-        image.load("${BuildConfig.BASE_URL}api/storage/serve?storageId=$storageId")
+        image.load(com.manjugroups.m_connect.network.MobileStorageFiles.resolve(storageId))
     }
 
     /** Recompute the live billing total whenever any amount/odometer changes. */

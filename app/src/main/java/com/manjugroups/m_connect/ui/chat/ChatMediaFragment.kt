@@ -201,13 +201,9 @@ class ChatMediaFragment : Fragment() {
                             val mime = att.fileType?.lowercase(Locale.US).orEmpty()
                             val isMedia = mime.startsWith("image/") || mime.startsWith("video/")
                             
-                            // Resolve the storage URL dynamically if the direct url is blank
-                            val resolvedUrl = att.url?.takeIf { it.isNotBlank() } ?: runCatching {
-                                val storageId = att.storageId
-                                if (storageId != null) {
-                                    api.getStorageUrl(session.bearerToken, storageId).url
-                                } else null
-                            }.getOrNull()
+                            val resolvedUrl = com.manjugroups.m_connect.network.MobileStorageFiles.resolve(
+                                att.url?.takeIf { it.isNotBlank() } ?: att.storageId,
+                            )
 
                             if (!resolvedUrl.isNullOrBlank()) {
                                 if (isMedia) {

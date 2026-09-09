@@ -29,11 +29,10 @@ class CollectionsAdapter : RecyclerView.Adapter<CollectionsAdapter.CollectionVH>
      *  personally collected (the scope-aware list also shows others'). */
     var viewerStaffId: String? = null
     var onImageClick: ((CollectionItem) -> Unit)? = null
-    // Fragment-provided hook: takes the server-side _storage id, resolves
-    // it to a signed URL (/api/storage/get-url), and loads the result
+    // Fragment-provided hook: takes the server-side storage id, resolves
+    // it through /api/storage/files/{storageId}, and loads the result
     // into the row's thumbnail ImageView via Coil. The fragment owns the
-    // coroutine scope + bearer token + a URL cache so we don't refetch
-    // the same id on every scroll bind.
+    // lifecycle and URL cache so the same id is not rebuilt on every bind.
     var proofLoader: ((storageId: String, target: ImageView) -> Unit)? = null
 
     fun submit(list: List<CollectionItem>) {

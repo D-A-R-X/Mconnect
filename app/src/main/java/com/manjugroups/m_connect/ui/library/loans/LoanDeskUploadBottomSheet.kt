@@ -957,7 +957,7 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
      *   1. Freshly picked file from this session → cacheDir hit, Coil
      *      loads it from disk.
      *   2. Pre-existing upload on the server with `storageId` →
-     *      resolve to a signed URL via /api/storage/get-url. Same path
+     *      resolve through /api/storage/files/{storageId}. Same path
      *      is used for fresh uploads whose storageId came back from
      *      the live upload pipeline.
      *   3. Neither → "Preview unavailable" toast (defensive).
@@ -1009,78 +1009,38 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
             return
         }
         showPreviewDialog { imageView, progressBar ->
-            // Two async waits between tap → image-on-screen: the
-            // signed-URL fetch and the bitmap decode. Showing the
-            // spinner across BOTH (instead of just the load step) is
-            // what removes the "did I tap wrong?" beat where the
-            // dialog opened over a black void.
             imageView.setImageDrawable(null)
             progressBar.visibility = View.VISIBLE
-            viewLifecycleOwner.lifecycleScope.launch {
-                try {
-                    val token = SessionManager(requireContext()).bearerToken
-                    val resp = withContext(Dispatchers.IO) {
-                        ApiService.create().getStorageUrl(token, storageId)
-                    }
-                    val url = resp.url
-                    if (resp.success && !url.isNullOrBlank()) {
-                        imageView.load(url) {
-                            crossfade(true)
-                            listener(
-                                onSuccess = { _, _ ->
-                                    progressBar.visibility = View.GONE
-                                    (imageView as? com.manjugroups.m_connect.ui.chat.ZoomableImageView)
-                                        ?.requestRecenter()
-                                },
-                                onError = { _, _ ->
-                                    progressBar.visibility = View.GONE
-                                    Toast.makeText(
-                                        requireContext(),
-                                        "Couldn't load preview",
-                                        Toast.LENGTH_SHORT,
-                                    ).show()
-                                },
-                            )
-                        }
-                    } else {
+            val url = com.manjugroups.m_connect.network.MobileStorageFiles.resolve(storageId)
+            if (url == null) {
+                progressBar.visibility = View.GONE
+                Toast.makeText(requireContext(), "Couldn't load preview", Toast.LENGTH_SHORT).show()
+                return@showPreviewDialog
+            }
+            imageView.load(url) {
+                crossfade(true)
+                listener(
+                    onSuccess = { _, _ ->
                         progressBar.visibility = View.GONE
-                        Toast.makeText(
-                            requireContext(),
-                            "Couldn't load preview",
-                            Toast.LENGTH_SHORT,
-                        ).show()
-                    }
-                } catch (_: Exception) {
-                    progressBar.visibility = View.GONE
-                    Toast.makeText(
-                        requireContext(),
-                        "Couldn't load preview",
-                        Toast.LENGTH_SHORT,
-                    ).show()
-                }
+                        (imageView as? com.manjugroups.m_connect.ui.chat.ZoomableImageView)
+                            ?.requestRecenter()
+                    },
+                    onError = { _, _ ->
+                        progressBar.visibility = View.GONE
+                        Toast.makeText(requireContext(), "Couldn't load preview", Toast.LENGTH_SHORT).show()
+                    },
+                )
             }
         }
     }
 
     private fun openRemotePdf(storageId: String) {
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val response = withContext(Dispatchers.IO) {
-                    ApiService.create().getStorageUrl(
-                        SessionManager(requireContext()).bearerToken,
-                        storageId,
-                    )
-                }
-                val url = response.url
-                if (!response.success || url.isNullOrBlank()) {
-                    Toast.makeText(requireContext(), "Couldn't open PDF", Toast.LENGTH_SHORT).show()
-                    return@launch
-                }
-                openDocument(Uri.parse(url), "application/pdf", grantRead = false)
-            } catch (_: Exception) {
-                Toast.makeText(requireContext(), "Couldn't open PDF", Toast.LENGTH_SHORT).show()
-            }
+        val url = com.manjugroups.m_connect.network.MobileStorageFiles.resolve(storageId)
+        if (url == null) {
+            Toast.makeText(requireContext(), "Couldn't open PDF", Toast.LENGTH_SHORT).show()
+            return
         }
+        openDocument(Uri.parse(url), "application/pdf", grantRead = false)
     }
 
     private fun openDocument(uri: Uri, mime: String, grantRead: Boolean) {
@@ -1164,7 +1124,7 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
          * @param preExistingStorageIds Aligned with `requiredLabels`,
          *   same convention as `preExistingFileNames`. Carries the
          *   Convex `_storage` id so the preview can resolve it to a
-         *   signed URL via /api/storage/get-url + Coil.
+         *   resolver URL via /api/storage/files/{storageId} + Coil.
          */
         fun newInstance(
             caseId: String,

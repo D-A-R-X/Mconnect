@@ -18,8 +18,32 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import retrofit2.http.POST
+import java.net.ConnectException
+import java.net.SocketTimeoutException
 
 class EmployeeLoginContractTest {
+    @Test
+    fun `otp dispatch acknowledgement opens entry for compatibility envelopes`() {
+        assertTrue(otpDispatchWasAcknowledged(true, null, null))
+        assertTrue(otpDispatchWasAcknowledged(false, "OTP sent to your phone", null))
+        assertTrue(otpDispatchWasAcknowledged(null, null, "Verification code has been sent"))
+
+        assertFalse(otpDispatchWasAcknowledged(false, null, "Failed to send OTP"))
+        assertFalse(otpDispatchWasAcknowledged(false, "OTP not sent", null))
+        assertFalse(otpDispatchWasAcknowledged(false, null, "Phone number not registered"))
+    }
+
+    @Test
+    fun `send timeout opens otp entry but connection failure stays on login`() {
+        assertTrue(otpRequestMayHaveReachedServer(SocketTimeoutException("timeout")))
+        assertTrue(
+            otpRequestMayHaveReachedServer(
+                IllegalStateException("wrapped", SocketTimeoutException("timeout")),
+            ),
+        )
+        assertFalse(otpRequestMayHaveReachedServer(ConnectException("refused")))
+    }
+
     @Test
     fun `mobile otp preflight sends device identity and parses account conflict`() {
         val request = Gson().toJsonTree(

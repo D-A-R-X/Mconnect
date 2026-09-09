@@ -68,6 +68,16 @@ class JointCpTemplateGuardTest {
         assertEquals(listOf("owner", "reviewer"), JointCpTemplateGuard.participantIds(owner, reviewer))
     }
 
+    @Test fun `participant ids are owner first even when senior staff was picked first`() {
+        val senior = staff("senior", "sm", level = 70)
+        val junior = staff("junior", "bdo", level = 40)
+
+        assertEquals(
+            listOf("junior", "senior"),
+            JointCpTemplateGuard.participantIds(senior, junior),
+        )
+    }
+
     @Test fun `lower level owns outcome regardless of picker order`() {
         val senior = staff("senior", "gm", level = 76)
         val junior = staff("junior", "bdo", level = 47)

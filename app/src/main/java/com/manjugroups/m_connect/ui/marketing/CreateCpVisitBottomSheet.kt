@@ -236,22 +236,8 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         val btnCancel = view.findViewById<View>(R.id.btnCancel)
         val btnSubmit = view.findViewById<View>(R.id.btnSubmit)
 
-        // Load logged-in staff info if available
-        val currentStaffId = session.staffId
-        val currentStaffName = session.userName
-        if (!currentStaffId.isNullOrBlank()) {
-            selectedStaff = StaffData(
-                id = currentStaffId,
-                name = currentStaffName ?: "Me",
-                phone = session.userPhone,
-                role = null,
-                designation = null,
-                status = null,
-                employeeId = null,
-                department = null
-            )
-            etStaff.setText(currentStaffName ?: "Me")
-        }
+        // Field staff must be chosen explicitly from the active-staff picker.
+        // Do not silently assign the logged-in creator.
 
         // Setup click listeners for spinners
         etStaff.setOnClickListener { pickStaff(etStaff) }
@@ -482,14 +468,18 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             }
 
             // A Joint CP is meaningless with one person on it.
-            val jointPartnerId = selectedJointPartner?.id
             val authoritativePrimary = staffCache.firstOrNull { it.id == staff.id } ?: staff
             var jointParticipantIds: List<String>? = null
+            var jointAssignment: JointCpTemplateGuard.Assignment? = null
             if (isJointCp) {
                 JointCpTemplateGuard.rejection(authoritativePrimary, selectedJointPartner)?.let {
                     toast(it)
                     return@setOnClickListener
                 }
+                jointAssignment = JointCpTemplateGuard.assignment(
+                    authoritativePrimary,
+                    selectedJointPartner,
+                )
                 jointParticipantIds = JointCpTemplateGuard.participantIds(
                     authoritativePrimary,
                     selectedJointPartner,
@@ -651,7 +641,10 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                     val request = CreateCpVisitRequest(
                             clientName = clientNameInput,
                             mobileNumber = phone,
-                            assignedStaffId = staff.id,
+                            // assignedStaffId remains the compatibility owner used by
+                            // existing OTP/outcome routes. For Joint CP it must be the
+                            // lower-level participant, independent of picker order.
+                            assignedStaffId = jointAssignment?.outcomeOwner?.id ?: staff.id,
                             lmoStaffId = lmo.id,
                             scheduledDate = selectedDate,
                             scheduledTime = selectedTime,

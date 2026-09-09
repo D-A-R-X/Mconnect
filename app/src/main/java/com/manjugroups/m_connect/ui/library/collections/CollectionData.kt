@@ -17,8 +17,8 @@ data class CollectionItem(
     // True when the collector corrected their own entry (while still pending
     // Accounts) — drives the "Edited" tag.
     var edited: Boolean = false,
-    // Convex `_storage` id from the server. Resolved to a signed URL
-    // at list-render time via /api/storage/get-url and loaded into
+    // Storage id from the server. Resolved through the stable file route
+    // at list-render time via /api/storage/files/{storageId} and loaded into
     // the thumbnail with Coil. Null when the executive submitted the
     // collection without a proof attachment.
     var proofStorageId: String? = null,

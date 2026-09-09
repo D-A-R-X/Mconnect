@@ -14,6 +14,11 @@ import java.io.IOException
 import java.net.SocketTimeoutException
 import java.util.UUID
 
+internal fun effectiveUploadContentType(
+    originalContentType: String,
+    imageReencodedAsJpeg: Boolean,
+): String = if (imageReencodedAsJpeg) "image/jpeg" else originalContentType
+
 /** Shared uploader preserving the existing business-facing `storageId`. */
 object StorageUploader {
 
@@ -61,7 +66,8 @@ object StorageUploader {
         val ownsTemp = uploadFile !== file
 
         return try {
-            val mime = runCatching { contentType.toMediaType() }.getOrNull()
+            val effectiveContentType = effectiveUploadContentType(contentType, ownsTemp)
+            val mime = runCatching { effectiveContentType.toMediaType() }.getOrNull()
                 ?: "application/octet-stream".toMediaType()
             uploadRequestBodyResult(
                 api = api,

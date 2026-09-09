@@ -118,11 +118,8 @@ class CpVisitsFragment : Fragment() {
     // so refreshes / re-opens with data already on screen don't flash the
     // list back to placeholders.
     private var hasLoadedOnce = false
-    // True once the user has punched in at least once today — sticky for the
-    // rest of the day even after subsequent clock-outs. Mid-day clock-outs
-    // (the user steps away, locks the punch-out time at midnight) must NOT
-    // re-gate the CP cards to "Need to Clock In", so we read this field
-    // from AttendanceFlowState rather than the right-now `isClockedIn` one.
+    // True while the mobile work session is active. Biometric gate activity
+    // does not end it; an explicit in-app Clock Out does.
     private var isClockedIn: Boolean = false
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
@@ -258,13 +255,7 @@ class CpVisitsFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 attendanceVm.uiState.collect { state ->
-                    // Use hasClockedInToday, not isClockedIn. The latter
-                    // flips to false the moment a user taps Clock Out, but
-                    // the one-time-Clock-In rule means trips/CP visits
-                    // should stay unlocked until the day ends. After the
-                    // midnight finalize the next morning's load resets
-                    // both flags via loadTodayAttendance().
-                    val newValue = state.hasClockedInToday
+                    val newValue = state.isClockedIn
                     if (newValue != isClockedIn) {
                         isClockedIn = newValue
                         renderList()
@@ -605,8 +596,9 @@ class CpVisitsFragment : Fragment() {
         // the existing rows stay put until renderList() rebuilds them —
         // no flash back to placeholders over data that's already there.
         if (!hasLoadedOnce) {
-            SkeletonUtils.startSkeletonPulse(skeletonContainer)
+            list.visibility = View.GONE
             empty.visibility = View.GONE
+            SkeletonUtils.startSkeletonPulse(skeletonContainer)
             list.removeAllViews()
         }
 
@@ -831,12 +823,28 @@ class CpVisitsFragment : Fragment() {
         // Shared with Home so both screens agree. A terminal CP status wins
         // over the trip row; a live one still defers to it. See
         // resolveCpEffectiveStatus for why.
-        val effectiveStatus = resolveCpEffectiveStatus(this.status, this.fieldVisit?.status)
-        val activityDate = if (isCompleted(effectiveStatus.lowercase(Locale.US))) {
-            this.activityDate ?: assignedDate
-        } else {
-            assignedDate
-        }
+        val actorParticipant = this.joint.participantFor(session.staffId)
+        val actorFieldVisitId = resolveCpFieldVisitId(
+            cpVisitId = cpId,
+            parentFieldVisitId = this.fieldVisitId,
+            joint = this.joint,
+            currentStaffId = session.staffId,
+        )
+        val effectiveStatus = resolveParticipantCpEffectiveStatus(
+            this.effectiveStatus,
+            this.status,
+            this.fieldVisit?.status,
+            this.joint,
+            session.staffId,
+        )
+        val displayDate = resolveCpActivityDate(
+            scheduledDate = assignedDate,
+            serverActivityDate = this.activityDate,
+            cpCompletedAt = this.completedAt,
+            fieldVisitCompletedAt = this.fieldVisit?.completedAt,
+            participantStartedAt = actorParticipant?.startedAt,
+            fieldVisitStartedAt = this.fieldVisit?.startedAt,
+        )
         val proposedHasFields = this.proposedSiteVisit?.let { p ->
             !p.projectId.isNullOrBlank() ||
                 !p.scheduledDate.isNullOrBlank() ||
@@ -890,7 +898,7 @@ class CpVisitsFragment : Fragment() {
         // the "sometimes disappearing" Pending button. Deciding it from BOTH
         // signals means a missing fieldVisit can no longer hide it.
         val cpState = CpVisitState(
-            outcomePending = isCpOutcomePending(this.status, this.fieldVisit?.status, effectiveOutcome),
+            outcomePending = isCpOutcomePending(effectiveStatus, null, effectiveOutcome),
             clientMet = this.clientMet,
             clientMetAt = this.clientMetAt,
             clientNoShowReason = this.clientNoShowReason,
@@ -899,9 +907,9 @@ class CpVisitsFragment : Fragment() {
             cpType = this.cpType,
         )
         return TodayVisit(
-            id = cpId,
+            id = actorFieldVisitId,
             clientPlaceId = this.clientPlaceId ?: cpId,
-            scheduledDate = activityDate,
+            scheduledDate = displayDate,
             status = effectiveStatus,
             // Both participants, so the card can name them.
             joint = this.joint,

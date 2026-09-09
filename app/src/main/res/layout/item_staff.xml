@@ -89,4 +89,14 @@
         android:fontFamily="@font/inter_semibold"
         android:paddingHorizontal="10dp"
         android:textSize="10sp" />
+
+    <CheckBox
+        android:id="@+id/cbStaffSelected"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_marginStart="6dp"
+        android:buttonTint="?attr/colorAccentPrimary"
+        android:contentDescription="Select staff"
+        android:gravity="center"
+        android:visibility="gone" />
 </LinearLayout>

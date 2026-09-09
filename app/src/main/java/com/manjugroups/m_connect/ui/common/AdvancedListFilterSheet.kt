@@ -11,6 +11,9 @@ import android.widget.EditText
 import android.text.Editable
 import android.text.TextWatcher
 import androidx.core.os.bundleOf
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.setFragmentResult
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -109,6 +112,7 @@ class AdvancedListFilterSheet : DialogFragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        applySystemBarInsets(view)
         resultCount = view.findViewById(R.id.tvFilterResultCount)
         activeSummary = view.findViewById(R.id.tvFilterActiveSummary)
         optionSearch = view.findViewById(R.id.etFilterOptionSearch)
@@ -159,6 +163,27 @@ class AdvancedListFilterSheet : DialogFragment() {
         optionAdapter.notifyDataSetChanged()
         refreshOptionPane()
         refreshFooter()
+    }
+
+    private fun applySystemBarInsets(root: View) {
+        val baseLeft = root.paddingLeft
+        val baseTop = root.paddingTop
+        val baseRight = root.paddingRight
+        val baseBottom = root.paddingBottom
+        ViewCompat.setOnApplyWindowInsetsListener(root) { target, insets ->
+            val safeArea = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or
+                    WindowInsetsCompat.Type.displayCutout(),
+            )
+            target.updatePadding(
+                left = baseLeft + safeArea.left,
+                top = baseTop + safeArea.top,
+                right = baseRight + safeArea.right,
+                bottom = baseBottom + safeArea.bottom,
+            )
+            insets
+        }
+        root.post { ViewCompat.requestApplyInsets(root) }
     }
 
     private fun currentState(): State = State(

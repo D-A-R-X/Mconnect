@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 
 const DEFAULT_BASE_URL = "https://api-mfpl.theairix.com/";
 const DEFAULT_STORAGE_BASE_URL = "https://mg.theairix.com/";
+const DEFAULT_GEO_BASE_URL = "https://api-geo.theairix.com/";
 const WRITE_CONFIRMATION = "I_UNDERSTAND_THIS_MUTATES_A_TEST_CP";
 const SECRET_KEYS = /token|authorization|password|otp|phone/i;
 
@@ -82,6 +83,7 @@ async function request(method, path, options = {}) {
       method,
       headers,
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      redirect: options.redirect ?? "follow",
       signal: controller.signal,
     });
   } finally {
@@ -102,6 +104,8 @@ async function request(method, path, options = {}) {
     path: `${url.pathname}${url.search}`,
     status: response.status,
     durationMs: Math.round(performance.now() - startedAt),
+    location: response.headers.get("location"),
+    contentType: response.headers.get("content-type"),
     data,
   };
   results.push(result);
@@ -117,7 +121,10 @@ function assert(condition, message) {
 
 function expectStatus(result, expected, requireStructuredSuccess = false) {
   const accepted = Array.isArray(expected) ? expected : [expected];
-  assert(accepted.includes(result.status), `${result.method} ${result.path} returned ${accepted.join(" or ")}`);
+  assert(
+    accepted.includes(result.status),
+    `${result.method} ${result.path} expected ${accepted.join(" or ")}, got ${result.status}`,
+  );
   if (requireStructuredSuccess) {
     assert(typeof result.data === "object" && result.data !== null, `${result.method} ${result.path} returned JSON`);
     assert("success" in result.data, `${result.method} ${result.path} returned structured JSON`);
@@ -134,6 +141,7 @@ async function contracts() {
     ["POST", "/api/marketing/clientPlaceVisits/setOutcome"],
     ["POST", "/api/marketing/clientPlaceVisits/joint-submit-review"],
     ["POST", "/api/marketing/clientPlaceVisits/joint-complete-review"],
+    ["POST", "/api/geotrack/visit/complete"],
     ["GET", "/api/marketing/clientPlaceVisits/my?scope=mine&status=completed&pageSize=1"],
   ];
   for (const [method, path] of routes) {
@@ -142,20 +150,272 @@ async function contracts() {
   }
 }
 
+async function cpSvContracts() {
+  const storageBaseUrl = args["storage-base-url"]
+    ?? process.env.MFPL_API_BASE_URL
+    ?? DEFAULT_STORAGE_BASE_URL;
+  const geoBaseUrl = args["geo-base-url"]
+    ?? process.env.MCONNECT_GEO_BASE_URL
+    ?? DEFAULT_GEO_BASE_URL;
+  const failures = [];
+  const businessRoutes = [
+    // Nested form dependencies: staff/template levels, projects, clients,
+    // leads and address/route resolution used before a mutation is enabled.
+    ["GET", "/api/hr/staff?status=active"],
+    ["GET", "/api/hr/staff/get?id=contract-probe"],
+    ["GET", "/api/projects/get?id=contract-probe"],
+    ["GET", "/api/telecaller/leads/search-by-phone?phone=1000000000"],
+    ["GET", "/api/clients/search-by-phone?phone=1000000000"],
+    ["GET", "/api/clients/referral-candidates?query=contract-probe&limit=1"],
+    ["POST", "/api/telecaller/leads/update"],
+    ["POST", "/api/address/parse"],
+    ["GET", "/api/address/autocomplete?q=contract-probe"],
+    ["GET", "/api/address/place?placeId=contract-probe"],
+    ["POST", "/api/geotrack/geocode-address"],
+    ["POST", "/api/geotrack/route", [400, 401]],
+    ["GET", "/api/hr/attendance/today"],
+    ["GET", "/api/hr/attendance/day-sessions"],
+    ["GET", "/api/hr/attendance/my?fromDate=2099-01-01&toDate=2099-01-01"],
+    ["POST", "/api/hr/attendance/punch-in"],
+    ["POST", "/api/hr/attendance/punch-out"],
+    ["GET", "/api/hr/permissions/monthly-usage"],
+    ["GET", "/api/mobile/dashboard?date=2099-01-01"],
+
+    // Tracking, lists and trip lifecycle.
+    ["GET", "/api/tracking/bootstrap?deviceId=contract-probe"],
+    ["POST", "/api/tracking/device/sync", [400, 401]],
+    ["POST", "/api/tracking/consent", [400, 401]],
+    ["POST", "/api/geotrack/tamper/report", [400, 401]],
+    ["POST", "/api/geotrack/consent", [400, 401]],
+    ["GET", "/api/geotrack/consent/status"],
+    ["GET", "/api/geotrack/assigned-places"],
+    ["GET", "/api/geotrack/today-visits?date=2099-01-01"],
+    ["GET", "/api/sitevisits/my?pageSize=1"],
+    ["POST", "/api/geotrack/visit/create"],
+    ["POST", "/api/geotrack/visit/start"],
+    ["POST", "/api/geotrack/visit/complete"],
+    ["GET", "/api/geotrack/timeline?dayStart=0&dayEnd=1", [400, 401]],
+    ["GET", "/api/geotrack/session-route?dayStart=0&dayEnd=1", [400, 401]],
+
+    // Driver-backed SV trip actions reachable from the shared trip screen.
+    ["GET", "/api/mms-fleet/driver/trips"],
+    ["POST", "/api/mms-fleet/driver/arrive"],
+    ["POST", "/api/mms-fleet/driver/start"],
+    ["POST", "/api/mms-fleet/driver/on-site"],
+    ["POST", "/api/mms-fleet/driver/picked-from-site"],
+    ["POST", "/api/mms-fleet/driver/end"],
+
+    // Arrival proof and OTP.
+    ["POST", "/api/geotrack/visit/arrival-otp/request"],
+    ["POST", "/api/geotrack/visit/arrival-otp/verify"],
+    ["POST", "/api/geotrack/visit/arrival-otp/cancel"],
+
+    // CP create, detail, outcome and synchronization.
+    ["POST", "/api/marketing/clientPlaceVisits/create"],
+    ["GET", "/api/marketing/clientPlaceVisits/get?id=contract-probe"],
+    ["GET", "/api/marketing/clientPlaceVisits/my?scope=mine&pageSize=1"],
+    ["GET", "/api/marketing/clientPlaceVisits/completed-count?date=2099-01-01"],
+    ["GET", "/api/marketing/clientPlaceVisits/completion-health?fromDate=2099-01-01&toDate=2099-01-01"],
+    ["POST", "/api/marketing/clientPlaceVisits/completion-repair/preview"],
+    ["POST", "/api/marketing/clientPlaceVisits/completion-repair/apply"],
+    ["GET", "/api/marketing/clientPlaceVisits/filter-options?scope=mine"],
+    ["POST", "/api/marketing/clientPlaceVisits/markClientMet"],
+    ["POST", "/api/marketing/clientPlaceVisits/setOutcome"],
+    ["POST", "/api/marketing/clientPlaceVisits/referral"],
+    ["POST", "/api/marketing/clientPlaceVisits/cancel"],
+    ["POST", "/api/marketing/clientPlaceVisits/convertToSiteVisit"],
+    ["POST", "/api/marketing/cp-visits/geofence-remark"],
+    ["POST", "/api/marketing/cp-visits/otp-assist"],
+    ["GET", "/api/marketing/cp-visits/pending-approvals"],
+    ["GET", "/api/marketing/cp-visits/approval-route?id=contract-probe"],
+    ["POST", "/api/marketing/cp-visits/approve"],
+    ["POST", "/api/marketing/cp-visits/reject"],
+
+    // Joint CP owner/reviewer contract.
+    ["GET", "/api/marketing/clientPlaceVisits/joint-workflow?id=contract-probe"],
+    ["POST", "/api/marketing/clientPlaceVisits/joint-arrival-preflight"],
+    ["POST", "/api/marketing/clientPlaceVisits/joint-participant-ready"],
+    ["POST", "/api/marketing/clientPlaceVisits/joint-submit-review"],
+    ["POST", "/api/marketing/clientPlaceVisits/joint-complete-review"],
+
+    // Site-visit confirmation, QR, outcome and lifecycle.
+    ["POST", "/api/marketing/siteVisits/create"],
+    ["POST", "/api/marketing/siteVisits/scanQr"],
+    ["POST", "/api/marketing/siteVisits/markOnCounselling"],
+    ["POST", "/api/marketing/siteVisits/setOutcome"],
+    ["POST", "/api/marketing/siteVisits/postpone"],
+    ["POST", "/api/marketing/siteVisits/cancel"],
+    ["POST", "/api/marketing/siteVisits/convertToBooking"],
+    ["POST", "/api/marketing/siteVisits/markPickedUp"],
+    ["POST", "/api/marketing/siteVisits/markClientStarted"],
+    ["POST", "/api/marketing/siteVisits/markArrivedSite"],
+    ["POST", "/api/marketing/siteVisits/markPickedFromSite"],
+    ["POST", "/api/marketing/siteVisits/markDropped"],
+    ["GET", "/api/sitevisits/filter-options"],
+
+    // Booking form dependencies and create/draft persistence.
+    ["GET", "/api/marketing/projects"],
+    ["GET", "/api/marketing/inventory-units?projectId=contract-probe"],
+    ["GET", "/api/marketing/inventory-units/layout?projectId=contract-probe"],
+    ["GET", "/api/bookings/plot-prefill?plotId=contract-probe"],
+    ["GET", "/api/bookings/conversion-prefill?mobileNumber=1000000000"],
+    ["GET", "/api/bookings/exchange-source-candidates?mobileNumber=1000000000"],
+    ["POST", "/api/bookings"],
+    ["POST", "/api/bookings/draft/save"],
+    ["GET", "/api/bookings/draft/get?sourceKey=contract-probe"],
+    ["POST", "/api/bookings/draft/clear"],
+    ["GET", "/api/marketing/bookings/my?pageSize=1"],
+    ["GET", "/api/bookings/contract-probe"],
+    ["PATCH", "/api/bookings/contract-probe"],
+    ["POST", "/api/bookings/contract-probe/approve"],
+    ["POST", "/api/bookings/contract-probe/reject"],
+
+    // Collection CP lookup, submit and list synchronization.
+    ["GET", "/api/postsales/cases/byMobile?mobile=1000000000"],
+    ["GET", "/api/postsales/cases/list"],
+    ["POST", "/api/postsales/collections/submit"],
+    ["GET", "/api/postsales/collections/my?pageSize=1"],
+    ["POST", "/api/postsales/collections/correct"],
+    ["GET", "/api/postsales/collections/for-accounts"],
+    ["POST", "/api/postsales/collections/approve"],
+    ["POST", "/api/postsales/collections/reject"],
+
+    // Compatibility upload used when the preferred storage service is absent.
+    ["POST", "/api/storage/upload"],
+  ];
+  for (const [method, path, expectedStatus = 401] of businessRoutes) {
+    try {
+      const result = await request(method, path, { body: method === "GET" ? undefined : {} });
+      expectStatus(result, expectedStatus, true);
+    } catch (error) {
+      failures.push(`${method} ${path}: ${error.message}`);
+      console.error(`FAIL contract: ${method} ${path}: ${error.message}`);
+    }
+  }
+
+  const externalRoutes = [
+    // The direct GeoTrack service validates its request body before auth, so
+    // an empty non-mutating probe may return 400 or 401 depending on route.
+    [geoBaseUrl, "POST", "/api/tracking/location/batch", [400, 401]],
+    [geoBaseUrl, "POST", "/api/tracking/heartbeat", [400, 401]],
+    [geoBaseUrl, "POST", "/api/tracking/tamper-events", [400, 401]],
+    [geoBaseUrl, "POST", "/api/geotrack/start", [400, 401]],
+    [geoBaseUrl, "POST", "/api/geotrack/stop", [400, 401]],
+    [storageBaseUrl, "POST", "/api/storage/uploads", 401],
+    [storageBaseUrl, "POST", "/api/storage/uploads/contract-probe/complete", 401],
+    [storageBaseUrl, "DELETE", "/api/storage/uploads/contract-probe", 401],
+    [storageBaseUrl, "GET", "/api/storage/files/contract-probe", 404],
+  ];
+  for (const [routeBaseUrl, method, path, expectedStatus] of externalRoutes) {
+    try {
+      const result = await request(method, path, {
+        baseUrl: routeBaseUrl,
+        body: method === "GET" || method === "DELETE" ? undefined : {},
+      });
+      expectStatus(result, expectedStatus, method !== "GET" || path !== "/api/storage/files/contract-probe");
+    } catch (error) {
+      failures.push(`${method} ${path}: ${error.message}`);
+      console.error(`FAIL contract: ${method} ${path}: ${error.message}`);
+    }
+  }
+  const total = businessRoutes.length + externalRoutes.length;
+  if (failures.length > 0) {
+    throw new Error(
+      `${total - failures.length}/${total} CP/SV module endpoint contracts passed; failures:\n- ${failures.join("\n- ")}`,
+    );
+  }
+  console.log(`PASS all ${total} CP/SV module endpoint contracts passed`);
+}
+
+async function geoTrackDirectContracts() {
+  const geoBaseUrl = args["geo-base-url"]
+    ?? process.env.MCONNECT_GEO_BASE_URL
+    ?? DEFAULT_GEO_BASE_URL;
+  const live = await request("GET", "/api/tracking/live?limit=1", {
+    baseUrl: geoBaseUrl,
+  });
+  expectStatus(live, 200, true);
+  assert(Array.isArray(live.data?.data), "preferred live route returns a data array");
+
+  const liveAlias = await request("GET", "/api/geotrack/live-status?limit=1", {
+    baseUrl: geoBaseUrl,
+  });
+  expectStatus(liveAlias, 200, true);
+  assert(Array.isArray(liveAlias.data?.data), "web live-status alias returns a data array");
+
+  const invalidToken = "invalid-geotrack-contract-probe";
+  const headers = { "Idempotency-Key": "invalid-geotrack-contract-probe" };
+  const writeRoutes = [
+    ["/api/tracking/location/batch", { deviceId: "contract-probe", requestId: "contract-probe", points: [] }],
+    ["/api/tracking/heartbeat", {
+      deviceId: "contract-probe",
+      requestId: "contract-probe",
+      deviceSequence: 1,
+      batteryPct: 50,
+      appVersion: "contract-probe",
+      recordedAt: 1,
+    }],
+    ["/api/tracking/tamper-events", {
+      eventType: "NETWORK_ONLINE",
+      detectedAt: 1,
+      requestId: "contract-probe",
+      metadata: { source: "contract-probe" },
+    }],
+    ["/api/geotrack/start", {}],
+    ["/api/geotrack/stop", {}],
+  ];
+  const failures = [];
+  for (const [path, body] of writeRoutes) {
+    const result = await request("POST", path, {
+      baseUrl: geoBaseUrl,
+      token: invalidToken,
+      headers,
+      body,
+    });
+    try {
+      expectStatus(result, 401, true);
+    } catch (error) {
+      failures.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+  assert(failures.length === 0, failures.join("; "));
+}
+
 async function storageContracts() {
   const storageBaseUrl = args["storage-base-url"]
     ?? process.env.MFPL_API_BASE_URL
     ?? DEFAULT_STORAGE_BASE_URL;
-  const routes = [
+  const protectedRoutes = [
     ["POST", "/api/storage/uploads", {}],
     ["POST", "/api/storage/uploads/contract-probe/complete", { storageId: "contract-probe" }],
     ["DELETE", "/api/storage/uploads/contract-probe", undefined],
-    ["GET", "/api/storage/files/contract-probe", undefined],
   ];
-  for (const [method, path, body] of routes) {
+  for (const [method, path, body] of protectedRoutes) {
     const result = await request(method, path, { baseUrl: storageBaseUrl, body });
     expectStatus(result, 401, true);
   }
+
+  const readFixtureId = process.env.MCONNECT_STORAGE_READ_ID;
+  if (readFixtureId) {
+    const fixtureRead = await request(
+      "GET",
+      `/api/storage/files/${encodeURIComponent(readFixtureId)}`,
+      { baseUrl: storageBaseUrl, redirect: "manual" },
+    );
+    expectStatus(fixtureRead, 307);
+    assert(
+      typeof fixtureRead.location === "string" && fixtureRead.location.length > 0,
+      "storage read returns a redirect target",
+    );
+  } else {
+    console.log("INFO set MCONNECT_STORAGE_READ_ID to verify a real legacy/external file redirect.");
+  }
+
+  const missingRead = await request("GET", "/api/storage/files/contract-probe", {
+    baseUrl: storageBaseUrl,
+    redirect: "manual",
+  });
+  expectStatus(missingRead, 404);
   console.log("INFO compatibility upload is intentionally not POST-probed because that would create a file.");
 }
 
@@ -294,10 +554,35 @@ async function deviceRolloutContracts() {
     ["POST", "/api/push/register", { token: "contract-probe", platform, deviceId: "contract-probe" }, 401],
     ["GET", "/api/hr/staff/security?staffId=contract-probe", undefined, 401],
     ["POST", "/api/hr/staff/device-reset", { staffId: "contract-probe" }, 401],
+    ["POST", "/api/hr/staff/device-reset/bulk", { staffIds: ["contract-probe"] }, 401],
   ];
   for (const [method, path, body, expectedStatus] of protectedRoutes) {
     const result = await request(method, path, { token: invalidToken, body });
     expectStatus(result, expectedStatus, true);
+  }
+}
+
+async function staffSecurityContracts() {
+  const invalidToken = "contract-probe-invalid-token";
+  const routes = [
+    ["GET", "/api/hr/staff/security?staffId=contract-probe", undefined],
+    ["POST", "/api/hr/staff/device-reset", { staffId: "contract-probe" }],
+    ["GET", "/api/hr/staff/active-logins", undefined],
+    ["GET", "/api/hr/staff/active-sessions?staffId=contract-probe", undefined],
+    ["POST", "/api/hr/staff/force-logout", { staffId: "contract-probe" }],
+    ["POST", "/api/hr/staff/logout-device", { staffId: "contract-probe", sessionIds: ["contract-probe"] }],
+    ["POST", "/api/hr/staff/logout-everywhere", { staffId: "contract-probe" }],
+    ["GET", "/api/hr/staff/password-status?staffId=contract-probe", undefined],
+    ["POST", "/api/hr/staff/set-password", { staffId: "contract-probe", newPassword: "Contract1!", mustChangePassword: true }],
+    ["POST", "/api/hr/staff/password-expiry-exempt", { staffId: "contract-probe", exempt: false }],
+    // Keep the newly supplied route last so every existing Security endpoint
+    // is reported even while a backend deployment is still pending.
+    ["POST", "/api/hr/staff/device-reset/bulk", { staffIds: ["contract-probe"] }],
+    ["GET", "/api/hr/staff/selectable-ids?status=active&department=Sales&query=contract-probe", undefined],
+  ];
+  for (const [method, path, body] of routes) {
+    const result = await request(method, path, { token: invalidToken, body });
+    expectStatus(result, 401, true);
   }
 }
 
@@ -485,18 +770,24 @@ async function customRequest() {
 function printHelp() {
   console.log(`Usage:
   node scripts/check-mobile-api.mjs contracts
+  node scripts/check-mobile-api.mjs cp-sv-contracts
+  node scripts/check-mobile-api.mjs geotrack-direct-contracts [--geo-base-url https://api-geo.theairix.com/]
   node scripts/check-mobile-api.mjs storage-contracts [--storage-base-url https://mg.theairix.com/]
   node scripts/check-mobile-api.mjs device-login-contracts
   node scripts/check-mobile-api.mjs device-rollout-contracts --rollout-mode compatibility [--legacy-build 71 --target-build 72]
   node scripts/check-mobile-api.mjs device-rollout-contracts --rollout-mode enforced [--legacy-build 71 --target-build 72]
   node scripts/check-mobile-api.mjs auth-recovery-contracts
+  node scripts/check-mobile-api.mjs staff-security-contracts
   node scripts/check-mobile-api.mjs joint-read
   node scripts/check-mobile-api.mjs joint-flow --allow-write
   node scripts/check-mobile-api.mjs request --method GET --path /api/health [--token-env MCONNECT_TOKEN]
 
 Safe defaults:
   contracts performs unauthenticated route/auth-contract probes only.
+  cp-sv-contracts audits the full CP/SV/booking/collection/tracking/storage route surface without mutations.
+  geotrack-direct-contracts proves both live reads work and every invalid-bearer mobile write is rejected with HTTP 401.
   storage-contracts verifies preferred storage routes reject unauthenticated calls and never uploads bytes.
+  Set MCONNECT_STORAGE_READ_ID to include a non-mutating real-file 307 redirect check.
   device-login-contracts verifies build-aware login routes using empty credentials and never sends an OTP.
   device-rollout-contracts verifies app-version, legacy/target auth gating, and protected support routes without real credentials.
   auth-recovery-contracts validates the two pre-login routes using empty, non-mutating bodies.
@@ -515,10 +806,13 @@ Tokens and OTP values are never printed. Set --verbose to print redacted respons
 try {
   if (args.help) printHelp();
   else if (command === "contracts") await contracts();
+  else if (command === "cp-sv-contracts") await cpSvContracts();
+  else if (command === "geotrack-direct-contracts") await geoTrackDirectContracts();
   else if (command === "storage-contracts") await storageContracts();
   else if (command === "device-login-contracts") await deviceLoginContracts();
   else if (command === "device-rollout-contracts") await deviceRolloutContracts();
   else if (command === "auth-recovery-contracts") await authRecoveryContracts();
+  else if (command === "staff-security-contracts") await staffSecurityContracts();
   else if (command === "joint-read") await jointReadAudit();
   else if (command === "joint-flow") await jointFullFlow();
   else if (command === "request") await customRequest();

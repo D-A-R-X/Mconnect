@@ -602,8 +602,22 @@ interface GeoTrackApi {
         @Query("id") id: String,
     ): JointCpWorkflowResponse
 
+    @GET("api/marketing/clientPlaceVisits/completed-count")
+    suspend fun getCompletedCpCount(
+        @Header("Authorization") token: String,
+        @Query("date") date: String,
+        @Query("staffId") staffId: String? = null,
+    ): CpCompletedCountResponse
+
     @POST("api/marketing/clientPlaceVisits/joint-arrival-preflight")
     suspend fun preflightJointCpArrival(
+        @Header("Authorization") token: String,
+        @Body body: JointCpLocationRequest,
+    ): JointCpWorkflowResponse
+
+    /** Higher-level participant's no-OTP arrival/proximity confirmation. */
+    @POST("api/marketing/clientPlaceVisits/joint-participant-ready")
+    suspend fun markJointCpParticipantReady(
         @Header("Authorization") token: String,
         @Body body: JointCpLocationRequest,
     ): JointCpWorkflowResponse
@@ -736,6 +750,17 @@ interface GeoTrackApi {
                 }
                 response
             }
+            val completionTimeout = okhttp3.Interceptor { chain ->
+                val path = chain.request().url.encodedPath
+                if (path in SLOW_COMPLETION_PATHS) {
+                    // These mutations can finish their database work after a
+                    // normal 30-second response window. Do not report a network
+                    // failure after the server has already committed the CP/SV.
+                    chain.withReadTimeout(90, TimeUnit.SECONDS).proceed(chain.request())
+                } else {
+                    chain.proceed(chain.request())
+                }
+            }
             val client = OkHttpClient.Builder()
                 // Offline support — see OfflineHttpCache: GETs are stored and
                 // replayed when the device has no network, so screens keep
@@ -743,6 +768,7 @@ interface GeoTrackApi {
                 .apply { OfflineHttpCache.cache()?.let { cache(it) } }
                 .addInterceptor(OfflineHttpCache.serveStaleWhenOffline)
                 .addNetworkInterceptor(OfflineHttpCache.storeResponses)
+                .addInterceptor(completionTimeout)
                 .addInterceptor(authWatchdog)
                 .addInterceptor(logging)
                 .connectTimeout(30, TimeUnit.SECONDS)
@@ -755,6 +781,13 @@ interface GeoTrackApi {
                 .build()
                 .create(GeoTrackApi::class.java)
         }
+
+        private val SLOW_COMPLETION_PATHS = setOf(
+            "/api/geotrack/visit/complete",
+            "/api/marketing/clientPlaceVisits/setOutcome",
+            "/api/marketing/clientPlaceVisits/joint-submit-review",
+            "/api/marketing/clientPlaceVisits/joint-complete-review",
+        )
 
     }
 }
@@ -872,6 +905,12 @@ data class GeoTrackResponse(
     val success: Boolean,
     val error: String? = null,
     val status: String? = null,
+    // CP setOutcome returns the updated parent row inside `visit`. Keep the
+    // top-level aliases too because older deployments returned them directly.
+    // Outcome callers must validate this state before closing the field trip.
+    val outcome: String? = null,
+    val cpVisitStatus: String? = null,
+    val visit: CpVisitDetail? = null,
     val clientPlaceVisitId: String? = null,
     val siteVisitId: String? = null,
     val confirmationStatus: String? = null,
@@ -1293,6 +1332,9 @@ data class SetOutcomeRequest(
     // the backend spawns the next collection_cp for this date/time.
     val followUpDate: String? = null,
     val followUpTime: String? = null,
+    // Required to attribute a Joint CP outcome to the authenticated lower-level
+    // participant. Harmless for ordinary CPs and ignored by older servers.
+    val actingStaffId: String? = null,
 )
 
 // ── Out-of-geofence CP completion GM approval ──
@@ -1904,6 +1946,11 @@ data class JointCpParticipant(
     val workflowRole: String? = null,
     val routeColor: String? = null,
     val fieldVisitId: String? = null,
+    val readyAt: Long? = null,
+    val readyLat: Double? = null,
+    val readyLng: Double? = null,
+    val readyAccuracyMeters: Double? = null,
+    val readyFieldVisitId: String? = null,
 )
 
 /**
@@ -1924,7 +1971,9 @@ data class JointCpSummary(
 
 data class JointCpWorkflowResponse(
     val success: Boolean,
+    val visit: CpVisitDetail? = null,
     val workflow: JointCpWorkflow? = null,
+    val creditedStaffIds: List<String>? = null,
     val error: String? = null,
     val code: String? = null,
 )
@@ -1941,6 +1990,11 @@ data class JointCpWorkflow(
     val canSubmitOutcome: Boolean = false,
     val canReview: Boolean = false,
     val canCompleteReview: Boolean = false,
+    // True after this bearer has explicitly swiped and the server accepted a
+    // fresh <50 m proximity check. The reviewer never receives an OTP.
+    // Null means a legacy deployment that predates reviewer readiness. Only an
+    // explicit false may force the new swipe, so mixed rollouts keep working.
+    val actorReady: Boolean? = null,
     val separationMeters: Double? = null,
     val isWithinCompletionRadius: Boolean = false,
     val requiredRadiusMeters: Double = 50.0,
@@ -1948,6 +2002,8 @@ data class JointCpWorkflow(
     val outcome: String? = null,
     @JsonAdapter(FlexibleDisplayStringDeserializer::class)
     val outcomeSummary: String? = null,
+    val reviewerRemark: String? = null,
+    val creditedStaffIds: List<String>? = null,
     val reviewedByName: String? = null,
     val reviewedByTemplateName: String? = null,
     val completedAt: Long? = null,
@@ -2059,6 +2115,19 @@ data class CpVisitFilterOption(
     val count: Int? = null,
 )
 
+data class CpCompletedCountResponse(
+    val success: Boolean = false,
+    val date: String? = null,
+    val staffId: String? = null,
+    val completedCount: Int = 0,
+    val visitIds: List<String>? = null,
+    val error: String? = null,
+    val code: String? = null,
+) {
+    val safeVisitIds: List<String>
+        get() = visitIds.orEmpty()
+}
+
 data class CpVisitFilterOptionsResponse(
     val success: Boolean = false,
     val fieldStaff: List<CpVisitFilterOption>? = null,
@@ -2094,6 +2163,10 @@ data class CpVisitDetail(
     val activityDate: String? = null,
     val scheduledTime: String? = null,
     val status: String? = null,
+    // Server-normalized parent/trip status. Prefer this whenever the updated
+    // endpoint supplies it so Android and web classify repaired legacy rows
+    // identically while retaining local fallback for older deployments.
+    val effectiveStatus: String? = null,
     val clientMet: Boolean? = null,
     val clientMetAt: Long? = null,
     val clientNoShowReason: String? = null,

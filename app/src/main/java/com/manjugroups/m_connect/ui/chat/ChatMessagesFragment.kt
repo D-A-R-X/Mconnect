@@ -789,12 +789,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
     }
 
     private fun resolveStorageUrl(storageId: String, onResolved: (String?) -> Unit) {
-        viewLifecycleOwner.lifecycleScope.launch {
-            val resolved = runCatching {
-                api.getStorageUrl(session.bearerToken, storageId)
-            }.getOrNull()?.url
-            onResolved(resolved)
-        }
+        onResolved(com.manjugroups.m_connect.network.MobileStorageFiles.resolve(storageId))
     }
 
     private fun showImagePreview(url: String) {
@@ -1060,9 +1055,9 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
                 targets.forEach { (sid, urlOrNull, _) ->
                     launch {
                         semaphore.withPermit {
-                            val url = urlOrNull?.takeIf { it.isNotBlank() } ?: runCatching {
-                                api.getStorageUrl(session.bearerToken, sid).url
-                            }.getOrNull()
+                            val url = com.manjugroups.m_connect.network.MobileStorageFiles.resolve(
+                                urlOrNull?.takeIf { it.isNotBlank() } ?: sid,
+                            )
                             if (url.isNullOrBlank()) return@withPermit
                             val durationMs = probeMediaDuration(url) ?: return@withPermit
                             val label = formatAudioMillis(durationMs)

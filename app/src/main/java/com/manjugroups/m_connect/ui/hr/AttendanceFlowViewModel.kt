@@ -146,7 +146,7 @@ class AttendanceFlowViewModel(
                 // the mobile sessions, NOT the server's hasOpenSession (which
                 // counts every punch source).
                 val sessions = (dayResp?.sessions ?: attendance?.sessions).orEmpty()
-                val clockedOutOnMobileForUi = computeClockedOutOnMobile(sessions)
+                val clockedOutOnMobileForUi = AttendanceTrackingGate.wasClockedOutOnMobile(sessions)
                 val hasClockedInTodayForUi =
                     AttendanceTrackingGate.isClockedInForToday(firstPunchIn, hasOpenSession)
                 // "Clocked in" (drives the live ticker, header and range label)
@@ -803,34 +803,7 @@ class AttendanceFlowViewModel(
          * while a biometric punch-out mid-shift never clocks the person out.
          */
         internal fun computeClockedOutOnMobile(sessions: List<SessionData>): Boolean {
-            var latestMobileOutMs: Long? = null
-            var latestActivityMs: Long? = null
-            for (s in sessions) {
-                s.punchInTime?.takeIf { it.isNotBlank() }?.let { iso ->
-                    parseMillis(iso)?.let { t ->
-                        if (latestActivityMs == null || t > latestActivityMs!!) latestActivityMs = t
-                    }
-                }
-                s.punchOutTime?.takeIf { it.isNotBlank() }?.let { iso ->
-                    parseMillis(iso)?.let { t ->
-                        // Only an EXPLICIT mobile punch-out counts as a mobile
-                        // clock-out. Do NOT fall back to the session's punch-IN
-                        // source — a session punched IN via mobile and OUT at a
-                        // biometric gate has no punchOutSource on older rows, and
-                        // the fallback mis-read that gate punch-out as a MOBILE
-                        // clock-out, flipping the app to "clocked out" (the
-                        // reported bug). Unknown/biometric out = activity, not a
-                        // mobile clock-out.
-                        if (s.punchOutSource.equals("mobile", ignoreCase = true)) {
-                            if (latestMobileOutMs == null || t > latestMobileOutMs!!) latestMobileOutMs = t
-                        } else {
-                            if (latestActivityMs == null || t > latestActivityMs!!) latestActivityMs = t
-                        }
-                    }
-                }
-            }
-            val mobileOut = latestMobileOutMs ?: return false
-            return latestActivityMs == null || mobileOut >= latestActivityMs!!
+            return AttendanceTrackingGate.wasClockedOutOnMobile(sessions)
         }
 
         internal fun formatIsoToTime(iso: String): String {

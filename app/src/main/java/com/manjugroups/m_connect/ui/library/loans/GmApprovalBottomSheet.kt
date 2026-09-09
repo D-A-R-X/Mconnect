@@ -140,7 +140,7 @@ class GmApprovalBottomSheet(
             .setPositiveButton("Close", null)
             .create()
         dialog.show()
-        val url = "${com.manjugroups.m_connect.BuildConfig.BASE_URL}api/storage/serve?storageId=$storageId"
+        val url = com.manjugroups.m_connect.network.MobileStorageFiles.resolve(storageId) ?: return
         viewLifecycleOwner.lifecycleScope.launch {
             runCatching {
                 val bmp = withContext(Dispatchers.IO) {
@@ -262,10 +262,8 @@ class GmApprovalBottomSheet(
     private fun loadSignatureImage(token: String, storageId: String, target: ImageView) {
         viewLifecycleOwner.lifecycleScope.launch {
             runCatching {
-                // Hit the public serve endpoint directly. /api/storage/get-url can
-                // return an internal URL the device can't reach (the same issue the
-                // web had), which left the signature preview blank.
-                val url = "${com.manjugroups.m_connect.BuildConfig.BASE_URL}api/storage/serve?storageId=$storageId"
+                val url = com.manjugroups.m_connect.network.MobileStorageFiles.resolve(storageId)
+                    ?: error("Storage resolver URL is unavailable")
                 val bitmap = withContext(Dispatchers.IO) {
                     val client = OkHttpClient()
                     val request = Request.Builder().url(url).build()

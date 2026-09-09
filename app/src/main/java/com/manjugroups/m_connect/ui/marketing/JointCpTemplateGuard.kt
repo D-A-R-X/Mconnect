@@ -39,9 +39,12 @@ object JointCpTemplateGuard {
         }
     }
 
-    /** Server contract requires both unique participants, regardless of UI order. */
+    /** Server contract receives owner first and reviewer second, regardless of UI order. */
     fun participantIds(primary: StaffData?, partner: StaffData?): List<String>? {
-        if (rejection(primary, partner) != null) return null
-        return listOf(primary!!.id!!.trim(), partner!!.id!!.trim())
+        val assignment = assignment(primary, partner) ?: return null
+        return listOf(
+            assignment.outcomeOwner.id!!.trim(),
+            assignment.reviewer.id!!.trim(),
+        )
     }
 }

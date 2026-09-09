@@ -24,6 +24,8 @@ import com.manjugroups.m_connect.network.AssignedPlace
 import com.manjugroups.m_connect.network.TodayVisit
 import com.manjugroups.m_connect.ui.common.preferredCpClientName
 import com.manjugroups.m_connect.ui.common.preferredCpClientPhone
+import com.manjugroups.m_connect.ui.marketing.participantFor
+import com.manjugroups.m_connect.ui.marketing.resolveCpActivityDate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -151,7 +153,9 @@ class HomeViewModel : ViewModel() {
 
                 val permLeft = permUsage?.remainingHours ?: 0
 
-                val att = attendance?.attendance
+                val validAttendance = attendance?.takeIf { it.success }
+                val validDaySessions = daySessions?.takeIf { it.success }
+                val att = validAttendance?.attendance
                 val sessions = mutableListOf<SessionItem>()
                 var hasOpen = false
                 var openNow = false
@@ -163,34 +167,40 @@ class HomeViewModel : ViewModel() {
                 // Did EITHER attendance source answer? When both fail (a network
                 // blip, a slow backend) we must not conclude "not clocked in" —
                 // see the copy below.
-                val attendanceKnown = att != null || daySessions != null
+                val attendanceKnown = validAttendance != null || validDaySessions != null
 
-                if (att == null && daySessions != null) {
+                if (att == null && validDaySessions != null) {
                     // The today-summary call failed but the sessions call
                     // answered. Sessions alone still prove an open session, so
                     // derive from them rather than falling through as "not
                     // clocked in".
-                    openNow = AttendanceTrackingGate.hasOpenSession(
-                        daySessions.hasOpenSession,
-                        daySessions.sessions,
+                    openNow = AttendanceTrackingGate.isMobileWorkSessionActive(
+                        firstPunchIn = validDaySessions.firstPunchIn,
+                        hasOpenSession = validDaySessions.hasOpenSession,
+                        sessions = validDaySessions.sessions,
                     )
                     hasOpen = AttendanceTrackingGate.isClockedInForToday(
-                        firstPunchIn = daySessions.firstPunchIn,
+                        firstPunchIn = validDaySessions.firstPunchIn,
                         hasOpenSession = openNow,
                     )
-                    firstPunchInMillis = daySessions.firstPunchIn?.let { parseMillis(it) } ?: 0L
+                    firstPunchInMillis = validDaySessions.firstPunchIn?.let { parseMillis(it) } ?: 0L
                 }
 
                 if (att != null) {
-                    val firstPunchIn = daySessions?.firstPunchIn ?: att.firstPunchIn
-                    // Raw "open session right now" — kept separately from the
-                    // lenient day gate so trip-start can require a live session.
-                    openNow = AttendanceTrackingGate.hasOpenSession(
+                    val firstPunchIn = validDaySessions?.firstPunchIn ?: att.firstPunchIn
+                    val sourceSessions = validDaySessions?.sessions?.takeIf { it.isNotEmpty() }
+                        ?: att.sessions
+                    val rawOpenSession = AttendanceTrackingGate.hasOpenSession(
                         att.hasOpenSession,
                         att.sessions,
                     ) || AttendanceTrackingGate.hasOpenSession(
-                        daySessions?.hasOpenSession,
-                        daySessions?.sessions,
+                        validDaySessions?.hasOpenSession,
+                        validDaySessions?.sessions,
+                    )
+                    openNow = AttendanceTrackingGate.isMobileWorkSessionActive(
+                        firstPunchIn = firstPunchIn,
+                        hasOpenSession = rawOpenSession,
+                        sessions = sourceSessions,
                     )
                     hasOpen = AttendanceTrackingGate.isClockedInForToday(
                         firstPunchIn = firstPunchIn,
@@ -458,9 +468,7 @@ class HomeViewModel : ViewModel() {
                     )
                     if (cpResp.success) {
                         cpFetched = cpResp.visits.size
-                        val legacyCpIds = legacyVisits.mapNotNull { it.clientPlaceVisitId }.toHashSet()
-                        // Keep every CP visit the server returned, dedup'd
-                        // against the legacy list. We deliberately do NOT
+                        // Keep every actionable CP visit the server returned. We deliberately do NOT
                         // filter by scheduledDate here: the previous
                         // today-only / today-or-overdue clamps dropped
                         // every visit on the test backend because they
@@ -471,16 +479,33 @@ class HomeViewModel : ViewModel() {
                         // Only "cancelled" and "completed" are hard
                         // exclusions — cancelled visits aren't actionable,
                         // and completed ones already lived their day.
-                        val extras = cpResp.visits
-                            .filter { detail ->
-                                val id = detail.id ?: return@filter false
-                                if (id in legacyCpIds) return@filter false
-                                val status = detail.status?.lowercase(Locale.getDefault())
-                                if (status == "cancelled") return@filter false
-                                if (status == "completed") return@filter false
-                                true
+                        val authoritativeCpIds = mutableSetOf<String>()
+                        val hiddenTerminalStatuses = setOf(
+                            "completed", "complete", "done", "closed", "cancelled", "canceled",
+                        )
+                        val extras = cpResp.visits.mapNotNull { detail ->
+                            val id = detail.id ?: return@mapNotNull null
+                            val mapped = detail.toTodayVisitOrNull(session?.staffId)
+                            val status = mapped?.status
+                                ?.trim()
+                                ?.lowercase(Locale.getDefault())
+                                ?: detail.status?.trim()?.lowercase(Locale.getDefault())
+                            if (status in hiddenTerminalStatuses) {
+                                // The parent CP is authoritative. Remove any stale legacy
+                                // field-visit card that still says Start/Enroute, but do not
+                                // add terminal work back to Today's actionable list.
+                                authoritativeCpIds += id
+                                return@mapNotNull null
                             }
-                            .mapNotNull { detail -> detail.toTodayVisitOrNull() }
+                            if (mapped != null) authoritativeCpIds += id
+                            mapped
+                        }
+                        // `/today-visits` can trail the CP parent after completion or
+                        // cancellation. Replace its duplicate instead of discarding the
+                        // newer CP row; otherwise terminal visits resurrect as Start/Enroute.
+                        merged.removeAll { legacy ->
+                            legacy.clientPlaceVisitId?.let(authoritativeCpIds::contains) == true
+                        }
                         cpKept = extras.size
                         Log.d(TAG, "Today visits (CP merge): +${extras.size}")
                         merged.addAll(extras)
@@ -630,9 +655,18 @@ class HomeViewModel : ViewModel() {
      * usable card — we need an id, a clientPlaceId proxy, and at
      * minimum a scheduledDate.
      */
-    private fun com.manjugroups.m_connect.network.CpVisitDetail.toTodayVisitOrNull(): TodayVisit? {
+    private fun com.manjugroups.m_connect.network.CpVisitDetail.toTodayVisitOrNull(
+        currentStaffId: String?,
+    ): TodayVisit? {
         val cpId = this.id ?: return null
         val scheduled = this.scheduledDate ?: return null
+        val actorParticipant = this.joint.participantFor(currentStaffId)
+        val actorFieldVisitId = com.manjugroups.m_connect.ui.marketing.resolveCpFieldVisitId(
+            cpVisitId = cpId,
+            parentFieldVisitId = this.fieldVisitId,
+            joint = this.joint,
+            currentStaffId = currentStaffId,
+        )
         // We use the CP visit id as the row id because the server-side
         // resolver added earlier accepts either a fieldVisits id or a
         // clientPlaceVisits id on startVisit / OTP / completeVisit. That
@@ -647,7 +681,21 @@ class HomeViewModel : ViewModel() {
         // so a completed CP whose field visit was left open showed as Enroute
         // with a Start action and never closed.
         val effectiveStatus = com.manjugroups.m_connect.ui.marketing
-            .resolveCpEffectiveStatus(this.status, this.fieldVisit?.status)
+            .resolveParticipantCpEffectiveStatus(
+                this.effectiveStatus,
+                this.status,
+                this.fieldVisit?.status,
+                this.joint,
+                currentStaffId,
+            )
+        val displayDate = resolveCpActivityDate(
+            scheduledDate = scheduled,
+            serverActivityDate = this.activityDate,
+            cpCompletedAt = this.completedAt,
+            fieldVisitCompletedAt = this.fieldVisit?.completedAt,
+            participantStartedAt = actorParticipant?.startedAt,
+            fieldVisitStartedAt = this.fieldVisit?.startedAt,
+        )
         // Detect "this CP was an SV-fix routed through CP first" using
         // the same three signals the outcome sheet uses for its locked
         // mode. Any one of these is enough: an explicit proposed SV
@@ -692,9 +740,9 @@ class HomeViewModel : ViewModel() {
             ?: phoneLabel
             ?: "CP visit"
         return TodayVisit(
-            id = cpId,
+            id = actorFieldVisitId,
             clientPlaceId = this.clientPlaceId ?: cpId,
-            scheduledDate = scheduled,
+            scheduledDate = displayDate,
             status = effectiveStatus,
             visitCategory = category,
             placeName = displayName,
@@ -704,9 +752,15 @@ class HomeViewModel : ViewModel() {
             placeLng = this.clientPlace?.lng,
             tripType = "client_place",
             clientPlaceVisitId = cpId,
+            joint = this.joint,
             leadName = resolvedClientName,
             leadPhone = phoneLabel,
             scheduledStartTime = this.scheduledTime,
+            bdoName = this.assignedStaff?.name?.takeIf { it.isNotBlank() },
+            bdoStaffId = this.assignedStaffId,
+            lmoName = this.telecaller?.name?.takeIf { it.isNotBlank() }
+                ?: this.telecaller?.staffName?.takeIf { it.isNotBlank() },
+            lmoStaffId = this.telecallerStaffId,
             // CpVisitDetail.createdAt is the same monotonic ms value
             // Convex uses for `_creationTime` (the createCpVisitRows
             // mutation seeds it from Date.now() at insert). Forwarding

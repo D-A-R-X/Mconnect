@@ -101,19 +101,17 @@ class LoginActivity : AppCompatActivity() {
                         }
                         is AuthUiState.OtpSent -> {
                             resetButton()
-                            val phone = normalizePhone(binding.etPhone.text.toString())
-                            startActivity(Intent(this@LoginActivity, OtpActivity::class.java).apply {
-                                putExtra(OtpActivity.EXTRA_PHONE, phone)
-                                putExtra(OtpActivity.EXTRA_AGENCY_DRIVER, state.agencyDriver)
-                            })
+                            openOtpEntry(state.agencyDriver)
                             viewModel.resetState()
                         }
                         is AuthUiState.Error -> {
                             resetButton()
                             val msg = state.message
-                            // Suppress dev-mode "OTP sent" confirmation that the backend
-                            // sometimes returns in the error channel.
-                            if (!msg.contains("otp sent", ignoreCase = true)) {
+                            // Defensive compatibility for older gateways that returned a
+                            // successful dispatch message inside an error envelope.
+                            if (otpDispatchWasAcknowledged(null, msg, null)) {
+                                openOtpEntry(agencyDriver = false)
+                            } else {
                                 Toast.makeText(this@LoginActivity, msg, Toast.LENGTH_SHORT).show()
                             }
                             viewModel.resetState()
@@ -139,6 +137,18 @@ class LoginActivity : AppCompatActivity() {
         SkeletonUtils.stopSkeletonPulse(binding.skeletonSendOtp)
         binding.skeletonSendOtp.visibility = View.GONE
         binding.btnSendOtp.isClickable = true
+    }
+
+    private fun openOtpEntry(agencyDriver: Boolean) {
+        val phone = normalizePhone(binding.etPhone.text.toString())
+        if (!isValidIndianMobile(phone)) {
+            showPhoneError(getString(R.string.phone_invalid))
+            return
+        }
+        startActivity(Intent(this, OtpActivity::class.java).apply {
+            putExtra(OtpActivity.EXTRA_PHONE, phone)
+            putExtra(OtpActivity.EXTRA_AGENCY_DRIVER, agencyDriver)
+        })
     }
 
     private fun goToNext() {

@@ -1,5 +1,12 @@
 # Device login update: backend endpoint handoff
 
+> **Incident rollout update (2026-09-08):** For the current fleet-wide
+> Play-signing identity mismatch, follow
+> `PLAYSTORE_DEVICE_BINDING_LOGIN_ENDPOINTS.md`. Its audited, one-time
+> active-staff reset supersedes this document's earlier gradual-migration-only
+> rollout. The strict one-account/one-device rule resumes as soon as each staff
+> member completes the first post-reset login.
+
 ## Goal
 
 After the Android and iOS update, every legitimate staff device must be able to
