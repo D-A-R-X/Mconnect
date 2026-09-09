@@ -1885,8 +1885,12 @@ data class JointCpWorkflowResponse(
     val visit: CpVisitDetail? = null,
     val workflow: JointCpWorkflow? = null,
     val creditedStaffIds: List<String>? = null,
+    val alreadyCompleted: Boolean? = null,
     val error: String? = null,
     val code: String? = null,
+    val requiredRadiusMeters: Double? = null,
+    val maximumAccuracyMeters: Double? = null,
+    val maximumLocationAgeMs: Long? = null,
 )
 
 data class JointCpWorkflow(
@@ -1902,13 +1906,13 @@ data class JointCpWorkflow(
     val canReview: Boolean = false,
     val canCompleteReview: Boolean = false,
     // True after this bearer has explicitly swiped and the server accepted a
-    // fresh <50 m proximity check. The reviewer never receives an OTP.
-    // Null means a legacy deployment that predates reviewer readiness. Only an
-    // explicit false may force the new swipe, so mixed rollouts keep working.
+    // fresh <=100 m proximity check. The reviewer never receives an OTP.
+    // Null means the server did not confirm readiness. The reviewer must still
+    // receive the proximity action so a partial/mixed rollout cannot deadlock.
     val actorReady: Boolean? = null,
     val separationMeters: Double? = null,
     val isWithinCompletionRadius: Boolean = false,
-    val requiredRadiusMeters: Double = 50.0,
+    val requiredRadiusMeters: Double = 100.0,
     val outcomeRevision: Long? = null,
     val outcome: String? = null,
     @JsonAdapter(FlexibleDisplayStringDeserializer::class)

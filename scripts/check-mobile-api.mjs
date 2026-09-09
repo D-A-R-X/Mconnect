@@ -106,10 +106,13 @@ async function request(method, path, options = {}) {
     durationMs: Math.round(performance.now() - startedAt),
     location: response.headers.get("location"),
     contentType: response.headers.get("content-type"),
+    serverTiming: response.headers.get("server-timing"),
+    traceTotalMs: response.headers.get("x-api-trace-total-ms"),
     data,
   };
   results.push(result);
-  console.log(`${response.ok ? "PASS" : "HTTP"} ${method} ${result.path} -> ${response.status} (${result.durationMs} ms)`);
+  const traceSuffix = result.traceTotalMs == null ? "" : `, server ${result.traceTotalMs} ms`;
+  console.log(`${response.ok ? "PASS" : "HTTP"} ${method} ${result.path} -> ${response.status} (${result.durationMs} ms${traceSuffix})`);
   if (args.verbose) console.log(JSON.stringify(redact(data), null, 2));
   return result;
 }
@@ -129,6 +132,17 @@ function expectStatus(result, expected, requireStructuredSuccess = false) {
     assert(typeof result.data === "object" && result.data !== null, `${result.method} ${result.path} returned JSON`);
     assert("success" in result.data, `${result.method} ${result.path} returned structured JSON`);
   }
+}
+
+function expectMobileTiming(result) {
+  assert(
+    typeof result.serverTiming === "string" && result.serverTiming.length > 0,
+    `${result.method} ${result.path} returns Server-Timing`,
+  );
+  assert(
+    Number.isFinite(Number(result.traceTotalMs)),
+    `${result.method} ${result.path} returns X-Api-Trace-Total-Ms`,
+  );
 }
 
 async function contracts() {
@@ -434,6 +448,74 @@ async function geoTrackDirectContracts() {
   assert(failures.length === 0, failures.join("; "));
 }
 
+function decodeGooglePolyline(encoded) {
+  const points = [];
+  let index = 0;
+  let latitude = 0;
+  let longitude = 0;
+  const nextValue = () => {
+    let shift = 0;
+    let result = 0;
+    while (index < encoded.length) {
+      const byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+      if (byte < 0x20) return (result & 1) ? ~(result >> 1) : result >> 1;
+    }
+    return null;
+  };
+  while (index < encoded.length) {
+    const deltaLatitude = nextValue();
+    const deltaLongitude = nextValue();
+    if (deltaLatitude === null || deltaLongitude === null) break;
+    latitude += deltaLatitude;
+    longitude += deltaLongitude;
+    points.push([latitude / 100_000, longitude / 100_000]);
+  }
+  return points;
+}
+
+async function geoTrackMapContracts() {
+  const geoBaseUrl = args["geo-base-url"]
+    ?? process.env.GEOTRACK_API_BASE_URL
+    ?? DEFAULT_GEO_BASE_URL;
+  const token = requireEnv("MCONNECT_TOKEN");
+  const route = await request("POST", "/api/geotrack/route", {
+    baseUrl: geoBaseUrl,
+    token,
+    body: {
+      originLat: 13.067439,
+      originLng: 80.237617,
+      destLat: 13.1049,
+      destLng: 80.2367,
+    },
+  });
+  expectStatus(route, 200, true);
+  assert(route.data.success === true, "route helper reports success");
+  assert(typeof route.data.encodedPolyline === "string", "route helper returns encodedPolyline");
+  assert(decodeGooglePolyline(route.data.encodedPolyline).length >= 3, "route contains road geometry, not only endpoints");
+  assert(Number(route.data.distanceMeters) > 0, "route returns a positive distance");
+  assert(Number(route.data.durationSeconds) > 0, "route returns a positive duration");
+
+  const geocode = await request("POST", "/api/geotrack/geocode-address", {
+    baseUrl: geoBaseUrl,
+    token,
+    body: { address: "4th Main Road, Ward 100, Chennai, Tamil Nadu 600040" },
+  });
+  expectStatus(geocode, 200, true);
+  assert(geocode.data.success === true, "geocode helper reports success");
+  assert(Number.isFinite(Number(geocode.data.lat)), "geocode returns latitude");
+  assert(Number.isFinite(Number(geocode.data.lng)), "geocode returns longitude");
+
+  const places = await request("GET", "/api/tracking/places/search?q=Anna%20Nagar%20Chennai", {
+    baseUrl: geoBaseUrl,
+    token,
+  });
+  expectStatus(places, 200, true);
+  assert(places.data.success === true, "place search reports success");
+  assert(Array.isArray(places.data.data), "place search returns a data array");
+}
+
 async function storageContracts() {
   const storageBaseUrl = args["storage-base-url"]
     ?? process.env.MFPL_API_BASE_URL
@@ -646,10 +728,13 @@ function workflowFrom(result, who) {
 }
 
 async function getWorkflow(token, cpId, who) {
-  return workflowFrom(
-    await request("GET", `/api/marketing/clientPlaceVisits/joint-workflow?id=${encodeURIComponent(cpId)}`, { token }),
-    who,
+  const result = await request(
+    "GET",
+    `/api/marketing/clientPlaceVisits/joint-workflow?id=${encodeURIComponent(cpId)}`,
+    { token },
   );
+  expectMobileTiming(result);
+  return workflowFrom(result, who);
 }
 
 async function completedList(token) {
@@ -703,6 +788,7 @@ async function successfulPost(path, token, body, idempotent = false) {
   const result = await request("POST", path, { token, body, headers });
   assert(result.status >= 200 && result.status < 300, `${path} returns HTTP success`);
   assert(result.data?.success === true, `${path} returns success=true`);
+  expectMobileTiming(result);
   return result.data;
 }
 
@@ -732,7 +818,8 @@ async function jointFullFlow() {
     lowToken,
     { id: cpId, fieldVisitId, lat, lng, accuracyMeters, capturedAt: Date.now() },
   );
-  assert(preflight.workflow?.isWithinCompletionRadius === true, "server confirms both staff are strictly within 50 metres");
+  assert(preflight.workflow?.isWithinCompletionRadius === true, "server confirms both staff are within 100 metres");
+  assert(Number(preflight.workflow?.requiredRadiusMeters) === 100, "server reports the 100 metre Joint CP radius");
   const seniorOtpAttempt = await request(
     "POST",
     "/api/geotrack/visit/arrival-otp/request",
@@ -825,6 +912,7 @@ function printHelp() {
   node scripts/check-mobile-api.mjs contracts
   node scripts/check-mobile-api.mjs cp-sv-contracts
   node scripts/check-mobile-api.mjs geotrack-direct-contracts [--geo-base-url https://api-geo.theairix.com/]
+  node scripts/check-mobile-api.mjs geotrack-map-contracts [--geo-base-url https://api-geo.theairix.com/]
   node scripts/check-mobile-api.mjs storage-contracts [--storage-base-url https://mg.theairix.com/]
   node scripts/check-mobile-api.mjs device-login-contracts
   node scripts/check-mobile-api.mjs device-rollout-contracts --rollout-mode compatibility [--legacy-build 71 --target-build 72]
@@ -839,6 +927,7 @@ Safe defaults:
   contracts performs unauthenticated route/auth-contract probes only.
   cp-sv-contracts audits the full CP/SV/booking/collection/tracking/storage route surface without mutations.
   geotrack-direct-contracts proves both live reads work and every invalid-bearer mobile write is rejected with HTTP 401.
+  geotrack-map-contracts uses MCONNECT_TOKEN for read-only route, geocode, and place-search success checks.
   storage-contracts verifies preferred storage routes reject unauthenticated calls and never uploads bytes.
   Set MCONNECT_STORAGE_READ_ID to include a non-mutating real-file 307 redirect check.
   device-login-contracts verifies build-aware login routes using empty credentials and never sends an OTP.
@@ -861,6 +950,7 @@ try {
   else if (command === "contracts") await contracts();
   else if (command === "cp-sv-contracts") await cpSvContracts();
   else if (command === "geotrack-direct-contracts") await geoTrackDirectContracts();
+  else if (command === "geotrack-map-contracts") await geoTrackMapContracts();
   else if (command === "storage-contracts") await storageContracts();
   else if (command === "device-login-contracts") await deviceLoginContracts();
   else if (command === "device-rollout-contracts") await deviceRolloutContracts();

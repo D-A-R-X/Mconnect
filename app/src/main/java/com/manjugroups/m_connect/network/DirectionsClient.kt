@@ -105,8 +105,16 @@ object DirectionsClient {
             }
             val distMeters = (resp.distanceMeters ?: 0.0).toInt()
             val durSeconds = (resp.durationSeconds ?: 0.0).toInt()
+            val points = decodePolyline(encoded)
+            if (points.size < 2 || points.any { point ->
+                    point.latitude !in -90.0..90.0 || point.longitude !in -180.0..180.0
+                }
+            ) {
+                android.util.Log.w("DirectionsClient", "Backend route returned invalid geometry")
+                return@withContext null
+            }
             DirectionsResult(
-                polyline = decodePolyline(encoded),
+                polyline = points,
                 distanceMeters = distMeters,
                 durationSeconds = durSeconds,
                 distanceText = formatDistance(distMeters),
@@ -226,7 +234,7 @@ object DirectionsClient {
      * Decodes Google's encoded polyline algorithm.
      * https://developers.google.com/maps/documentation/utilities/polylinealgorithm
      */
-    private fun decodePolyline(encoded: String): List<LatLng> {
+    internal fun decodePolyline(encoded: String): List<LatLng> {
         val poly = ArrayList<LatLng>(encoded.length / 2)
         var index = 0
         var lat = 0

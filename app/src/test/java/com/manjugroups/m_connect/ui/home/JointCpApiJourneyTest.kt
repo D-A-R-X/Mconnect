@@ -186,6 +186,7 @@ class JointCpApiJourneyTest {
         )
         assertTrue(preflight.workflow?.isWithinCompletionRadius == true)
         assertTrue(preflight.workflow?.canRequestOtp == true)
+        assertEquals(100.0, preflight.workflow?.requiredRadiusMeters ?: 0.0, 0.0)
         take(
             "POST",
             "/api/marketing/clientPlaceVisits/joint-arrival-preflight",
@@ -571,7 +572,7 @@ class JointCpApiJourneyTest {
             "actorReady":$actorReady,
             "separationMeters":4.7,
             "isWithinCompletionRadius":$withinRadius,
-            "requiredRadiusMeters":50.0,
+            "requiredRadiusMeters":100.0,
             "outcome":${outcome?.let { "\"$it\"" } ?: "null"},
             "outcomeRevision":${revision ?: "null"}
         }

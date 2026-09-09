@@ -684,6 +684,9 @@ class HomeViewModel : ViewModel() {
                 this.fieldVisit?.status,
                 this.joint,
                 currentStaffId,
+                cpCompletedAt = this.completedAt,
+                fieldVisitCompletedAt = this.fieldVisit?.completedAt,
+                arrivalOtpVerifiedAt = this.arrivalProof?.otpVerifiedAt,
             )
         val displayDate = resolveCpActivityDate(
             scheduledDate = scheduled,
