@@ -634,9 +634,9 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                     val request = CreateCpVisitRequest(
                             clientName = clientNameInput,
                             mobileNumber = phone,
-                            // assignedStaffId remains the compatibility owner used by
-                            // existing OTP/outcome routes. For Joint CP it must be the
-                            // lower-level participant, independent of picker order.
+                            // Use the locally resolved owner when picker metadata is
+                            // available. The server resolves and rewrites this field
+                            // authoritatively for every Joint CP creation.
                             assignedStaffId = jointAssignment?.outcomeOwner?.id ?: staff.id,
                             lmoStaffId = lmo.id,
                             scheduledDate = selectedDate,
@@ -1020,12 +1020,16 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
     private fun renderJointRoleAssignment() {
         val label = view?.findViewById<android.widget.TextView>(R.id.tvJointRoleAssignment) ?: return
         val assignment = JointCpTemplateGuard.assignment(selectedStaff, selectedJointPartner)
-        label.text = if (assignment == null) {
-            "Select staff at different IAM levels to assign the Joint CP workflow."
-        } else {
-            val owner = assignment.outcomeOwner.name?.takeIf { it.isNotBlank() } ?: "Lower-level staff"
-            val reviewer = assignment.reviewer.name?.takeIf { it.isNotBlank() } ?: "Higher-level staff"
-            "Outcome & OTP: $owner\nRemarks, review & complete: $reviewer"
+        label.text = when {
+            assignment != null -> {
+                val owner = assignment.outcomeOwner.name?.takeIf { it.isNotBlank() } ?: "Lower-level staff"
+                val reviewer = assignment.reviewer.name?.takeIf { it.isNotBlank() } ?: "Higher-level staff"
+                "Outcome & OTP: $owner\nRemarks, review & complete: $reviewer"
+            }
+            selectedStaff != null && selectedJointPartner != null ->
+                "Workflow roles will be confirmed from the staff designation hierarchy when the visit is created."
+            else ->
+                "Select staff at different designation levels to assign the Joint CP workflow."
         }
     }
 
@@ -1520,7 +1524,20 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         val marker = Regex("Uncaught (?:Convex)?Error:\\s*", RegexOption.IGNORE_CASE)
             .find(raw)
         val actionable = marker?.let { raw.substring(it.range.last + 1) } ?: raw
-        return actionable.lineSequence().firstOrNull()?.trim().orEmpty()
+        val message = actionable.lineSequence().firstOrNull()?.trim().orEmpty()
+        return if (
+            message.contains("TEMPLATE_LEVEL_REQUIRED", ignoreCase = true) ||
+            message.contains("designation level is missing", ignoreCase = true)
+        ) {
+            "Joint CP designation hierarchy is incomplete. Ask admin to map both staff designations and set different numeric levels."
+        } else if (
+            message.contains("SAME_TEMPLATE_LEVEL_NOT_ALLOWED", ignoreCase = true) ||
+            message.contains("different designation levels", ignoreCase = true)
+        ) {
+            "Both staff have the same designation level. Select one higher-level and one lower-level staff member."
+        } else {
+            message
+        }
     }
 
     companion object {

@@ -43,9 +43,26 @@ class JointCpTemplateGuardTest {
         ))
     }
 
-    @Test fun `missing admin level is rejected`() {
-        assertNotNull(JointCpTemplateGuard.rejection(
+    @Test fun `missing picker level is deferred to authoritative server validation`() {
+        assertNull(JointCpTemplateGuard.rejection(
             staff("a", null, level = null),
+            staff("b", "gm", level = 70),
+        ))
+    }
+
+    @Test fun `missing picker level still sends both participant ids`() {
+        assertEquals(
+            listOf("a", "b"),
+            JointCpTemplateGuard.participantIds(
+                staff("a", "sales", level = null),
+                staff("b", "gm", level = 70),
+            ),
+        )
+    }
+
+    @Test fun `missing picker level does not guess workflow roles`() {
+        assertNull(JointCpTemplateGuard.assignment(
+            staff("a", "sales", level = null),
             staff("b", "gm", level = 70),
         ))
     }
