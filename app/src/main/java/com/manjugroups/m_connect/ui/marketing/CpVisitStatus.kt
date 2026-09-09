@@ -91,14 +91,40 @@ fun resolveParticipantCpEffectiveStatus(
     parentFieldVisitStatus: String?,
     joint: JointCpSummary?,
     currentStaffId: String?,
+    cpCompletedAt: Long? = null,
+    fieldVisitCompletedAt: Long? = null,
+    arrivalOtpVerifiedAt: Long? = null,
 ): String {
     val cp = cpStatus?.trim().orEmpty()
     if (cp.lowercase(Locale.US) in TERMINAL_CP_STATUSES) return cp
     val server = serverEffectiveStatus?.trim().orEmpty()
     if (server.lowercase(Locale.US) in TERMINAL_CP_STATUSES) return server
+    if ((cpCompletedAt ?: 0L) > 0L || (fieldVisitCompletedAt ?: 0L) > 0L) return "completed"
+
     val participant = joint.participantFor(currentStaffId)?.status?.trim().orEmpty()
-    if (participant.isNotEmpty()) return participant
-    return resolveServerCpEffectiveStatus(serverEffectiveStatus, cpStatus, parentFieldVisitStatus)
+    val candidates = if (participant.isNotEmpty()) {
+        listOf(participant, server, cp)
+    } else {
+        listOf(parentFieldVisitStatus?.trim().orEmpty(), server, cp)
+    }.filter(String::isNotEmpty)
+
+    val mostAdvanced = candidates.maxByOrNull(::cpStatusProgressRank)
+        ?: "scheduled"
+    return if ((arrivalOtpVerifiedAt ?: 0L) > 0L && cpStatusProgressRank(mostAdvanced) < 3) {
+        "arrived"
+    } else {
+        mostAdvanced
+    }
+}
+
+private fun cpStatusProgressRank(status: String): Int = when (
+    status.trim().lowercase(Locale.US).replace('-', '_')
+) {
+    "completed", "complete", "done", "closed" -> 4
+    "arrived", "arrival_verified", "on_site" -> 3
+    "in_progress", "ongoing", "started", "active", "enroute", "en_route" -> 2
+    "scheduled", "assigned", "pending", "in_progress_cp" -> 1
+    else -> 0
 }
 
 /** Missing legacy outcome text does not reopen an authoritative closed CP. */

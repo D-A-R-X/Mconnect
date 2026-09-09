@@ -11,6 +11,13 @@ import org.junit.Test
 
 class CpCompletionContractTest {
     @Test
+    fun `cp id keeps legacy trip in cp flow when trip type metadata is missing`() {
+        assertTrue(isCpBackedTrip("cp-visit-1"))
+        assertFalse(isCpBackedTrip(null))
+        assertFalse(isCpBackedTrip("  "))
+    }
+
+    @Test
     fun `legacy success response may omit status`() {
         assertTrue(isCompatibleCpCompletionStatus(null))
         assertTrue(isCompatibleCpCompletionStatus("  "))
@@ -61,6 +68,112 @@ class CpCompletionContractTest {
         assertNull(jointCpReviewRevision(JointCpWorkflow(actorRole = "outcome_owner", canCompleteReview = true, outcomeRevision = 7)))
         assertNull(jointCpReviewRevision(JointCpWorkflow(actorRole = "reviewer", canCompleteReview = false, outcomeRevision = 7)))
         assertNull(jointCpReviewRevision(JointCpWorkflow(actorRole = "reviewer", actorReady = false, canCompleteReview = true, outcomeRevision = 7)))
+    }
+
+    @Test
+    fun `reviewer with omitted readiness must receive proximity action`() {
+        assertTrue(
+            jointCpReviewerNeedsReadiness(
+                JointCpWorkflow(
+                    state = "in_progress",
+                    actorRole = "reviewer",
+                    actorReady = null,
+                    canReview = false,
+                ),
+            ),
+        )
+        assertFalse(
+            jointCpReviewerNeedsReadiness(
+                JointCpWorkflow(
+                    state = "in_progress",
+                    actorRole = "reviewer",
+                    actorReady = true,
+                    canReview = false,
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun `submitted outcome never asks reviewer to repeat readiness`() {
+        assertFalse(
+            jointCpReviewerNeedsReadiness(
+                JointCpWorkflow(
+                    state = "pending_review",
+                    actorRole = "reviewer",
+                    actorReady = null,
+                    canReview = true,
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun `stale otp permission never hides owner preflight`() {
+        assertTrue(
+            jointCpOwnerNeedsArrivalPreflight(
+                workflow = JointCpWorkflow(
+                    state = "in_progress",
+                    actorRole = "outcome_owner",
+                    canRequestOtp = false,
+                ),
+                alreadyArrived = false,
+            ),
+        )
+        assertFalse(
+            jointCpOwnerNeedsArrivalPreflight(
+                workflow = JointCpWorkflow(
+                    state = "pending_review",
+                    actorRole = "outcome_owner",
+                    canRequestOtp = false,
+                ),
+                alreadyArrived = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `joint proximity codes retain server limits in staff messages`() {
+        assertEquals(
+            "Partner location is older than 60 seconds. Keep both phones on this visit and try again.",
+            jointCpApiErrorMessage(
+                code = "PARTNER_LOCATION_STALE",
+                raw = null,
+                requiredRadiusMeters = 100.0,
+                maximumAccuracyMeters = 30.0,
+                maximumLocationAgeMs = 60_000,
+                fallback = "fallback",
+            ),
+        )
+        assertEquals(
+            "GPS accuracy is too low. Turn on precise location, move to an open area, and retry with 30 metres accuracy or better.",
+            jointCpApiErrorMessage(
+                code = "LOCATION_ACCURACY_LOW",
+                raw = null,
+                requiredRadiusMeters = 100.0,
+                maximumAccuracyMeters = 30.0,
+                maximumLocationAgeMs = 60_000,
+                fallback = "fallback",
+            ),
+        )
+        assertEquals(
+            "Both Joint CP staff must be within 100 metres to continue.",
+            jointCpApiErrorMessage(
+                code = "PARTNER_TOO_FAR",
+                raw = null,
+                requiredRadiusMeters = 100.0,
+                maximumAccuracyMeters = 30.0,
+                maximumLocationAgeMs = 60_000,
+                fallback = "fallback",
+            ),
+        )
+    }
+
+    @Test
+    fun `joint radius follows server during rollout and defaults to one hundred`() {
+        assertEquals(50, jointCpRadiusMeters(JointCpWorkflow(requiredRadiusMeters = 50.0)))
+        assertEquals(100, jointCpRadiusMeters(JointCpWorkflow(requiredRadiusMeters = 100.0)))
+        assertEquals(100, jointCpRadiusMeters(null))
     }
 
     @Test

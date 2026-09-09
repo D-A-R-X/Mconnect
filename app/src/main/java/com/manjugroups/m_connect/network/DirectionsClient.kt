@@ -11,9 +11,8 @@ import kotlin.math.cos
 import kotlin.math.max
 
 /**
- * Driving-route helper. Calls our Convex backend (which proxies to the
- * Routes API using the server-side key), then decodes the encoded polyline
- * locally for rendering on the map.
+ * Driving-route helper. Calls the direct GeoTrack service, then decodes the
+ * encoded polyline locally for rendering on the map.
  *
  * Returns null if the backend reports failure or the network call throws —
  * callers should fall back gracefully (e.g. straight-line + haversine).
@@ -106,8 +105,16 @@ object DirectionsClient {
             }
             val distMeters = (resp.distanceMeters ?: 0.0).toInt()
             val durSeconds = (resp.durationSeconds ?: 0.0).toInt()
+            val points = decodePolyline(encoded)
+            if (points.size < 2 || points.any { point ->
+                    point.latitude !in -90.0..90.0 || point.longitude !in -180.0..180.0
+                }
+            ) {
+                android.util.Log.w("DirectionsClient", "Backend route returned invalid geometry")
+                return@withContext null
+            }
             DirectionsResult(
-                polyline = decodePolyline(encoded),
+                polyline = points,
                 distanceMeters = distMeters,
                 durationSeconds = durSeconds,
                 distanceText = formatDistance(distMeters),
@@ -227,7 +234,7 @@ object DirectionsClient {
      * Decodes Google's encoded polyline algorithm.
      * https://developers.google.com/maps/documentation/utilities/polylinealgorithm
      */
-    private fun decodePolyline(encoded: String): List<LatLng> {
+    internal fun decodePolyline(encoded: String): List<LatLng> {
         val poly = ArrayList<LatLng>(encoded.length / 2)
         var index = 0
         var lat = 0

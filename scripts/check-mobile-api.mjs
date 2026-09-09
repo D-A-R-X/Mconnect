@@ -106,10 +106,13 @@ async function request(method, path, options = {}) {
     durationMs: Math.round(performance.now() - startedAt),
     location: response.headers.get("location"),
     contentType: response.headers.get("content-type"),
+    serverTiming: response.headers.get("server-timing"),
+    traceTotalMs: response.headers.get("x-api-trace-total-ms"),
     data,
   };
   results.push(result);
-  console.log(`${response.ok ? "PASS" : "HTTP"} ${method} ${result.path} -> ${response.status} (${result.durationMs} ms)`);
+  const traceSuffix = result.traceTotalMs == null ? "" : `, server ${result.traceTotalMs} ms`;
+  console.log(`${response.ok ? "PASS" : "HTTP"} ${method} ${result.path} -> ${response.status} (${result.durationMs} ms${traceSuffix})`);
   if (args.verbose) console.log(JSON.stringify(redact(data), null, 2));
   return result;
 }
@@ -131,12 +134,30 @@ function expectStatus(result, expected, requireStructuredSuccess = false) {
   }
 }
 
+function expectMobileTiming(result) {
+  assert(
+    typeof result.serverTiming === "string" && result.serverTiming.length > 0,
+    `${result.method} ${result.path} returns Server-Timing`,
+  );
+  assert(
+    Number.isFinite(Number(result.traceTotalMs)),
+    `${result.method} ${result.path} returns X-Api-Trace-Total-Ms`,
+  );
+}
+
 async function contracts() {
+  const failures = [];
   const routes = [
+    ["POST", "/api/marketing/clientPlaceVisits/create"],
+    ["POST", "/api/geotrack/visit/start"],
+    ["GET", "/api/marketing/clientPlaceVisits/get?id=contract-probe"],
     ["GET", "/api/marketing/clientPlaceVisits/joint-workflow?id=contract-probe"],
+    ["GET", "/api/marketing/clientPlaceVisits/completed-count?date=2099-01-01&staffId=contract-probe"],
     ["POST", "/api/marketing/clientPlaceVisits/joint-arrival-preflight"],
+    ["POST", "/api/marketing/clientPlaceVisits/joint-participant-ready"],
     ["POST", "/api/geotrack/visit/arrival-otp/request"],
     ["POST", "/api/geotrack/visit/arrival-otp/verify"],
+    ["POST", "/api/storage/upload"],
     ["POST", "/api/marketing/clientPlaceVisits/markClientMet"],
     ["POST", "/api/marketing/clientPlaceVisits/setOutcome"],
     ["POST", "/api/marketing/clientPlaceVisits/joint-submit-review"],
@@ -144,9 +165,19 @@ async function contracts() {
     ["POST", "/api/geotrack/visit/complete"],
     ["GET", "/api/marketing/clientPlaceVisits/my?scope=mine&status=completed&pageSize=1"],
   ];
-  for (const [method, path] of routes) {
-    const result = await request(method, path, { body: method === "POST" ? {} : undefined });
-    expectStatus(result, 401, true);
+  await Promise.all(routes.map(async ([method, path]) => {
+    try {
+      const result = await request(method, path, { body: method === "POST" ? {} : undefined });
+      expectStatus(result, 401, true);
+    } catch (error) {
+      failures.push(`${method} ${path}: ${error.message}`);
+      console.error(`FAIL contract: ${method} ${path}: ${error.message}`);
+    }
+  }));
+  if (failures.length > 0) {
+    throw new Error(
+      `${routes.length - failures.length}/${routes.length} Joint CP contracts passed; failures:\n- ${failures.join("\n- ")}`,
+    );
   }
 }
 
@@ -171,8 +202,6 @@ async function cpSvContracts() {
     ["POST", "/api/address/parse"],
     ["GET", "/api/address/autocomplete?q=contract-probe"],
     ["GET", "/api/address/place?placeId=contract-probe"],
-    ["POST", "/api/geotrack/geocode-address"],
-    ["POST", "/api/geotrack/route", [400, 401]],
     ["GET", "/api/hr/attendance/today"],
     ["GET", "/api/hr/attendance/day-sessions"],
     ["GET", "/api/hr/attendance/my?fromDate=2099-01-01&toDate=2099-01-01"],
@@ -181,21 +210,13 @@ async function cpSvContracts() {
     ["GET", "/api/hr/permissions/monthly-usage"],
     ["GET", "/api/mobile/dashboard?date=2099-01-01"],
 
-    // Tracking, lists and trip lifecycle.
-    ["GET", "/api/tracking/bootstrap?deviceId=contract-probe"],
-    ["POST", "/api/tracking/device/sync", [400, 401]],
-    ["POST", "/api/tracking/consent", [400, 401]],
-    ["POST", "/api/geotrack/tamper/report", [400, 401]],
-    ["POST", "/api/geotrack/consent", [400, 401]],
-    ["GET", "/api/geotrack/consent/status"],
+    // Business-owned visit lists and lifecycle.
     ["GET", "/api/geotrack/assigned-places"],
     ["GET", "/api/geotrack/today-visits?date=2099-01-01"],
     ["GET", "/api/sitevisits/my?pageSize=1"],
     ["POST", "/api/geotrack/visit/create"],
     ["POST", "/api/geotrack/visit/start"],
     ["POST", "/api/geotrack/visit/complete"],
-    ["GET", "/api/geotrack/timeline?dayStart=0&dayEnd=1", [400, 401]],
-    ["GET", "/api/geotrack/session-route?dayStart=0&dayEnd=1", [400, 401]],
 
     // Driver-backed SV trip actions reachable from the shared trip screen.
     ["GET", "/api/mms-fleet/driver/trips"],
@@ -299,8 +320,8 @@ async function cpSvContracts() {
     [geoBaseUrl, "POST", "/api/tracking/location/batch", [400, 401]],
     [geoBaseUrl, "POST", "/api/tracking/heartbeat", [400, 401]],
     [geoBaseUrl, "POST", "/api/tracking/tamper-events", [400, 401]],
-    [geoBaseUrl, "POST", "/api/geotrack/start", [400, 401]],
-    [geoBaseUrl, "POST", "/api/geotrack/stop", [400, 401]],
+    [geoBaseUrl, "POST", "/api/tracking/sessions/start", [400, 401]],
+    [geoBaseUrl, "POST", "/api/tracking/sessions/end", [400, 401]],
     [storageBaseUrl, "POST", "/api/storage/uploads", 401],
     [storageBaseUrl, "POST", "/api/storage/uploads/contract-probe/complete", 401],
     [storageBaseUrl, "DELETE", "/api/storage/uploads/contract-probe", 401],
@@ -331,6 +352,11 @@ async function geoTrackDirectContracts() {
   const geoBaseUrl = args["geo-base-url"]
     ?? process.env.MCONNECT_GEO_BASE_URL
     ?? DEFAULT_GEO_BASE_URL;
+  for (const path of ["/healthz", "/readyz"]) {
+    const result = await request("GET", path, { baseUrl: geoBaseUrl });
+    expectStatus(result, 200);
+    assert(typeof result.data === "object" && result.data !== null, `${path} returned JSON`);
+  }
   const live = await request("GET", "/api/tracking/live?limit=1", {
     baseUrl: geoBaseUrl,
   });
@@ -345,6 +371,31 @@ async function geoTrackDirectContracts() {
 
   const invalidToken = "invalid-geotrack-contract-probe";
   const headers = { "Idempotency-Key": "invalid-geotrack-contract-probe" };
+  const authenticatedReads = [
+    "/api/tracking/sessions/current",
+    "/api/geotrack/day-status?from=1&to=2&limit=1",
+    "/api/geotrack/timeline?dayStart=1&dayEnd=2",
+    "/api/geotrack/session-route?dayStart=1&dayEnd=2",
+    "/api/tracking/trips?from=1&to=2",
+    "/api/geotrack/nearby-staff?lat=13.0827&lng=80.2707&radiusMeters=100&limit=1",
+    "/api/tracking/places/search?q=Chennai",
+    "/api/tracking/tamper-events?limit=1",
+    "/api/geotrack/employee-detail?staffId=contract-probe",
+    "/api/geotrack/stats?startDate=1&endDate=2",
+  ];
+  const failures = [];
+  for (const path of authenticatedReads) {
+    const result = await request("GET", path, {
+      baseUrl: geoBaseUrl,
+      token: invalidToken,
+    });
+    try {
+      expectStatus(result, 401, true);
+    } catch (error) {
+      failures.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   const writeRoutes = [
     ["/api/tracking/location/batch", { deviceId: "contract-probe", requestId: "contract-probe", points: [] }],
     ["/api/tracking/heartbeat", {
@@ -361,10 +412,26 @@ async function geoTrackDirectContracts() {
       requestId: "contract-probe",
       metadata: { source: "contract-probe" },
     }],
-    ["/api/geotrack/start", {}],
-    ["/api/geotrack/stop", {}],
+    ["/api/tracking/sessions/start", {
+      deviceId: "contract-probe",
+      contextType: "attendance",
+      source: "mconnect",
+      trigger: "attendance_punch_in",
+      startedAt: 1,
+    }],
+    ["/api/tracking/sessions/end", {
+      sessionId: "contract-probe",
+      endedAt: 2,
+      reason: "attendance_punch_out",
+    }],
+    ["/api/geotrack/route", {
+      originLat: 13.0827,
+      originLng: 80.2707,
+      destLat: 13.083,
+      destLng: 80.271,
+    }],
+    ["/api/geotrack/geocode-address", { address: "Chennai" }],
   ];
-  const failures = [];
   for (const [path, body] of writeRoutes) {
     const result = await request("POST", path, {
       baseUrl: geoBaseUrl,
@@ -379,6 +446,74 @@ async function geoTrackDirectContracts() {
     }
   }
   assert(failures.length === 0, failures.join("; "));
+}
+
+function decodeGooglePolyline(encoded) {
+  const points = [];
+  let index = 0;
+  let latitude = 0;
+  let longitude = 0;
+  const nextValue = () => {
+    let shift = 0;
+    let result = 0;
+    while (index < encoded.length) {
+      const byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+      if (byte < 0x20) return (result & 1) ? ~(result >> 1) : result >> 1;
+    }
+    return null;
+  };
+  while (index < encoded.length) {
+    const deltaLatitude = nextValue();
+    const deltaLongitude = nextValue();
+    if (deltaLatitude === null || deltaLongitude === null) break;
+    latitude += deltaLatitude;
+    longitude += deltaLongitude;
+    points.push([latitude / 100_000, longitude / 100_000]);
+  }
+  return points;
+}
+
+async function geoTrackMapContracts() {
+  const geoBaseUrl = args["geo-base-url"]
+    ?? process.env.GEOTRACK_API_BASE_URL
+    ?? DEFAULT_GEO_BASE_URL;
+  const token = requireEnv("MCONNECT_TOKEN");
+  const route = await request("POST", "/api/geotrack/route", {
+    baseUrl: geoBaseUrl,
+    token,
+    body: {
+      originLat: 13.067439,
+      originLng: 80.237617,
+      destLat: 13.1049,
+      destLng: 80.2367,
+    },
+  });
+  expectStatus(route, 200, true);
+  assert(route.data.success === true, "route helper reports success");
+  assert(typeof route.data.encodedPolyline === "string", "route helper returns encodedPolyline");
+  assert(decodeGooglePolyline(route.data.encodedPolyline).length >= 3, "route contains road geometry, not only endpoints");
+  assert(Number(route.data.distanceMeters) > 0, "route returns a positive distance");
+  assert(Number(route.data.durationSeconds) > 0, "route returns a positive duration");
+
+  const geocode = await request("POST", "/api/geotrack/geocode-address", {
+    baseUrl: geoBaseUrl,
+    token,
+    body: { address: "4th Main Road, Ward 100, Chennai, Tamil Nadu 600040" },
+  });
+  expectStatus(geocode, 200, true);
+  assert(geocode.data.success === true, "geocode helper reports success");
+  assert(Number.isFinite(Number(geocode.data.lat)), "geocode returns latitude");
+  assert(Number.isFinite(Number(geocode.data.lng)), "geocode returns longitude");
+
+  const places = await request("GET", "/api/tracking/places/search?q=Anna%20Nagar%20Chennai", {
+    baseUrl: geoBaseUrl,
+    token,
+  });
+  expectStatus(places, 200, true);
+  assert(places.data.success === true, "place search reports success");
+  assert(Array.isArray(places.data.data), "place search returns a data array");
 }
 
 async function storageContracts() {
@@ -593,10 +728,13 @@ function workflowFrom(result, who) {
 }
 
 async function getWorkflow(token, cpId, who) {
-  return workflowFrom(
-    await request("GET", `/api/marketing/clientPlaceVisits/joint-workflow?id=${encodeURIComponent(cpId)}`, { token }),
-    who,
+  const result = await request(
+    "GET",
+    `/api/marketing/clientPlaceVisits/joint-workflow?id=${encodeURIComponent(cpId)}`,
+    { token },
   );
+  expectMobileTiming(result);
+  return workflowFrom(result, who);
 }
 
 async function completedList(token) {
@@ -650,6 +788,7 @@ async function successfulPost(path, token, body, idempotent = false) {
   const result = await request("POST", path, { token, body, headers });
   assert(result.status >= 200 && result.status < 300, `${path} returns HTTP success`);
   assert(result.data?.success === true, `${path} returns success=true`);
+  expectMobileTiming(result);
   return result.data;
 }
 
@@ -679,7 +818,8 @@ async function jointFullFlow() {
     lowToken,
     { id: cpId, fieldVisitId, lat, lng, accuracyMeters, capturedAt: Date.now() },
   );
-  assert(preflight.workflow?.isWithinCompletionRadius === true, "server confirms both staff are strictly within 50 metres");
+  assert(preflight.workflow?.isWithinCompletionRadius === true, "server confirms both staff are within 100 metres");
+  assert(Number(preflight.workflow?.requiredRadiusMeters) === 100, "server reports the 100 metre Joint CP radius");
   const seniorOtpAttempt = await request(
     "POST",
     "/api/geotrack/visit/arrival-otp/request",
@@ -772,6 +912,7 @@ function printHelp() {
   node scripts/check-mobile-api.mjs contracts
   node scripts/check-mobile-api.mjs cp-sv-contracts
   node scripts/check-mobile-api.mjs geotrack-direct-contracts [--geo-base-url https://api-geo.theairix.com/]
+  node scripts/check-mobile-api.mjs geotrack-map-contracts [--geo-base-url https://api-geo.theairix.com/]
   node scripts/check-mobile-api.mjs storage-contracts [--storage-base-url https://mg.theairix.com/]
   node scripts/check-mobile-api.mjs device-login-contracts
   node scripts/check-mobile-api.mjs device-rollout-contracts --rollout-mode compatibility [--legacy-build 71 --target-build 72]
@@ -786,6 +927,7 @@ Safe defaults:
   contracts performs unauthenticated route/auth-contract probes only.
   cp-sv-contracts audits the full CP/SV/booking/collection/tracking/storage route surface without mutations.
   geotrack-direct-contracts proves both live reads work and every invalid-bearer mobile write is rejected with HTTP 401.
+  geotrack-map-contracts uses MCONNECT_TOKEN for read-only route, geocode, and place-search success checks.
   storage-contracts verifies preferred storage routes reject unauthenticated calls and never uploads bytes.
   Set MCONNECT_STORAGE_READ_ID to include a non-mutating real-file 307 redirect check.
   device-login-contracts verifies build-aware login routes using empty credentials and never sends an OTP.
@@ -808,6 +950,7 @@ try {
   else if (command === "contracts") await contracts();
   else if (command === "cp-sv-contracts") await cpSvContracts();
   else if (command === "geotrack-direct-contracts") await geoTrackDirectContracts();
+  else if (command === "geotrack-map-contracts") await geoTrackMapContracts();
   else if (command === "storage-contracts") await storageContracts();
   else if (command === "device-login-contracts") await deviceLoginContracts();
   else if (command === "device-rollout-contracts") await deviceRolloutContracts();

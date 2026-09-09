@@ -13,21 +13,16 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
-import com.manjugroups.m_connect.BuildConfig
 import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.ActivityGeoConsentBinding
-import com.manjugroups.m_connect.geotrack.service.GeoTrackService
 import com.manjugroups.m_connect.network.ApiService
-import com.manjugroups.m_connect.network.ConsentRequest
-import com.manjugroups.m_connect.network.GeoTrackApi
 import kotlinx.coroutines.launch
 
 class GeoTrackConsentActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityGeoConsentBinding
     private lateinit var session: SessionManager
-    private val api = GeoTrackApi.create()
     private var permissionCheckPending = false
 
     companion object {
@@ -115,48 +110,17 @@ class GeoTrackConsentActivity : AppCompatActivity() {
         }
 
         binding.btnDecline.setOnClickListener {
-            lifecycleScope.launch {
-                runCatching {
-                    api.recordTrackingConsent(
-                        session.bearerToken,
-                        ConsentRequest(
-                            consented = false,
-                            appVersion = BuildConfig.VERSION_NAME,
-                            policyKey = "attendance_field",
-                            status = "declined",
-                            deviceId = session.trackingDeviceId,
-                        )
-                    )
-                }
-                session.geoConsentDeclined = true
-                goToMain()
-            }
+            session.geoConsentGiven = false
+            session.geoConsentDeclined = true
+            session.shouldTrackNow = false
+            goToMain()
         }
     }
 
     private fun recordConsentAndRequestPermissions() {
-        lifecycleScope.launch {
-            try {
-                val response = api.recordTrackingConsent(
-                    session.bearerToken,
-                    ConsentRequest(
-                        consented = true,
-                        appVersion = BuildConfig.VERSION_NAME,
-                        policyKey = "attendance_field",
-                        status = "granted",
-                        deviceId = session.trackingDeviceId,
-                    )
-                )
-                session.geoConsentGiven = true
-                session.geoTrackingEnabled = response.bootstrap?.assignment?.attendance != null || response.bootstrap?.assignment?.siteVisit != null
-                session.activeTrackingSessionId = response.bootstrap?.activeSession?.id
-                session.shouldTrackNow = response.bootstrap?.shouldTrack == true
-            } catch (e: Exception) {
-                // Still proceed even if server call fails — consent is recorded locally
-                session.geoConsentGiven = true
-            }
-            requestLocationPermissions()
-        }
+        session.geoConsentGiven = true
+        session.geoConsentDeclined = false
+        requestLocationPermissions()
     }
 
     private fun requestLocationPermissions() {
@@ -250,12 +214,11 @@ class GeoTrackConsentActivity : AppCompatActivity() {
             val attendanceActive = runCatching {
                 AttendanceTrackingGate.isClockedInForToday(session.bearerToken, ApiService.create())
             }.getOrDefault(false)
-            session.shouldTrackNow = attendanceActive && session.shouldTrackNow
-            if (attendanceActive) {
-                GeoTrackService.start(this@GeoTrackConsentActivity)
-            } else {
-                GeoTrackService.stop(this@GeoTrackConsentActivity)
-            }
+            GeoTrackBootstrapSync.sync(
+                context = this@GeoTrackConsentActivity,
+                allowPromptConsent = false,
+                attendanceOpenOverride = attendanceActive,
+            )
             goToMain()
         }
     }

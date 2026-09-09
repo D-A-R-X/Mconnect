@@ -24,6 +24,7 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import androidx.fragment.app.FragmentManager
 import com.manjugroups.m_connect.R
+import com.manjugroups.m_connect.util.UnusedAppRestrictions
 import java.util.Locale
 
 /**
@@ -137,7 +138,11 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
                         androidx.core.content.UnusedAppRestrictionsConstants.API_31 -> true
                         else -> false
                     }
-                    if (restrictionOn && fm.findFragmentByTag(TAG) == null) {
+                    if (
+                        restrictionOn &&
+                        UnusedAppRestrictions.settingsIntent(ctx) != null &&
+                        fm.findFragmentByTag(TAG) == null
+                    ) {
                         runCatching { BackgroundPermissionsGateDialog().show(fm, TAG) }
                     }
                 },
@@ -146,11 +151,10 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
         }
     }
 
-    // "Manage app if unused" must be turned OFF before the gate lets the user
-    // through — users were skipping it, leaving the OS free to hibernate the app
-    // and revoke tracking permissions. Resolved asynchronously; stays false
-    // (blocking) until we confirm the restriction is disabled OR the device has
-    // no such setting.
+    // On supported devices, "Manage app if unused" must be turned OFF before
+    // the gate lets the user through. Unsupported/old OEM devices are released
+    // synchronously, before the asynchronous status lookup, so a system option
+    // they do not have can never lock them out of the app.
     private var unusedAppSatisfied = false
 
     // ── Lifecycle ──────────────────────────────────────────────────
@@ -255,9 +259,18 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
         // OS setting so the user turns it OFF, keeping the app alive.
         view.findViewById<View>(R.id.rowManageAppUnused).setOnClickListener {
             val ctx = context ?: return@setOnClickListener
-            val intent = androidx.core.content.IntentCompat
-                .createManageUnusedAppRestrictionsIntent(ctx, ctx.packageName)
+            val intent = UnusedAppRestrictions.settingsIntent(ctx)
+            if (intent == null) {
+                Toast.makeText(
+                    ctx,
+                    "This setting is not available on your device.",
+                    Toast.LENGTH_SHORT,
+                ).show()
+                refreshStatus(view)
+                return@setOnClickListener
+            }
             runCatching { startActivity(intent) }
+                .onFailure { refreshStatus(view) }
         }
 
         refreshStatus(view)
@@ -265,8 +278,8 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
 
     /**
      * Resolve the async "unused app restrictions" status and show the row
-     * alongside the other permissions WHENEVER the device supports the feature
-     * — whether the restriction is still ON (needs turning off) or already OFF.
+     * alongside the other permissions only when the device supports the feature
+     * and exposes a settings activity for it.
      * The switch reads ON only once the restriction is disabled on the device
      * (the good state the user is aiming for). The row is hidden only when the
      * OS has no such setting (FEATURE_NOT_AVAILABLE / ERROR), since there would
@@ -278,48 +291,30 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
         val ctx = context ?: return
         val row = root.findViewById<View>(R.id.rowManageAppUnused)
         val sw = root.findViewById<SwitchCompat>(R.id.switchManageAppUnused)
+        val settingsIntent = UnusedAppRestrictions.settingsIntent(ctx)
+        if (settingsIntent == null) {
+            row.visibility = View.GONE
+            sw.isChecked = false
+            unusedAppSatisfied = true
+            if (allGranted(ctx)) {
+                com.manjugroups.m_connect.notifications.PermissionAlertNotification.clear(ctx)
+                dismissAllowingStateLoss()
+            }
+            return
+        }
         val future = androidx.core.content.PackageManagerCompat
             .getUnusedAppRestrictionsStatus(ctx)
         future.addListener(
             {
                 if (!isAdded || view == null) return@addListener
                 val status = runCatching { future.get() }.getOrNull()
-                // available   = the device exposes this setting at all.
-                // restrictionOn = the OS will hibernate/revoke the app if unused.
-                // known       = the standard query actually read the on/off state.
-                val available: Boolean
-                val restrictionOn: Boolean
-                var known = true
-                when (status) {
-                    androidx.core.content.UnusedAppRestrictionsConstants.API_30_BACKPORT,
-                    androidx.core.content.UnusedAppRestrictionsConstants.API_30,
-                    androidx.core.content.UnusedAppRestrictionsConstants.API_31 -> {
-                        available = true; restrictionOn = true
-                    }
-                    androidx.core.content.UnusedAppRestrictionsConstants.DISABLED -> {
-                        available = true; restrictionOn = false
-                    }
-                    else -> {
-                        // FEATURE_NOT_AVAILABLE / ERROR / null. The standard query
-                        // couldn't read the state — but on Android 11+ (API 30) the
-                        // "pause app if unused" / hibernation setting exists on
-                        // essentially every device, and many OEMs (Xiaomi, Oppo,
-                        // Vivo, etc.) don't report it through this API. So surface
-                        // the row anyway (assume it may be ON) instead of hiding it;
-                        // we just can't confirm the exact state.
-                        known = false
-                        available = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
-                        restrictionOn = available
-                    }
-                }
-                row.visibility = if (available) View.VISIBLE else View.GONE
-                // Toggle ON only when the restriction is confirmed disabled.
-                sw.isChecked = available && known && !restrictionOn
-                // Satisfied when the device has no such setting, or the user has
-                // CONFIRMED-disabled it. When the state is unreadable (known=false)
-                // we still show the row so the user can reach the setting, but we
-                // don't hard-block the gate on a signal we can't verify.
-                unusedAppSatisfied = !available || !known || !restrictionOn
+                val uiState = UnusedAppRestrictions.uiState(
+                    status = status,
+                    canOpenSettings = true,
+                )
+                row.visibility = if (uiState.visible) View.VISIBLE else View.GONE
+                sw.isChecked = uiState.restrictionDisabled
+                unusedAppSatisfied = uiState.satisfied
                 if (unusedAppSatisfied && allGranted(ctx)) {
                     com.manjugroups.m_connect.notifications.PermissionAlertNotification.clear(ctx)
                     dismissAllowingStateLoss()

@@ -36,7 +36,6 @@ import com.manjugroups.m_connect.ui.common.SearchableOption
 import com.manjugroups.m_connect.ui.common.SearchableSelectionDialog
 import com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -113,6 +112,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
     // Caches for fast display
     private var staffCache: List<StaffData> = emptyList()
     private var projectCache: List<MarketingProject> = emptyList()
+    private val pickerLoadGate = PickerLoadGate()
 
     // Collection CP gate — when the user picks "Collection CP" we
     // pre-fetch the client's confirmed bookings (postSaleCases) and
@@ -596,13 +596,6 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                             return@launch
                         }
                     }
-                    // Start the duplicate read while resolving a missing pin.
-                    // These calls are independent and used to run serially,
-                    // making a normal create feel unnecessarily slow.
-                    val duplicateDeferred = async {
-                        findSameDayCpVisitFor(phone, selectedDate)
-                    }
-
                     // A CP MUST carry coordinates so the trip map can pin the
                     // client location (without them the trip screen tries to
                     // geocode the free-text address, and a vague/junk address
@@ -641,9 +634,9 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                     val request = CreateCpVisitRequest(
                             clientName = clientNameInput,
                             mobileNumber = phone,
-                            // assignedStaffId remains the compatibility owner used by
-                            // existing OTP/outcome routes. For Joint CP it must be the
-                            // lower-level participant, independent of picker order.
+                            // Use the locally resolved owner when picker metadata is
+                            // available. The server resolves and rewrites this field
+                            // authoritatively for every Joint CP creation.
                             assignedStaffId = jointAssignment?.outcomeOwner?.id ?: staff.id,
                             lmoStaffId = lmo.id,
                             scheduledDate = selectedDate,
@@ -673,14 +666,10 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                         createRequestId = UUID.randomUUID().toString()
                         createRequestFingerprint = requestFingerprint
                     }
-                    val duplicate = OpenCpVisitGuard.blockReason(
-                        duplicateDeferred.await(), phone, selectedDate, createRequestId,
-                    )
-                    if (duplicate != null) {
-                        btnSubmit.isEnabled = true
-                        toast(duplicate)
-                        return@launch
-                    }
+                    // The create mutation already enforces same-day duplicate
+                    // protection atomically. Avoid a second list request here:
+                    // on the production gateway that redundant read can add a
+                    // full cold-start delay before the real create even begins.
                     val resp = geoApi.createCpVisit(session.bearerToken, createRequestId, request)
                     if (!resp.success) {
                         toast(cleanServerErrorMessage(resp.error ?: "Failed to create CP visit"))
@@ -924,12 +913,12 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             showStaffPicker(label, staffCache)
             return
         }
-        viewLifecycleOwner.lifecycleScope.launch {
+        launchPickerLoad(label, "Loading staff...") {
             try {
                 val resp = api.getStaff(session.bearerToken, status = "active")
                 if (!resp.success) {
                     toast("Failed to load staff list")
-                    return@launch
+                    return@launchPickerLoad
                 }
                 staffCache = resp.staff
                 showStaffPicker(label, resp.staff)
@@ -987,12 +976,12 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             show(staffCache)
             return
         }
-        viewLifecycleOwner.lifecycleScope.launch {
+        launchPickerLoad(label, "Loading staff...") {
             try {
                 val resp = api.getStaff(session.bearerToken, status = "active")
                 if (!resp.success) {
                     toast("Failed to load staff list")
-                    return@launch
+                    return@launchPickerLoad
                 }
                 staffCache = resp.staff
                 show(resp.staff)
@@ -1031,12 +1020,16 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
     private fun renderJointRoleAssignment() {
         val label = view?.findViewById<android.widget.TextView>(R.id.tvJointRoleAssignment) ?: return
         val assignment = JointCpTemplateGuard.assignment(selectedStaff, selectedJointPartner)
-        label.text = if (assignment == null) {
-            "Select staff at different IAM levels to assign the Joint CP workflow."
-        } else {
-            val owner = assignment.outcomeOwner.name?.takeIf { it.isNotBlank() } ?: "Lower-level staff"
-            val reviewer = assignment.reviewer.name?.takeIf { it.isNotBlank() } ?: "Higher-level staff"
-            "Outcome & OTP: $owner\nRemarks, review & complete: $reviewer"
+        label.text = when {
+            assignment != null -> {
+                val owner = assignment.outcomeOwner.name?.takeIf { it.isNotBlank() } ?: "Lower-level staff"
+                val reviewer = assignment.reviewer.name?.takeIf { it.isNotBlank() } ?: "Higher-level staff"
+                "Outcome & OTP: $owner\nRemarks, review & complete: $reviewer"
+            }
+            selectedStaff != null && selectedJointPartner != null ->
+                "Workflow roles will be confirmed from the staff designation hierarchy when the visit is created."
+            else ->
+                "Select staff at different designation levels to assign the Joint CP workflow."
         }
     }
 
@@ -1085,12 +1078,12 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             showLmoPicker(label, staffCache)
             return
         }
-        viewLifecycleOwner.lifecycleScope.launch {
+        launchPickerLoad(label, "Loading staff...") {
             try {
                 val resp = api.getStaff(session.bearerToken, status = "active")
                 if (!resp.success) {
                     toast("Failed to load staff list")
-                    return@launch
+                    return@launchPickerLoad
                 }
                 staffCache = resp.staff
                 showLmoPicker(label, resp.staff)
@@ -1143,12 +1136,12 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             showProjectPicker(label, projectCache)
             return
         }
-        viewLifecycleOwner.lifecycleScope.launch {
+        launchPickerLoad(label, "Loading projects...") {
             try {
                 val resp = api.getMarketingProjects(session.bearerToken)
                 if (!resp.success) {
                     toast(resp.error ?: "Failed to load projects")
-                    return@launch
+                    return@launchPickerLoad
                 }
                 projectCache = resp.projects
                 showProjectPicker(label, resp.projects)
@@ -1277,6 +1270,31 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         if (!showClient) {
             selectedReferringClient = null
             view?.findViewById<EditText>(R.id.etReferringClient)?.setText("")
+        }
+    }
+
+    private fun launchPickerLoad(
+        label: EditText,
+        loadingHint: String,
+        load: suspend () -> Unit,
+    ) {
+        if (!pickerLoadGate.tryStart()) {
+            toast("Options are still loading. Please wait.")
+            return
+        }
+        val previousHint = label.hint
+        label.hint = loadingHint
+        label.isEnabled = false
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                load()
+            } finally {
+                pickerLoadGate.finish()
+                if (isAdded) {
+                    label.hint = previousHint
+                    label.isEnabled = true
+                }
+            }
         }
     }
 
@@ -1506,7 +1524,20 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         val marker = Regex("Uncaught (?:Convex)?Error:\\s*", RegexOption.IGNORE_CASE)
             .find(raw)
         val actionable = marker?.let { raw.substring(it.range.last + 1) } ?: raw
-        return actionable.lineSequence().firstOrNull()?.trim().orEmpty()
+        val message = actionable.lineSequence().firstOrNull()?.trim().orEmpty()
+        return if (
+            message.contains("TEMPLATE_LEVEL_REQUIRED", ignoreCase = true) ||
+            message.contains("designation level is missing", ignoreCase = true)
+        ) {
+            "Joint CP designation hierarchy is incomplete. Ask admin to map both staff designations and set different numeric levels."
+        } else if (
+            message.contains("SAME_TEMPLATE_LEVEL_NOT_ALLOWED", ignoreCase = true) ||
+            message.contains("different designation levels", ignoreCase = true)
+        ) {
+            "Both staff have the same designation level. Select one higher-level and one lower-level staff member."
+        } else {
+            message
+        }
     }
 
     companion object {

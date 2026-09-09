@@ -1,12 +1,15 @@
 package com.manjugroups.m_connect.ui.marketing
 
 import com.manjugroups.m_connect.network.StaffData
+import com.google.gson.Gson
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
 
 class JointCpTemplateGuardTest {
+    private val gson = Gson()
+
     private fun staff(
         id: String,
         template: String?,
@@ -40,9 +43,26 @@ class JointCpTemplateGuardTest {
         ))
     }
 
-    @Test fun `missing admin level is rejected`() {
-        assertNotNull(JointCpTemplateGuard.rejection(
+    @Test fun `missing picker level is deferred to authoritative server validation`() {
+        assertNull(JointCpTemplateGuard.rejection(
             staff("a", null, level = null),
+            staff("b", "gm", level = 70),
+        ))
+    }
+
+    @Test fun `missing picker level still sends both participant ids`() {
+        assertEquals(
+            listOf("a", "b"),
+            JointCpTemplateGuard.participantIds(
+                staff("a", "sales", level = null),
+                staff("b", "gm", level = 70),
+            ),
+        )
+    }
+
+    @Test fun `missing picker level does not guess workflow roles`() {
+        assertNull(JointCpTemplateGuard.assignment(
+            staff("a", "sales", level = null),
             staff("b", "gm", level = 70),
         ))
     }
@@ -91,5 +111,23 @@ class JointCpTemplateGuardTest {
     @Test fun `same staff is rejected`() {
         val person = staff("same", "sales", level = 47)
         assertNotNull(JointCpTemplateGuard.rejection(person, person))
+    }
+
+    @Test fun `coarse role level is never treated as joint cp hierarchy`() {
+        val decoded = gson.fromJson(
+            """{"_id":"staff","name":"BDO","roleLevel":20}""",
+            StaffData::class.java,
+        )
+
+        assertNull(decoded.iamTemplateLevel)
+    }
+
+    @Test fun `designation level alias is accepted as joint cp hierarchy`() {
+        val decoded = gson.fromJson(
+            """{"_id":"staff","name":"BDO","designationLevel":3}""",
+            StaffData::class.java,
+        )
+
+        assertEquals(3, decoded.iamTemplateLevel)
     }
 }

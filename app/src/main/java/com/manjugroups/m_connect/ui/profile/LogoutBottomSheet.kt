@@ -97,6 +97,9 @@ class LogoutBottomSheet : BottomSheetDialogFragment() {
                         )
                     }
                 }
+                runCatching {
+                    com.manjugroups.m_connect.geotrack.GeoTrackBootstrapSync.endForLogout(ctx)
+                }
                 runCatching { PushTokenManager.unregisterCurrentToken(ctx, session) }
             }
             // Free the SERVER session before clearing local — this is what

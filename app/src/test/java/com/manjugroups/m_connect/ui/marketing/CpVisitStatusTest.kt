@@ -62,6 +62,50 @@ class CpVisitStatusTest {
     }
 
     @Test
+    fun `verified arrival proof cannot be downgraded by stale scheduled statuses`() {
+        assertEquals(
+            "arrived",
+            resolveParticipantCpEffectiveStatus(
+                serverEffectiveStatus = "scheduled",
+                cpStatus = "scheduled",
+                parentFieldVisitStatus = "started",
+                joint = null,
+                currentStaffId = "staff",
+                arrivalOtpVerifiedAt = 1_757_419_000_000,
+            ),
+        )
+    }
+
+    @Test
+    fun `explicit field arrival wins over stale server effective status`() {
+        assertEquals(
+            "arrived",
+            resolveParticipantCpEffectiveStatus(
+                serverEffectiveStatus = "scheduled",
+                cpStatus = "scheduled",
+                parentFieldVisitStatus = "arrived",
+                joint = null,
+                currentStaffId = "staff",
+            ),
+        )
+    }
+
+    @Test
+    fun `completion timestamp is terminal even when status projection is stale`() {
+        assertEquals(
+            "completed",
+            resolveParticipantCpEffectiveStatus(
+                serverEffectiveStatus = "scheduled",
+                cpStatus = "scheduled",
+                parentFieldVisitStatus = "arrived",
+                joint = null,
+                currentStaffId = "staff",
+                cpCompletedAt = 1_757_419_100_000,
+            ),
+        )
+    }
+
+    @Test
     fun `legacy completed CP with missing outcome stays completed`() {
         for (cp in listOf("completed", "complete", "done", "closed", " COMPLETED ")) {
             for (trip in listOf("enroute", "in-progress", "completed")) {

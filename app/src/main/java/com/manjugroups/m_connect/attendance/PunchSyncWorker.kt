@@ -10,9 +10,11 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkerParameters
 import androidx.work.WorkManager
 import com.manjugroups.m_connect.auth.SessionManager
+import com.manjugroups.m_connect.geotrack.GeoTrackBootstrapSync
 import com.manjugroups.m_connect.geotrack.data.GeoTrackDatabase
 import com.manjugroups.m_connect.geotrack.data.PendingPunchEntity
 import com.manjugroups.m_connect.network.ApiService
+import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.PunchRequest
 import com.manjugroups.m_connect.network.StorageUploader
 import java.io.File
@@ -91,7 +93,22 @@ class PunchSyncWorker(
                 // location, etc.) both clear the row — retrying a rejection would
                 // loop forever, and a duplicate-rejection means it already landed.
                 dao.deleteById(p.id)
-                if (resp.success) deletePhoto(p.photoPath)
+                if (resp.success) {
+                    deletePhoto(p.photoPath)
+                    GeoTrackBootstrapSync.onPunchRecorded(
+                        context = applicationContext,
+                        punchedIn = p.isPunchIn,
+                        contextId = resp.attendanceId,
+                        occurredAt = runCatching {
+                            java.time.OffsetDateTime.parse(p.clientPunchTime)
+                                .toInstant()
+                                .toEpochMilli()
+                        }.getOrDefault(System.currentTimeMillis()),
+                        lat = p.latitude,
+                        lng = p.longitude,
+                        api = GeoTrackApi.create(),
+                    )
+                }
             } catch (e: Exception) {
                 // Network / server error — keep the row and let WorkManager retry.
                 networkFailure = true

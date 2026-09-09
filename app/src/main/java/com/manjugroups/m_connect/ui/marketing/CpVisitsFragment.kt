@@ -836,6 +836,9 @@ class CpVisitsFragment : Fragment() {
             this.fieldVisit?.status,
             this.joint,
             session.staffId,
+            cpCompletedAt = this.completedAt,
+            fieldVisitCompletedAt = this.fieldVisit?.completedAt,
+            arrivalOtpVerifiedAt = this.arrivalProof?.otpVerifiedAt,
         )
         val displayDate = resolveCpActivityDate(
             scheduledDate = assignedDate,

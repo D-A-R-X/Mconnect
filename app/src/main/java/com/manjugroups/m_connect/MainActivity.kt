@@ -28,7 +28,6 @@ import com.manjugroups.m_connect.auth.WelcomeActivity
 import com.manjugroups.m_connect.geotrack.GeoTrackBootstrapSync
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.GeoTrackApi
-import com.manjugroups.m_connect.network.TrackingBootstrapData
 import com.manjugroups.m_connect.notifications.PushTokenManager
 import com.manjugroups.m_connect.notifications.WorkflowNotificationRoute
 import com.manjugroups.m_connect.update.InAppUpdateManager
@@ -2114,15 +2113,6 @@ class MainActivity : AppCompatActivity() {
 
     private suspend fun syncTrackingBootstrap() {
         GeoTrackBootstrapSync.sync(this, allowPromptConsent = true, api = geoApi)
-    }
-
-    private fun applyTrackingBootstrap(bootstrap: TrackingBootstrapData?, attendanceActive: Boolean) {
-        GeoTrackBootstrapSync.apply(this, bootstrap, allowPromptConsent = attendanceActive && !isFinishing)
-
-        // First-time users only learn they're tracked after the bootstrap
-        // flips geoTrackingEnabled on. Re-evaluate the gate here so the
-        // dialog appears immediately on the first login, not only after
-        // the next foreground cycle.
         maybeShowBackgroundPermissionsGate()
     }
 

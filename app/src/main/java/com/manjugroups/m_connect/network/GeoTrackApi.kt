@@ -17,25 +17,13 @@ import java.lang.reflect.Type
 
 interface GeoTrackApi {
 
-    // ── Tracking bootstrap / device ──
+    // ── Direct tracking session recovery ──
 
-    @GET("api/tracking/bootstrap")
-    suspend fun getTrackingBootstrap(
+    @GET
+    suspend fun getCurrentTrackingSession(
         @Header("Authorization") token: String,
-        @Query("deviceId") deviceId: String? = null
-    ): TrackingBootstrapResponse
-
-    @POST("api/tracking/device/sync")
-    suspend fun syncTrackingDevice(
-        @Header("Authorization") token: String,
-        @Body body: TrackingDeviceSyncRequest
-    ): TrackingDeviceSyncResponse
-
-    @POST("api/tracking/consent")
-    suspend fun recordTrackingConsent(
-        @Header("Authorization") token: String,
-        @Body body: ConsentRequest
-    ): TrackingConsentResponse
+        @Url url: String = DIRECT_CURRENT_SESSION_URL,
+    ): DirectTrackingSessionResponse
 
     // ── Location ──
 
@@ -67,40 +55,21 @@ interface GeoTrackApi {
         @Body body: TamperReportRequest
     ): GeoTrackResponse
 
-    @POST("api/geotrack/tamper/report")
-    suspend fun reportLegacyTamper(
-        @Header("Authorization") token: String,
-        @Body body: TamperReportRequest,
-    ): GeoTrackResponse
-
     @POST
     suspend fun startDirectTracking(
         @Url url: String = DIRECT_START_URL,
         @Header("Authorization") token: String,
         @Header("Idempotency-Key") idempotencyKey: String,
         @Body body: DirectTrackingStartRequest,
-    ): GeoTrackResponse
+    ): DirectTrackingSessionResponse
 
     @POST
     suspend fun stopDirectTracking(
         @Url url: String = DIRECT_STOP_URL,
         @Header("Authorization") token: String,
         @Header("Idempotency-Key") idempotencyKey: String,
-        @Body body: DirectTrackingStopRequest = DirectTrackingStopRequest(),
-    ): GeoTrackResponse
-
-    // ── Consent ──
-
-    @POST("api/geotrack/consent")
-    suspend fun recordConsent(
-        @Header("Authorization") token: String,
-        @Body body: ConsentRequest
-    ): GeoTrackResponse
-
-    @GET("api/geotrack/consent/status")
-    suspend fun getConsentStatus(
-        @Header("Authorization") token: String
-    ): ConsentStatusResponse
+        @Body body: DirectTrackingStopRequest,
+    ): DirectTrackingSessionResponse
 
     // ── Visits / Trips ──
 
@@ -134,15 +103,17 @@ interface GeoTrackApi {
         @Header("Authorization") token: String
     ): MarketingProjectsResponse
 
-    @GET("api/tracking/places/search")
+    @GET
     suspend fun searchPlaces(
         @Header("Authorization") token: String,
-        @Query("q") query: String
+        @Query("q") query: String,
+        @Url url: String = DIRECT_PLACE_SEARCH_URL,
     ): PlaceSearchResponse
 
-    @GET("api/geotrack/live-status")
+    @GET
     suspend fun getLiveStatus(
-        @Header("Authorization") token: String
+        @Header("Authorization") token: String,
+        @Url url: String = DIRECT_LIVE_URL,
     ): LiveStatusResponse
 
     @POST("api/geotrack/visit/create")
@@ -198,16 +169,18 @@ interface GeoTrackApi {
         @Body body: MmsFleetDriverEndRequest
     ): MmsFleetDriverActionResponse
 
-    @POST("api/geotrack/route")
+    @POST
     suspend fun getRoute(
         @Header("Authorization") token: String,
-        @Body body: RouteRequest
+        @Body body: RouteRequest,
+        @Url url: String = DIRECT_ROUTE_URL,
     ): RouteResponse
 
-    @POST("api/geotrack/geocode-address")
+    @POST
     suspend fun geocodeAddress(
         @Header("Authorization") token: String,
-        @Body body: GeocodeAddressRequest
+        @Body body: GeocodeAddressRequest,
+        @Url url: String = DIRECT_GEOCODE_URL,
     ): GeocodeAddressResponse
 
     @POST("api/geotrack/visit/arrival-otp/request")
@@ -681,29 +654,32 @@ interface GeoTrackApi {
 
     // ── Timeline (self-view) ──
 
-    @GET("api/geotrack/timeline")
+    @GET
     suspend fun getTimeline(
         @Header("Authorization") token: String,
         @Query("staffId") staffId: String? = null,
         @Query("dayStart") dayStart: Long,
-        @Query("dayEnd") dayEnd: Long
+        @Query("dayEnd") dayEnd: Long,
+        @Url url: String = DIRECT_TIMELINE_URL,
     ): TimelineResponse
 
-    @GET("api/geotrack/session-route")
+    @GET
     suspend fun getSessionRoute(
         @Header("Authorization") token: String,
         @Query("staffId") staffId: String? = null,
         @Query("dayStart") dayStart: Long,
         @Query("dayEnd") dayEnd: Long,
         @Query("minStopMinutes") minStopMinutes: Int? = null,
+        @Url url: String = DIRECT_SESSION_ROUTE_URL,
     ): SessionRouteResponse
 
-    @GET("api/geotrack/trips")
+    @GET
     suspend fun getTrips(
         @Header("Authorization") token: String,
         @Query("staffId") staffId: String? = null,
-        @Query("startDate") startDate: Long,
-        @Query("endDate") endDate: Long
+        @Query("from") startDate: Long,
+        @Query("to") endDate: Long,
+        @Url url: String = DIRECT_TRIPS_URL,
     ): TripsResponse
 
     companion object {
@@ -711,8 +687,18 @@ interface GeoTrackApi {
         const val DIRECT_LOCATION_BATCH_URL = "$DIRECT_BASE_URL/api/tracking/location/batch"
         const val DIRECT_HEARTBEAT_URL = "$DIRECT_BASE_URL/api/tracking/heartbeat"
         const val DIRECT_TAMPER_URL = "$DIRECT_BASE_URL/api/tracking/tamper-events"
-        const val DIRECT_START_URL = "$DIRECT_BASE_URL/api/geotrack/start"
-        const val DIRECT_STOP_URL = "$DIRECT_BASE_URL/api/geotrack/stop"
+        const val DIRECT_START_URL = "$DIRECT_BASE_URL/api/tracking/sessions/start"
+        const val DIRECT_CURRENT_SESSION_URL = "$DIRECT_BASE_URL/api/tracking/sessions/current"
+        const val DIRECT_STOP_URL = "$DIRECT_BASE_URL/api/tracking/sessions/end"
+        const val DIRECT_LIVE_URL = "$DIRECT_BASE_URL/api/tracking/live"
+        const val DIRECT_DAY_STATUS_URL = "$DIRECT_BASE_URL/api/geotrack/day-status"
+        const val DIRECT_TIMELINE_URL = "$DIRECT_BASE_URL/api/geotrack/timeline"
+        const val DIRECT_TRIPS_URL = "$DIRECT_BASE_URL/api/tracking/trips"
+        const val DIRECT_NEARBY_STAFF_URL = "$DIRECT_BASE_URL/api/geotrack/nearby-staff"
+        const val DIRECT_SESSION_ROUTE_URL = "$DIRECT_BASE_URL/api/geotrack/session-route"
+        const val DIRECT_PLACE_SEARCH_URL = "$DIRECT_BASE_URL/api/tracking/places/search"
+        const val DIRECT_ROUTE_URL = "$DIRECT_BASE_URL/api/geotrack/route"
+        const val DIRECT_GEOCODE_URL = "$DIRECT_BASE_URL/api/geotrack/geocode-address"
 
         // Single shared client (see ApiService.create() — same rationale):
         // build once, reuse the connection pool across every trip/visit call
@@ -752,7 +738,7 @@ interface GeoTrackApi {
             }
             val completionTimeout = okhttp3.Interceptor { chain ->
                 val path = chain.request().url.encodedPath
-                if (path in SLOW_COMPLETION_PATHS) {
+                if (path in SLOW_OPERATION_PATHS) {
                     // These mutations can finish their database work after a
                     // normal 30-second response window. Do not report a network
                     // failure after the server has already committed the CP/SV.
@@ -782,9 +768,17 @@ interface GeoTrackApi {
                 .create(GeoTrackApi::class.java)
         }
 
-        private val SLOW_COMPLETION_PATHS = setOf(
+        private val SLOW_OPERATION_PATHS = setOf(
+            "/api/marketing/clientPlaceVisits/create",
+            "/api/geotrack/visit/start",
+            "/api/geotrack/visit/arrival-otp/request",
+            "/api/geotrack/visit/arrival-otp/verify",
+            "/api/marketing/clientPlaceVisits/markClientMet",
             "/api/geotrack/visit/complete",
             "/api/marketing/clientPlaceVisits/setOutcome",
+            "/api/marketing/clientPlaceVisits/joint-workflow",
+            "/api/marketing/clientPlaceVisits/joint-arrival-preflight",
+            "/api/marketing/clientPlaceVisits/joint-participant-ready",
             "/api/marketing/clientPlaceVisits/joint-submit-review",
             "/api/marketing/clientPlaceVisits/joint-complete-review",
         )
@@ -837,6 +831,13 @@ data class HeartbeatRequest(
     // tampering — not just a no-signal dead zone.
     val airplaneMode: Boolean? = null,
     val locationEnabled: Boolean? = null,
+    val lat: Double? = null,
+    val lng: Double? = null,
+    val networkAvailable: Boolean? = null,
+    val permissionState: String? = null,
+    val movementMode: String? = null,
+    val trackingActive: Boolean? = null,
+    val backgroundRestricted: Boolean? = null,
 )
 
 data class TamperReportRequest(
@@ -850,56 +851,47 @@ data class TamperReportRequest(
 )
 
 data class DirectTrackingStartRequest(
+    val deviceId: String,
+    val contextType: String = "attendance",
+    val contextId: String? = null,
+    val source: String = "mconnect",
+    val trigger: String = "attendance_punch_in",
+    val startedAt: Long,
     val lat: Double? = null,
     val lng: Double? = null,
+    val batteryPct: Int? = null,
 )
 
-class DirectTrackingStopRequest
+data class DirectTrackingStopRequest(
+    val sessionId: String,
+    val endedAt: Long,
+    val lat: Double? = null,
+    val lng: Double? = null,
+    val reason: String = "attendance_punch_out",
+)
 
-data class ConsentRequest(
-    val consented: Boolean = true,
-    val appVersion: String,
+data class DirectTrackingSessionResponse(
+    val success: Boolean,
+    val data: DirectTrackingSessionData? = null,
+    val error: String? = null,
+)
+
+data class DirectTrackingSessionData(
+    val sessionId: String,
+    val staffId: String? = null,
     val policyKey: String? = null,
-    val consentVersionKey: String? = null,
-    val status: String? = null,
-    val deviceId: String? = null
-)
-
-data class TrackingDeviceSyncRequest(
-    val deviceId: String,
-    val platform: String = "android",
-    val appVersion: String,
-    val pushToken: String? = null,
-    val notificationPermission: Boolean,
-    val fineLocationPermission: Boolean,
-    val backgroundLocationPermission: Boolean,
-    val activityRecognitionPermission: Boolean,
-    val batteryOptimizationIgnored: Boolean? = null,
-    val manufacturer: String? = null,
-    val model: String? = null
+    val contextType: String? = null,
+    val state: String? = null,
+    val deviceId: String? = null,
+    val startedAt: String? = null,
+    val lastLat: Double? = null,
+    val lastLng: Double? = null,
+    val batteryPct: Int? = null,
+    val trackingLive: Boolean = false,
+    val endedAt: String? = null,
 )
 
 // ── Response Models ──
-
-data class TrackingBootstrapResponse(
-    val success: Boolean,
-    val data: TrackingBootstrapData? = null,
-    val error: String? = null
-)
-
-data class TrackingDeviceSyncResponse(
-    val success: Boolean,
-    val device: TrackingDevice? = null,
-    val bootstrap: TrackingBootstrapData? = null,
-    val error: String? = null
-)
-
-data class TrackingConsentResponse(
-    val success: Boolean,
-    val consent: TrackingConsentRecord? = null,
-    val bootstrap: TrackingBootstrapData? = null,
-    val error: String? = null
-)
 
 data class GeoTrackResponse(
     val success: Boolean,
@@ -942,53 +934,6 @@ data class CpRevisitInfo(
     val error: String? = null,
 )
 
-data class ConsentStatusResponse(
-    val success: Boolean,
-    val data: ConsentData? = null
-)
-
-data class ConsentData(
-    val staffId: String? = null,
-    val consented: Boolean = false,
-    val consentedAt: Long? = null,
-    val appVersion: String? = null
-)
-
-data class TrackingConsentRecord(
-    val staffId: String? = null,
-    val consentVersionKey: String? = null,
-    val policyKey: String? = null,
-    val status: String? = null,
-    val appVersion: String? = null,
-    val actedAt: Long? = null,
-    val source: String? = null
-)
-
-data class TrackingAssignmentInfo(
-    val policyKey: String? = null,
-    val scopeType: String? = null
-)
-
-data class TrackingAssignments(
-    val attendance: TrackingAssignmentInfo? = null,
-    val siteVisit: TrackingAssignmentInfo? = null
-)
-
-data class TrackingPolicy(
-    val key: String? = null,
-    val label: String? = null,
-    val consentVersionKey: String? = null,
-    val requiresConsent: Boolean = false,
-    val requiresFineLocation: Boolean = false,
-    val requiresBackgroundLocation: Boolean = false,
-    val requiresActivityRecognition: Boolean = false,
-    val requiresNotificationPermission: Boolean = false,
-    val samplingMovingSeconds: Int = 0,
-    val samplingStationarySeconds: Int = 0,
-    val routeOptimizationEnabled: Boolean = false,
-    val routeDeviationThresholdMeters: Int = 0
-)
-
 data class TrackingSession(
     @com.google.gson.annotations.SerializedName("_id") val id: String? = null,
     val staffId: String,
@@ -1004,40 +949,6 @@ data class TrackingSession(
     val routeExpectedDistanceMeters: Int? = null,
     val routeActualDistanceMeters: Int? = null,
     val routeVarianceMeters: Int? = null
-)
-
-data class TrackingDevice(
-    @com.google.gson.annotations.SerializedName("_id") val id: String? = null,
-    val staffId: String,
-    val deviceId: String,
-    val platform: String? = null,
-    val appVersion: String? = null,
-    val pushToken: String? = null,
-    val notificationPermission: Boolean = false,
-    val fineLocationPermission: Boolean = false,
-    val backgroundLocationPermission: Boolean = false,
-    val activityRecognitionPermission: Boolean = false,
-    val status: String? = null,
-    val lastSyncedAt: Long? = null
-)
-
-data class TrackingBootstrapData(
-    val staffId: String,
-    val assignment: TrackingAssignments? = null,
-    val consentVersion: ConsentVersionInfo? = null,
-    val consent: TrackingConsentRecord? = null,
-    val activeSession: TrackingSession? = null,
-    val currentPolicy: TrackingPolicy? = null,
-    val device: TrackingDevice? = null,
-    val shouldTrack: Boolean = false,
-    val shouldPromptConsent: Boolean = false
-)
-
-data class ConsentVersionInfo(
-    val key: String,
-    val title: String? = null,
-    val body: String? = null,
-    val locale: String? = null
 )
 
 data class PlaceSearchResponse(
@@ -1974,8 +1885,12 @@ data class JointCpWorkflowResponse(
     val visit: CpVisitDetail? = null,
     val workflow: JointCpWorkflow? = null,
     val creditedStaffIds: List<String>? = null,
+    val alreadyCompleted: Boolean? = null,
     val error: String? = null,
     val code: String? = null,
+    val requiredRadiusMeters: Double? = null,
+    val maximumAccuracyMeters: Double? = null,
+    val maximumLocationAgeMs: Long? = null,
 )
 
 data class JointCpWorkflow(
@@ -1991,13 +1906,13 @@ data class JointCpWorkflow(
     val canReview: Boolean = false,
     val canCompleteReview: Boolean = false,
     // True after this bearer has explicitly swiped and the server accepted a
-    // fresh <50 m proximity check. The reviewer never receives an OTP.
-    // Null means a legacy deployment that predates reviewer readiness. Only an
-    // explicit false may force the new swipe, so mixed rollouts keep working.
+    // fresh <=100 m proximity check. The reviewer never receives an OTP.
+    // Null means the server did not confirm readiness. The reviewer must still
+    // receive the proximity action so a partial/mixed rollout cannot deadlock.
     val actorReady: Boolean? = null,
     val separationMeters: Double? = null,
     val isWithinCompletionRadius: Boolean = false,
-    val requiredRadiusMeters: Double = 50.0,
+    val requiredRadiusMeters: Double = 100.0,
     val outcomeRevision: Long? = null,
     val outcome: String? = null,
     @JsonAdapter(FlexibleDisplayStringDeserializer::class)

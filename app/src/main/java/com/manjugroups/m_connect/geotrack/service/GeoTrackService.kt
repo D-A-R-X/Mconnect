@@ -1,6 +1,7 @@
 package com.manjugroups.m_connect.geotrack.service
 
 import android.annotation.SuppressLint
+import android.Manifest
 import android.app.*
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -263,7 +264,7 @@ class GeoTrackService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.i(TAG, "onStartCommand — token=${session.token?.take(10)}...")
         if (!session.shouldTrackNow || session.activeTrackingSessionId.isNullOrBlank()) {
-            Log.i(TAG, "No active tracking session from server bootstrap — stopping service")
+            Log.i(TAG, "No active tracking session from direct recovery; stopping service")
             stopSelf()
             return START_NOT_STICKY
         }
@@ -301,7 +302,6 @@ class GeoTrackService : Service() {
             sessionOpen = true
             verifiedAttendanceDay = AttendanceDayBoundary.dateKey()
             scheduleAttendanceDayBoundaryStop()
-            queueDirectTrackingCommand(start = true)
             initializeTracking()
         }
 
@@ -611,6 +611,13 @@ class GeoTrackService : Service() {
                                 batteryPct = battery,
                                 appVersion = BuildConfig.VERSION_NAME,
                                 recordedAt = tickAt,
+                                lat = loc?.latitude,
+                                lng = loc?.longitude,
+                                networkAvailable = hasNetwork(),
+                                permissionState = trackingPermissionState(),
+                                movementMode = lastActivity,
+                                trackingActive = true,
+                                backgroundRestricted = isBackgroundRestricted(),
                             )
                         )
                         Log.i(TAG, "Initial heartbeat sent")
@@ -629,6 +636,13 @@ class GeoTrackService : Service() {
                                     put("requestId", heartbeatRequestId)
                                     if (battery != null) put("batteryPct", battery)
                                     put("appVersion", BuildConfig.VERSION_NAME)
+                                    loc?.latitude?.let { put("lat", it) }
+                                    loc?.longitude?.let { put("lng", it) }
+                                    put("networkAvailable", hasNetwork())
+                                    put("permissionState", trackingPermissionState())
+                                    put("movementMode", lastActivity)
+                                    put("trackingActive", true)
+                                    put("backgroundRestricted", isBackgroundRestricted())
                                 },
                                 occurredAt = tickAt,
                             )
@@ -884,36 +898,36 @@ class GeoTrackService : Service() {
         sessionOpen = false
         Log.i(TAG, "$reason — stopping GeoTrack")
         clockGateStopped = true
-        queueDirectTrackingCommand(start = false)
-        // Clear the bootstrap flags so START_STICKY / a later bootstrap sync
-        // doesn't resurrect tracking until the next genuine clock-in.
+        queueDirectTrackingEnd(reason)
+        // Keep the ended session ID until the direct end request succeeds so
+        // offline points and the retry retain their original session identity.
         runCatching {
             session.shouldTrackNow = false
-            session.activeTrackingSessionId = null
         }
         stopSelf()
     }
 
-    private suspend fun queueDirectTrackingCommand(start: Boolean) {
-        val sessionKey = session.activeTrackingSessionId ?: "current"
-        val eventType = if (start) {
-            GeoTrackEventQueue.TRACKING_START_EVENT_TYPE
-        } else {
-            GeoTrackEventQueue.TRACKING_STOP_EVENT_TYPE
-        }
+    private suspend fun queueDirectTrackingEnd(reason: String) {
+        val sessionId = session.activeTrackingSessionId ?: return
+        val endedAt = System.currentTimeMillis()
+        val requestId = "tracking-end-$sessionId"
         val queued = GeoTrackEventQueue.enqueueDistinct(
             context = this,
-            eventType = eventType,
+            eventType = GeoTrackEventQueue.TRACKING_STOP_EVENT_TYPE,
             metadata = buildMap {
-                session.activeTrackingSessionId?.let { put("sessionId", it) }
-                session.trackingDeviceId?.let { put("deviceId", it) }
+                put("sessionId", sessionId)
+                put("deviceId", session.trackingDeviceId)
+                put("requestId", requestId)
+                put("endedAt", endedAt)
+                put("reason", reason)
             },
-            signature = "${eventType.lowercase()}_$sessionKey",
+            signature = requestId,
             minIntervalMs = 24 * 60 * 60 * 1000L,
+            occurredAt = endedAt,
         )
         if (queued && hasNetwork()) {
             runCatching { GeoTrackEventQueue.flush(this, api, session) }
-                .onFailure { Log.w(TAG, "$eventType sync deferred: ${it.message}") }
+                .onFailure { Log.w(TAG, "Tracking end sync deferred: ${it.message}") }
         }
     }
 
@@ -1043,6 +1057,11 @@ class GeoTrackService : Service() {
                                 recordedAt = tickAt,
                                 airplaneMode = airplane,
                                 locationEnabled = locEnabled,
+                                networkAvailable = hasNetwork(),
+                                permissionState = trackingPermissionState(),
+                                movementMode = lastActivity,
+                                trackingActive = true,
+                                backgroundRestricted = isBackgroundRestricted(),
                             )
                         )
                     }
@@ -1068,6 +1087,11 @@ class GeoTrackService : Service() {
                                 put("appVersion", BuildConfig.VERSION_NAME)
                                 put("airplaneMode", airplane)
                                 put("locationEnabled", locEnabled)
+                                put("networkAvailable", hasNetwork())
+                                put("permissionState", trackingPermissionState())
+                                put("movementMode", lastActivity)
+                                put("trackingActive", true)
+                                put("backgroundRestricted", isBackgroundRestricted())
                             },
                             occurredAt = tickAt,
                         )
@@ -1419,4 +1443,15 @@ class GeoTrackService : Service() {
         val caps = cm.getNetworkCapabilities(cm.activeNetwork ?: return false) ?: return false
         return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
+
+    private fun trackingPermissionState(): String = when {
+        checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED ->
+            "fine_location_missing"
+        !hasBackgroundLocationPermission() -> "background_location_missing"
+        else -> "granted"
+    }
+
+    private fun isBackgroundRestricted(): Boolean =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
+            (getSystemService(ACTIVITY_SERVICE) as ActivityManager).isBackgroundRestricted
 }
