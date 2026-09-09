@@ -1,6 +1,7 @@
 package com.manjugroups.m_connect.util
 
 import android.content.Context
+import android.content.Intent
 import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
 import androidx.core.content.PackageManagerCompat
@@ -21,6 +22,12 @@ import androidx.fragment.app.FragmentActivity
  * [PackageManagerCompat] / [IntentCompat] helpers do across API levels.
  */
 object UnusedAppRestrictions {
+
+    internal data class UiState(
+        val visible: Boolean,
+        val satisfied: Boolean,
+        val restrictionDisabled: Boolean,
+    )
 
     private const val PREFS = "unused_app_restrictions"
     private const val KEY_ASKED = "asked_v1"
@@ -47,7 +54,9 @@ object UnusedAppRestrictions {
                     UnusedAppRestrictionsConstants.FEATURE_NOT_AVAILABLE,
                     UnusedAppRestrictionsConstants.DISABLED -> Unit
                     // Restrictions are ENABLED (any API-level variant) — prompt.
-                    else -> showDialog(activity, prefs)
+                    else -> settingsIntent(activity)?.let { intent ->
+                        showDialog(activity, prefs, intent)
+                    }
                 }
             },
             ContextCompat.getMainExecutor(activity),
@@ -57,6 +66,7 @@ object UnusedAppRestrictions {
     private fun showDialog(
         activity: FragmentActivity,
         prefs: android.content.SharedPreferences,
+        settingsIntent: Intent,
     ) {
         // Don't stack on top of the mandatory background-permissions gate;
         // leave KEY_ASKED unset so we retry on a later foreground.
@@ -80,12 +90,38 @@ object UnusedAppRestrictions {
                     "\"Remove permissions if unused\") for Mconnect.",
             )
             .setPositiveButton("Open settings") { _, _ ->
-                val intent = IntentCompat.createManageUnusedAppRestrictionsIntent(
-                    activity, activity.packageName,
-                )
-                runCatching { activity.startActivity(intent) }
+                runCatching { activity.startActivity(settingsIntent) }
             }
             .setNegativeButton("Not now", null)
             .show()
+    }
+
+    /**
+     * Returns the vendor/system screen only when Android can actually resolve
+     * it. Some Android 11+ OEM builds omit this screen entirely even though the
+     * platform API level normally supports app hibernation.
+     */
+    fun settingsIntent(context: Context): Intent? {
+        val intent = runCatching {
+            IntentCompat.createManageUnusedAppRestrictionsIntent(
+                context,
+                context.packageName,
+            )
+        }.getOrNull() ?: return null
+        return intent.takeIf { it.resolveActivity(context.packageManager) != null }
+    }
+
+    internal fun uiState(status: Int?, canOpenSettings: Boolean): UiState {
+        val enabled = status == UnusedAppRestrictionsConstants.API_30_BACKPORT ||
+            status == UnusedAppRestrictionsConstants.API_30 ||
+            status == UnusedAppRestrictionsConstants.API_31
+        val disabled = status == UnusedAppRestrictionsConstants.DISABLED
+        val supported = enabled || disabled
+        val visible = supported && canOpenSettings
+        return UiState(
+            visible = visible,
+            satisfied = !visible || disabled,
+            restrictionDisabled = visible && disabled,
+        )
     }
 }

@@ -113,6 +113,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
     // Caches for fast display
     private var staffCache: List<StaffData> = emptyList()
     private var projectCache: List<MarketingProject> = emptyList()
+    private val pickerLoadGate = PickerLoadGate()
 
     // Collection CP gate — when the user picks "Collection CP" we
     // pre-fetch the client's confirmed bookings (postSaleCases) and
@@ -924,12 +925,12 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             showStaffPicker(label, staffCache)
             return
         }
-        viewLifecycleOwner.lifecycleScope.launch {
+        launchPickerLoad(label, "Loading staff...") {
             try {
                 val resp = api.getStaff(session.bearerToken, status = "active")
                 if (!resp.success) {
                     toast("Failed to load staff list")
-                    return@launch
+                    return@launchPickerLoad
                 }
                 staffCache = resp.staff
                 showStaffPicker(label, resp.staff)
@@ -987,12 +988,12 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             show(staffCache)
             return
         }
-        viewLifecycleOwner.lifecycleScope.launch {
+        launchPickerLoad(label, "Loading staff...") {
             try {
                 val resp = api.getStaff(session.bearerToken, status = "active")
                 if (!resp.success) {
                     toast("Failed to load staff list")
-                    return@launch
+                    return@launchPickerLoad
                 }
                 staffCache = resp.staff
                 show(resp.staff)
@@ -1085,12 +1086,12 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             showLmoPicker(label, staffCache)
             return
         }
-        viewLifecycleOwner.lifecycleScope.launch {
+        launchPickerLoad(label, "Loading staff...") {
             try {
                 val resp = api.getStaff(session.bearerToken, status = "active")
                 if (!resp.success) {
                     toast("Failed to load staff list")
-                    return@launch
+                    return@launchPickerLoad
                 }
                 staffCache = resp.staff
                 showLmoPicker(label, resp.staff)
@@ -1143,12 +1144,12 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             showProjectPicker(label, projectCache)
             return
         }
-        viewLifecycleOwner.lifecycleScope.launch {
+        launchPickerLoad(label, "Loading projects...") {
             try {
                 val resp = api.getMarketingProjects(session.bearerToken)
                 if (!resp.success) {
                     toast(resp.error ?: "Failed to load projects")
-                    return@launch
+                    return@launchPickerLoad
                 }
                 projectCache = resp.projects
                 showProjectPicker(label, resp.projects)
@@ -1277,6 +1278,31 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         if (!showClient) {
             selectedReferringClient = null
             view?.findViewById<EditText>(R.id.etReferringClient)?.setText("")
+        }
+    }
+
+    private fun launchPickerLoad(
+        label: EditText,
+        loadingHint: String,
+        load: suspend () -> Unit,
+    ) {
+        if (!pickerLoadGate.tryStart()) {
+            toast("Options are still loading. Please wait.")
+            return
+        }
+        val previousHint = label.hint
+        label.hint = loadingHint
+        label.isEnabled = false
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                load()
+            } finally {
+                pickerLoadGate.finish()
+                if (isAdded) {
+                    label.hint = previousHint
+                    label.isEnabled = true
+                }
+            }
         }
     }
 

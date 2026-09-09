@@ -1663,7 +1663,7 @@ data class StaffData(
     val iamTemplateId: String? = null,
     @SerializedName(value = "iamTemplateName", alternate = ["templateName", "permissionTemplateName"])
     val iamTemplateName: String? = null,
-    @SerializedName(value = "iamTemplateLevel", alternate = ["templateLevel", "roleLevel"])
+    @SerializedName(value = "iamTemplateLevel", alternate = ["templateLevel", "designationLevel"])
     val iamTemplateLevel: Int? = null,
     @SerializedName(value = "jointCpWorkflowRole", alternate = ["jointCpRole"])
     val jointCpWorkflowRole: String? = null,
