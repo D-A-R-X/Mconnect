@@ -49,6 +49,7 @@ import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.geotrack.AttendanceTrackingGate
+import com.manjugroups.m_connect.geotrack.GeoTrackBootstrapSync
 import com.manjugroups.m_connect.geotrack.GeoTrackConsentActivity
 import com.manjugroups.m_connect.geotrack.service.GeoTrackService
 import com.manjugroups.m_connect.network.ApiService
@@ -67,7 +68,6 @@ import com.manjugroups.m_connect.network.JointCpWorkflow
 import com.manjugroups.m_connect.network.MmsFleetDriverSiteVisitRequest
 import com.manjugroups.m_connect.network.StartVisitRequest
 import com.manjugroups.m_connect.network.StorageUploader
-import com.manjugroups.m_connect.network.TrackingBootstrapData
 import com.manjugroups.m_connect.ui.common.navigateUp
 import com.manjugroups.m_connect.ui.common.OutcomeRemarksBottomSheet
 import com.manjugroups.m_connect.ui.common.OutcomeSelectionDialog
@@ -1902,11 +1902,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     )
                 }
 
-                // Refresh tracking session + start GeoTrackService
-                val bootstrap = geoApi
-                    .getTrackingBootstrap(session.bearerToken, session.trackingDeviceId)
-                    .data
-                applyTrackingBootstrap(bootstrap, attendanceActive = true)
+                GeoTrackBootstrapSync.sync(requireContext(), api = geoApi)
 
                 visitStarted = true
                 // Remember locally that this device started the trip so a
@@ -3922,18 +3918,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 // Completion is already committed. A dashboard refresh failure
                 // must not tell staff the visit failed and tempt a duplicate.
                 runCatching {
-                    val bootstrap = geoApi
-                        .getTrackingBootstrap(session.bearerToken, session.trackingDeviceId)
-                        .data
-                    applyTrackingBootstrap(
-                        bootstrap,
-                        attendanceActive = runCatching {
-                            AttendanceTrackingGate.isClockedInForToday(
-                                session.bearerToken,
-                                api,
-                            )
-                        }.getOrDefault(false),
-                    )
+                    GeoTrackBootstrapSync.sync(requireContext(), api = geoApi)
                 }.onFailure {
                     android.util.Log.w("TripNav", "Post-completion refresh failed", it)
                 }
@@ -3987,26 +3972,6 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     }
 
     private var pendingArrivalStorageId: String? = null
-
-    private fun applyTrackingBootstrap(bootstrap: TrackingBootstrapData?, attendanceActive: Boolean) {
-        session.activeTrackingSessionId = bootstrap?.activeSession?.id
-        session.shouldTrackNow = attendanceActive && bootstrap?.shouldTrack == true
-        session.geoTrackingEnabled =
-            bootstrap?.assignment?.attendance != null || bootstrap?.assignment?.siteVisit != null
-        session.geoConsentGiven = bootstrap?.consent?.status == "granted"
-        session.geoConsentDeclined =
-            bootstrap?.consent?.status == "declined" || bootstrap?.consent?.status == "revoked"
-
-        if (attendanceActive && bootstrap?.shouldPromptConsent == true) {
-            startActivity(Intent(requireContext(), GeoTrackConsentActivity::class.java))
-            return
-        }
-        if (attendanceActive && bootstrap?.shouldTrack == true && !bootstrap.activeSession?.id.isNullOrBlank()) {
-            GeoTrackService.start(requireContext())
-        } else {
-            GeoTrackService.stop(requireContext())
-        }
-    }
 
     private fun hasLocationPermission(): Boolean {
         val ctx = requireContext()

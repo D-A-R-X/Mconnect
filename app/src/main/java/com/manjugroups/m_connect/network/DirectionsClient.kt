@@ -11,9 +11,8 @@ import kotlin.math.cos
 import kotlin.math.max
 
 /**
- * Driving-route helper. Calls our Convex backend (which proxies to the
- * Routes API using the server-side key), then decodes the encoded polyline
- * locally for rendering on the map.
+ * Driving-route helper. Calls the direct GeoTrack service, then decodes the
+ * encoded polyline locally for rendering on the map.
  *
  * Returns null if the backend reports failure or the network call throws —
  * callers should fall back gracefully (e.g. straight-line + haversine).

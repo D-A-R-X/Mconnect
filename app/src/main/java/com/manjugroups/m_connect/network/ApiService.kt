@@ -2124,7 +2124,6 @@ data class PunchRequest(
 data class PunchResponse(
     val success: Boolean,
     val attendanceId: String?,
-    val trackingBootstrap: TrackingBootstrapData? = null,
     val error: String? = null
 )
 

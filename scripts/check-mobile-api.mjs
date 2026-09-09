@@ -171,8 +171,6 @@ async function cpSvContracts() {
     ["POST", "/api/address/parse"],
     ["GET", "/api/address/autocomplete?q=contract-probe"],
     ["GET", "/api/address/place?placeId=contract-probe"],
-    ["POST", "/api/geotrack/geocode-address"],
-    ["POST", "/api/geotrack/route", [400, 401]],
     ["GET", "/api/hr/attendance/today"],
     ["GET", "/api/hr/attendance/day-sessions"],
     ["GET", "/api/hr/attendance/my?fromDate=2099-01-01&toDate=2099-01-01"],
@@ -181,21 +179,13 @@ async function cpSvContracts() {
     ["GET", "/api/hr/permissions/monthly-usage"],
     ["GET", "/api/mobile/dashboard?date=2099-01-01"],
 
-    // Tracking, lists and trip lifecycle.
-    ["GET", "/api/tracking/bootstrap?deviceId=contract-probe"],
-    ["POST", "/api/tracking/device/sync", [400, 401]],
-    ["POST", "/api/tracking/consent", [400, 401]],
-    ["POST", "/api/geotrack/tamper/report", [400, 401]],
-    ["POST", "/api/geotrack/consent", [400, 401]],
-    ["GET", "/api/geotrack/consent/status"],
+    // Business-owned visit lists and lifecycle.
     ["GET", "/api/geotrack/assigned-places"],
     ["GET", "/api/geotrack/today-visits?date=2099-01-01"],
     ["GET", "/api/sitevisits/my?pageSize=1"],
     ["POST", "/api/geotrack/visit/create"],
     ["POST", "/api/geotrack/visit/start"],
     ["POST", "/api/geotrack/visit/complete"],
-    ["GET", "/api/geotrack/timeline?dayStart=0&dayEnd=1", [400, 401]],
-    ["GET", "/api/geotrack/session-route?dayStart=0&dayEnd=1", [400, 401]],
 
     // Driver-backed SV trip actions reachable from the shared trip screen.
     ["GET", "/api/mms-fleet/driver/trips"],
@@ -299,8 +289,8 @@ async function cpSvContracts() {
     [geoBaseUrl, "POST", "/api/tracking/location/batch", [400, 401]],
     [geoBaseUrl, "POST", "/api/tracking/heartbeat", [400, 401]],
     [geoBaseUrl, "POST", "/api/tracking/tamper-events", [400, 401]],
-    [geoBaseUrl, "POST", "/api/geotrack/start", [400, 401]],
-    [geoBaseUrl, "POST", "/api/geotrack/stop", [400, 401]],
+    [geoBaseUrl, "POST", "/api/tracking/sessions/start", [400, 401]],
+    [geoBaseUrl, "POST", "/api/tracking/sessions/end", [400, 401]],
     [storageBaseUrl, "POST", "/api/storage/uploads", 401],
     [storageBaseUrl, "POST", "/api/storage/uploads/contract-probe/complete", 401],
     [storageBaseUrl, "DELETE", "/api/storage/uploads/contract-probe", 401],
@@ -331,6 +321,11 @@ async function geoTrackDirectContracts() {
   const geoBaseUrl = args["geo-base-url"]
     ?? process.env.MCONNECT_GEO_BASE_URL
     ?? DEFAULT_GEO_BASE_URL;
+  for (const path of ["/healthz", "/readyz"]) {
+    const result = await request("GET", path, { baseUrl: geoBaseUrl });
+    expectStatus(result, 200);
+    assert(typeof result.data === "object" && result.data !== null, `${path} returned JSON`);
+  }
   const live = await request("GET", "/api/tracking/live?limit=1", {
     baseUrl: geoBaseUrl,
   });
@@ -345,6 +340,31 @@ async function geoTrackDirectContracts() {
 
   const invalidToken = "invalid-geotrack-contract-probe";
   const headers = { "Idempotency-Key": "invalid-geotrack-contract-probe" };
+  const authenticatedReads = [
+    "/api/tracking/sessions/current",
+    "/api/geotrack/day-status?from=1&to=2&limit=1",
+    "/api/geotrack/timeline?dayStart=1&dayEnd=2",
+    "/api/geotrack/session-route?dayStart=1&dayEnd=2",
+    "/api/tracking/trips?from=1&to=2",
+    "/api/geotrack/nearby-staff?lat=13.0827&lng=80.2707&radiusMeters=100&limit=1",
+    "/api/tracking/places/search?q=Chennai",
+    "/api/tracking/tamper-events?limit=1",
+    "/api/geotrack/employee-detail?staffId=contract-probe",
+    "/api/geotrack/stats?startDate=1&endDate=2",
+  ];
+  const failures = [];
+  for (const path of authenticatedReads) {
+    const result = await request("GET", path, {
+      baseUrl: geoBaseUrl,
+      token: invalidToken,
+    });
+    try {
+      expectStatus(result, 401, true);
+    } catch (error) {
+      failures.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   const writeRoutes = [
     ["/api/tracking/location/batch", { deviceId: "contract-probe", requestId: "contract-probe", points: [] }],
     ["/api/tracking/heartbeat", {
@@ -361,10 +381,26 @@ async function geoTrackDirectContracts() {
       requestId: "contract-probe",
       metadata: { source: "contract-probe" },
     }],
-    ["/api/geotrack/start", {}],
-    ["/api/geotrack/stop", {}],
+    ["/api/tracking/sessions/start", {
+      deviceId: "contract-probe",
+      contextType: "attendance",
+      source: "mconnect",
+      trigger: "attendance_punch_in",
+      startedAt: 1,
+    }],
+    ["/api/tracking/sessions/end", {
+      sessionId: "contract-probe",
+      endedAt: 2,
+      reason: "attendance_punch_out",
+    }],
+    ["/api/geotrack/route", {
+      originLat: 13.0827,
+      originLng: 80.2707,
+      destLat: 13.083,
+      destLng: 80.271,
+    }],
+    ["/api/geotrack/geocode-address", { address: "Chennai" }],
   ];
-  const failures = [];
   for (const [path, body] of writeRoutes) {
     const result = await request("POST", path, {
       baseUrl: geoBaseUrl,

@@ -22,22 +22,6 @@ object GeoTrackEventQueue {
     const val HEARTBEAT_EVENT_TYPE = "HEARTBEAT"
     const val TRACKING_START_EVENT_TYPE = "TRACKING_START"
     const val TRACKING_STOP_EVENT_TYPE = "TRACKING_STOP"
-    private val directTamperTypes = setOf(
-        "GPS_DISABLED",
-        "GPS_ENABLED",
-        "LOCATION_DISABLED",
-        "LOCATION_ENABLED",
-        "NETWORK_OFFLINE",
-        "NETWORK_ONLINE",
-        "AIRPLANE_MODE_ON",
-        "AIRPLANE_MODE_OFF",
-        "MOCK_LOCATION",
-        "PERMISSION_MISSING",
-        "DEVICE_REBOOT",
-        "DEVICE_SHUTDOWN",
-        "HEARTBEAT_MISSED",
-    )
-
     suspend fun enqueue(
         context: Context,
         eventType: String,
@@ -130,28 +114,72 @@ object GeoTrackEventQueue {
                             recordedAt = occurredAt,
                             airplaneMode = metadata["airplaneMode"] as? Boolean,
                             locationEnabled = metadata["locationEnabled"] as? Boolean,
+                            lat = (metadata["lat"] as? Number)?.toDouble(),
+                            lng = (metadata["lng"] as? Number)?.toDouble(),
+                            networkAvailable = metadata["networkAvailable"] as? Boolean,
+                            permissionState = metadata["permissionState"] as? String,
+                            movementMode = metadata["movementMode"] as? String,
+                            trackingActive = metadata["trackingActive"] as? Boolean,
+                            backgroundRestricted = metadata["backgroundRestricted"] as? Boolean,
                         ),
                     )
                     resp.success
                 }.getOrDefault(false)
             } else if (event.eventType == TRACKING_START_EVENT_TYPE) {
-                runCatching {
-                    api.startDirectTracking(
-                        token = session.bearerToken,
-                        idempotencyKey = requestId,
-                        body = DirectTrackingStartRequest(
-                            lat = (metadata["lat"] as? Number)?.toDouble(),
-                            lng = (metadata["lng"] as? Number)?.toDouble(),
-                        ),
-                    ).success
-                }.getOrDefault(false)
+                val queuedStartAt = (metadata["startedAt"] as? Number)?.toLong() ?: occurredAt
+                if (AttendanceDayBoundary.dateKey(queuedStartAt) != AttendanceDayBoundary.dateKey()) {
+                    true // Never reopen a start command from a finalized attendance day.
+                } else when (AttendanceTrackingGate.hasOpenSessionNow(session.bearerToken)) {
+                    false -> true // Stale offline start from a closed attendance day.
+                    null -> false
+                    true -> runCatching {
+                        val response = api.startDirectTracking(
+                            token = session.bearerToken,
+                            idempotencyKey = requestId,
+                            body = DirectTrackingStartRequest(
+                                deviceId = deviceId,
+                                contextId = metadata["contextId"] as? String,
+                                startedAt = queuedStartAt,
+                                lat = (metadata["lat"] as? Number)?.toDouble(),
+                                lng = (metadata["lng"] as? Number)?.toDouble(),
+                                batteryPct = (metadata["batteryPct"] as? Number)?.toInt(),
+                            ),
+                        )
+                        val activeId = response.data?.sessionId?.takeIf { it.isNotBlank() }
+                        if (response.success && activeId != null) {
+                            session.activeTrackingSessionId = activeId
+                            session.shouldTrackNow = true
+                            if (com.manjugroups.m_connect.geotrack.service.GeoTrackService
+                                    .hasRequiredLocationPermissions(context)
+                            ) {
+                                com.manjugroups.m_connect.geotrack.service.GeoTrackService.start(context)
+                            }
+                            true
+                        } else {
+                            false
+                        }
+                    }.getOrDefault(false)
+                }
             } else if (event.eventType == TRACKING_STOP_EVENT_TYPE) {
                 runCatching {
-                    api.stopDirectTracking(
+                    val stoppedSessionId = (metadata["sessionId"] as? String)
+                        ?.takeIf { it.isNotBlank() }
+                        ?: return@runCatching false
+                    val response = api.stopDirectTracking(
                         token = session.bearerToken,
                         idempotencyKey = requestId,
-                        body = DirectTrackingStopRequest(),
-                    ).success
+                        body = DirectTrackingStopRequest(
+                            sessionId = stoppedSessionId,
+                            endedAt = (metadata["endedAt"] as? Number)?.toLong() ?: occurredAt,
+                            lat = (metadata["lat"] as? Number)?.toDouble(),
+                            lng = (metadata["lng"] as? Number)?.toDouble(),
+                            reason = (metadata["reason"] as? String) ?: "attendance_session_closed",
+                        ),
+                    )
+                    if (response.success && session.activeTrackingSessionId == stoppedSessionId) {
+                        session.activeTrackingSessionId = null
+                    }
+                    response.success
                 }.getOrDefault(false)
             } else {
                 runCatching {
@@ -163,18 +191,11 @@ object GeoTrackEventQueue {
                         detectedAt = occurredAt,
                         requestId = requestId,
                     )
-                    if (event.eventType in directTamperTypes) {
-                        api.reportTamper(
-                            token = session.bearerToken,
-                            idempotencyKey = requestId,
-                            body = body,
-                        ).success
-                    } else {
-                        // Historical MMS-only lifecycle events such as
-                        // USER_LOGIN and APP_UPDATED are not accepted by the
-                        // direct GeoTrack tamper contract.
-                        api.reportLegacyTamper(session.bearerToken, body).success
-                    }
+                    api.reportTamper(
+                        token = session.bearerToken,
+                        idempotencyKey = requestId,
+                        body = body,
+                    ).success
                 }.getOrDefault(false)
             }
             if (ok) {

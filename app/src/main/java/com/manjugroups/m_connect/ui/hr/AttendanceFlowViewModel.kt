@@ -20,7 +20,6 @@ import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.PunchRequest
 import com.manjugroups.m_connect.network.SessionData
 import com.manjugroups.m_connect.network.StorageUploader
-import com.manjugroups.m_connect.network.TrackingBootstrapData
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -445,20 +444,16 @@ class AttendanceFlowViewModel(
 
                 context?.let { ctx ->
                     val appCtx = ctx.applicationContext
+                    GeoTrackBootstrapSync.onPunchRecorded(
+                        context = appCtx,
+                        punchedIn = mode == PunchMode.PUNCH_IN,
+                        contextId = response.attendanceId,
+                        occurredAt = parseMillis(punchIso) ?: System.currentTimeMillis(),
+                        lat = latitude,
+                        lng = longitude,
+                        api = geoApi,
+                    )
                     if (mode == PunchMode.PUNCH_OUT) {
-                        // Clock-out closes the GeoTrack window immediately. Don't
-                        // route through the server bootstrap on punch-out — it can
-                        // momentarily still report shouldTrack and let post-clock-out
-                        // travel leak onto the map. Flip shouldTrackNow off (blocks a
-                        // START_STICKY restart) and stop the service. We deliberately
-                        // KEEP activeTrackingSessionId so the service's final sync can
-                        // still flush the in-window tail captured since the last cycle;
-                        // no new points are captured because stop() removes the
-                        // location updates immediately. The service's own clock-in
-                        // gate is the backstop for non-app clock-outs (biometric/
-                        // midnight) and for any bootstrap-driven restart.
-                        SessionManager(appCtx).shouldTrackNow = false
-                        GeoTrackService.stop(appCtx)
                         // Clocking out also ends any active On-Duty trip — a
                         // forgotten on-duty must not keep accumulating travel
                         // routes past the shift. Clear it locally (immediate UI)
@@ -483,15 +478,6 @@ class AttendanceFlowViewModel(
                                 )
                             }
                         }
-                    } else {
-                        val bootstrap = response.trackingBootstrap ?: runCatching {
-                            geoApi.getTrackingBootstrap(token, deviceId ?: SessionManager(ctx).trackingDeviceId).data
-                        }.getOrNull()
-                        applyTrackingBootstrap(
-                            context = appCtx,
-                            bootstrap = bootstrap,
-                            attendanceActive = true,
-                        )
                     }
                 }
 
@@ -668,14 +654,6 @@ class AttendanceFlowViewModel(
         val rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
         if (rotated !== bitmap) bitmap.recycle()
         return rotated
-    }
-
-    private fun applyTrackingBootstrap(
-        context: Context,
-        bootstrap: TrackingBootstrapData?,
-        attendanceActive: Boolean,
-    ) {
-        GeoTrackBootstrapSync.apply(context, bootstrap, allowPromptConsent = attendanceActive)
     }
 
     /** Minimal projection of a queued offline punch used by the pure overlay

@@ -18,7 +18,6 @@ import com.manjugroups.m_connect.attendance.OfflinePunchQueue
 import com.manjugroups.m_connect.attendance.PunchSyncWorker
 import com.manjugroups.m_connect.geotrack.data.GeoTrackDatabase
 import com.manjugroups.m_connect.geotrack.data.PendingPunchEntity
-import com.manjugroups.m_connect.network.TrackingBootstrapData
 import com.manjugroups.m_connect.network.StartVisitRequest
 import com.manjugroups.m_connect.network.AssignedPlace
 import com.manjugroups.m_connect.network.TodayVisit
@@ -323,16 +322,14 @@ class HomeViewModel : ViewModel() {
                     // on an earlier attempt so they don't linger.
                     PunchSyncWorker.enqueue(context)
                     _punchEvent.emit(PunchEvent.Success(if (isPunchIn) "Punched In!" else "Punched Out!"))
-                    val bootstrap = response.trackingBootstrap ?: runCatching {
-                        geoApi.getTrackingBootstrap(
-                            bearerToken,
-                            SessionManager(context).trackingDeviceId,
-                        ).data
-                    }.getOrNull()
-                    applyTrackingBootstrap(
+                    GeoTrackBootstrapSync.onPunchRecorded(
                         context = context,
-                        bootstrap = bootstrap,
-                        attendanceActive = true,
+                        punchedIn = isPunchIn,
+                        contextId = response.attendanceId,
+                        occurredAt = parseMillis(punchIso),
+                        lat = lat,
+                        lng = lng,
+                        api = geoApi,
                     )
                     if (isPunchIn) {
                         loadTodayVisits(bearerToken)
@@ -858,14 +855,7 @@ class HomeViewModel : ViewModel() {
                     return@launch
                 }
                 geoApi.startVisit(bearerToken, StartVisitRequest(visitId, lat, lng))
-                applyTrackingBootstrap(
-                    context = context,
-                    bootstrap = geoApi.getTrackingBootstrap(
-                        bearerToken,
-                        SessionManager(context).trackingDeviceId,
-                    ).data,
-                    attendanceActive = true,
-                )
+                GeoTrackBootstrapSync.sync(context, api = geoApi)
                 _punchEvent.emit(PunchEvent.Success("Visit started!"))
                 setVisitNotification(context, cachedState?.todayVisits?.firstOrNull { it.id == visitId }, null)
                 val latest = cachedState ?: return@launch
@@ -889,14 +879,7 @@ class HomeViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 geoApi.completeVisit(bearerToken, CompleteVisitRequest(visitId, lat, lng))
-                applyTrackingBootstrap(
-                    context = context,
-                    bootstrap = geoApi.getTrackingBootstrap(
-                        bearerToken,
-                        SessionManager(context).trackingDeviceId,
-                    ).data,
-                    attendanceActive = cachedState?.hasOpenSession == true,
-                )
+                GeoTrackBootstrapSync.sync(context, api = geoApi)
                 _punchEvent.emit(PunchEvent.Success("Visit completed!"))
                 // Visit over → drop the field-activity so the tracking
                 // notification falls back to its neutral shift line.
@@ -931,14 +914,7 @@ class HomeViewModel : ViewModel() {
                 if (createResp.success && createResp.visitId != null) {
                     // Start the visit
                     geoApi.startVisit(bearerToken, StartVisitRequest(createResp.visitId, lat, lng))
-                    applyTrackingBootstrap(
-                        context = context,
-                        bootstrap = geoApi.getTrackingBootstrap(
-                            bearerToken,
-                            SessionManager(context).trackingDeviceId,
-                        ).data,
-                        attendanceActive = true,
-                    )
+                    GeoTrackBootstrapSync.sync(context, api = geoApi)
                     _punchEvent.emit(PunchEvent.Success("Trip to $placeName started!"))
                     setVisitNotification(
                         context,
@@ -1008,14 +984,6 @@ class HomeViewModel : ViewModel() {
             file,
             purpose = com.manjugroups.m_connect.network.MobileStoragePurpose.ATTENDANCE_PHOTO,
         ).storageId
-    }
-
-    private fun applyTrackingBootstrap(
-        context: Context,
-        bootstrap: TrackingBootstrapData?,
-        attendanceActive: Boolean,
-    ) {
-        GeoTrackBootstrapSync.apply(context, bootstrap, allowPromptConsent = attendanceActive)
     }
 
     /** Parse ISO timestamp like "2026-04-08T14:40:10+05:30" to display format "02:40 PM" */
