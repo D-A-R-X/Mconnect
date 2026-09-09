@@ -36,7 +36,6 @@ import com.manjugroups.m_connect.ui.common.SearchableOption
 import com.manjugroups.m_connect.ui.common.SearchableSelectionDialog
 import com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -597,13 +596,6 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                             return@launch
                         }
                     }
-                    // Start the duplicate read while resolving a missing pin.
-                    // These calls are independent and used to run serially,
-                    // making a normal create feel unnecessarily slow.
-                    val duplicateDeferred = async {
-                        findSameDayCpVisitFor(phone, selectedDate)
-                    }
-
                     // A CP MUST carry coordinates so the trip map can pin the
                     // client location (without them the trip screen tries to
                     // geocode the free-text address, and a vague/junk address
@@ -674,14 +666,10 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                         createRequestId = UUID.randomUUID().toString()
                         createRequestFingerprint = requestFingerprint
                     }
-                    val duplicate = OpenCpVisitGuard.blockReason(
-                        duplicateDeferred.await(), phone, selectedDate, createRequestId,
-                    )
-                    if (duplicate != null) {
-                        btnSubmit.isEnabled = true
-                        toast(duplicate)
-                        return@launch
-                    }
+                    // The create mutation already enforces same-day duplicate
+                    // protection atomically. Avoid a second list request here:
+                    // on the production gateway that redundant read can add a
+                    // full cold-start delay before the real create even begins.
                     val resp = geoApi.createCpVisit(session.bearerToken, createRequestId, request)
                     if (!resp.success) {
                         toast(cleanServerErrorMessage(resp.error ?: "Failed to create CP visit"))

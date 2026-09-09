@@ -132,11 +132,18 @@ function expectStatus(result, expected, requireStructuredSuccess = false) {
 }
 
 async function contracts() {
+  const failures = [];
   const routes = [
+    ["POST", "/api/marketing/clientPlaceVisits/create"],
+    ["POST", "/api/geotrack/visit/start"],
+    ["GET", "/api/marketing/clientPlaceVisits/get?id=contract-probe"],
     ["GET", "/api/marketing/clientPlaceVisits/joint-workflow?id=contract-probe"],
+    ["GET", "/api/marketing/clientPlaceVisits/completed-count?date=2099-01-01&staffId=contract-probe"],
     ["POST", "/api/marketing/clientPlaceVisits/joint-arrival-preflight"],
+    ["POST", "/api/marketing/clientPlaceVisits/joint-participant-ready"],
     ["POST", "/api/geotrack/visit/arrival-otp/request"],
     ["POST", "/api/geotrack/visit/arrival-otp/verify"],
+    ["POST", "/api/storage/upload"],
     ["POST", "/api/marketing/clientPlaceVisits/markClientMet"],
     ["POST", "/api/marketing/clientPlaceVisits/setOutcome"],
     ["POST", "/api/marketing/clientPlaceVisits/joint-submit-review"],
@@ -144,9 +151,19 @@ async function contracts() {
     ["POST", "/api/geotrack/visit/complete"],
     ["GET", "/api/marketing/clientPlaceVisits/my?scope=mine&status=completed&pageSize=1"],
   ];
-  for (const [method, path] of routes) {
-    const result = await request(method, path, { body: method === "POST" ? {} : undefined });
-    expectStatus(result, 401, true);
+  await Promise.all(routes.map(async ([method, path]) => {
+    try {
+      const result = await request(method, path, { body: method === "POST" ? {} : undefined });
+      expectStatus(result, 401, true);
+    } catch (error) {
+      failures.push(`${method} ${path}: ${error.message}`);
+      console.error(`FAIL contract: ${method} ${path}: ${error.message}`);
+    }
+  }));
+  if (failures.length > 0) {
+    throw new Error(
+      `${routes.length - failures.length}/${routes.length} Joint CP contracts passed; failures:\n- ${failures.join("\n- ")}`,
+    );
   }
 }
 

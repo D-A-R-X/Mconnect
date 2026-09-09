@@ -738,7 +738,7 @@ interface GeoTrackApi {
             }
             val completionTimeout = okhttp3.Interceptor { chain ->
                 val path = chain.request().url.encodedPath
-                if (path in SLOW_COMPLETION_PATHS) {
+                if (path in SLOW_OPERATION_PATHS) {
                     // These mutations can finish their database work after a
                     // normal 30-second response window. Do not report a network
                     // failure after the server has already committed the CP/SV.
@@ -768,9 +768,17 @@ interface GeoTrackApi {
                 .create(GeoTrackApi::class.java)
         }
 
-        private val SLOW_COMPLETION_PATHS = setOf(
+        private val SLOW_OPERATION_PATHS = setOf(
+            "/api/marketing/clientPlaceVisits/create",
+            "/api/geotrack/visit/start",
+            "/api/geotrack/visit/arrival-otp/request",
+            "/api/geotrack/visit/arrival-otp/verify",
+            "/api/marketing/clientPlaceVisits/markClientMet",
             "/api/geotrack/visit/complete",
             "/api/marketing/clientPlaceVisits/setOutcome",
+            "/api/marketing/clientPlaceVisits/joint-workflow",
+            "/api/marketing/clientPlaceVisits/joint-arrival-preflight",
+            "/api/marketing/clientPlaceVisits/joint-participant-ready",
             "/api/marketing/clientPlaceVisits/joint-submit-review",
             "/api/marketing/clientPlaceVisits/joint-complete-review",
         )

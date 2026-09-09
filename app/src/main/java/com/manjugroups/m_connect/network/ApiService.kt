@@ -1475,6 +1475,13 @@ interface ApiService {
                 chain.withReadTimeout(AuthNetworkPolicy.READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                     .proceed(request)
             }
+            val storageUploadTimeout = okhttp3.Interceptor { chain ->
+                if (chain.request().url.encodedPath == "/api/storage/upload") {
+                    chain.withReadTimeout(90, TimeUnit.SECONDS).proceed(chain.request())
+                } else {
+                    chain.proceed(chain.request())
+                }
+            }
             val client = OkHttpClient.Builder()
                 // Offline support: store GET responses and replay the last
                 // known one when the device has no network, so screens keep
@@ -1484,6 +1491,7 @@ interface ApiService {
                 .addInterceptor(OfflineHttpCache.serveStaleWhenOffline)
                 .addNetworkInterceptor(OfflineHttpCache.storeResponses)
                 .addInterceptor(mobileAuthContract)
+                .addInterceptor(storageUploadTimeout)
                 .addInterceptor(authWatchdog)
                 .addInterceptor(logging)
                 .connectTimeout(30, TimeUnit.SECONDS)

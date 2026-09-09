@@ -789,7 +789,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         }
         swipeArrived?.lockAsBusy("Checking both staff locations...")
         viewLifecycleOwner.lifecycleScope.launch {
-            val location = fetchCurrentLocation()
+            val location = fetchJointCpLocation()
             if (location == null) {
                 arrivalInProgress = false
                 swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
@@ -843,7 +843,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         val fieldId = visitId ?: return
         swipeArrived?.lockAsBusy("Checking both staff locations...")
         viewLifecycleOwner.lifecycleScope.launch {
-            val location = fetchCurrentLocation()
+            val location = fetchJointCpLocation()
             if (location == null) {
                 arrivalInProgress = false
                 swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
@@ -902,7 +902,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         renderArrivalPhase(alreadyArrived = true)
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val location = fetchCurrentLocation()
+                val location = fetchJointCpLocation()
                     ?: throw IllegalStateException("Could not read your current location")
                 val response = geoApi.submitJointCpReview(
                     session.bearerToken,
@@ -1013,11 +1013,26 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         renderArrivalPhase(alreadyArrived = true)
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                // Reviewing can edit the outcome and increment its revision. Fetch the
-                // authoritative revision immediately before completing to avoid a stale write.
-                val latest = geoApi.getJointCpWorkflow(session.bearerToken, cpId)
+                // Refresh the reviewer's own GPS at the final action. The old
+                // flow only re-read workflow state here, so the server could
+                // compare the owner's new submit location with a reviewer fix
+                // captured before OTP/photo/outcome entry.
+                val fieldId = visitId ?: error("The reviewer trip is missing")
+                val location = fetchJointCpLocation()
+                    ?: error("Could not read your current location")
+                val latest = geoApi.markJointCpParticipantReady(
+                    session.bearerToken,
+                    JointCpLocationRequest(
+                        id = cpId,
+                        fieldVisitId = fieldId,
+                        lat = location.latitude,
+                        lng = location.longitude,
+                        accuracyMeters = location.accuracy.takeIf { location.hasAccuracy() },
+                        capturedAt = location.time.takeIf { it > 0L } ?: System.currentTimeMillis(),
+                    ),
+                )
                 check(latest.success && latest.workflow != null) {
-                    latest.error ?: "Could not refresh the submitted outcome"
+                    latest.error ?: "Could not refresh both staff locations"
                 }
                 val workflow = resolvedJointCpWorkflowForActor(
                     latest.workflow,
@@ -1025,6 +1040,11 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     latest.visit?.joint ?: jointSummary,
                 )
                 jointWorkflow = workflow
+                check(workflow.actorReady != false && workflow.isWithinCompletionRadius) {
+                    workflow.separationMeters?.let {
+                        "Both staff must be within 50 metres. Current separation: ${formatDistance(it)}."
+                    } ?: "Both staff need a fresh accurate location within 50 metres"
+                }
                 val revision = jointCpReviewRevision(workflow)
                     ?: error("The submitted outcome is not ready for review completion")
                 val response = geoApi.completeJointCpReview(
@@ -1962,7 +1982,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     }
 
     @android.annotation.SuppressLint("MissingPermission")
-    private suspend fun fetchCurrentLocation(): Location? {
+    private suspend fun fetchCurrentLocation(maxUpdateAgeMillis: Long = 10_000L): Location? {
         if (!hasLocationPermission()) return null
         return try {
             val client = LocationServices.getFusedLocationProviderClient(requireContext())
@@ -1976,7 +1996,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             // up to 20s for GPS before giving up.
             val request = CurrentLocationRequest.Builder()
                 .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
-                .setMaxUpdateAgeMillis(10_000L)
+                .setMaxUpdateAgeMillis(maxUpdateAgeMillis)
                 .setDurationMillis(20_000L)
                 .build()
             client.getCurrentLocation(request, token.token).await()
@@ -1984,6 +2004,10 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             null
         }
     }
+
+    /** Joint proximity decisions must never reuse a pre-arrival cached fix. */
+    private suspend fun fetchJointCpLocation(): Location? =
+        fetchCurrentLocation(maxUpdateAgeMillis = 0L)
 
     private fun renderMapMarkersAndRoute() {
         val map = googleMap ?: return
