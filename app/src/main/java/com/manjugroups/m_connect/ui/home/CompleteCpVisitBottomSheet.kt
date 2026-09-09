@@ -5272,7 +5272,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                         SiteVisitIdRequest(id = svId),
                     )
                 }
-                val resp = geoApi.setSiteVisitOutcome(
+                val resp = geoApi.setSiteVisitOutcomeConfirmed(
                     session.bearerToken,
                     SetSiteVisitOutcomeRequest(
                         id = svId,
@@ -5428,7 +5428,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                             SiteVisitIdRequest(id = svId),
                         )
                     }
-                    val resp = geoApi.setSiteVisitOutcome(
+                    val resp = geoApi.setSiteVisitOutcomeConfirmed(
                         session.bearerToken,
                         SetSiteVisitOutcomeRequest(
                             id = svId,

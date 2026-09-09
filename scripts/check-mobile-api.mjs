@@ -121,7 +121,10 @@ function assert(condition, message) {
 
 function expectStatus(result, expected, requireStructuredSuccess = false) {
   const accepted = Array.isArray(expected) ? expected : [expected];
-  assert(accepted.includes(result.status), `${result.method} ${result.path} returned ${accepted.join(" or ")}`);
+  assert(
+    accepted.includes(result.status),
+    `${result.method} ${result.path} expected ${accepted.join(" or ")}, got ${result.status}`,
+  );
   if (requireStructuredSuccess) {
     assert(typeof result.data === "object" && result.data !== null, `${result.method} ${result.path} returned JSON`);
     assert("success" in result.data, `${result.method} ${result.path} returned structured JSON`);
@@ -322,6 +325,60 @@ async function cpSvContracts() {
     );
   }
   console.log(`PASS all ${total} CP/SV module endpoint contracts passed`);
+}
+
+async function geoTrackDirectContracts() {
+  const geoBaseUrl = args["geo-base-url"]
+    ?? process.env.MCONNECT_GEO_BASE_URL
+    ?? DEFAULT_GEO_BASE_URL;
+  const live = await request("GET", "/api/tracking/live?limit=1", {
+    baseUrl: geoBaseUrl,
+  });
+  expectStatus(live, 200, true);
+  assert(Array.isArray(live.data?.data), "preferred live route returns a data array");
+
+  const liveAlias = await request("GET", "/api/geotrack/live-status?limit=1", {
+    baseUrl: geoBaseUrl,
+  });
+  expectStatus(liveAlias, 200, true);
+  assert(Array.isArray(liveAlias.data?.data), "web live-status alias returns a data array");
+
+  const invalidToken = "invalid-geotrack-contract-probe";
+  const headers = { "Idempotency-Key": "invalid-geotrack-contract-probe" };
+  const writeRoutes = [
+    ["/api/tracking/location/batch", { deviceId: "contract-probe", requestId: "contract-probe", points: [] }],
+    ["/api/tracking/heartbeat", {
+      deviceId: "contract-probe",
+      requestId: "contract-probe",
+      deviceSequence: 1,
+      batteryPct: 50,
+      appVersion: "contract-probe",
+      recordedAt: 1,
+    }],
+    ["/api/tracking/tamper-events", {
+      eventType: "NETWORK_ONLINE",
+      detectedAt: 1,
+      requestId: "contract-probe",
+      metadata: { source: "contract-probe" },
+    }],
+    ["/api/geotrack/start", {}],
+    ["/api/geotrack/stop", {}],
+  ];
+  const failures = [];
+  for (const [path, body] of writeRoutes) {
+    const result = await request("POST", path, {
+      baseUrl: geoBaseUrl,
+      token: invalidToken,
+      headers,
+      body,
+    });
+    try {
+      expectStatus(result, 401, true);
+    } catch (error) {
+      failures.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+  assert(failures.length === 0, failures.join("; "));
 }
 
 async function storageContracts() {
@@ -714,6 +771,7 @@ function printHelp() {
   console.log(`Usage:
   node scripts/check-mobile-api.mjs contracts
   node scripts/check-mobile-api.mjs cp-sv-contracts
+  node scripts/check-mobile-api.mjs geotrack-direct-contracts [--geo-base-url https://api-geo.theairix.com/]
   node scripts/check-mobile-api.mjs storage-contracts [--storage-base-url https://mg.theairix.com/]
   node scripts/check-mobile-api.mjs device-login-contracts
   node scripts/check-mobile-api.mjs device-rollout-contracts --rollout-mode compatibility [--legacy-build 71 --target-build 72]
@@ -727,6 +785,7 @@ function printHelp() {
 Safe defaults:
   contracts performs unauthenticated route/auth-contract probes only.
   cp-sv-contracts audits the full CP/SV/booking/collection/tracking/storage route surface without mutations.
+  geotrack-direct-contracts proves both live reads work and every invalid-bearer mobile write is rejected with HTTP 401.
   storage-contracts verifies preferred storage routes reject unauthenticated calls and never uploads bytes.
   Set MCONNECT_STORAGE_READ_ID to include a non-mutating real-file 307 redirect check.
   device-login-contracts verifies build-aware login routes using empty credentials and never sends an OTP.
@@ -748,6 +807,7 @@ try {
   if (args.help) printHelp();
   else if (command === "contracts") await contracts();
   else if (command === "cp-sv-contracts") await cpSvContracts();
+  else if (command === "geotrack-direct-contracts") await geoTrackDirectContracts();
   else if (command === "storage-contracts") await storageContracts();
   else if (command === "device-login-contracts") await deviceLoginContracts();
   else if (command === "device-rollout-contracts") await deviceRolloutContracts();

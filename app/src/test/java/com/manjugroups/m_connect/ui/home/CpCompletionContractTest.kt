@@ -1,6 +1,8 @@
 package com.manjugroups.m_connect.ui.home
 
 import com.manjugroups.m_connect.network.JointCpWorkflow
+import com.manjugroups.m_connect.network.JointCpParticipant
+import com.manjugroups.m_connect.network.JointCpSummary
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertFalse
@@ -119,5 +121,102 @@ class CpCompletionContractTest {
         assertFalse(verified.canSubmitOutcome)
         assertTrue(verified.canReview)
         assertTrue(verified.canCompleteReview)
+    }
+
+    @Test
+    fun `legacy joint primary and companion recover owner and reviewer ids`() {
+        val summary = JointCpSummary(
+            leadStaffId = "bdo",
+            participants = listOf(
+                JointCpParticipant(staffId = "bdo", staffName = "BDO", isPrimary = true),
+                JointCpParticipant(staffId = "manager", staffName = "Manager"),
+            ),
+        )
+        val reviewer = resolvedJointCpWorkflowForActor(
+            JointCpWorkflow(actorRole = "reviewer", canReview = true),
+            currentStaffId = "manager",
+            joint = summary,
+        )
+
+        assertEquals("bdo", reviewer.outcomeOwnerStaffId)
+        assertEquals("manager", reviewer.reviewerStaffId)
+        assertEquals("reviewer", reviewer.actorRole)
+        assertTrue(reviewer.canReview)
+        assertFalse(reviewer.canRequestOtp)
+    }
+
+    @Test
+    fun `opaque backend ids never leak into joint cp errors`() {
+        assertEquals(
+            "Could not complete review",
+            jointCpUserMessage("k2g8m1v4b6p9q3w7x5z0c2n8", "Could not complete review"),
+        )
+        assertEquals(
+            "Could not complete review",
+            jointCpUserMessage(
+                "Visit k2g8m1v4b6p9q3w7x5z0c2n8 could not be resolved",
+                "Could not complete review",
+            ),
+        )
+        assertEquals(
+            "Both staff must be within 50 metres",
+            jointCpUserMessage("Both staff must be within 50 metres", "fallback"),
+        )
+    }
+
+    @Test
+    fun `joint submit timeout is confirmed only by review state and revision`() {
+        assertTrue(
+            isJointCpSubmissionConfirmed(
+                JointCpWorkflow(state = "pending_review", outcomeRevision = 4),
+                expectedOutcomeRevision = 4,
+            ),
+        )
+        assertTrue(
+            isJointCpSubmissionConfirmed(
+                JointCpWorkflow(state = "completed", outcomeRevision = 5),
+                expectedOutcomeRevision = 4,
+            ),
+        )
+        assertFalse(
+            isJointCpSubmissionConfirmed(
+                JointCpWorkflow(state = "outcome_submitted", outcomeRevision = 4),
+                expectedOutcomeRevision = 4,
+            ),
+        )
+        assertFalse(
+            isJointCpSubmissionConfirmed(
+                JointCpWorkflow(state = "pending_review", outcomeRevision = 3),
+                expectedOutcomeRevision = 4,
+            ),
+        )
+    }
+
+    @Test
+    fun `joint completion readback confirms both participant credits when returned`() {
+        assertTrue(
+            isJointCpCompletionConfirmed(
+                JointCpWorkflow(
+                    state = "completed",
+                    creditedStaffIds = listOf("bdo", "manager"),
+                ),
+                setOf("bdo", "manager"),
+            ),
+        )
+        assertFalse(
+            isJointCpCompletionConfirmed(
+                JointCpWorkflow(
+                    state = "completed",
+                    creditedStaffIds = listOf("manager"),
+                ),
+                setOf("bdo", "manager"),
+            ),
+        )
+        assertFalse(
+            isJointCpCompletionConfirmed(
+                JointCpWorkflow(state = "pending_review"),
+                setOf("bdo", "manager"),
+            ),
+        )
     }
 }

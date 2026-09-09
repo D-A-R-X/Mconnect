@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
+import java.net.SocketTimeoutException
 
 sealed interface AuthUiState {
     data object Idle : AuthUiState
@@ -86,7 +87,7 @@ class AuthViewModel : ViewModel() {
                         )
                     )
                 }
-                if (response.success) {
+                if (otpDispatchWasAcknowledged(response.success, response.message, response.error)) {
                     _uiState.value = AuthUiState.OtpSent(response.message ?: "OTP sent")
                 } else if (response.code.equals(DEVICE_LINKED_TO_ANOTHER_ACCOUNT, ignoreCase = true)) {
                     _uiState.value = deviceAccountConflict(response.boundAccountName)
@@ -111,6 +112,12 @@ class AuthViewModel : ViewModel() {
                         _uiState.value = deviceAccountConflict(decoded?.boundAccountName)
                         return@launch
                     }
+                    if (otpDispatchWasAcknowledged(decoded?.success, decoded?.message, decoded?.error)) {
+                        _uiState.value = AuthUiState.OtpSent(
+                            decoded?.message ?: decoded?.error ?: "OTP sent",
+                        )
+                        return@launch
+                    }
                     val parsed = decoded?.error ?: decoded?.message
                         ?: EmployeeLoginErrorParser.message(e.code(), body, "Unable to send OTP")
                     if (isNotRegistered(parsed)) {
@@ -118,6 +125,12 @@ class AuthViewModel : ViewModel() {
                     } else {
                         _uiState.value = AuthUiState.Error(parsed)
                     }
+                    return@launch
+                }
+                if (otpRequestMayHaveReachedServer(e)) {
+                    _uiState.value = AuthUiState.OtpSent(
+                        "OTP request submitted. Enter the code if received, or use Resend.",
+                    )
                     return@launch
                 }
                 val parsed = parseErrorMessage(e, "Network error. Please try again.")
@@ -142,7 +155,7 @@ class AuthViewModel : ViewModel() {
             val td = withAuthInitialConnectionRetry {
                 travelDeskApi.sendOtp(TravelDeskSendOtpRequest(phone))
             }
-            if (td.success) {
+            if (otpDispatchWasAcknowledged(td.success, td.message, td.error)) {
                 _uiState.value = AuthUiState.OtpSent(td.message ?: "OTP sent", agencyDriver = true)
             } else {
                 _uiState.value = AuthUiState.Error(neutralNotRegistered)
@@ -150,10 +163,17 @@ class AuthViewModel : ViewModel() {
         } catch (e: Exception) {
             // Genuine network/connectivity errors keep their real message; a
             // travel-desk 4xx (phone unknown there too) collapses to neutral.
-            val message =
-                if (e is HttpException) neutralNotRegistered
-                else parseErrorMessage(e, neutralNotRegistered)
-            _uiState.value = AuthUiState.Error(message)
+            if (otpRequestMayHaveReachedServer(e)) {
+                _uiState.value = AuthUiState.OtpSent(
+                    "OTP request submitted. Enter the code if received, or use Resend.",
+                    agencyDriver = true,
+                )
+            } else {
+                val message =
+                    if (e is HttpException) neutralNotRegistered
+                    else parseErrorMessage(e, neutralNotRegistered)
+                _uiState.value = AuthUiState.Error(message)
+            }
         }
     }
 
@@ -396,4 +416,38 @@ class AuthViewModel : ViewModel() {
         // Any other throwable — never leak a raw technical / "HTTP …" message.
         return fallback
     }
+}
+
+/** Accepts explicit success plus legacy/gateway envelopes that acknowledge delivery in text. */
+internal fun otpDispatchWasAcknowledged(
+    success: Boolean?,
+    message: String?,
+    error: String?,
+): Boolean {
+    if (success == true) return true
+    return listOfNotNull(message, error).any { raw ->
+        val text = raw.trim().lowercase()
+        val negative = listOf(
+            "not sent",
+            "failed to send",
+            "unable to send",
+            "could not send",
+            "couldn't send",
+        ).any(text::contains)
+        !negative && (
+            Regex("\\botp(?: has been| was)? sent\\b").containsMatchIn(text) ||
+                Regex("\\bverification code(?: has been| was)? sent\\b").containsMatchIn(text)
+            )
+    }
+}
+
+/** A read timeout can happen after the server stored and dispatched the OTP. */
+internal fun otpRequestMayHaveReachedServer(error: Throwable): Boolean {
+    var current: Throwable? = error
+    val seen = mutableSetOf<Throwable>()
+    while (current != null && seen.add(current)) {
+        if (current is SocketTimeoutException) return true
+        current = current.cause
+    }
+    return false
 }

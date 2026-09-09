@@ -22,33 +22,41 @@ class CpVisitActivityDateTest {
     }
 
     @Test
-    fun `completed cp remains attributed to assigned day when completed later`() {
+    fun `completed cp is attributed to participant start day`() {
         assertEquals(
-            "2026-09-05",
+            "2026-09-07",
             resolveCpActivityDate(
                 scheduledDate = "2026-09-05",
                 serverActivityDate = "2026-09-08",
                 cpCompletedAt = 1_788_859_800_000,
                 fieldVisitCompletedAt = null,
+                participantStartedAt = java.time.OffsetDateTime
+                    .parse("2026-09-07T23:55:00+05:30")
+                    .toInstant()
+                    .toEpochMilli(),
             ),
         )
     }
 
     @Test
-    fun `completed cp remains attributed to assigned day when completed earlier`() {
+    fun `field visit start is used when participant start is absent`() {
         assertEquals(
-            "2026-09-08",
+            "2026-09-06",
             resolveCpActivityDate(
                 scheduledDate = "2026-09-08",
                 serverActivityDate = "2026-09-05",
                 cpCompletedAt = null,
                 fieldVisitCompletedAt = 1_788_600_000_000,
+                fieldVisitStartedAt = java.time.OffsetDateTime
+                    .parse("2026-09-06T00:05:00+05:30")
+                    .toInstant()
+                    .toEpochMilli(),
             ),
         )
     }
 
     @Test
-    fun `same day completion remains attributed once`() {
+    fun `legacy cp without start timestamp remains on assigned day`() {
         assertEquals(
             "2026-09-05",
             resolveCpActivityDate(

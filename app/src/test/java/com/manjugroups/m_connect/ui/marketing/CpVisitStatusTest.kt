@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.marketing
 
+import com.manjugroups.m_connect.network.JointCpParticipant
+import com.manjugroups.m_connect.network.JointCpSummary
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -15,6 +17,49 @@ import org.junit.Test
  * forever, on every reload.
  */
 class CpVisitStatusTest {
+
+    @Test
+    fun `joint participants use their own field visit id and status`() {
+        val joint = JointCpSummary(
+            participants = listOf(
+                JointCpParticipant(
+                    staffId = "bdo",
+                    fieldVisitId = "field-bdo",
+                    status = "arrived",
+                ),
+                JointCpParticipant(
+                    staffId = "manager",
+                    fieldVisitId = "field-manager",
+                    status = "in_progress",
+                ),
+            ),
+        )
+
+        assertEquals("field-bdo", resolveCpFieldVisitId("cp", "field-parent", joint, "bdo"))
+        assertEquals("field-manager", resolveCpFieldVisitId("cp", "field-parent", joint, "manager"))
+        assertEquals(
+            "arrived",
+            resolveParticipantCpEffectiveStatus("scheduled", "scheduled", "scheduled", joint, "bdo"),
+        )
+        assertEquals(
+            "in_progress",
+            resolveParticipantCpEffectiveStatus("scheduled", "scheduled", "arrived", joint, "manager"),
+        )
+    }
+
+    @Test
+    fun `terminal parent state closes every joint participant`() {
+        val joint = JointCpSummary(
+            participants = listOf(
+                JointCpParticipant(staffId = "bdo", status = "in_progress"),
+            ),
+        )
+
+        assertEquals(
+            "cancelled",
+            resolveParticipantCpEffectiveStatus("cancelled", "cancelled", "in_progress", joint, "bdo"),
+        )
+    }
 
     @Test
     fun `legacy completed CP with missing outcome stays completed`() {

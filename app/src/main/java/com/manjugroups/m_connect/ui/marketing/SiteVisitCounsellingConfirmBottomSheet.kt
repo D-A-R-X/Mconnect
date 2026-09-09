@@ -62,7 +62,7 @@ class SiteVisitCounsellingConfirmBottomSheet : BottomSheetDialogFragment() {
         val canRecordOutcome =
             requireArguments().getBoolean(ARG_CAN_RECORD_OUTCOME, false)
         val isOngoing = visitStatus == "on_counselling"
-        val isCompleted = visitStatus == "completed" || !outcome.isNullOrBlank()
+        val isCompleted = siteVisitHasRecordedOutcome(outcome)
 
         view.findViewById<TextView>(R.id.tvCounsellingClientName).text =
             clientName.ifBlank { "Client name unavailable" }
@@ -127,12 +127,10 @@ class SiteVisitCounsellingConfirmBottomSheet : BottomSheetDialogFragment() {
         // the outcome page after a short countdown (no button). Scheduled +
         // authorised → an explicit Start counselling button.
         // The outcome can be recorded from the moment counselling starts through
-        // the cab return leg — on_counselling, picked_from_site, dropped
-        // (mirrors setOutcome). So an authorised Site Incharge / BDO is NOT
-        // locked out once the fleet advances the SV to "dropped".
-        val outcomeRecordableStatus = visitStatus == "on_counselling" ||
-            visitStatus == "picked_from_site" || visitStatus == "dropped"
-        val showOutcome = canRecordOutcome && outcomeRecordableStatus && !isCompleted
+        // the cab return leg. A completed row without an outcome is an
+        // interrupted partial transition and must reopen the same form.
+        val showOutcome = canRecordOutcome &&
+            siteVisitOutcomeCanBeRecorded(visitStatus, outcome)
         val showStart = canStartCounselling && !isOngoing && !isCompleted
         // Whoever opened this can't start counselling or record the outcome —
         // they may only view. Point them at the Site Incharge by name.

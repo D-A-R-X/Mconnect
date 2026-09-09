@@ -447,9 +447,11 @@ class QrScannerFragment : Fragment() {
                 val canStartNow = statusLc in setOf(
                     "scheduled", "client_started", "picked_up", "on_site",
                 )
-                val canRecordNow = statusLc in setOf(
-                    "on_counselling", "picked_from_site", "dropped",
-                )
+                val canRecordNow =
+                    com.manjugroups.m_connect.ui.marketing.siteVisitOutcomeCanBeRecorded(
+                        statusLc,
+                        visit.outcome,
+                    )
                 SiteVisitCounsellingConfirmBottomSheet.newInstance(
                     siteVisitId = visit._id,
                     projectName = projectName,

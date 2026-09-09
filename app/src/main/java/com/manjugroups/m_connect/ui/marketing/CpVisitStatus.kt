@@ -1,5 +1,9 @@
 package com.manjugroups.m_connect.ui.marketing
 
+import com.manjugroups.m_connect.network.JointCpParticipant
+import com.manjugroups.m_connect.network.JointCpSummary
+import java.time.Instant
+import java.time.ZoneId
 import java.util.Locale
 
 /**
@@ -61,6 +65,42 @@ fun resolveServerCpEffectiveStatus(
 ): String = serverEffectiveStatus?.trim()?.takeIf { it.isNotEmpty() }
     ?: resolveCpEffectiveStatus(cpStatus, fieldVisitStatus)
 
+fun JointCpSummary?.participantFor(staffId: String?): JointCpParticipant? {
+    val actorId = staffId?.trim()?.takeIf(String::isNotEmpty) ?: return null
+    return this?.participants.orEmpty().firstOrNull {
+        it.staffId?.trim()?.equals(actorId, ignoreCase = true) == true
+    }
+}
+
+/** Joint participants mutate and track their own field-visit leg. */
+fun resolveCpFieldVisitId(
+    cpVisitId: String,
+    parentFieldVisitId: String?,
+    joint: JointCpSummary?,
+    currentStaffId: String?,
+): String = joint.participantFor(currentStaffId)?.fieldVisitId
+    ?.trim()
+    ?.takeIf(String::isNotEmpty)
+    ?: parentFieldVisitId?.trim()?.takeIf(String::isNotEmpty)
+    ?: cpVisitId
+
+/** Terminal parent state wins; otherwise a Joint CP actor sees their own leg state. */
+fun resolveParticipantCpEffectiveStatus(
+    serverEffectiveStatus: String?,
+    cpStatus: String?,
+    parentFieldVisitStatus: String?,
+    joint: JointCpSummary?,
+    currentStaffId: String?,
+): String {
+    val cp = cpStatus?.trim().orEmpty()
+    if (cp.lowercase(Locale.US) in TERMINAL_CP_STATUSES) return cp
+    val server = serverEffectiveStatus?.trim().orEmpty()
+    if (server.lowercase(Locale.US) in TERMINAL_CP_STATUSES) return server
+    val participant = joint.participantFor(currentStaffId)?.status?.trim().orEmpty()
+    if (participant.isNotEmpty()) return participant
+    return resolveServerCpEffectiveStatus(serverEffectiveStatus, cpStatus, parentFieldVisitStatus)
+}
+
 /** Missing legacy outcome text does not reopen an authoritative closed CP. */
 fun isCpOutcomePending(cpStatus: String?, fieldVisitStatus: String?, outcome: String?): Boolean {
     val cp = cpStatus?.trim()?.lowercase(Locale.US).orEmpty()
@@ -68,11 +108,26 @@ fun isCpOutcomePending(cpStatus: String?, fieldVisitStatus: String?, outcome: St
     return fieldVisitStatus?.trim()?.lowercase(Locale.US) in setOf("completed", "complete", "done", "closed")
 }
 
-/** CP list/count attribution always belongs to the assigned visit date. */
-@Suppress("UNUSED_PARAMETER")
+/** Completed CP activity belongs to the signed-in staff member's actual trip-start day. */
 fun resolveCpActivityDate(
     scheduledDate: String,
     serverActivityDate: String?,
     cpCompletedAt: Long?,
     fieldVisitCompletedAt: Long?,
-): String = scheduledDate
+    participantStartedAt: Long? = null,
+    fieldVisitStartedAt: Long? = null,
+): String {
+    val startedAt = participantStartedAt.validEpochMillis()
+        ?: fieldVisitStartedAt.validEpochMillis()
+    if (startedAt != null) {
+        return Instant.ofEpochMilli(startedAt)
+            .atZone(ZoneId.of("Asia/Kolkata"))
+            .toLocalDate()
+            .toString()
+    }
+    // Legacy rows may not carry any start timestamp. Keep their assigned day
+    // rather than incorrectly grouping them by completion time.
+    return scheduledDate
+}
+
+private fun Long?.validEpochMillis(): Long? = this?.takeIf { it > 0L }

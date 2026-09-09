@@ -5,6 +5,8 @@ import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.GeoTrackResponse
 import com.manjugroups.m_connect.network.JointCpWorkflow
 import com.manjugroups.m_connect.network.SetOutcomeRequest
+import com.manjugroups.m_connect.network.SetSiteVisitOutcomeRequest
+import kotlinx.coroutines.CancellationException
 import java.util.Locale
 
 private val TERMINAL_OUTCOME_STATUSES = setOf(
@@ -73,6 +75,15 @@ private fun GeoTrackResponse.responseVisitState(): Pair<String?, String?> =
 
 private fun CpVisitDetail.visitState(): Pair<String?, String?> = status to outcome
 
+private fun CpVisitDetail.siteVisitState(): Pair<String?, String?> {
+    val siteVisit = proposedSiteVisit
+    return if (siteVisit != null) {
+        siteVisit.status to siteVisit.outcome
+    } else {
+        status to outcome
+    }
+}
+
 private fun JointCpWorkflow.workflowState(): Pair<String?, String?> = state to outcome
 
 /**
@@ -85,16 +96,27 @@ internal suspend fun GeoTrackApi.setCpVisitOutcomeConfirmed(
     actingStaffId: String?,
     jointCp: Boolean,
 ): GeoTrackResponse {
-    val response = setCpVisitOutcome(
-        token,
-        request.copy(actingStaffId = request.actingStaffId ?: actingStaffId),
-    )
-    if (!response.success) return response
+    var requestFailure: Throwable? = null
+    val response = try {
+        setCpVisitOutcome(
+            token,
+            request.copy(actingStaffId = request.actingStaffId ?: actingStaffId),
+        )
+    } catch (error: CancellationException) {
+        throw error
+    } catch (error: Throwable) {
+        requestFailure = error
+        null
+    }
 
     if (jointCp) {
         val workflowResponse = runCatching { getJointCpWorkflow(token, request.id) }
             .getOrElse {
-                return response.copy(
+                requestFailure?.let { failure -> throw failure }
+                return response?.copy(
+                    success = false,
+                    error = "The outcome was sent, but Joint CP confirmation could not be loaded. Refresh the visit before retrying.",
+                ) ?: GeoTrackResponse(
                     success = false,
                     error = "The outcome was sent, but Joint CP confirmation could not be loaded. Refresh the visit before retrying.",
                 )
@@ -108,27 +130,35 @@ internal suspend fun GeoTrackApi.setCpVisitOutcomeConfirmed(
             cpOutcomeConfirmationError(request.outcome, state, outcome, jointCp = true)
         }
         return if (error == null) {
-            response.copy(
-                status = response.status ?: workflow?.state,
-                outcome = response.outcome ?: workflow?.outcome,
+            (response ?: GeoTrackResponse(success = true)).copy(
+                success = true,
+                status = response?.status ?: workflow?.state,
+                outcome = response?.outcome ?: workflow?.outcome,
             )
         } else {
-            response.copy(success = false, error = error)
+            requestFailure?.let { failure -> throw failure }
+            response?.copy(success = false, error = response.error ?: error)
+                ?: GeoTrackResponse(success = false, error = error)
         }
     }
 
-    var (status, outcome) = response.responseVisitState()
+    var (status, outcome) = response?.responseVisitState() ?: (null to null)
     if (cpOutcomeConfirmationError(request.outcome, status, outcome, jointCp = false) != null) {
         val detailResponse = runCatching { getCpVisitDetail(token, request.id) }
             .getOrElse {
-                return response.copy(
+                requestFailure?.let { failure -> throw failure }
+                return response?.copy(
+                    success = false,
+                    error = "The outcome was sent, but the completed CP could not be confirmed. Refresh the visit before retrying.",
+                ) ?: GeoTrackResponse(
                     success = false,
                     error = "The outcome was sent, but the completed CP could not be confirmed. Refresh the visit before retrying.",
                 )
             }
         val detail = detailResponse.visit
         if (!detailResponse.success || detail == null) {
-            return response.copy(
+            requestFailure?.let { failure -> throw failure }
+            return (response ?: GeoTrackResponse(success = false)).copy(
                 success = false,
                 error = detailResponse.error
                     ?: "The outcome was sent, but the completed CP was not returned. Refresh the visit before retrying.",
@@ -142,13 +172,86 @@ internal suspend fun GeoTrackApi.setCpVisitOutcomeConfirmed(
 
     val error = cpOutcomeConfirmationError(request.outcome, status, outcome, jointCp = false)
     return if (error == null) {
-        response.copy(
-            status = response.status ?: status,
-            outcome = response.outcome ?: outcome,
+        (response ?: GeoTrackResponse(success = true)).copy(
+            success = true,
+            status = response?.status ?: status,
+            outcome = response?.outcome ?: outcome,
         )
     } else {
-        response.copy(success = false, error = error)
+        requestFailure?.let { failure -> throw failure }
+        response?.copy(success = false, error = response.error ?: error)
+            ?: GeoTrackResponse(success = false, error = error)
     }
+}
+
+internal fun siteVisitOutcomeConfirmationError(
+    expectedOutcome: String,
+    status: String?,
+    actualOutcome: String?,
+): String? {
+    val expected = if (expectedOutcome.contractValue() == "postponed") {
+        "follow_up"
+    } else {
+        expectedOutcome.contractValue()
+    }
+    if (actualOutcome.contractValue() != expected) {
+        return "The server did not confirm the saved site visit outcome. Refresh the visit and try again."
+    }
+    if (status.contractValue() !in setOf("completed", "complete", "done", "closed")) {
+        return "The outcome was received, but the site visit was not finalized. Refresh the visit and try again."
+    }
+    return null
+}
+
+/**
+ * Makes SV outcome submission idempotent from the app's perspective. A timeout
+ * may happen after setOutcome committed and changed the row to completed; the
+ * authoritative read prevents a retry from surfacing an invalid-transition
+ * error or creating duplicate follow-up work.
+ */
+internal suspend fun GeoTrackApi.setSiteVisitOutcomeConfirmed(
+    token: String,
+    request: SetSiteVisitOutcomeRequest,
+): GeoTrackResponse {
+    var requestFailure: Throwable? = null
+    val response = try {
+        setSiteVisitOutcome(token, request)
+    } catch (error: CancellationException) {
+        throw error
+    } catch (error: Throwable) {
+        requestFailure = error
+        null
+    }
+
+    var (status, outcome) = response?.visit?.siteVisitState()
+        ?: (response?.status to response?.outcome)
+    var confirmationError = siteVisitOutcomeConfirmationError(request.outcome, status, outcome)
+    if (confirmationError != null) {
+        val detailResponse = runCatching { getCpVisitDetail(token, request.id) }.getOrNull()
+        val detail = detailResponse?.visit
+        if (detailResponse?.success == true && detail != null) {
+            detail.siteVisitState().also {
+                status = it.first
+                outcome = it.second
+            }
+            confirmationError = siteVisitOutcomeConfirmationError(request.outcome, status, outcome)
+        }
+    }
+
+    if (confirmationError == null) {
+        return (response ?: GeoTrackResponse(success = true)).copy(
+            success = true,
+            error = null,
+            status = response?.status ?: status,
+            outcome = response?.outcome ?: outcome,
+        )
+    }
+    requestFailure?.let { throw it }
+    if (response?.success == false) return response
+    return (response ?: GeoTrackResponse(success = false)).copy(
+        success = false,
+        error = confirmationError,
+    )
 }
 
 internal suspend fun GeoTrackApi.confirmCpConversion(

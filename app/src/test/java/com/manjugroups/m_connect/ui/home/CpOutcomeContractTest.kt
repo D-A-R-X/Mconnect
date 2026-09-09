@@ -55,4 +55,18 @@ class CpOutcomeContractTest {
             )?.contains("not linked") == true,
         )
     }
+
+    @Test
+    fun `site visit outcome requires matching value and terminal status`() {
+        assertNull(siteVisitOutcomeConfirmationError("interested", "completed", "interested"))
+        assertNull(siteVisitOutcomeConfirmationError("postponed", "completed", "follow_up"))
+        assertTrue(
+            siteVisitOutcomeConfirmationError("interested", "on_counselling", "interested")
+                ?.contains("not finalized") == true,
+        )
+        assertTrue(
+            siteVisitOutcomeConfirmationError("interested", "completed", "not_interested")
+                ?.contains("did not confirm") == true,
+        )
+    }
 }

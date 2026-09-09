@@ -596,8 +596,9 @@ class CpVisitsFragment : Fragment() {
         // the existing rows stay put until renderList() rebuilds them —
         // no flash back to placeholders over data that's already there.
         if (!hasLoadedOnce) {
-            SkeletonUtils.startSkeletonPulse(skeletonContainer)
+            list.visibility = View.GONE
             empty.visibility = View.GONE
+            SkeletonUtils.startSkeletonPulse(skeletonContainer)
             list.removeAllViews()
         }
 
@@ -822,16 +823,27 @@ class CpVisitsFragment : Fragment() {
         // Shared with Home so both screens agree. A terminal CP status wins
         // over the trip row; a live one still defers to it. See
         // resolveCpEffectiveStatus for why.
-        val effectiveStatus = resolveServerCpEffectiveStatus(
+        val actorParticipant = this.joint.participantFor(session.staffId)
+        val actorFieldVisitId = resolveCpFieldVisitId(
+            cpVisitId = cpId,
+            parentFieldVisitId = this.fieldVisitId,
+            joint = this.joint,
+            currentStaffId = session.staffId,
+        )
+        val effectiveStatus = resolveParticipantCpEffectiveStatus(
             this.effectiveStatus,
             this.status,
             this.fieldVisit?.status,
+            this.joint,
+            session.staffId,
         )
         val displayDate = resolveCpActivityDate(
             scheduledDate = assignedDate,
             serverActivityDate = this.activityDate,
             cpCompletedAt = this.completedAt,
             fieldVisitCompletedAt = this.fieldVisit?.completedAt,
+            participantStartedAt = actorParticipant?.startedAt,
+            fieldVisitStartedAt = this.fieldVisit?.startedAt,
         )
         val proposedHasFields = this.proposedSiteVisit?.let { p ->
             !p.projectId.isNullOrBlank() ||
@@ -895,7 +907,7 @@ class CpVisitsFragment : Fragment() {
             cpType = this.cpType,
         )
         return TodayVisit(
-            id = cpId,
+            id = actorFieldVisitId,
             clientPlaceId = this.clientPlaceId ?: cpId,
             scheduledDate = displayDate,
             status = effectiveStatus,

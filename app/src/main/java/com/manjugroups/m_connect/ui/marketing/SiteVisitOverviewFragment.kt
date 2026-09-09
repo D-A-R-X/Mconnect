@@ -32,6 +32,7 @@ import com.manjugroups.m_connect.network.SetSiteVisitOutcomeRequest
 // Trip-state advancement is web-only now (see wireStepperReadOnlyHint).
 import com.manjugroups.m_connect.network.TodayVisit
 import com.manjugroups.m_connect.ui.home.CompleteCpVisitBottomSheet
+import com.manjugroups.m_connect.ui.home.setSiteVisitOutcomeConfirmed
 import com.manjugroups.m_connect.ui.home.setCpVisitOutcomeConfirmed
 import com.manjugroups.m_connect.ui.common.preferredCpClientName
 import com.manjugroups.m_connect.ui.common.preferredCpClientPhone
@@ -1433,7 +1434,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
                     // Pure-SV outcome
                     val postponeReasons = if (outcomeValue == "postponed") listOf("other") else null
                     val notInterestedReasons = if (outcomeValue == "not_interested") listOf("other") else null
-                    val resp = geoApi.setSiteVisitOutcome(
+                    val resp = geoApi.setSiteVisitOutcomeConfirmed(
                         session.bearerToken,
                         SetSiteVisitOutcomeRequest(
                             id = targetVisitId,

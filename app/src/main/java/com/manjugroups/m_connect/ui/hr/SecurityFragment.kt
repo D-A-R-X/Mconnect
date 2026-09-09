@@ -35,8 +35,10 @@ import com.manjugroups.m_connect.ui.common.AvatarUtils.loadUserAvatar
 import com.manjugroups.m_connect.ui.common.ProfilePhotos
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import retrofit2.HttpException
 import org.json.JSONObject
 import java.io.IOException
@@ -276,7 +278,7 @@ class SecurityFragment : Fragment() {
         val requestedCursor = cursor
         isLoading = true
         loadMoreFailed = false
-        renderLoadingState()
+        render()
 
         dataLoadJob = viewLifecycleOwner.lifecycleScope.launch {
             val resp = getStaffPageWithRetry(requestedCursor)
@@ -310,7 +312,8 @@ class SecurityFragment : Fragment() {
             // With a filter on, one page may contain few (or no) matches. Keep
             // pulling so the user is not left staring at an empty list while
             // hundreds of unloaded staff would have matched.
-            if (hasActiveFilters() && !isDone && visibleStaff().size < PAGE_SIZE) {
+            if (!isDone && (loaded.isEmpty() ||
+                    hasActiveFilters() && visibleStaff().size < PAGE_SIZE)) {
                 loadNextPage()
             }
         }
@@ -327,14 +330,19 @@ class SecurityFragment : Fragment() {
     ): StaffPaginatedResponse? {
         repeat(PAGE_LOAD_ATTEMPTS) { attempt ->
             try {
-                return api.getStaffPaginated(
-                    token = session.bearerToken,
-                    numItems = PAGE_SIZE,
-                    cursor = requestedCursor,
-                    // This screen needs the staff rows only; the enriched
-                    // response hung the request.
-                    lite = "1",
-                )
+                return withTimeout(PAGE_REQUEST_TIMEOUT_MS) {
+                    api.getStaffPaginated(
+                        token = session.bearerToken,
+                        numItems = PAGE_SIZE,
+                        cursor = requestedCursor,
+                        // This screen needs the staff rows only; the enriched
+                        // response hung the request.
+                        lite = "1",
+                    )
+                }
+            } catch (_: TimeoutCancellationException) {
+                if (attempt == PAGE_LOAD_ATTEMPTS - 1) return null
+                delay(PAGE_RETRY_DELAYS_MS[attempt])
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
@@ -393,14 +401,21 @@ class SecurityFragment : Fragment() {
         isSearching = true
         loadFailed = false
         isLoading = true
-        renderLoadingState()
+        render()
         searchJob = viewLifecycleOwner.lifecycleScope.launch {
             kotlinx.coroutines.delay(SEARCH_DEBOUNCE_MS)
             // lite: this screen needs the staff rows only. The enriched
             // response costs hundreds of extra reads and timed out.
-            val resp = runCatching {
-                api.searchStaff(session.bearerToken, q, lite = "1")
-            }.getOrNull()
+            val resp = try {
+                withTimeout(PAGE_REQUEST_TIMEOUT_MS) {
+                    api.searchStaff(session.bearerToken, q, lite = "1")
+                }
+            } catch (error: CancellationException) {
+                if (error !is TimeoutCancellationException) throw error
+                null
+            } catch (_: Throwable) {
+                null
+            }
             if (!isAdded || _binding == null) return@launch
             isLoading = false
             if (resp?.success == true) {
@@ -450,11 +465,18 @@ class SecurityFragment : Fragment() {
     private fun loadLogins() {
         if (isLoading) return
         isLoading = true
-        renderLoadingState()
+        render()
         dataLoadJob = viewLifecycleOwner.lifecycleScope.launch {
-            val resp = runCatching {
-                api.getActiveStaffLogins(session.bearerToken)
-            }.getOrNull()
+            val resp = try {
+                withTimeout(LOGINS_REQUEST_TIMEOUT_MS) {
+                    api.getActiveStaffLogins(session.bearerToken)
+                }
+            } catch (error: CancellationException) {
+                if (error !is TimeoutCancellationException) throw error
+                null
+            } catch (_: Throwable) {
+                null
+            }
             if (!isAdded || _binding == null) return@launch
             isLoading = false
             binding.securityRefresh.dismissRefresh()
@@ -826,31 +848,36 @@ class SecurityFragment : Fragment() {
 
     // ---------- rendering ----------
 
-    /** Skeleton only while the FIRST page is in flight; a spinner for later pages. */
-    private fun renderLoadingState() {
-        if (_binding == null) return
-        val firstLoad = isLoading && if (selectedTab == Action.STAFF_LOGIN) {
-            logins.isEmpty()
-        } else {
-            loaded.isEmpty()
-        }
-        binding.securitySkeleton.visibility = if (firstLoad) View.VISIBLE else View.GONE
-        if (firstLoad && binding.securitySkeleton.childCount == 0) {
-            repeat(6) { binding.securitySkeleton.addView(skeletonRow()) }
-        }
-        binding.securityLoadingMore.visibility =
-            if (isLoading && loaded.isNotEmpty()) View.VISIBLE else View.GONE
-        binding.btnSecurityLoadMoreRetry.visibility =
-            if (loadMoreFailed && !isLoading) View.VISIBLE else View.GONE
-    }
-
     private fun render() {
         if (_binding == null) return
-        renderLoadingState()
 
         val staffRows = visibleStaff()
         val loginRows = visibleLogins()
+        val hasRows = if (selectedTab == Action.STAFF_LOGIN) loginRows.isNotEmpty()
+        else staffRows.isNotEmpty()
+        val dataComplete = if (selectedTab == Action.STAFF_LOGIN) {
+            loginsLoaded
+        } else {
+            isSearching || isDone
+        }
+        val presentation = securityListPresentation(
+            isLoading = isLoading,
+            hasRows = hasRows,
+            loadFailed = loadFailed,
+            loadMoreFailed = loadMoreFailed,
+            dataComplete = dataComplete,
+        )
+        if (presentation.showSkeleton && binding.securitySkeleton.childCount == 0) {
+            repeat(6) { binding.securitySkeleton.addView(skeletonRow()) }
+        }
+        binding.securitySkeleton.visibility =
+            if (presentation.showSkeleton) View.VISIBLE else View.GONE
+        binding.securityLoadingMore.visibility =
+            if (presentation.showLoadingMore) View.VISIBLE else View.GONE
+        binding.btnSecurityLoadMoreRetry.visibility =
+            if (presentation.showLoadMoreRetry) View.VISIBLE else View.GONE
         binding.tvSecurityCount.text = when {
+            isLoading && !hasRows -> "Loading..."
             selectedTab == Action.STAFF_LOGIN -> if (searchQuery.isBlank()) {
                 "${loginRows.size} active"
             } else {
@@ -880,23 +907,22 @@ class SecurityFragment : Fragment() {
                 }
             },
         )
-        val hasRows = if (selectedTab == Action.STAFF_LOGIN) loginRows.isNotEmpty()
-        else staffRows.isNotEmpty()
-        binding.securityList.visibility = if (hasRows) View.VISIBLE else View.GONE
+        binding.securityList.visibility =
+            if (presentation.showRows) View.VISIBLE else View.GONE
 
         // Nothing at all AND the first load failed -> an explicit retry, never a
         // blank screen the user has to guess about.
-        val showError = loadFailed && !hasRows
-        binding.securityError.visibility = if (showError) View.VISIBLE else View.GONE
+        binding.securityError.visibility =
+            if (presentation.showError) View.VISIBLE else View.GONE
         binding.tvSecurityErrorText.text = if (selectedTab == Action.STAFF_LOGIN) {
             "Couldn't load active sessions. Check your connection and try again."
         } else {
             "Couldn't load the staff directory. Check your connection and try again."
         }
 
-        val showEmpty = !showError && !hasRows && !isLoading
-        binding.securityEmpty.visibility = if (showEmpty) View.VISIBLE else View.GONE
-        if (showEmpty) {
+        binding.securityEmpty.visibility =
+            if (presentation.showEmpty) View.VISIBLE else View.GONE
+        if (presentation.showEmpty) {
             val narrowed = searchQuery.isNotBlank() || hasActiveFilters()
             binding.tvSecurityEmptyTitle.text =
                 if (narrowed) "No matches" else "No staff found"
@@ -1404,7 +1430,9 @@ class SecurityFragment : Fragment() {
 
         private const val PAGE_SIZE = 25
         private const val PAGE_PREFETCH_ROWS = 8
-        private const val PAGE_LOAD_ATTEMPTS = 3
+        private const val PAGE_LOAD_ATTEMPTS = 2
+        private const val PAGE_REQUEST_TIMEOUT_MS = 6_000L
+        private const val LOGINS_REQUEST_TIMEOUT_MS = 10_000L
         private const val MAX_SELECTABLE_STAFF_IDS = 2_000
         private val PAGE_RETRY_DELAYS_MS = longArrayOf(300L, 900L)
         private val AUTO_PAGE_RETRY_DELAYS_MS = longArrayOf(4_000L, 10_000L, 20_000L, 30_000L)
