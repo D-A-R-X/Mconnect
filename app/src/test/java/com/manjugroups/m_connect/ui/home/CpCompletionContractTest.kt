@@ -1,6 +1,9 @@
 package com.manjugroups.m_connect.ui.home
 
+import com.google.gson.Gson
+import com.manjugroups.m_connect.network.GeoTrackResponse
 import com.manjugroups.m_connect.network.JointCpWorkflow
+import com.manjugroups.m_connect.network.JointCpWorkflowResponse
 import com.manjugroups.m_connect.network.JointCpParticipant
 import com.manjugroups.m_connect.network.JointCpSummary
 import org.junit.Assert.assertEquals
@@ -10,6 +13,39 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CpCompletionContractTest {
+
+    @Test
+    fun `verified owner can reopen outcome when transient permission flag is stale`() {
+        val workflow = JointCpWorkflow(
+            state = "awaiting_owner_outcome",
+            actorRole = "outcome_owner",
+            canSubmitOutcome = false,
+        )
+
+        assertTrue(jointCpOutcomeOwnerCanEnterOutcome(workflow))
+    }
+
+    @Test
+    fun `owner cannot reopen outcome after it was sent for review`() {
+        val workflow = JointCpWorkflow(
+            state = "pending_review",
+            actorRole = "outcome_owner",
+            canSubmitOutcome = true,
+        )
+
+        assertFalse(jointCpOutcomeOwnerCanEnterOutcome(workflow))
+    }
+
+    @Test
+    fun `reviewer never receives owner outcome action`() {
+        val workflow = JointCpWorkflow(
+            state = "awaiting_owner_outcome",
+            actorRole = "reviewer",
+            canSubmitOutcome = true,
+        )
+
+        assertFalse(jointCpOutcomeOwnerCanEnterOutcome(workflow))
+    }
     @Test
     fun `cp id keeps legacy trip in cp flow when trip type metadata is missing`() {
         assertTrue(isCpBackedTrip("cp-visit-1"))
@@ -38,11 +74,53 @@ class CpCompletionContractTest {
     }
 
     @Test
+    fun `repeat completion response uses authoritative effective status`() {
+        val response = Gson().fromJson(
+            """{
+                "success": true,
+                "fieldVisitId": "field-1",
+                "clientPlaceVisitId": "cp-1",
+                "status": "completed",
+                "effectiveStatus": "pending_gm_approval",
+                "alreadyCompleted": true,
+                "visit": {
+                    "_id": "cp-1",
+                    "status": "completed",
+                    "effectiveStatus": "pending_gm_approval",
+                    "outcome": "old_client_visited"
+                },
+                "fieldVisit": {
+                    "_id": "field-1",
+                    "status": "completed",
+                    "completedAt": 1757410000000
+                },
+                "completionProof": { "distanceMeters": 42 }
+            }""".trimIndent(),
+            GeoTrackResponse::class.java,
+        )
+
+        assertTrue(response.alreadyCompleted == true)
+        assertEquals("field-1", response.fieldVisitId)
+        assertEquals("completed", response.fieldVisit?.status)
+        assertEquals("old_client_visited", response.visit?.outcome)
+        assertEquals(
+            "pending_gm_approval",
+            resolvedCpCompletionStatus(
+                response.effectiveStatus,
+                response.status,
+                response.visit?.effectiveStatus,
+                response.visit?.status,
+            ),
+        )
+    }
+
+    @Test
     fun `joint reviewer completion uses the freshly authorized revision`() {
         assertEquals(
             7L,
             jointCpReviewRevision(
                 JointCpWorkflow(
+                    state = "pending_review",
                     actorRole = "reviewer",
                     actorReady = true,
                     canCompleteReview = true,
@@ -54,6 +132,7 @@ class CpCompletionContractTest {
             8L,
             jointCpReviewRevision(
                 JointCpWorkflow(
+                    state = "pending_review",
                     actorRole = "reviewer",
                     actorReady = null,
                     canCompleteReview = true,
@@ -64,78 +143,115 @@ class CpCompletionContractTest {
     }
 
     @Test
-    fun `joint outcome owner or unready reviewer cannot complete review`() {
-        assertNull(jointCpReviewRevision(JointCpWorkflow(actorRole = "outcome_owner", canCompleteReview = true, outcomeRevision = 7)))
-        assertNull(jointCpReviewRevision(JointCpWorkflow(actorRole = "reviewer", canCompleteReview = false, outcomeRevision = 7)))
-        assertNull(jointCpReviewRevision(JointCpWorkflow(actorRole = "reviewer", actorReady = false, canCompleteReview = true, outcomeRevision = 7)))
+    fun `workflow response maps effective template snapshots and owner controls`() {
+        val response = Gson().fromJson(
+            """{
+                "success": true,
+                "workflow": {
+                    "state": "in_progress",
+                    "actorRole": "outcome_owner",
+                    "outcomeOwnerStaffId": "staff-low",
+                    "outcomeOwnerName": "Lower staff",
+                    "outcomeOwnerTemplateName": "Sales Level 3",
+                    "outcomeOwnerTemplateLevel": 3,
+                    "reviewerStaffId": "staff-high",
+                    "reviewerName": "Higher staff",
+                    "reviewerTemplateName": "Sales Level 4",
+                    "reviewerTemplateLevel": 4,
+                    "canRequestOtp": true,
+                    "canSubmitOutcome": true,
+                    "canReview": false,
+                    "canCompleteReview": false
+                }
+            }""".trimIndent(),
+            JointCpWorkflowResponse::class.java,
+        )
+        val verified = verifiedJointCpWorkflowForActor(response.workflow!!, "staff-low")
+
+        assertEquals("Sales Level 3", verified.outcomeOwnerTemplateName)
+        assertEquals(3, verified.outcomeOwnerTemplateLevel)
+        assertEquals("Sales Level 4", verified.reviewerTemplateName)
+        assertEquals(4, verified.reviewerTemplateLevel)
+        assertTrue(verified.canRequestOtp)
+        assertTrue(verified.canSubmitOutcome)
+        assertFalse(verified.canReview)
+        assertFalse(verified.canCompleteReview)
     }
 
     @Test
-    fun `reviewer with omitted readiness must receive proximity action`() {
-        assertTrue(
-            jointCpReviewerNeedsReadiness(
-                JointCpWorkflow(
-                    state = "in_progress",
-                    actorRole = "reviewer",
-                    actorReady = null,
-                    canReview = false,
-                ),
-            ),
-        )
-        assertFalse(
-            jointCpReviewerNeedsReadiness(
-                JointCpWorkflow(
-                    state = "in_progress",
-                    actorRole = "reviewer",
-                    actorReady = true,
-                    canReview = false,
-                ),
-            ),
-        )
-    }
-
-    @Test
-    fun `submitted outcome never asks reviewer to repeat readiness`() {
-        assertFalse(
-            jointCpReviewerNeedsReadiness(
+    fun `joint review completion is role and sequence gated without proximity`() {
+        assertNull(
+            jointCpReviewRevision(
                 JointCpWorkflow(
                     state = "pending_review",
-                    actorRole = "reviewer",
-                    actorReady = null,
-                    canReview = true,
+                    actorRole = "outcome_owner",
+                    outcomeRevision = 7,
                 ),
             ),
         )
-    }
-
-    @Test
-    fun `stale otp permission never hides owner preflight`() {
-        assertTrue(
-            jointCpOwnerNeedsArrivalPreflight(
-                workflow = JointCpWorkflow(
+        assertNull(
+            jointCpReviewRevision(
+                JointCpWorkflow(
                     state = "in_progress",
-                    actorRole = "outcome_owner",
-                    canRequestOtp = false,
+                    actorRole = "reviewer",
+                    outcomeRevision = 7,
                 ),
-                alreadyArrived = false,
             ),
         )
-        assertFalse(
-            jointCpOwnerNeedsArrivalPreflight(
-                workflow = JointCpWorkflow(
-                    state = "pending_review",
-                    actorRole = "outcome_owner",
-                    canRequestOtp = false,
-                ),
-                alreadyArrived = false,
-            ),
-        )
-    }
-
-    @Test
-    fun `joint proximity codes retain server limits in staff messages`() {
         assertEquals(
-            "Partner location is older than 60 seconds. Keep both phones on this visit and try again.",
+            7L,
+            jointCpReviewRevision(
+                JointCpWorkflow(
+                    state = "pending_review",
+                    actorRole = "reviewer",
+                    actorReady = false,
+                    isWithinCompletionRadius = false,
+                    canCompleteReview = false,
+                    outcomeRevision = 7,
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun `submitted outcome can be reviewed regardless of participant distance`() {
+        assertTrue(
+            jointCpReviewerCanReview(
+                JointCpWorkflow(
+                    state = "pending_review",
+                    actorRole = "reviewer",
+                    actorReady = false,
+                    isWithinCompletionRadius = false,
+                    canReview = false,
+                    canCompleteReview = false,
+                    outcomeRevision = 9,
+                ),
+            ),
+        )
+        assertFalse(
+            jointCpReviewerCanReview(
+                JointCpWorkflow(
+                    state = "in_progress",
+                    actorRole = "reviewer",
+                    outcomeRevision = 9,
+                ),
+            ),
+        )
+        assertFalse(
+            jointCpReviewerCanReview(
+                JointCpWorkflow(
+                    state = "pending_review",
+                    actorRole = "outcome_owner",
+                    outcomeRevision = 9,
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun `legacy proximity errors never expose a distance restriction`() {
+        assertEquals(
+            "fallback",
             jointCpApiErrorMessage(
                 code = "PARTNER_LOCATION_STALE",
                 raw = null,
@@ -146,7 +262,7 @@ class CpCompletionContractTest {
             ),
         )
         assertEquals(
-            "GPS accuracy is too low. Turn on precise location, move to an open area, and retry with 30 metres accuracy or better.",
+            "fallback",
             jointCpApiErrorMessage(
                 code = "LOCATION_ACCURACY_LOW",
                 raw = null,
@@ -157,7 +273,7 @@ class CpCompletionContractTest {
             ),
         )
         assertEquals(
-            "Both Joint CP staff must be within 100 metres to continue.",
+            "fallback",
             jointCpApiErrorMessage(
                 code = "PARTNER_TOO_FAR",
                 raw = null,
@@ -167,13 +283,6 @@ class CpCompletionContractTest {
                 fallback = "fallback",
             ),
         )
-    }
-
-    @Test
-    fun `joint radius follows server during rollout and defaults to one hundred`() {
-        assertEquals(50, jointCpRadiusMeters(JointCpWorkflow(requiredRadiusMeters = 50.0)))
-        assertEquals(100, jointCpRadiusMeters(JointCpWorkflow(requiredRadiusMeters = 100.0)))
-        assertEquals(100, jointCpRadiusMeters(null))
     }
 
     @Test
@@ -272,7 +381,7 @@ class CpCompletionContractTest {
             ),
         )
         assertEquals(
-            "Both staff must be within 50 metres",
+            "fallback",
             jointCpUserMessage("Both staff must be within 50 metres", "fallback"),
         )
     }

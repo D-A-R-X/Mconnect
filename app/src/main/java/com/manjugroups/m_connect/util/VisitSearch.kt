@@ -14,6 +14,36 @@ import java.util.Locale
  */
 object VisitSearch {
 
+    /** Canonical form sent to server-side search, especially for formatted phones. */
+    fun serverQuery(rawQuery: String): String {
+        val trimmed = rawQuery.trim()
+        if (trimmed.isBlank()) return ""
+
+        val digits = trimmed.filter(Char::isDigit)
+        val compact = trimmed.filterNot {
+            it.isWhitespace() || it == '+' || it == '-' || it == '(' || it == ')'
+        }
+        val phoneLike = digits.length >= 3 && compact.all(Char::isDigit)
+        return if (phoneLike) digits.takeLast(10) else trimmed
+    }
+
+    /**
+     * A completed server search is authoritative. Rechecking only the compact
+     * display phone can hide rows matched through a denormalized phone snapshot.
+     */
+    fun matchesLoadedServerResult(
+        visit: TodayVisit,
+        rawQuery: String,
+        loadedServerQuery: String?,
+    ): Boolean {
+        val query = serverQuery(rawQuery)
+        if (query.isBlank()) return true
+        if (loadedServerQuery != null && query.equals(loadedServerQuery, ignoreCase = true)) {
+            return true
+        }
+        return matches(visit, rawQuery)
+    }
+
     fun matches(visit: TodayVisit, rawQuery: String): Boolean {
         val q = rawQuery.trim().lowercase(Locale.US)
         if (q.isBlank()) return true

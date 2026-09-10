@@ -236,8 +236,10 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         val btnCancel = view.findViewById<View>(R.id.btnCancel)
         val btnSubmit = view.findViewById<View>(R.id.btnSubmit)
 
-        // Field staff must be chosen explicitly from the active-staff picker.
-        // Do not silently assign the logged-in creator.
+        // Start with the signed-in account, while keeping the selector editable.
+        // The active-staff load replaces this lightweight session row with the
+        // server row, including effective IAM template metadata.
+        prefillLoggedInStaff(etStaff)
 
         // Setup click listeners for spinners
         etStaff.setOnClickListener { pickStaff(etStaff) }
@@ -468,20 +470,14 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             }
 
             // A Joint CP is meaningless with one person on it.
-            val authoritativePrimary = staffCache.firstOrNull { it.id == staff.id } ?: staff
-            var jointParticipantIds: List<String>? = null
-            var jointAssignment: JointCpTemplateGuard.Assignment? = null
+            var jointCompanionIds: List<String>? = null
             if (isJointCp) {
-                JointCpTemplateGuard.rejection(authoritativePrimary, selectedJointPartner)?.let {
+                JointCpTemplateGuard.rejection(staff, selectedJointPartner)?.let {
                     toast(it)
                     return@setOnClickListener
                 }
-                jointAssignment = JointCpTemplateGuard.assignment(
-                    authoritativePrimary,
-                    selectedJointPartner,
-                )
-                jointParticipantIds = JointCpTemplateGuard.participantIds(
-                    authoritativePrimary,
+                jointCompanionIds = JointCpTemplateGuard.companionIds(
+                    staff,
                     selectedJointPartner,
                 )
             }
@@ -634,10 +630,10 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                     val request = CreateCpVisitRequest(
                             clientName = clientNameInput,
                             mobileNumber = phone,
-                            // Use the locally resolved owner when picker metadata is
-                            // available. The server resolves and rewrites this field
-                            // authoritatively for every Joint CP creation.
-                            assignedStaffId = jointAssignment?.outcomeOwner?.id ?: staff.id,
+                            // Selection order carries no authority. The server resolves
+                            // effective IAM templates, snapshots both roles, and rewrites
+                            // this compatibility owner when creating a Joint CP.
+                            assignedStaffId = staff.id,
                             lmoStaffId = lmo.id,
                             scheduledDate = selectedDate,
                             scheduledTime = selectedTime,
@@ -659,7 +655,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                             pincode = pincode,
                             // Only sent for a Joint CP; the server ignores it
                             // for every other type.
-                            jointStaffIds = jointParticipantIds,
+                            jointStaffIds = jointCompanionIds,
                     )
                     val requestFingerprint = com.google.gson.Gson().toJson(request)
                     if (createRequestFingerprint != requestFingerprint) {
@@ -947,13 +943,11 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                         title = st.name ?: "Unnamed Staff",
                         subtitle = listOfNotNull(
                             st.employeeId,
-                            st.iamTemplateName,
-                            st.iamTemplateLevel?.let { "Level $it" },
-                            st.role,
+                            st.designation,
+                            st.department,
                         ).joinToString(" - "),
                         keywords = listOfNotNull(
-                            st.id, st.name, st.employeeId, st.iamTemplateName,
-                            st.iamTemplateLevel?.toString(), st.role, st.department,
+                            st.id, st.name, st.employeeId, st.designation, st.department,
                         ).joinToString(" "),
                     )
                 },
@@ -994,42 +988,82 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
     private fun showStaffPicker(label: EditText, items: List<StaffData>) {
         SearchableSelectionDialog.show(
             context = requireContext(),
-            title = "Select field staff",
-            options = items.map { s ->
+            title = "Select staff",
+            options = JointCpTemplateGuard.pickerStaff(items).map { s ->
                 SearchableOption(
                     item = s,
                     title = s.name ?: "Unnamed Staff",
-                    subtitle = listOfNotNull(s.employeeId, s.role).joinToString(" • "),
-                    keywords = listOfNotNull(s.id, s.name, s.employeeId, s.role, s.department).joinToString(" ")
+                    subtitle = listOfNotNull(s.employeeId, s.designation, s.department)
+                        .joinToString(" • "),
+                    keywords = listOfNotNull(
+                        s.id,
+                        s.name,
+                        s.employeeId,
+                        s.role,
+                        s.designation,
+                        s.department,
+                    ).joinToString(" ")
                 )
             },
             emptyMessage = "No staff found"
         ) { staff ->
+            val reason = selectedJointPartner?.let {
+                JointCpTemplateGuard.rejection(staff, it)
+            }
+            if (reason != null) {
+                selectedStaff = null
+                label.setText("")
+                toast(reason)
+                renderJointRoleAssignment()
+                return@show
+            }
             selectedStaff = staff
             label.setText(staff.name ?: "Selected")
-            if (selectedJointPartner?.let { !JointCpTemplateGuard.canPair(staff, it) } == true) {
-                val reason = JointCpTemplateGuard.rejection(staff, selectedJointPartner)
-                selectedJointPartner = null
-                view?.findViewById<EditText>(R.id.etJointPartner)?.setText("")
-                reason?.let(::toast)
-            }
             renderJointRoleAssignment()
+        }
+    }
+
+    private fun prefillLoggedInStaff(label: EditText) {
+        val loggedInId = session.staffId?.trim()?.takeIf(String::isNotEmpty) ?: return
+        val sessionStaff = StaffData(
+            id = loggedInId,
+            name = session.userName,
+            phone = session.userPhone,
+            role = session.role,
+            designation = null,
+            status = "active",
+            employeeId = session.employeeId,
+            department = null,
+        )
+        selectedStaff = sessionStaff
+        label.setText(sessionStaff.name?.takeIf(String::isNotBlank) ?: "My account")
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val response = api.getStaff(session.bearerToken, status = "active")
+                if (!isAdded || !response.success) return@launch
+                staffCache = JointCpTemplateGuard.pickerStaff(response.staff)
+                val serverStaff = JointCpTemplateGuard.loggedInStaff(staffCache, loggedInId)
+                    ?: return@launch
+                // Do not overwrite a choice made while the request was running.
+                if (selectedStaff?.id?.trim() == loggedInId) {
+                    selectedStaff = serverStaff
+                    label.setText(serverStaff.name?.takeIf(String::isNotBlank) ?: "My account")
+                    renderJointRoleAssignment()
+                }
+            } catch (_: Exception) {
+                // Session data is enough to prefill. The picker retries this API,
+                // while the create endpoint remains the authoritative validator.
+            }
         }
     }
 
     private fun renderJointRoleAssignment() {
         val label = view?.findViewById<android.widget.TextView>(R.id.tvJointRoleAssignment) ?: return
-        val assignment = JointCpTemplateGuard.assignment(selectedStaff, selectedJointPartner)
-        label.text = when {
-            assignment != null -> {
-                val owner = assignment.outcomeOwner.name?.takeIf { it.isNotBlank() } ?: "Lower-level staff"
-                val reviewer = assignment.reviewer.name?.takeIf { it.isNotBlank() } ?: "Higher-level staff"
-                "Outcome & OTP: $owner\nRemarks, review & complete: $reviewer"
-            }
-            selectedStaff != null && selectedJointPartner != null ->
-                "Workflow roles will be confirmed from the staff designation hierarchy when the visit is created."
-            else ->
-                "Select staff at different designation levels to assign the Joint CP workflow."
+        label.text = if (selectedStaff != null && selectedJointPartner != null) {
+            "The server will assign OTP/outcome and review/completion from each staff member's effective IAM template."
+        } else {
+            "Select two staff. Their Joint CP roles are assigned securely after creation."
         }
     }
 
@@ -1526,15 +1560,30 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         val actionable = marker?.let { raw.substring(it.range.last + 1) } ?: raw
         val message = actionable.lineSequence().firstOrNull()?.trim().orEmpty()
         return if (
+            message.contains("TEMPLATE_REQUIRED", ignoreCase = true) ||
+            message.contains("template is missing", ignoreCase = true)
+        ) {
+            "Joint CP template is missing for one of these staff. Ask admin to update the IAM template."
+        } else if (
+            message.contains("SAME_TEMPLATE_NOT_ALLOWED", ignoreCase = true) ||
+            (
+                message.contains("same template", ignoreCase = true) &&
+                    !message.contains("same template level", ignoreCase = true)
+            )
+        ) {
+            "Both staff use the same IAM template. Select staff from different template levels."
+        } else if (
             message.contains("TEMPLATE_LEVEL_REQUIRED", ignoreCase = true) ||
             message.contains("designation level is missing", ignoreCase = true)
         ) {
-            "Joint CP designation hierarchy is incomplete. Ask admin to map both staff designations and set different numeric levels."
+            "Joint CP template level is missing. Ask admin to configure a numeric level for both staff members' effective IAM templates."
         } else if (
             message.contains("SAME_TEMPLATE_LEVEL_NOT_ALLOWED", ignoreCase = true) ||
             message.contains("different designation levels", ignoreCase = true)
         ) {
-            "Both staff have the same designation level. Select one higher-level and one lower-level staff member."
+            "Both staff have the same Joint CP template level. Select staff with different template levels."
+        } else if (message.contains("INVALID_JOINT_CP_ROLE_PAIR", ignoreCase = true)) {
+            "The selected IAM templates do not form a valid Joint CP role pair. Ask admin to check the templates."
         } else {
             message
         }

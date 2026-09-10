@@ -662,12 +662,12 @@
             android:orientation="vertical"
             android:padding="14dp">
 
-            <!-- Field Staff -->
+            <!-- Staff -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="@font/inter_medium"
-                android:text="Field Staff *"
+                android:text="Staff *"
                 android:textColor="#344054"
                 android:textSize="13sp" />
 

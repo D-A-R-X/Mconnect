@@ -43,6 +43,7 @@ class ArrivalOtpBottomSheet : BottomSheetDialogFragment() {
     private lateinit var boxes: List<EditText>
     private var errorText: TextView? = null
     private var verifyBtn: View? = null
+    private var verifyButtonLabel: CharSequence? = null
     private var subtitleText: TextView? = null
     private var cpVisitId: String? = null
     private var gmRequestInFlight: Boolean = false
@@ -107,6 +108,7 @@ class ArrivalOtpBottomSheet : BottomSheetDialogFragment() {
         )
         errorText = view.findViewById(R.id.tvArrivalOtpError)
         verifyBtn = view.findViewById(R.id.btnArrivalOtpVerify)
+        verifyButtonLabel = (verifyBtn as? TextView)?.text
         subtitleText = view.findViewById(R.id.tvArrivalOtpSubtitle)
 
         // Figma 314:10209 — keep the static body copy as the subtitle. Phone
@@ -175,7 +177,7 @@ class ArrivalOtpBottomSheet : BottomSheetDialogFragment() {
             showError("Enter all 4 digits")
             return
         }
-        verifyBtn?.isEnabled = false
+        setVerifyBusy(true)
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val resp = verifyArrivalOtp(entered)
@@ -183,16 +185,21 @@ class ArrivalOtpBottomSheet : BottomSheetDialogFragment() {
                     setFragmentResult(RESULT_KEY, bundleOf(KEY_OTP to entered))
                     dismissAllowingStateLoss()
                 } else {
-                    verifyBtn?.isEnabled = true
+                    setVerifyBusy(false)
                     boxes.forEach { it.setText("") }
                     boxes.first().requestFocus()
                     showError(resp.error ?: "Invalid OTP")
                 }
             } catch (e: Exception) {
-                verifyBtn?.isEnabled = true
+                setVerifyBusy(false)
                 showError(arrivalOtpFailureMessage(e, "Couldn't verify OTP. Please try again."))
             }
         }
+    }
+
+    private fun setVerifyBusy(busy: Boolean) {
+        verifyBtn?.isEnabled = !busy
+        (verifyBtn as? TextView)?.text = if (busy) "Confirming OTP..." else verifyButtonLabel
     }
 
     private suspend fun verifyArrivalOtp(otp: String): com.manjugroups.m_connect.network.ArrivalOtpVerifyResponse {
@@ -355,6 +362,14 @@ internal fun arrivalOtpFailureMessage(error: Throwable, fallback: String): Strin
     }
     return error.message?.takeIf { it.isNotBlank() } ?: fallback
 }
+
+internal fun isAmbiguousOtpRequestTimeout(error: Throwable): Boolean =
+    generateSequence(error as Throwable?) { it.cause }
+        .any { cause ->
+            cause is java.net.SocketTimeoutException ||
+                (cause is java.io.InterruptedIOException &&
+                    cause.message?.contains("timed out", ignoreCase = true) == true)
+        }
 
 internal fun parseArrivalOtpErrorBody(raw: String?): String? {
     if (raw.isNullOrBlank()) return null

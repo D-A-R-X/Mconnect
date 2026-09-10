@@ -881,7 +881,13 @@ class HomeViewModel : ViewModel() {
     fun completeVisit(context: Context, bearerToken: String, visitId: String, lat: Double?, lng: Double?) {
         viewModelScope.launch {
             try {
-                geoApi.completeVisit(bearerToken, CompleteVisitRequest(visitId, lat, lng))
+                val completion = geoApi.completeVisit(
+                    bearerToken,
+                    CompleteVisitRequest(visitId, lat, lng),
+                )
+                check(completion.success) {
+                    completion.error ?: "Visit completion was rejected"
+                }
                 GeoTrackBootstrapSync.sync(context, api = geoApi)
                 _punchEvent.emit(PunchEvent.Success("Visit completed!"))
                 // Visit over → drop the field-activity so the tracking

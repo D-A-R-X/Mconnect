@@ -74,4 +74,16 @@ class ArrivalOtpErrorParserTest {
             ),
         )
     }
+
+    @Test
+    fun `request timeout is treated as an ambiguous committed otp send`() {
+        assertEquals(true, isAmbiguousOtpRequestTimeout(java.net.SocketTimeoutException("timeout")))
+        assertEquals(
+            true,
+            isAmbiguousOtpRequestTimeout(
+                IllegalStateException("wrapped", java.io.InterruptedIOException("timed out")),
+            ),
+        )
+        assertEquals(false, isAmbiguousOtpRequestTimeout(IllegalStateException("rejected")))
+    }
 }

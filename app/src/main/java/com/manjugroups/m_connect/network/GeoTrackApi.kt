@@ -897,6 +897,9 @@ data class GeoTrackResponse(
     val success: Boolean,
     val error: String? = null,
     val status: String? = null,
+    // Enriched CP completion responses expose the authoritative parent state.
+    // Keep legacy aliases because older deployments only returned `status`.
+    val effectiveStatus: String? = null,
     // CP setOutcome returns the updated parent row inside `visit`. Keep the
     // top-level aliases too because older deployments returned them directly.
     // Outcome callers must validate this state before closing the field trip.
@@ -904,6 +907,10 @@ data class GeoTrackResponse(
     val cpVisitStatus: String? = null,
     val visit: CpVisitDetail? = null,
     val clientPlaceVisitId: String? = null,
+    val fieldVisitId: String? = null,
+    val fieldVisit: CpVisitFieldVisit? = null,
+    val completionProof: JsonElement? = null,
+    val alreadyCompleted: Boolean? = null,
     val siteVisitId: String? = null,
     val confirmationStatus: String? = null,
     val alreadyCancelled: Boolean? = null,
@@ -1898,9 +1905,12 @@ data class JointCpWorkflow(
     val actorRole: String? = null,
     val outcomeOwnerStaffId: String? = null,
     val outcomeOwnerName: String? = null,
+    val outcomeOwnerTemplateName: String? = null,
+    val outcomeOwnerTemplateLevel: Int? = null,
     val reviewerStaffId: String? = null,
     val reviewerName: String? = null,
     val reviewerTemplateName: String? = null,
+    val reviewerTemplateLevel: Int? = null,
     val canRequestOtp: Boolean = false,
     val canSubmitOutcome: Boolean = false,
     val canReview: Boolean = false,
@@ -1962,8 +1972,8 @@ data class JointCpLocationRequest(
 data class JointCpSubmitReviewRequest(
     val id: String,
     val fieldVisitId: String,
-    val lat: Double,
-    val lng: Double,
+    val lat: Double? = null,
+    val lng: Double? = null,
     val accuracyMeters: Float? = null,
     val capturedAt: Long = System.currentTimeMillis(),
     val arrivalPhotoStorageId: String? = null,
@@ -2064,6 +2074,9 @@ data class SiteVisitFilterOptionsResponse(
 
 data class CpVisitDetail(
     @com.google.gson.annotations.SerializedName("_id") val id: String? = null,
+    // Stable 10-digit snapshot used by server-side phone search. Some legacy
+    // rows no longer have a resolvable lead/client link, so retain this value.
+    val mobileNumberNormalized: String? = null,
     // Returned by create and participant-aware list reads so mobile can
     // reconcile a mutation whose HTTP response was lost after commit.
     val requestId: String? = null,

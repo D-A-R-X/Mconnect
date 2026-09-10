@@ -62,7 +62,6 @@ import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.JointCpParticipant
 import com.manjugroups.m_connect.network.JointCpSummary
 import com.manjugroups.m_connect.network.JointCpCompleteReviewRequest
-import com.manjugroups.m_connect.network.JointCpLocationRequest
 import com.manjugroups.m_connect.network.JointCpSubmitReviewRequest
 import com.manjugroups.m_connect.network.JointCpWorkflow
 import com.manjugroups.m_connect.network.JointCpWorkflowResponse
@@ -678,8 +677,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     bindJointCp(it, response.visit?.joint ?: jointSummary)
                     applyJointWorkflowPresentation(it, workflow)
                 }
-                if (workflow.actorRole == "reviewer" && workflow.actorReady != false && workflow.canReview &&
-                    workflow.outcomeRevision != null &&
+                if (jointCpReviewerCanReview(workflow) &&
                     autoOpenedJointReviewRevision != workflow.outcomeRevision &&
                     !isOpeningOutcomeSheet
                 ) {
@@ -712,7 +710,6 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     private fun jointWaitingMessage(workflow: JointCpWorkflow): String {
         val owner = workflow.outcomeOwnerName?.trim()?.takeIf { it.isNotEmpty() }
             ?: "the outcome owner"
-        val radius = jointCpRadiusMeters(workflow)
         return when {
         workflow.state == "completed" -> {
             val reviewer = workflow.reviewedByTemplateName ?: workflow.reviewedByName ?: "reviewer"
@@ -723,16 +720,14 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 ?: "the higher-level partner"
             "Waiting for $reviewer to add remarks and complete"
         }
-        jointCpReviewerNeedsReadiness(workflow) ->
-            "Swipe to confirm both partners are within $radius metres"
-        workflow.actorRole == "reviewer" && workflow.canReview ->
+        jointCpReviewerCanReview(workflow) ->
             "Review $owner's outcome and make any required changes"
         workflow.actorRole == "reviewer" ->
             "Waiting for $owner to submit the outcome"
-        workflow.actorRole == "outcome_owner" && workflow.canSubmitOutcome ->
+        jointCpOutcomeOwnerCanEnterOutcome(workflow) ->
             "OTP verified. Complete the outcome and send it for review"
         workflow.actorRole == "outcome_owner" ->
-            "Complete OTP and photo while both partners are within $radius metres"
+            "Complete OTP and photo, then submit the outcome"
         workflow.outcomeOwnerStaffId != null || workflow.reviewerStaffId != null ->
             "Joint CP role assignment is out of sync. Refresh this visit or ask admin to repair it"
         else -> "Waiting for Joint CP workflow update"
@@ -752,28 +747,20 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         val workflow = jointWorkflow ?: return false
         if (!visitStarted) return false
 
-        // Always let the authenticated outcome owner ask the authoritative
-        // preflight endpoint. canRequestOtp is a snapshot and may still be
-        // false until the partner's readiness write has propagated.
-        if (jointCpOwnerNeedsArrivalPreflight(workflow, alreadyArrived)) {
+        if (!alreadyArrived && workflow.actorRole == "outcome_owner") {
             return false
-        }
-
-        if (jointCpReviewerNeedsReadiness(workflow)) {
-            btnCompleteCpDetails?.visibility = View.GONE
-            swipeArrived?.visibility = View.VISIBLE
-            swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
-            return true
         }
 
         swipeArrived?.visibility = View.GONE
         btnCompleteCpDetails?.visibility = View.VISIBLE
+        val reviewerCanReview = jointCpReviewerCanReview(workflow)
+        val ownerCanEnterOutcome = jointCpOutcomeOwnerCanEnterOutcome(workflow)
         btnCompleteCpDetails?.isEnabled = !jointMutationInProgress &&
-            (workflow.canSubmitOutcome || workflow.canReview)
+            (ownerCanEnterOutcome || reviewerCanReview)
         btnCompleteCpDetails?.text = when {
             jointMutationInProgress -> "Updating Joint CP..."
-            workflow.actorRole == "reviewer" && workflow.canReview -> "Review outcome"
-            workflow.actorRole == "outcome_owner" && workflow.canSubmitOutcome -> "Enter outcome"
+            reviewerCanReview -> "Review outcome"
+            ownerCanEnterOutcome -> "Enter outcome"
             workflow.actorRole == "reviewer" -> {
                 val owner = workflow.outcomeOwnerName?.trim()?.takeIf { it.isNotEmpty() }
                     ?: "outcome owner"
@@ -782,128 +769,6 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             else -> "Waiting for partner"
         }
         return true
-    }
-
-    private fun preflightJointCpArrival() {
-        val cpId = cpVisitId ?: return
-        val fieldId = visitId ?: return
-        val workflow = jointWorkflow
-        if (workflow?.actorRole == "reviewer") {
-            preflightJointCpReviewerReady()
-            return
-        }
-        if (workflow != null && workflow.actorRole != "outcome_owner") {
-            swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
-            Toast.makeText(requireContext(), jointWaitingMessage(workflow), Toast.LENGTH_LONG).show()
-            return
-        }
-        swipeArrived?.lockAsBusy("Checking both staff locations...")
-        viewLifecycleOwner.lifecycleScope.launch {
-            val location = fetchJointCpLocation()
-            if (location == null) {
-                arrivalInProgress = false
-                swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
-                Toast.makeText(requireContext(), "Could not read your GPS. Try again in open sky.", Toast.LENGTH_LONG).show()
-                return@launch
-            }
-            try {
-                val response = geoApi.preflightJointCpArrival(
-                    session.bearerToken,
-                    JointCpLocationRequest(
-                        id = cpId,
-                        fieldVisitId = fieldId,
-                        lat = location.latitude,
-                        lng = location.longitude,
-                        accuracyMeters = location.accuracy.takeIf { location.hasAccuracy() },
-                        capturedAt = location.time.takeIf { it > 0L } ?: System.currentTimeMillis(),
-                    ),
-                )
-                val refreshed = response.workflow?.let {
-                    resolvedJointCpWorkflowForActor(it, session.staffId, jointSummary)
-                }
-                if (!response.success || refreshed == null || !refreshed.isWithinCompletionRadius) {
-                    jointWorkflow = refreshed ?: jointWorkflow
-                    arrivalInProgress = false
-                    swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
-                    val measured = refreshed?.separationMeters?.let(::formatDistance)
-                    val radius = jointCpRadiusMeters(refreshed ?: jointWorkflow)
-                    val fallback = if (measured != null) {
-                        "Joint CP completion is blocked. Both staff must be within $radius metres. Current separation: $measured."
-                    } else {
-                        "Both Joint CP staff must share a fresh location and be within $radius metres."
-                    }
-                    val message = jointCpResponseErrorMessage(response, fallback)
-                    Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
-                    return@launch
-                }
-                jointWorkflow = refreshed
-                checkReachingAndAskClientSeen()
-            } catch (e: Exception) {
-                arrivalInProgress = false
-                swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
-                Toast.makeText(
-                    requireContext(),
-                    jointCpThrowableMessage(e, "Could not verify both staff locations"),
-                    Toast.LENGTH_LONG,
-                ).show()
-            }
-        }
-    }
-
-    private fun preflightJointCpReviewerReady() {
-        val cpId = cpVisitId ?: return
-        val fieldId = visitId ?: return
-        swipeArrived?.lockAsBusy("Checking both staff locations...")
-        viewLifecycleOwner.lifecycleScope.launch {
-            val location = fetchJointCpLocation()
-            if (location == null) {
-                arrivalInProgress = false
-                swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
-                Toast.makeText(requireContext(), "Could not read your GPS. Try again in open sky.", Toast.LENGTH_LONG).show()
-                return@launch
-            }
-            try {
-                val response = geoApi.markJointCpParticipantReady(
-                    session.bearerToken,
-                    JointCpLocationRequest(
-                        id = cpId,
-                        fieldVisitId = fieldId,
-                        lat = location.latitude,
-                        lng = location.longitude,
-                        accuracyMeters = location.accuracy.takeIf { location.hasAccuracy() },
-                        capturedAt = location.time.takeIf { it > 0L } ?: System.currentTimeMillis(),
-                    ),
-                )
-                val refreshed = response.workflow?.let {
-                    resolvedJointCpWorkflowForActor(it, session.staffId, jointSummary)
-                }
-                check(response.success && refreshed != null && refreshed.actorReady != false &&
-                    refreshed.isWithinCompletionRadius) {
-                    val radius = jointCpRadiusMeters(refreshed ?: response.workflow)
-                    jointCpResponseErrorMessage(
-                        response,
-                        "Both Joint CP staff must be within $radius metres to continue",
-                    )
-                }
-                jointWorkflow = refreshed
-                arrivalConfirmedForProgress = true
-                arrivalInProgress = false
-                applyJointWorkflowPresentation(requireView(), refreshed)
-                Toast.makeText(
-                    requireContext(),
-                    "Presence confirmed. Waiting for ${refreshed.outcomeOwnerName ?: "the outcome owner"}.",
-                    Toast.LENGTH_LONG,
-                ).show()
-            } catch (e: Exception) {
-                arrivalInProgress = false
-                swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
-                Toast.makeText(
-                    requireContext(),
-                    jointCpThrowableMessage(e, "Could not verify both staff locations"),
-                    Toast.LENGTH_LONG,
-                ).show()
-            }
-        }
     }
 
     private fun submitJointCpForReview() {
@@ -915,18 +780,15 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         renderArrivalPhase(alreadyArrived = true)
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val location = fetchJointCpLocation()
-                    ?: throw IllegalStateException("Could not read your current location")
                 val response = geoApi.submitJointCpReview(
                     session.bearerToken,
                     java.util.UUID.randomUUID().toString(),
                     JointCpSubmitReviewRequest(
                         id = cpId,
                         fieldVisitId = fieldId,
-                        lat = location.latitude,
-                        lng = location.longitude,
-                        accuracyMeters = location.accuracy.takeIf { location.hasAccuracy() },
-                        capturedAt = location.time.takeIf { it > 0L } ?: System.currentTimeMillis(),
+                        lat = pendingArrivalLat,
+                        lng = pendingArrivalLng,
+                        capturedAt = System.currentTimeMillis(),
                         arrivalPhotoStorageId = pendingArrivalStorageId,
                         expectedOutcomeRevision = expectedOutcomeRevision,
                     ),
@@ -1023,39 +885,8 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         renderArrivalPhase(alreadyArrived = true)
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                // Refresh the reviewer's own GPS at the final action. The old
-                // flow only re-read workflow state here, so the server could
-                // compare the owner's new submit location with a reviewer fix
-                // captured before OTP/photo/outcome entry.
-                val fieldId = visitId ?: error("The reviewer trip is missing")
-                val location = fetchJointCpLocation()
-                    ?: error("Could not read your current location")
-                val latest = geoApi.markJointCpParticipantReady(
-                    session.bearerToken,
-                    JointCpLocationRequest(
-                        id = cpId,
-                        fieldVisitId = fieldId,
-                        lat = location.latitude,
-                        lng = location.longitude,
-                        accuracyMeters = location.accuracy.takeIf { location.hasAccuracy() },
-                        capturedAt = location.time.takeIf { it > 0L } ?: System.currentTimeMillis(),
-                    ),
-                )
-                check(latest.success && latest.workflow != null) {
-                    jointCpResponseErrorMessage(latest, "Could not refresh both staff locations")
-                }
-                val workflow = resolvedJointCpWorkflowForActor(
-                    latest.workflow,
-                    session.staffId,
-                    latest.visit?.joint ?: jointSummary,
-                )
-                jointWorkflow = workflow
-                check(workflow.actorReady != false && workflow.isWithinCompletionRadius) {
-                    val radius = jointCpRadiusMeters(workflow)
-                    workflow.separationMeters?.let {
-                        "Both staff must be within $radius metres. Current separation: ${formatDistance(it)}."
-                    } ?: "Both staff need a fresh accurate location within $radius metres"
-                }
+                val workflow = jointWorkflow
+                    ?: error("The submitted outcome is not ready for review completion")
                 val revision = jointCpReviewRevision(workflow)
                     ?: error("The submitted outcome is not ready for review completion")
                 val response = geoApi.completeJointCpReview(
@@ -2040,10 +1871,6 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         }
     }
 
-    /** Joint proximity decisions must never reuse a pre-arrival cached fix. */
-    private suspend fun fetchJointCpLocation(): Location? =
-        fetchCurrentLocation(maxUpdateAgeMillis = 0L)
-
     private fun renderMapMarkersAndRoute() {
         val map = googleMap ?: return
         val requestGeneration = ++routeRequestGeneration
@@ -2238,7 +2065,28 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         }
 
         if (isJointCpWorkflow()) {
-            preflightJointCpArrival()
+            val workflow = jointWorkflow
+            when (workflow?.actorRole) {
+                "outcome_owner" -> checkReachingAndAskClientSeen()
+                "reviewer" -> {
+                    arrivalInProgress = false
+                    swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                    Toast.makeText(
+                        requireContext(),
+                        jointWaitingMessage(workflow),
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+                else -> {
+                    arrivalInProgress = false
+                    swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                    Toast.makeText(
+                        requireContext(),
+                        "Joint CP role assignment is unavailable. Refresh the visit.",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+            }
             return
         }
         if (isCpVisit()) {
@@ -2498,34 +2346,17 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     // fall through to the normal proof + OTP entry flow below.
                 }
 
-                pendingArrivalOtpPhoneMasked = resp.contactPhoneMasked
-                pendingArrivalLat = effLat
-                pendingArrivalLng = effLng
-                // Gift Distribution shortcut: skip the pre-OTP photo
-                // step entirely. The proof we capture for gift_distri-
-                // bution is the gift handover itself, which only
-                // happens AFTER OTP verifies the client is present.
-                // Open the OTP sheet directly without a photo
-                // storage id; the post-OTP "Confirm Gift Distri-
-                // bution" button then handles the camera + upload.
-                if (isGiftDistribution) {
-                    pendingArrivalStorageId = null
-                    swipeArrived?.lockAsBusy("Enter OTP to confirm")
-                    ArrivalOtpBottomSheet.newInstance(
-                        visitId = id,
-                        cpVisitId = cpVisitId,
-                        phoneMasked = pendingArrivalOtpPhoneMasked,
-                        lat = effLat,
-                        lng = effLng,
-                        arrivalPhotoStorageId = null,
-                    ).showOnce(parentFragmentManager, "arrival_otp")
-                    return@launch
-                }
-                swipeArrived?.lockAsBusy("Opening camera…")
-                launchArrivalCamera()
+                continueAfterArrivalOtpRequest(id, effLat, effLng, resp.contactPhoneMasked)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
+                if (isAmbiguousOtpRequestTimeout(e)) {
+                    // OTP sending may already be committed even though the
+                    // response missed the client deadline. Continue to proof
+                    // and OTP entry instead of resetting the swipe.
+                    continueAfterArrivalOtpRequest(id, effLat, effLng, null)
+                    return@launch
+                }
                 arrivalInProgress = false
                 swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
                 context?.let { ctx ->
@@ -2537,6 +2368,32 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 }
             }
         }
+    }
+
+    private fun continueAfterArrivalOtpRequest(
+        visitId: String,
+        lat: Double,
+        lng: Double,
+        phoneMasked: String?,
+    ) {
+        pendingArrivalOtpPhoneMasked = phoneMasked
+        pendingArrivalLat = lat
+        pendingArrivalLng = lng
+        if (isGiftDistribution) {
+            pendingArrivalStorageId = null
+            swipeArrived?.lockAsBusy("Enter OTP to confirm")
+            ArrivalOtpBottomSheet.newInstance(
+                visitId = visitId,
+                cpVisitId = cpVisitId,
+                phoneMasked = pendingArrivalOtpPhoneMasked,
+                lat = lat,
+                lng = lng,
+                arrivalPhotoStorageId = null,
+            ).showOnce(parentFragmentManager, "arrival_otp")
+            return
+        }
+        swipeArrived?.lockAsBusy("Opening camera…")
+        launchArrivalCamera()
     }
 
     private fun arrivalBlockedMessage(resp: com.manjugroups.m_connect.network.ArrivalOtpRequestResponse): String {
@@ -3641,9 +3498,9 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     private fun onCompleteCpDetailsClicked() {
         val workflow = jointWorkflow
         if (isJointCpWorkflow() && workflow != null) {
-            if (workflow.actorRole == "reviewer" && workflow.actorReady != false && workflow.canReview) {
+            if (jointCpReviewerCanReview(workflow)) {
                 showCpCompletionSheet()
-            } else if (workflow.actorRole == "outcome_owner" && workflow.canSubmitOutcome) {
+            } else if (jointCpOutcomeOwnerCanEnterOutcome(workflow)) {
                 showCpCompletionSheet()
             } else {
                 Toast.makeText(
@@ -3714,6 +3571,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 cpOutcome = cpOutcome,
                 isSvFixedHint = svFix,
                 cpType = cpType,
+                cpClientPhone = clientMobile,
                 jointCtaMode = when (jointWorkflow?.actorRole) {
                     "outcome_owner" -> "send_review"
                     "reviewer" -> "complete_review"
@@ -4017,7 +3875,12 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 serverOutcomePendingFinalClose = false
                 cpVisitDecisionCaptured = true
                 val isCpBackedVisit = !cpVisitId.isNullOrBlank()
-                val cpStatus = completion.status?.trim()?.lowercase(Locale.US)
+                val cpStatus = resolvedCpCompletionStatus(
+                    effectiveStatus = completion.effectiveStatus,
+                    status = completion.status,
+                    visitEffectiveStatus = completion.visit?.effectiveStatus,
+                    visitStatus = completion.visit?.status,
+                )?.lowercase(Locale.US)
                 if (isCpBackedVisit && !cpOutcome.isNullOrBlank()) {
                     // Older/current backends confirm the field-visit mutation with
                     // { success:true, fieldVisitId } and omit `status`. The CP
@@ -4049,6 +3912,8 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 } else {
                     val message = if (cpStatus == "pending_gm_approval") {
                         "Outcome saved and waiting for GM approval"
+                    } else if (completion.alreadyCompleted == true) {
+                        "Visit was already completed"
                     } else {
                         "Visit completed"
                     }
