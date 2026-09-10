@@ -356,6 +356,14 @@ internal fun arrivalOtpFailureMessage(error: Throwable, fallback: String): Strin
     return error.message?.takeIf { it.isNotBlank() } ?: fallback
 }
 
+internal fun isAmbiguousOtpRequestTimeout(error: Throwable): Boolean =
+    generateSequence(error as Throwable?) { it.cause }
+        .any { cause ->
+            cause is java.net.SocketTimeoutException ||
+                (cause is java.io.InterruptedIOException &&
+                    cause.message?.contains("timed out", ignoreCase = true) == true)
+        }
+
 internal fun parseArrivalOtpErrorBody(raw: String?): String? {
     if (raw.isNullOrBlank()) return null
     return runCatching {

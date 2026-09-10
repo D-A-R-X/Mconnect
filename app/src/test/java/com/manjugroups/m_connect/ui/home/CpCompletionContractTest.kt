@@ -1,6 +1,9 @@
 package com.manjugroups.m_connect.ui.home
 
+import com.google.gson.Gson
+import com.manjugroups.m_connect.network.GeoTrackResponse
 import com.manjugroups.m_connect.network.JointCpWorkflow
+import com.manjugroups.m_connect.network.JointCpWorkflowResponse
 import com.manjugroups.m_connect.network.JointCpParticipant
 import com.manjugroups.m_connect.network.JointCpSummary
 import org.junit.Assert.assertEquals
@@ -38,6 +41,47 @@ class CpCompletionContractTest {
     }
 
     @Test
+    fun `repeat completion response uses authoritative effective status`() {
+        val response = Gson().fromJson(
+            """{
+                "success": true,
+                "fieldVisitId": "field-1",
+                "clientPlaceVisitId": "cp-1",
+                "status": "completed",
+                "effectiveStatus": "pending_gm_approval",
+                "alreadyCompleted": true,
+                "visit": {
+                    "_id": "cp-1",
+                    "status": "completed",
+                    "effectiveStatus": "pending_gm_approval",
+                    "outcome": "old_client_visited"
+                },
+                "fieldVisit": {
+                    "_id": "field-1",
+                    "status": "completed",
+                    "completedAt": 1757410000000
+                },
+                "completionProof": { "distanceMeters": 42 }
+            }""".trimIndent(),
+            GeoTrackResponse::class.java,
+        )
+
+        assertTrue(response.alreadyCompleted == true)
+        assertEquals("field-1", response.fieldVisitId)
+        assertEquals("completed", response.fieldVisit?.status)
+        assertEquals("old_client_visited", response.visit?.outcome)
+        assertEquals(
+            "pending_gm_approval",
+            resolvedCpCompletionStatus(
+                response.effectiveStatus,
+                response.status,
+                response.visit?.effectiveStatus,
+                response.visit?.status,
+            ),
+        )
+    }
+
+    @Test
     fun `joint reviewer completion uses the freshly authorized revision`() {
         assertEquals(
             7L,
@@ -61,6 +105,42 @@ class CpCompletionContractTest {
                 ),
             ),
         )
+    }
+
+    @Test
+    fun `workflow response maps effective template snapshots and owner controls`() {
+        val response = Gson().fromJson(
+            """{
+                "success": true,
+                "workflow": {
+                    "state": "in_progress",
+                    "actorRole": "outcome_owner",
+                    "outcomeOwnerStaffId": "staff-low",
+                    "outcomeOwnerName": "Lower staff",
+                    "outcomeOwnerTemplateName": "Sales Level 3",
+                    "outcomeOwnerTemplateLevel": 3,
+                    "reviewerStaffId": "staff-high",
+                    "reviewerName": "Higher staff",
+                    "reviewerTemplateName": "Sales Level 4",
+                    "reviewerTemplateLevel": 4,
+                    "canRequestOtp": true,
+                    "canSubmitOutcome": true,
+                    "canReview": false,
+                    "canCompleteReview": false
+                }
+            }""".trimIndent(),
+            JointCpWorkflowResponse::class.java,
+        )
+        val verified = verifiedJointCpWorkflowForActor(response.workflow!!, "staff-low")
+
+        assertEquals("Sales Level 3", verified.outcomeOwnerTemplateName)
+        assertEquals(3, verified.outcomeOwnerTemplateLevel)
+        assertEquals("Sales Level 4", verified.reviewerTemplateName)
+        assertEquals(4, verified.reviewerTemplateLevel)
+        assertTrue(verified.canRequestOtp)
+        assertTrue(verified.canSubmitOutcome)
+        assertFalse(verified.canReview)
+        assertFalse(verified.canCompleteReview)
     }
 
     @Test
@@ -174,6 +254,34 @@ class CpCompletionContractTest {
         assertEquals(50, jointCpRadiusMeters(JointCpWorkflow(requiredRadiusMeters = 50.0)))
         assertEquals(100, jointCpRadiusMeters(JointCpWorkflow(requiredRadiusMeters = 100.0)))
         assertEquals(100, jointCpRadiusMeters(null))
+    }
+
+    @Test
+    fun `accepted joint presence refreshes only while an actor is active`() {
+        assertTrue(
+            shouldRefreshJointCpPresence(
+                JointCpWorkflow(actorRole = "outcome_owner", canRequestOtp = true),
+                visitStarted = true,
+            ),
+        )
+        assertTrue(
+            shouldRefreshJointCpPresence(
+                JointCpWorkflow(actorRole = "reviewer", actorReady = true),
+                visitStarted = true,
+            ),
+        )
+        assertFalse(
+            shouldRefreshJointCpPresence(
+                JointCpWorkflow(actorRole = "reviewer", actorReady = false),
+                visitStarted = true,
+            ),
+        )
+        assertFalse(
+            shouldRefreshJointCpPresence(
+                JointCpWorkflow(state = "completed", actorRole = "reviewer", actorReady = true),
+                visitStarted = true,
+            ),
+        )
     }
 
     @Test

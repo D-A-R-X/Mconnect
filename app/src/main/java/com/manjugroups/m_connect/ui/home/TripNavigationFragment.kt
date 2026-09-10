@@ -181,6 +181,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     private var jointSummary: JointCpSummary? = null
     private var jointWorkflow: JointCpWorkflow? = null
     private var jointWorkflowPollJob: Job? = null
+    private var jointPresenceRefreshJob: Job? = null
     private var jointMutationInProgress = false
     private var autoOpenedJointReviewRevision: Long? = null
 
@@ -662,6 +663,49 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         }
     }
 
+    /** Keep an explicitly accepted presence younger than the server's 60-second limit. */
+    private fun startJointPresenceRefreshIfEligible() {
+        if (jointPresenceRefreshJob != null || !visitStarted) return
+        val workflow = jointWorkflow ?: return
+        if (!shouldRefreshJointCpPresence(workflow, visitStarted)) return
+
+        jointPresenceRefreshJob = viewLifecycleOwner.lifecycleScope.launch {
+            delay(JOINT_PRESENCE_REFRESH_MS)
+            while (isActive) {
+                val current = jointWorkflow ?: break
+                if (!shouldRefreshJointCpPresence(current, visitStarted)) break
+                if (!jointMutationInProgress) refreshJointPresence(current.actorRole)
+                delay(JOINT_PRESENCE_REFRESH_MS)
+            }
+        }
+    }
+
+    private suspend fun refreshJointPresence(actorRole: String?) {
+        val cpId = cpVisitId ?: return
+        val fieldId = visitId ?: return
+        val location = fetchJointCpLocation() ?: return
+        val request = JointCpLocationRequest(
+            id = cpId,
+            fieldVisitId = fieldId,
+            lat = location.latitude,
+            lng = location.longitude,
+            accuracyMeters = location.accuracy.takeIf { location.hasAccuracy() },
+            capturedAt = location.time.takeIf { it > 0L } ?: System.currentTimeMillis(),
+        )
+        val response = runCatching {
+            when (actorRole) {
+                "outcome_owner" -> geoApi.preflightJointCpArrival(session.bearerToken, request)
+                "reviewer" -> geoApi.markJointCpParticipantReady(session.bearerToken, request)
+                else -> null
+            }
+        }.getOrNull() ?: return
+        val refreshed = response.workflow?.let {
+            resolvedJointCpWorkflowForActor(it, session.staffId, response.visit?.joint ?: jointSummary)
+        } ?: return
+        jointWorkflow = refreshed
+        view?.let { applyJointWorkflowPresentation(it, refreshed) }
+    }
+
     private suspend fun refreshJointWorkflow() {
         val cpId = cpVisitId ?: return
         runCatching { geoApi.getJointCpWorkflow(session.bearerToken, cpId) }
@@ -674,6 +718,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     response.visit?.joint ?: jointSummary,
                 )
                 jointWorkflow = workflow
+                startJointPresenceRefreshIfEligible()
                 view?.let {
                     bindJointCp(it, response.visit?.joint ?: jointSummary)
                     applyJointWorkflowPresentation(it, workflow)
@@ -837,8 +882,26 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     return@launch
                 }
                 jointWorkflow = refreshed
+                startJointPresenceRefreshIfEligible()
                 checkReachingAndAskClientSeen()
             } catch (e: Exception) {
+                if (isAmbiguousOtpRequestTimeout(e)) {
+                    val recovered = runCatching {
+                        geoApi.getJointCpWorkflow(session.bearerToken, cpId)
+                    }.getOrNull()?.takeIf { it.success && it.workflow != null }?.let {
+                        resolvedJointCpWorkflowForActor(
+                            it.workflow!!,
+                            session.staffId,
+                            it.visit?.joint ?: jointSummary,
+                        )
+                    }
+                    if (recovered?.actorRole == "outcome_owner" && recovered.canRequestOtp) {
+                        jointWorkflow = recovered
+                        startJointPresenceRefreshIfEligible()
+                        checkReachingAndAskClientSeen()
+                        return@launch
+                    }
+                }
                 arrivalInProgress = false
                 swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
                 Toast.makeText(
@@ -888,6 +951,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 jointWorkflow = refreshed
                 arrivalConfirmedForProgress = true
                 arrivalInProgress = false
+                startJointPresenceRefreshIfEligible()
                 applyJointWorkflowPresentation(requireView(), refreshed)
                 Toast.makeText(
                     requireContext(),
@@ -1532,6 +1596,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         super.onStart()
         mapView?.onStart()
         startJointWorkflowPolling()
+        startJointPresenceRefreshIfEligible()
     }
 
     override fun onPause() {
@@ -1553,6 +1618,8 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     override fun onStop() {
         jointWorkflowPollJob?.cancel()
         jointWorkflowPollJob = null
+        jointPresenceRefreshJob?.cancel()
+        jointPresenceRefreshJob = null
         mapView?.onStop()
         super.onStop()
     }
@@ -2498,34 +2565,17 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     // fall through to the normal proof + OTP entry flow below.
                 }
 
-                pendingArrivalOtpPhoneMasked = resp.contactPhoneMasked
-                pendingArrivalLat = effLat
-                pendingArrivalLng = effLng
-                // Gift Distribution shortcut: skip the pre-OTP photo
-                // step entirely. The proof we capture for gift_distri-
-                // bution is the gift handover itself, which only
-                // happens AFTER OTP verifies the client is present.
-                // Open the OTP sheet directly without a photo
-                // storage id; the post-OTP "Confirm Gift Distri-
-                // bution" button then handles the camera + upload.
-                if (isGiftDistribution) {
-                    pendingArrivalStorageId = null
-                    swipeArrived?.lockAsBusy("Enter OTP to confirm")
-                    ArrivalOtpBottomSheet.newInstance(
-                        visitId = id,
-                        cpVisitId = cpVisitId,
-                        phoneMasked = pendingArrivalOtpPhoneMasked,
-                        lat = effLat,
-                        lng = effLng,
-                        arrivalPhotoStorageId = null,
-                    ).showOnce(parentFragmentManager, "arrival_otp")
-                    return@launch
-                }
-                swipeArrived?.lockAsBusy("Opening camera…")
-                launchArrivalCamera()
+                continueAfterArrivalOtpRequest(id, effLat, effLng, resp.contactPhoneMasked)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
+                if (isAmbiguousOtpRequestTimeout(e)) {
+                    // OTP sending may already be committed even though the
+                    // response missed the client deadline. Continue to proof
+                    // and OTP entry instead of resetting the swipe.
+                    continueAfterArrivalOtpRequest(id, effLat, effLng, null)
+                    return@launch
+                }
                 arrivalInProgress = false
                 swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
                 context?.let { ctx ->
@@ -2537,6 +2587,32 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 }
             }
         }
+    }
+
+    private fun continueAfterArrivalOtpRequest(
+        visitId: String,
+        lat: Double,
+        lng: Double,
+        phoneMasked: String?,
+    ) {
+        pendingArrivalOtpPhoneMasked = phoneMasked
+        pendingArrivalLat = lat
+        pendingArrivalLng = lng
+        if (isGiftDistribution) {
+            pendingArrivalStorageId = null
+            swipeArrived?.lockAsBusy("Enter OTP to confirm")
+            ArrivalOtpBottomSheet.newInstance(
+                visitId = visitId,
+                cpVisitId = cpVisitId,
+                phoneMasked = pendingArrivalOtpPhoneMasked,
+                lat = lat,
+                lng = lng,
+                arrivalPhotoStorageId = null,
+            ).showOnce(parentFragmentManager, "arrival_otp")
+            return
+        }
+        swipeArrived?.lockAsBusy("Opening camera…")
+        launchArrivalCamera()
     }
 
     private fun arrivalBlockedMessage(resp: com.manjugroups.m_connect.network.ArrivalOtpRequestResponse): String {
@@ -4017,7 +4093,12 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 serverOutcomePendingFinalClose = false
                 cpVisitDecisionCaptured = true
                 val isCpBackedVisit = !cpVisitId.isNullOrBlank()
-                val cpStatus = completion.status?.trim()?.lowercase(Locale.US)
+                val cpStatus = resolvedCpCompletionStatus(
+                    effectiveStatus = completion.effectiveStatus,
+                    status = completion.status,
+                    visitEffectiveStatus = completion.visit?.effectiveStatus,
+                    visitStatus = completion.visit?.status,
+                )?.lowercase(Locale.US)
                 if (isCpBackedVisit && !cpOutcome.isNullOrBlank()) {
                     // Older/current backends confirm the field-visit mutation with
                     // { success:true, fieldVisitId } and omit `status`. The CP
@@ -4049,6 +4130,8 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 } else {
                     val message = if (cpStatus == "pending_gm_approval") {
                         "Outcome saved and waiting for GM approval"
+                    } else if (completion.alreadyCompleted == true) {
+                        "Visit was already completed"
                     } else {
                         "Visit completed"
                     }
@@ -4127,6 +4210,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         // fires for the same completions the server holds for GM approval.
         private const val GEOFENCE_APPROVAL_RADIUS_METERS = 300.0
         private const val JOINT_WORKFLOW_POLL_MS = 5_000L
+        private const val JOINT_PRESENCE_REFRESH_MS = 20_000L
         private const val ARG_VISIT_ID = "arg_visit_id"
         private const val ARG_PLACE_ID = "arg_place_id"
         private const val ARG_PLACE_NAME = "arg_place_name"

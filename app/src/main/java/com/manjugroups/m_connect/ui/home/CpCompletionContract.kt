@@ -22,6 +22,16 @@ internal fun isCompatibleCpCompletionStatus(status: String?): Boolean {
     return normalized == null || normalized in TERMINAL_CP_COMPLETION_STATUSES
 }
 
+/** Prefer the authoritative CP state returned by the repeat-safe completion route. */
+internal fun resolvedCpCompletionStatus(
+    effectiveStatus: String?,
+    status: String?,
+    visitEffectiveStatus: String?,
+    visitStatus: String?,
+): String? = sequenceOf(effectiveStatus, status, visitEffectiveStatus, visitStatus)
+    .mapNotNull { it?.trim()?.takeIf(String::isNotEmpty) }
+    .firstOrNull()
+
 /** Uses only a freshly fetched reviewer workflow for the final mutation. */
 internal fun jointCpReviewRevision(workflow: JointCpWorkflow?): Long? = workflow
     ?.takeIf {
@@ -57,6 +67,20 @@ internal fun jointCpRadiusMeters(workflow: JointCpWorkflow?): Int = workflow
     ?.roundToInt()
     ?.coerceAtLeast(1)
     ?: 100
+
+internal fun shouldRefreshJointCpPresence(
+    workflow: JointCpWorkflow?,
+    visitStarted: Boolean,
+): Boolean {
+    if (!visitStarted || workflow == null) return false
+    val state = workflow.state?.trim()?.lowercase(Locale.US)?.replace('-', '_')
+    if (state == "completed" || state == "cancelled") return false
+    return when (workflow.actorRole?.trim()?.lowercase(Locale.US)) {
+        "outcome_owner" -> workflow.canRequestOtp || workflow.canSubmitOutcome
+        "reviewer" -> workflow.actorReady == true || workflow.canReview || workflow.canCompleteReview
+        else -> false
+    }
+}
 
 internal fun isJointCpSubmissionConfirmed(
     workflow: JointCpWorkflow?,

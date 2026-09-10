@@ -468,20 +468,14 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             }
 
             // A Joint CP is meaningless with one person on it.
-            val authoritativePrimary = staffCache.firstOrNull { it.id == staff.id } ?: staff
-            var jointParticipantIds: List<String>? = null
-            var jointAssignment: JointCpTemplateGuard.Assignment? = null
+            var jointCompanionIds: List<String>? = null
             if (isJointCp) {
-                JointCpTemplateGuard.rejection(authoritativePrimary, selectedJointPartner)?.let {
+                JointCpTemplateGuard.rejection(staff, selectedJointPartner)?.let {
                     toast(it)
                     return@setOnClickListener
                 }
-                jointAssignment = JointCpTemplateGuard.assignment(
-                    authoritativePrimary,
-                    selectedJointPartner,
-                )
-                jointParticipantIds = JointCpTemplateGuard.participantIds(
-                    authoritativePrimary,
+                jointCompanionIds = JointCpTemplateGuard.companionIds(
+                    staff,
                     selectedJointPartner,
                 )
             }
@@ -634,10 +628,10 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                     val request = CreateCpVisitRequest(
                             clientName = clientNameInput,
                             mobileNumber = phone,
-                            // Use the locally resolved owner when picker metadata is
-                            // available. The server resolves and rewrites this field
-                            // authoritatively for every Joint CP creation.
-                            assignedStaffId = jointAssignment?.outcomeOwner?.id ?: staff.id,
+                            // Selection order carries no authority. The server resolves
+                            // effective IAM templates, snapshots both roles, and rewrites
+                            // this compatibility owner when creating a Joint CP.
+                            assignedStaffId = staff.id,
                             lmoStaffId = lmo.id,
                             scheduledDate = selectedDate,
                             scheduledTime = selectedTime,
@@ -659,7 +653,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                             pincode = pincode,
                             // Only sent for a Joint CP; the server ignores it
                             // for every other type.
-                            jointStaffIds = jointParticipantIds,
+                            jointStaffIds = jointCompanionIds,
                     )
                     val requestFingerprint = com.google.gson.Gson().toJson(request)
                     if (createRequestFingerprint != requestFingerprint) {
@@ -947,13 +941,11 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                         title = st.name ?: "Unnamed Staff",
                         subtitle = listOfNotNull(
                             st.employeeId,
-                            st.iamTemplateName,
-                            st.iamTemplateLevel?.let { "Level $it" },
-                            st.role,
+                            st.designation,
+                            st.department,
                         ).joinToString(" - "),
                         keywords = listOfNotNull(
-                            st.id, st.name, st.employeeId, st.iamTemplateName,
-                            st.iamTemplateLevel?.toString(), st.role, st.department,
+                            st.id, st.name, st.employeeId, st.designation, st.department,
                         ).joinToString(" "),
                     )
                 },
@@ -1019,17 +1011,10 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
 
     private fun renderJointRoleAssignment() {
         val label = view?.findViewById<android.widget.TextView>(R.id.tvJointRoleAssignment) ?: return
-        val assignment = JointCpTemplateGuard.assignment(selectedStaff, selectedJointPartner)
-        label.text = when {
-            assignment != null -> {
-                val owner = assignment.outcomeOwner.name?.takeIf { it.isNotBlank() } ?: "Lower-level staff"
-                val reviewer = assignment.reviewer.name?.takeIf { it.isNotBlank() } ?: "Higher-level staff"
-                "Outcome & OTP: $owner\nRemarks, review & complete: $reviewer"
-            }
-            selectedStaff != null && selectedJointPartner != null ->
-                "Workflow roles will be confirmed from the staff designation hierarchy when the visit is created."
-            else ->
-                "Select staff at different designation levels to assign the Joint CP workflow."
+        label.text = if (selectedStaff != null && selectedJointPartner != null) {
+            "The server will assign OTP/outcome and review/completion from each staff member's effective IAM template."
+        } else {
+            "Select two staff. Their Joint CP roles are assigned securely after creation."
         }
     }
 
@@ -1529,12 +1514,12 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             message.contains("TEMPLATE_LEVEL_REQUIRED", ignoreCase = true) ||
             message.contains("designation level is missing", ignoreCase = true)
         ) {
-            "Joint CP designation hierarchy is incomplete. Ask admin to map both staff designations and set different numeric levels."
+            "Joint CP template level is missing. Ask admin to configure a numeric level for both staff members' effective IAM templates."
         } else if (
             message.contains("SAME_TEMPLATE_LEVEL_NOT_ALLOWED", ignoreCase = true) ||
             message.contains("different designation levels", ignoreCase = true)
         ) {
-            "Both staff have the same designation level. Select one higher-level and one lower-level staff member."
+            "Both staff have the same Joint CP template level. Select staff with different template levels."
         } else {
             message
         }
