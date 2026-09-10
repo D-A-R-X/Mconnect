@@ -52,6 +52,7 @@ class CompletedVisitDetailFragment : Fragment() {
     // sheet skips the Booking-tab flash before locking to SV mode.
     private var isSvFixedHint: Boolean = false
     private var cpType: String? = null
+    private var clientPhone: String? = null
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -111,6 +112,7 @@ class CompletedVisitDetailFragment : Fragment() {
         val placeAddress = args.getString(ARG_PLACE_ADDRESS).trimOrNull()
         val leadName = args.getString(ARG_LEAD_NAME).trimOrNull()
         val leadPhone = args.getString(ARG_LEAD_PHONE).trimOrNull()
+        clientPhone = leadPhone
         val scheduledDate = args.getString(ARG_SCHEDULED_DATE).trimOrNull()
         val scheduledStartTime = args.getString(ARG_SCHEDULED_START_TIME).trimOrNull()
         val scheduledEndTime = args.getString(ARG_SCHEDULED_END_TIME).trimOrNull()
@@ -435,6 +437,7 @@ class CompletedVisitDetailFragment : Fragment() {
             cpOutcome = null,
             isSvFixedHint = isSvFixedHint,
             cpType = cpType,
+            cpClientPhone = clientPhone,
         ).showOnce(parentFragmentManager, "CompleteCpVisitBottomSheet")
     }
 
@@ -520,6 +523,7 @@ class CompletedVisitDetailFragment : Fragment() {
             displayName.firstOrNull()?.uppercase() ?: "C"
         val phone = visit.preferredCpClientPhone()
         if (!phone.isNullOrBlank()) {
+            clientPhone = phone
             val phoneView = root.findViewById<TextView>(R.id.tvCvdClientPhone)
             phoneView.text = phone
             phoneView.setOnClickListener { dialPhone(phone) }

@@ -1972,8 +1972,8 @@ data class JointCpLocationRequest(
 data class JointCpSubmitReviewRequest(
     val id: String,
     val fieldVisitId: String,
-    val lat: Double,
-    val lng: Double,
+    val lat: Double? = null,
+    val lng: Double? = null,
     val accuracyMeters: Float? = null,
     val capturedAt: Long = System.currentTimeMillis(),
     val arrivalPhotoStorageId: String? = null,
@@ -2074,6 +2074,9 @@ data class SiteVisitFilterOptionsResponse(
 
 data class CpVisitDetail(
     @com.google.gson.annotations.SerializedName("_id") val id: String? = null,
+    // Stable 10-digit snapshot used by server-side phone search. Some legacy
+    // rows no longer have a resolvable lead/client link, so retain this value.
+    val mobileNumberNormalized: String? = null,
     // Returned by create and participant-aware list reads so mobile can
     // reconcile a mutation whose HTTP response was lost after commit.
     val requestId: String? = null,

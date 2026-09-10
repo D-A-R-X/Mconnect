@@ -5,6 +5,7 @@ import com.manjugroups.m_connect.network.CpVisitDetail
 import com.manjugroups.m_connect.network.CpVisitLead
 import com.manjugroups.m_connect.network.CpVisitPlace
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class CpClientIdentityTest {
@@ -28,5 +29,19 @@ class CpClientIdentityTest {
         )
 
         assertEquals("Sivakumar", visit.preferredCpClientName())
+    }
+
+    @Test
+    fun normalizedVisitPhoneRemainsFallbackForLegacyRows() {
+        val visit = CpVisitDetail(mobileNumberNormalized = "9840032837")
+
+        assertEquals("9840032837", visit.preferredCpClientPhone())
+    }
+
+    @Test
+    fun bookingMobileUsesTenLocalDigitsFromCountryCodeNumber() {
+        assertEquals("8807588547", bookingMobileNumber("+91 88075 88547"))
+        assertEquals("8807588547", bookingMobileNumber("918807588547"))
+        assertNull(bookingMobileNumber("12345"))
     }
 }

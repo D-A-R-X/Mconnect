@@ -80,6 +80,7 @@ class CpVisitsFragment : Fragment() {
     private var currentScope: CpVisitListScope = CpVisitListScope.MY
     private var activeOwnershipScope: CpVisitListScope? = null
     private var searchQuery: String = ""
+    private var loadedServerSearch: String? = null
     // Debounces the server-side search reload so a super-admin can find an
     // older client that's beyond the recency cap of the default list.
     private val searchDebounce =
@@ -608,6 +609,9 @@ class CpVisitsFragment : Fragment() {
         val to = filterToDate
         val requestedScope = currentScope
         val requestedSearch = searchQuery
+        val requestedServerSearch = com.manjugroups.m_connect.util.VisitSearch
+            .serverQuery(requestedSearch)
+            .ifBlank { null }
         val requestGeneration = ++loadGeneration
         cpNextCursor = null
         cpHasMore = false
@@ -650,7 +654,7 @@ class CpVisitsFragment : Fragment() {
                         // When searching, ask the backend to full-text search so a
                         // client OLDER than the recency window is still found (the
                         // super-admin "on web but not mobile" case).
-                        search = requestedSearch.ifBlank { null },
+                        search = requestedServerSearch,
                         assignedStaffId = filterAssignedStaffId,
                         telecallerStaffId = filterTelecallerStaffId,
                         status = currentFilter.takeUnless { it == Filter.ALL }
@@ -715,6 +719,7 @@ class CpVisitsFragment : Fragment() {
                             .thenByDescending { it.creationTime ?: 0.0 }
                             .thenByDescending { it.scheduledDate }
                     )
+                loadedServerSearch = requestedServerSearch
                 cpNextCursor = resp.nextCursor
                 cpHasMore = resp.hasMore == true && !cpNextCursor.isNullOrBlank()
                 consumeFocusVisit()
@@ -769,7 +774,9 @@ class CpVisitsFragment : Fragment() {
                     toDate = filterToDate,
                     scope = requestedScope.apiValue,
                     limit = 200,
-                    search = searchQuery.ifBlank { null },
+                    search = com.manjugroups.m_connect.util.VisitSearch
+                        .serverQuery(searchQuery)
+                        .ifBlank { null },
                     assignedStaffId = filterAssignedStaffId,
                     telecallerStaffId = filterTelecallerStaffId,
                     status = currentFilter.takeUnless { it == Filter.ALL }?.name?.lowercase(Locale.US),
@@ -987,7 +994,11 @@ class CpVisitsFragment : Fragment() {
             if (filterCpType != null && v.cpVisit?.cpType != filterCpType) return false
             if (filterAssignedStaffId != null && v.bdoStaffId != filterAssignedStaffId) return false
             if (filterTelecallerStaffId != null && v.lmoStaffId != filterTelecallerStaffId) return false
-            return com.manjugroups.m_connect.util.VisitSearch.matches(v, searchQuery)
+            return com.manjugroups.m_connect.util.VisitSearch.matchesLoadedServerResult(
+                visit = v,
+                rawQuery = searchQuery,
+                loadedServerQuery = loadedServerSearch,
+            )
         }
         val matched = allVisits.filter { matches(it) }
         cpMatchedCount = matched.size
@@ -1524,6 +1535,7 @@ class CpVisitsFragment : Fragment() {
             cpOutcome = null,
             isSvFixedHint = isSvFixed,
             cpType = visit.cpVisit?.cpType,
+            cpClientPhone = visit.leadPhone,
         ).showOnce(parentFragmentManager, "CompleteCpVisitBottomSheet")
     }
 

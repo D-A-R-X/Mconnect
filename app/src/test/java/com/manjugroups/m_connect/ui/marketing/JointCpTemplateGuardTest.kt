@@ -1,6 +1,7 @@
 package com.manjugroups.m_connect.ui.marketing
 
 import com.manjugroups.m_connect.network.StaffData
+import com.google.gson.Gson
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -33,14 +34,43 @@ class JointCpTemplateGuardTest {
         ))
     }
 
-    @Test fun `same template id is deferred to server authority`() {
-        assertNull(JointCpTemplateGuard.rejection(
-            staff("a", "sales", level = 40),
+    @Test fun `staff api effective template metadata is decoded`() {
+        val direct = Gson().fromJson(
+            """{
+                "_id":"staff-a",
+                "name":"Staff A",
+                "iamTemplateId":"template-a",
+                "iamTemplateName":"Sales Level 3",
+                "iamTemplateLevel":3
+            }""".trimIndent(),
+            StaffData::class.java,
+        )
+        val aliases = Gson().fromJson(
+            """{
+                "id":"staff-b",
+                "permissionTemplateId":"template-b",
+                "permissionTemplateName":"Sales Level 4",
+                "designationLevel":4
+            }""".trimIndent(),
+            StaffData::class.java,
+        )
+
+        assertEquals("template-a", direct.iamTemplateId)
+        assertEquals("Sales Level 3", direct.iamTemplateName)
+        assertEquals(3, direct.iamTemplateLevel)
+        assertEquals("template-b", aliases.iamTemplateId)
+        assertEquals("Sales Level 4", aliases.iamTemplateName)
+        assertEquals(4, aliases.iamTemplateLevel)
+    }
+
+    @Test fun `same effective template id is rejected even if levels differ`() {
+        assertNotNull(JointCpTemplateGuard.rejection(
+            staff("a", " Sales ", level = 40),
             staff("b", "sales", level = 70),
         ))
     }
 
-    @Test fun `missing picker metadata is deferred to authoritative server validation`() {
+    @Test fun `missing picker template metadata is deferred to create api`() {
         assertNull(JointCpTemplateGuard.rejection(
             staff("a", null, level = null),
             staff("b", "gm", level = 70),
@@ -51,7 +81,7 @@ class JointCpTemplateGuardTest {
         assertEquals(
             listOf("b"),
             JointCpTemplateGuard.companionIds(
-                staff("a", "sales", level = null),
+                staff("a", "sales", level = 40),
                 staff("b", "gm", level = 70),
             ),
         )
@@ -64,10 +94,17 @@ class JointCpTemplateGuardTest {
         ))
     }
 
-    @Test fun `equal picker levels are deferred to effective template resolver`() {
-        assertNull(JointCpTemplateGuard.rejection(
+    @Test fun `equal effective template levels are rejected`() {
+        assertNotNull(JointCpTemplateGuard.rejection(
             staff("a", "bdo-east", "outcome_owner", 40),
             staff("b", "gm-temp", "reviewer", 40),
+        ))
+    }
+
+    @Test fun `missing picker template level is deferred to create api`() {
+        assertNull(JointCpTemplateGuard.rejection(
+            staff("a", "bdo-east", level = null),
+            staff("b", "gm-temp", level = 70),
         ))
     }
 
@@ -84,6 +121,32 @@ class JointCpTemplateGuardTest {
     @Test fun `same staff is rejected`() {
         val person = staff("same", "sales", level = 47)
         assertNotNull(JointCpTemplateGuard.rejection(person, person))
+    }
+
+    @Test fun `staff picker includes every role and removes only invalid duplicate rows`() {
+        val office = staff("office", "office-template", level = 20).copy(role = "office-staff")
+        val field = staff("field", "field-template", level = 30).copy(role = "field-staff")
+        val admin = staff("admin", "admin-template", level = 80).copy(role = "super-admin")
+        val duplicate = office.copy(name = "Duplicate")
+        val missingId = office.copy(id = "")
+
+        assertEquals(
+            listOf("office", "field", "admin"),
+            JointCpTemplateGuard.pickerStaff(
+                listOf(office, field, admin, duplicate, missingId),
+            ).map { it.id },
+        )
+    }
+
+    @Test fun `logged in staff prefill resolves by stable staff id`() {
+        val current = staff("staff-current", "sales-three", level = 3)
+        val other = staff("staff-other", "sales-four", level = 4)
+
+        assertEquals(
+            current,
+            JointCpTemplateGuard.loggedInStaff(listOf(other, current), " staff-current "),
+        )
+        assertNull(JointCpTemplateGuard.loggedInStaff(listOf(other), "staff-current"))
     }
 
 }

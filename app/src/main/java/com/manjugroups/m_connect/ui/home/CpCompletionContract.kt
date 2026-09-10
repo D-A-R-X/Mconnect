@@ -3,7 +3,6 @@ package com.manjugroups.m_connect.ui.home
 import com.manjugroups.m_connect.network.JointCpSummary
 import com.manjugroups.m_connect.network.JointCpWorkflow
 import java.util.Locale
-import kotlin.math.roundToInt
 
 private val TERMINAL_CP_COMPLETION_STATUSES = setOf(
     "completed",
@@ -32,55 +31,29 @@ internal fun resolvedCpCompletionStatus(
     .mapNotNull { it?.trim()?.takeIf(String::isNotEmpty) }
     .firstOrNull()
 
-/** Uses only a freshly fetched reviewer workflow for the final mutation. */
+internal fun jointCpReviewerCanReview(workflow: JointCpWorkflow?): Boolean {
+    val state = workflow?.state?.trim()?.lowercase(Locale.US)?.replace('-', '_')
+    return workflow?.actorRole.equals("reviewer", ignoreCase = true) &&
+        workflow?.outcomeRevision != null &&
+        state in setOf("pending_review", "reviewing")
+}
+
+/**
+ * The server-snapshotted participant IDs establish the owner role. Do not let
+ * an omitted/stale convenience boolean permanently hide a form the owner has
+ * already reached; the outcome write and submit-review APIs revalidate every
+ * prerequisite authoritatively.
+ */
+internal fun jointCpOutcomeOwnerCanEnterOutcome(workflow: JointCpWorkflow?): Boolean {
+    if (!workflow?.actorRole.equals("outcome_owner", ignoreCase = true)) return false
+    val state = workflow?.state?.trim()?.lowercase(Locale.US)?.replace('-', '_')
+    return state !in setOf("pending_review", "reviewing", "completed", "cancelled", "canceled")
+}
+
+/** Reviewer completion is sequence- and role-gated, never proximity-gated. */
 internal fun jointCpReviewRevision(workflow: JointCpWorkflow?): Long? = workflow
-    ?.takeIf {
-        it.actorRole.equals("reviewer", ignoreCase = true) &&
-            it.actorReady != false &&
-            it.canCompleteReview
-    }
+    ?.takeIf { jointCpReviewerCanReview(it) }
     ?.outcomeRevision
-
-/** Missing readiness is not proof that the reviewer has confirmed proximity. */
-internal fun jointCpReviewerNeedsReadiness(workflow: JointCpWorkflow): Boolean {
-    val state = workflow.state?.trim()?.lowercase(Locale.US)?.replace('-', '_')
-    return workflow.actorRole.equals("reviewer", ignoreCase = true) &&
-        workflow.actorReady != true &&
-        !workflow.canReview &&
-        state !in setOf("pending_review", "reviewing", "completed")
-}
-
-/** A stale permission snapshot must not hide the owner's authoritative preflight. */
-internal fun jointCpOwnerNeedsArrivalPreflight(
-    workflow: JointCpWorkflow,
-    alreadyArrived: Boolean,
-): Boolean {
-    val state = workflow.state?.trim()?.lowercase(Locale.US)?.replace('-', '_')
-    return !alreadyArrived &&
-        workflow.actorRole.equals("outcome_owner", ignoreCase = true) &&
-        state !in setOf("pending_review", "reviewing", "completed")
-}
-
-internal fun jointCpRadiusMeters(workflow: JointCpWorkflow?): Int = workflow
-    ?.requiredRadiusMeters
-    ?.takeIf { it.isFinite() && it > 0.0 }
-    ?.roundToInt()
-    ?.coerceAtLeast(1)
-    ?: 100
-
-internal fun shouldRefreshJointCpPresence(
-    workflow: JointCpWorkflow?,
-    visitStarted: Boolean,
-): Boolean {
-    if (!visitStarted || workflow == null) return false
-    val state = workflow.state?.trim()?.lowercase(Locale.US)?.replace('-', '_')
-    if (state == "completed" || state == "cancelled") return false
-    return when (workflow.actorRole?.trim()?.lowercase(Locale.US)) {
-        "outcome_owner" -> workflow.canRequestOtp || workflow.canSubmitOutcome
-        "reviewer" -> workflow.actorReady == true || workflow.canReview || workflow.canCompleteReview
-        else -> false
-    }
-}
 
 internal fun isJointCpSubmissionConfirmed(
     workflow: JointCpWorkflow?,
@@ -188,7 +161,17 @@ internal fun jointCpUserMessage(raw: String?, fallback: String): String {
         ?: return fallback
     val opaqueId = Regex("^[a-z0-9]{20,}$", RegexOption.IGNORE_CASE)
     val containsOpaqueId = Regex("\\b[a-z][a-z0-9]{19,}\\b", RegexOption.IGNORE_CASE)
-    return if (opaqueId.matches(cleaned) || containsOpaqueId.containsMatchIn(cleaned)) fallback else cleaned
+    val legacyProximityError = cleaned.lowercase(Locale.US).let { message ->
+        message.contains("partner location") ||
+            (message.contains("both staff") && message.contains("metre")) ||
+            message.contains("partner too far") ||
+            message.contains("location accuracy")
+    }
+    return if (opaqueId.matches(cleaned) || containsOpaqueId.containsMatchIn(cleaned) || legacyProximityError) {
+        fallback
+    } else {
+        cleaned
+    }
 }
 
 internal fun jointCpApiErrorMessage(
@@ -199,16 +182,8 @@ internal fun jointCpApiErrorMessage(
     maximumLocationAgeMs: Long?,
     fallback: String,
 ): String {
-    val radius = (requiredRadiusMeters ?: 100.0).roundToInt()
-    val accuracy = (maximumAccuracyMeters ?: 30.0).roundToInt()
-    val ageSeconds = ((maximumLocationAgeMs ?: 60_000L) / 1_000L).coerceAtLeast(1L)
     return when (code?.trim()?.uppercase(Locale.US)) {
-        "PARTNER_LOCATION_STALE" ->
-            "Partner location is older than $ageSeconds seconds. Keep both phones on this visit and try again."
-        "LOCATION_ACCURACY_LOW" ->
-            "GPS accuracy is too low. Turn on precise location, move to an open area, and retry with $accuracy metres accuracy or better."
-        "PARTNER_TOO_FAR" ->
-            "Both Joint CP staff must be within $radius metres to continue."
+        "PARTNER_LOCATION_STALE", "LOCATION_ACCURACY_LOW", "PARTNER_TOO_FAR" -> fallback
         else -> jointCpUserMessage(raw, fallback)
     }
 }

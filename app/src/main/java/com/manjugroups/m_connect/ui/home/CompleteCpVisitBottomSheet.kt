@@ -60,6 +60,7 @@ import com.manjugroups.m_connect.network.StaffData
 import com.manjugroups.m_connect.ui.common.SearchableOption
 import com.manjugroups.m_connect.ui.common.SearchableSelectionDialog
 import com.manjugroups.m_connect.ui.common.BookingUploadFieldView
+import com.manjugroups.m_connect.ui.common.bookingMobileNumber
 import com.manjugroups.m_connect.ui.common.preferredCpClientName
 import com.manjugroups.m_connect.ui.common.preferredCpClientPhone
 import com.manjugroups.m_connect.ui.marketing.bookings.BookingCalc
@@ -788,6 +789,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
+        cpClientPhone = arguments?.getString(ARG_CP_CLIENT_PHONE)
 
         bindTopTabs(view)
         bindSubTabs(view)
@@ -2703,7 +2705,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             // pre-filled from the CP's known contact. Falls back to the
             // find-mobile step only when we have no phone yet (e.g. the
             // detail hasn't loaded, or a manual CP with no contact).
-            val cpPhone = cpClientPhone?.filter { it.isDigit() }?.takeIf { it.length >= 6 }
+            val cpPhone = bookingMobileNumber(cpClientPhone)
             if (!isStandaloneBookingMode && cpPhone != null) {
                 bookingStep = BookingStep.CLIENT_FORM
                 prefillBookingClientFromCp(cpPhone)
@@ -2737,12 +2739,12 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
      *  known client: seed the mobile field(s) and pull the rest from any
      *  existing lead/client record (same lookup the find-mobile Next runs). */
     private fun prefillBookingClientFromCp(phone: String) {
-        val digits = phone.filter { it.isDigit() }.takeLast(10)
+        val digits = bookingMobileNumber(phone) ?: return
         // Pre-arm the guard so the mobile field's TextWatcher doesn't ALSO fire
         // the lookup when we set the text — we run it once explicitly below.
         lastLookedUpBookingPhone = digits
-        tvFormPhone?.text = phone
-        etClientMobile?.setText(phone)
+        tvFormPhone?.text = digits
+        etClientMobile?.setText(digits)
         cpClientName?.takeIf { it.isNotBlank() }?.let { name ->
             if (etFormName?.text?.toString()?.trim().isNullOrEmpty()) etFormName?.setText(name)
         }
@@ -7030,7 +7032,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         // Known contact for this CP — lets the Booking outcome open the client
         // form pre-filled (skip the "enter mobile" step). The visit lead is
         // authoritative; reconciled client/place data remains a fallback.
-        cpClientPhone = visit.preferredCpClientPhone()
+        cpClientPhone = visit.preferredCpClientPhone() ?: cpClientPhone
         cpClientName = cachedLeadDisplayName
 
         // Telecaller-pre-set attendees (rare on a pure manual CP,
@@ -7406,6 +7408,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         private const val ARG_CP_CLIENT_MET = "arg_cp_client_met"
         private const val ARG_CP_OUTCOME = "arg_cp_outcome"
         private const val ARG_CP_TYPE = "arg_cp_type"
+        private const val ARG_CP_CLIENT_PHONE = "arg_cp_client_phone"
         private const val ARG_JOINT_CTA_MODE = "arg_joint_cta_mode"
         private const val ARG_JOINT_OUTCOME_SUMMARY = "arg_joint_outcome_summary"
         private const val JOINT_CTA_SEND_REVIEW = "send_review"
@@ -7462,6 +7465,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             cpOutcome: String? = null,
             isSvFixedHint: Boolean = false,
             cpType: String? = null,
+            cpClientPhone: String? = null,
             jointCtaMode: String? = null,
             jointOutcomeSummary: String? = null,
         ): CompleteCpVisitBottomSheet =
@@ -7472,6 +7476,9 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     if (!cpOutcome.isNullOrBlank()) putString(ARG_CP_OUTCOME, cpOutcome)
                     if (isSvFixedHint) putBoolean(ARG_IS_SV_FIXED_HINT, true)
                     if (!cpType.isNullOrBlank()) putString(ARG_CP_TYPE, cpType)
+                    if (!cpClientPhone.isNullOrBlank()) {
+                        putString(ARG_CP_CLIENT_PHONE, cpClientPhone)
+                    }
                     if (!jointCtaMode.isNullOrBlank()) putString(ARG_JOINT_CTA_MODE, jointCtaMode)
                     if (!jointOutcomeSummary.isNullOrBlank()) {
                         putString(ARG_JOINT_OUTCOME_SUMMARY, jointOutcomeSummary)

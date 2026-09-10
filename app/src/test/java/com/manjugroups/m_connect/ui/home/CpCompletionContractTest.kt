@@ -13,6 +13,39 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CpCompletionContractTest {
+
+    @Test
+    fun `verified owner can reopen outcome when transient permission flag is stale`() {
+        val workflow = JointCpWorkflow(
+            state = "awaiting_owner_outcome",
+            actorRole = "outcome_owner",
+            canSubmitOutcome = false,
+        )
+
+        assertTrue(jointCpOutcomeOwnerCanEnterOutcome(workflow))
+    }
+
+    @Test
+    fun `owner cannot reopen outcome after it was sent for review`() {
+        val workflow = JointCpWorkflow(
+            state = "pending_review",
+            actorRole = "outcome_owner",
+            canSubmitOutcome = true,
+        )
+
+        assertFalse(jointCpOutcomeOwnerCanEnterOutcome(workflow))
+    }
+
+    @Test
+    fun `reviewer never receives owner outcome action`() {
+        val workflow = JointCpWorkflow(
+            state = "awaiting_owner_outcome",
+            actorRole = "reviewer",
+            canSubmitOutcome = true,
+        )
+
+        assertFalse(jointCpOutcomeOwnerCanEnterOutcome(workflow))
+    }
     @Test
     fun `cp id keeps legacy trip in cp flow when trip type metadata is missing`() {
         assertTrue(isCpBackedTrip("cp-visit-1"))
@@ -87,6 +120,7 @@ class CpCompletionContractTest {
             7L,
             jointCpReviewRevision(
                 JointCpWorkflow(
+                    state = "pending_review",
                     actorRole = "reviewer",
                     actorReady = true,
                     canCompleteReview = true,
@@ -98,6 +132,7 @@ class CpCompletionContractTest {
             8L,
             jointCpReviewRevision(
                 JointCpWorkflow(
+                    state = "pending_review",
                     actorRole = "reviewer",
                     actorReady = null,
                     canCompleteReview = true,
@@ -144,78 +179,79 @@ class CpCompletionContractTest {
     }
 
     @Test
-    fun `joint outcome owner or unready reviewer cannot complete review`() {
-        assertNull(jointCpReviewRevision(JointCpWorkflow(actorRole = "outcome_owner", canCompleteReview = true, outcomeRevision = 7)))
-        assertNull(jointCpReviewRevision(JointCpWorkflow(actorRole = "reviewer", canCompleteReview = false, outcomeRevision = 7)))
-        assertNull(jointCpReviewRevision(JointCpWorkflow(actorRole = "reviewer", actorReady = false, canCompleteReview = true, outcomeRevision = 7)))
-    }
-
-    @Test
-    fun `reviewer with omitted readiness must receive proximity action`() {
-        assertTrue(
-            jointCpReviewerNeedsReadiness(
-                JointCpWorkflow(
-                    state = "in_progress",
-                    actorRole = "reviewer",
-                    actorReady = null,
-                    canReview = false,
-                ),
-            ),
-        )
-        assertFalse(
-            jointCpReviewerNeedsReadiness(
-                JointCpWorkflow(
-                    state = "in_progress",
-                    actorRole = "reviewer",
-                    actorReady = true,
-                    canReview = false,
-                ),
-            ),
-        )
-    }
-
-    @Test
-    fun `submitted outcome never asks reviewer to repeat readiness`() {
-        assertFalse(
-            jointCpReviewerNeedsReadiness(
+    fun `joint review completion is role and sequence gated without proximity`() {
+        assertNull(
+            jointCpReviewRevision(
                 JointCpWorkflow(
                     state = "pending_review",
-                    actorRole = "reviewer",
-                    actorReady = null,
-                    canReview = true,
+                    actorRole = "outcome_owner",
+                    outcomeRevision = 7,
                 ),
             ),
         )
-    }
-
-    @Test
-    fun `stale otp permission never hides owner preflight`() {
-        assertTrue(
-            jointCpOwnerNeedsArrivalPreflight(
-                workflow = JointCpWorkflow(
+        assertNull(
+            jointCpReviewRevision(
+                JointCpWorkflow(
                     state = "in_progress",
-                    actorRole = "outcome_owner",
-                    canRequestOtp = false,
+                    actorRole = "reviewer",
+                    outcomeRevision = 7,
                 ),
-                alreadyArrived = false,
             ),
         )
-        assertFalse(
-            jointCpOwnerNeedsArrivalPreflight(
-                workflow = JointCpWorkflow(
-                    state = "pending_review",
-                    actorRole = "outcome_owner",
-                    canRequestOtp = false,
-                ),
-                alreadyArrived = false,
-            ),
-        )
-    }
-
-    @Test
-    fun `joint proximity codes retain server limits in staff messages`() {
         assertEquals(
-            "Partner location is older than 60 seconds. Keep both phones on this visit and try again.",
+            7L,
+            jointCpReviewRevision(
+                JointCpWorkflow(
+                    state = "pending_review",
+                    actorRole = "reviewer",
+                    actorReady = false,
+                    isWithinCompletionRadius = false,
+                    canCompleteReview = false,
+                    outcomeRevision = 7,
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun `submitted outcome can be reviewed regardless of participant distance`() {
+        assertTrue(
+            jointCpReviewerCanReview(
+                JointCpWorkflow(
+                    state = "pending_review",
+                    actorRole = "reviewer",
+                    actorReady = false,
+                    isWithinCompletionRadius = false,
+                    canReview = false,
+                    canCompleteReview = false,
+                    outcomeRevision = 9,
+                ),
+            ),
+        )
+        assertFalse(
+            jointCpReviewerCanReview(
+                JointCpWorkflow(
+                    state = "in_progress",
+                    actorRole = "reviewer",
+                    outcomeRevision = 9,
+                ),
+            ),
+        )
+        assertFalse(
+            jointCpReviewerCanReview(
+                JointCpWorkflow(
+                    state = "pending_review",
+                    actorRole = "outcome_owner",
+                    outcomeRevision = 9,
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun `legacy proximity errors never expose a distance restriction`() {
+        assertEquals(
+            "fallback",
             jointCpApiErrorMessage(
                 code = "PARTNER_LOCATION_STALE",
                 raw = null,
@@ -226,7 +262,7 @@ class CpCompletionContractTest {
             ),
         )
         assertEquals(
-            "GPS accuracy is too low. Turn on precise location, move to an open area, and retry with 30 metres accuracy or better.",
+            "fallback",
             jointCpApiErrorMessage(
                 code = "LOCATION_ACCURACY_LOW",
                 raw = null,
@@ -237,7 +273,7 @@ class CpCompletionContractTest {
             ),
         )
         assertEquals(
-            "Both Joint CP staff must be within 100 metres to continue.",
+            "fallback",
             jointCpApiErrorMessage(
                 code = "PARTNER_TOO_FAR",
                 raw = null,
@@ -245,41 +281,6 @@ class CpCompletionContractTest {
                 maximumAccuracyMeters = 30.0,
                 maximumLocationAgeMs = 60_000,
                 fallback = "fallback",
-            ),
-        )
-    }
-
-    @Test
-    fun `joint radius follows server during rollout and defaults to one hundred`() {
-        assertEquals(50, jointCpRadiusMeters(JointCpWorkflow(requiredRadiusMeters = 50.0)))
-        assertEquals(100, jointCpRadiusMeters(JointCpWorkflow(requiredRadiusMeters = 100.0)))
-        assertEquals(100, jointCpRadiusMeters(null))
-    }
-
-    @Test
-    fun `accepted joint presence refreshes only while an actor is active`() {
-        assertTrue(
-            shouldRefreshJointCpPresence(
-                JointCpWorkflow(actorRole = "outcome_owner", canRequestOtp = true),
-                visitStarted = true,
-            ),
-        )
-        assertTrue(
-            shouldRefreshJointCpPresence(
-                JointCpWorkflow(actorRole = "reviewer", actorReady = true),
-                visitStarted = true,
-            ),
-        )
-        assertFalse(
-            shouldRefreshJointCpPresence(
-                JointCpWorkflow(actorRole = "reviewer", actorReady = false),
-                visitStarted = true,
-            ),
-        )
-        assertFalse(
-            shouldRefreshJointCpPresence(
-                JointCpWorkflow(state = "completed", actorRole = "reviewer", actorReady = true),
-                visitStarted = true,
             ),
         )
     }
@@ -380,7 +381,7 @@ class CpCompletionContractTest {
             ),
         )
         assertEquals(
-            "Both staff must be within 50 metres",
+            "fallback",
             jointCpUserMessage("Both staff must be within 50 metres", "fallback"),
         )
     }
