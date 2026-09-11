@@ -49,7 +49,11 @@
 }
 
 -keep interface com.manjugroups.m_connect.network.** { *; }
--keep class * extends com.google.gson.reflect.TypeToken
+# Gson reads the generic superclass of every anonymous TypeToken at runtime.
+# R8 full mode can otherwise strip that Signature despite the broad attribute
+# rule above, causing a post-login crash only in Play's minified release.
+-keep,allowobfuscation,allowoptimization class * extends com.google.gson.reflect.TypeToken
+-keep,allowobfuscation,allowoptimization class com.google.gson.reflect.TypeToken
 -keepclassmembers class * {
     @android.webkit.JavascriptInterface <methods>;
 }

@@ -315,6 +315,12 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
 
     private val cpType: String?
         get() = arguments?.getString(ARG_CP_TYPE)
+    private val isJointCp: Boolean
+        get() = jointCtaMode != null || cpType
+            ?.trim()
+            ?.lowercase(java.util.Locale.US)
+            ?.replace('-', '_')
+            ?.replace(' ', '_') == "joint_cp"
     private val jointCtaMode: String?
         get() = arguments?.getString(ARG_JOINT_CTA_MODE)
     private val jointOutcomeSummary: String?
@@ -5486,7 +5492,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                         followUpDate = followUpDate,
                     ),
                     actingStaffId = session.staffId,
-                    jointCp = cpType == "joint_cp",
+                    jointCp = isJointCp,
                 )
                 if (!outcomeResp.success) {
                     finishCtaSave(outcomeResp.error ?: "Failed to save outcome")

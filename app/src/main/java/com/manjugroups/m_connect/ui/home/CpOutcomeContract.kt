@@ -21,13 +21,6 @@ private val TERMINAL_OUTCOME_STATUSES = setOf(
     "rejected",
 )
 
-private val JOINT_OUTCOME_STATES = setOf(
-    "outcome_submitted",
-    "pending_review",
-    "reviewing",
-    "completed",
-)
-
 private fun String?.contractValue(): String =
     this?.trim()?.lowercase(Locale.US)?.replace('-', '_').orEmpty()
 
@@ -43,9 +36,14 @@ internal fun cpOutcomeConfirmationError(
         return "The server did not confirm the saved CP outcome. Refresh the visit and try again."
     }
 
+    // A Joint CP owner is only saving a revisioned draft here. The parent CP
+    // intentionally stays open until joint-submit-review succeeds and the
+    // reviewer later completes it. Requiring a terminal parent status at this
+    // point blocks the owner before that handoff can happen.
+    if (jointCp) return null
+
     val normalizedStatus = status.contractValue()
-    val allowed = if (jointCp) JOINT_OUTCOME_STATES else TERMINAL_OUTCOME_STATUSES
-    if (normalizedStatus !in allowed) {
+    if (normalizedStatus !in TERMINAL_OUTCOME_STATUSES) {
         return "The outcome was received, but the CP status was not finalized. Refresh the visit and try again."
     }
     return null
@@ -126,8 +124,14 @@ internal suspend fun GeoTrackApi.setCpVisitOutcomeConfirmed(
             workflowResponse.error
                 ?: "The outcome was sent, but Joint CP confirmation was not returned. Refresh the visit before retrying."
         } else {
-            val (state, outcome) = workflow.workflowState()
-            cpOutcomeConfirmationError(request.outcome, state, outcome, jointCp = true)
+            val (state, workflowOutcome) = workflow.workflowState()
+            val responseOutcome = response?.responseVisitState()?.second
+            cpOutcomeConfirmationError(
+                request.outcome,
+                state,
+                workflowOutcome ?: responseOutcome,
+                jointCp = true,
+            )
         }
         return if (error == null) {
             (response ?: GeoTrackResponse(success = true)).copy(

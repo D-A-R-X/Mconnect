@@ -25,12 +25,13 @@ class CpOutcomeContractTest {
     }
 
     @Test
-    fun `joint outcome accepts review states but not an untouched visit`() {
+    fun `joint owner outcome accepts a saved draft before parent status changes`() {
         assertNull(cpOutcomeConfirmationError("interested", "pending_review", "interested", true))
         assertNull(cpOutcomeConfirmationError("interested", "completed", "interested", true))
+        assertNull(cpOutcomeConfirmationError("interested", "scheduled", "interested", true))
         assertTrue(
-            cpOutcomeConfirmationError("interested", "scheduled", "interested", true)
-                ?.contains("status was not finalized") == true,
+            cpOutcomeConfirmationError("interested", "scheduled", "follow_up", true)
+                ?.contains("did not confirm") == true,
         )
     }
 
