@@ -468,7 +468,7 @@ class ChatListFragment : Fragment() {
                 // show the skeleton when there's genuinely nothing cached — this
                 // is what stops Chat from sitting on a long blank/skeleton wait.
                 val cached = runCatching {
-                    LocalCache.get<ChatListSnapshot>(requireContext(), chatCacheKey())
+                    LocalCache.get(requireContext(), chatCacheKey(), ChatListSnapshot::class.java)
                 }.getOrNull()
                 if (cached != null && _binding != null) {
                     allConversations = cached.conversations

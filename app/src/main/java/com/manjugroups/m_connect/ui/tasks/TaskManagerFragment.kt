@@ -224,8 +224,10 @@ class TaskManagerFragment : Fragment() {
         // only ever shows on a genuine first load with nothing cached.
         if (allTasks.isEmpty()) {
             runCatching {
-                LocalCache.get<com.manjugroups.m_connect.network.TaskManagerResponse>(
-                    requireContext(), tasksCacheKey(),
+                LocalCache.get(
+                    requireContext(),
+                    tasksCacheKey(),
+                    com.manjugroups.m_connect.network.TaskManagerResponse::class.java,
                 )
             }.getOrNull()?.let { applyTasksData(it) }
         }

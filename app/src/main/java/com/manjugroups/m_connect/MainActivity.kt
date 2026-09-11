@@ -638,8 +638,10 @@ class MainActivity : AppCompatActivity() {
         // instead of intermittently not appearing at all.
         if (taskNudgePendingCount == 0) {
             runCatching {
-                com.manjugroups.m_connect.ui.common.LocalCache.get<List<com.manjugroups.m_connect.network.DailyTaskData>>(
-                    this, taskNudgeCacheKey(),
+                com.manjugroups.m_connect.ui.common.LocalCache.getList(
+                    this,
+                    taskNudgeCacheKey(),
+                    com.manjugroups.m_connect.network.DailyTaskData::class.java,
                 )
             }.getOrNull()
                 ?.let { scopeToOwnTasks(it) }

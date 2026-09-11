@@ -22,6 +22,16 @@ class CpVisitListScopePolicyTest {
     }
 
     @Test
+    fun legacyNullVisitsIsTreatedAsEmpty() {
+        val response = Gson().fromJson(
+            """{"success":true,"visits":null,"directReportIds":[]}""",
+            MyMarketingCpVisitsResponse::class.java,
+        )
+
+        assertEquals(emptyList<CpVisitDetail>(), response.safeVisits)
+    }
+
+    @Test
     fun teamContainsOnlyIdsExplicitlyReturnedAsDirectReports() {
         val aVisit = CpVisitDetail(id = "cp-a", assignedStaffId = "A")
         val cVisit = CpVisitDetail(id = "cp-c", assignedStaffId = "C")

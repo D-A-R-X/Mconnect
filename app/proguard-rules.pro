@@ -23,7 +23,7 @@
 # Retrofit and Gson use annotations/reflection for API interfaces and JSON
 # payload fields. Keep the runtime metadata and model field names while allowing
 # the rest of the app code to be shrunk and obfuscated by R8.
--keepattributes Signature,InnerClasses,EnclosingMethod,RuntimeVisibleAnnotations,RuntimeVisibleParameterAnnotations,AnnotationDefault
+-keepattributes Signature,*Annotation*,InnerClasses,EnclosingMethod
 -keep class retrofit2.** { *; }
 -dontwarn retrofit2.**
 -dontwarn okhttp3.**
@@ -49,7 +49,13 @@
 }
 
 -keep interface com.manjugroups.m_connect.network.** { *; }
--keep class * extends com.google.gson.reflect.TypeToken
+-keep class com.manjugroups.m_connect.network.** { *; }
+
+# Gson's TypeToken reads the generic type from the anonymous subclass Signature.
+# R8 must keep both the metadata above and the TypeToken hierarchy itself, or
+# minified release builds can crash while restoring cached generic JSON.
+-keep class com.google.gson.reflect.TypeToken { *; }
+-keep class * extends com.google.gson.reflect.TypeToken { *; }
 -keepclassmembers class * {
     @android.webkit.JavascriptInterface <methods>;
 }

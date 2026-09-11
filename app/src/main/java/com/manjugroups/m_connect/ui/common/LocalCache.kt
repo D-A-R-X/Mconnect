@@ -50,6 +50,14 @@ object LocalCache {
     /** Cached value for [key], or null if absent/unparseable. Ignores age. */
     fun <T : Any> get(ctx: Context, key: String, type: Type): T? = getEntry<T>(ctx, key, type)?.value
 
+    /** Cached object for [key] without anonymous TypeToken metadata. */
+    fun <T : Any> get(ctx: Context, key: String, rawType: Class<T>): T? =
+        get(ctx, key, rawType as Type)
+
+    /** Cached list for [key] without anonymous TypeToken metadata. */
+    fun <T : Any> getList(ctx: Context, key: String, elementType: Class<T>): List<T>? =
+        get(ctx, key, TypeToken.getParameterized(List::class.java, elementType).type)
+
     /** Cached value + when it was saved, so callers can gate on staleness. */
     fun <T : Any> getEntry(ctx: Context, key: String, type: Type): Entry<T>? = runCatching {
         val f = file(ctx, key)
@@ -59,9 +67,6 @@ object LocalCache {
         val value = gson.fromJson<T>(valueEl, type) ?: return null
         Entry(value, obj.get("t")?.asLong ?: 0L)
     }.getOrNull()
-
-    inline fun <reified T : Any> get(ctx: Context, key: String): T? =
-        get(ctx, key, object : TypeToken<T>() {}.type)
 
     /** Wipe everything — call on logout so a new user starts clean. */
     fun clearAll(ctx: Context) {

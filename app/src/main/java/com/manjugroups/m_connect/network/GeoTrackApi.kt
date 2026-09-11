@@ -2011,7 +2011,9 @@ data class CpOtpAssistResponse(
 data class MyMarketingCpVisitsResponse(
     val success: Boolean,
     val total: Int? = null,
-    val visits: List<CpVisitDetail> = emptyList(),
+    // Nullable because Gson writes explicit JSON null through Kotlin defaults.
+    // Use safeVisits at call sites so a no-data response never crashes a list.
+    val visits: List<CpVisitDetail>? = null,
     // Echoed by the server so mobile can fail closed if an older endpoint
     // ignores scope=direct and returns a wider hierarchy.
     val scope: String? = null,
@@ -2027,6 +2029,9 @@ data class MyMarketingCpVisitsResponse(
 ) {
     val safeDirectReportIds: List<String>
         get() = directReportIds.orEmpty()
+
+    val safeVisits: List<CpVisitDetail>
+        get() = visits.orEmpty()
 }
 
 data class CpVisitFilterOption(

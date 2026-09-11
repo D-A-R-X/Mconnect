@@ -1100,8 +1100,10 @@ class HomeFragment : Fragment() {
         // Cache-first: paint the last-known numbers immediately so the overview
         // never sits blank while the network round-trips.
         if (vpDashboardData == null) {
-            LocalCache.get<com.manjugroups.m_connect.network.MobileDashboardResponse>(
-                requireContext(), dashCacheKey(requestedDate),
+            LocalCache.get(
+                requireContext(),
+                dashCacheKey(requestedDate),
+                com.manjugroups.m_connect.network.MobileDashboardResponse::class.java,
             )?.let { cached ->
                 vpDashboardData = cached
                 bindDashboardData()
