@@ -1,7 +1,4 @@
 <resources>
-    <string name="release_notice_logo_description">Manju Groups logo</string>
-    <string name="release_notice_illustration_description">MConnect service update</string>
-    <string name="release_notice_continue">Continue</string>
     <string name="booking_upload_choose_file">Choose file</string>
     <string name="booking_upload_uploading">Uploading...</string>
     <string name="app_name">M-connect</string>

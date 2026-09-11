@@ -33,9 +33,6 @@ import com.manjugroups.m_connect.notifications.WorkflowNotificationRoute
 import com.manjugroups.m_connect.update.InAppUpdateManager
 import com.manjugroups.m_connect.update.InAppUpdateUiState
 import com.manjugroups.m_connect.update.OperationalUpdateGate
-import com.manjugroups.m_connect.update.ReleaseNoticeConfig
-import com.manjugroups.m_connect.update.ReleaseNoticeDialogFragment
-import com.manjugroups.m_connect.update.ReleaseNoticePreferences
 import com.manjugroups.m_connect.ui.chat.ChatListFragment
 import com.manjugroups.m_connect.ui.chat.ChatMessagesFragment
 import com.manjugroups.m_connect.ui.home.HomeFragment
@@ -88,7 +85,6 @@ class MainActivity : AppCompatActivity() {
     // Google Play in-app updates. Initialized in onCreate only once we know the
     // user stays in the shell (past the login / force-password redirects).
     private var inAppUpdateManager: InAppUpdateManager? = null
-    private var releaseNoticeShowPosted = false
     private var currentTab = 0
     private var cachedTopInset = 0
     private var cachedBottomInset = 0
@@ -271,17 +267,6 @@ class MainActivity : AppCompatActivity() {
         tabBar = findViewById(R.id.tabBar)
         swipePager = findViewById(R.id.fragmentContainer)
         bottomNavFadeOverlay = findViewById(R.id.bottomNavFadeOverlay)
-
-        supportFragmentManager.setFragmentResultListener(
-            ReleaseNoticeDialogFragment.RESULT_KEY,
-            this,
-        ) { _, result ->
-            val campaignId = result.getString(ReleaseNoticeDialogFragment.KEY_CAMPAIGN_ID)
-                ?.takeIf(String::isNotBlank)
-                ?: return@setFragmentResultListener
-            ReleaseNoticePreferences(this).markSeen(campaignId)
-        }
-        scheduleReleaseNotice()
 
         // The update coordinator can emit immediately, so it must start only
         // after activity_main and its update views have been inflated.
@@ -1194,34 +1179,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun scheduleReleaseNotice() {
-        if (releaseNoticeShowPosted || !::mainRoot.isInitialized) return
-        if (ReleaseNoticeConfig.activeCampaign == null) return
-        releaseNoticeShowPosted = true
-        mainRoot.postDelayed({
-            releaseNoticeShowPosted = false
-            showReleaseNoticeIfNeeded()
-        }, 550L)
-    }
-
-    private fun showReleaseNoticeIfNeeded() {
-        val campaign = ReleaseNoticeConfig.activeCampaign ?: return
-        if (isFinishing || isDestroyed || supportFragmentManager.isStateSaved) return
-        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
-        if (!ReleaseNoticePreferences(this).shouldShow(campaign)) return
-        if (supportFragmentManager.findFragmentByTag(ReleaseNoticeDialogFragment.TAG) != null) return
-
-        val anotherDialogIsVisible = supportFragmentManager.fragments.any { fragment ->
-            fragment is androidx.fragment.app.DialogFragment && fragment.dialog?.isShowing == true
-        }
-        if (anotherDialogIsVisible) {
-            scheduleReleaseNotice()
-            return
-        }
-        ReleaseNoticeDialogFragment.newInstance(campaign)
-            .showOnce(supportFragmentManager, ReleaseNoticeDialogFragment.TAG)
-    }
-
     override fun onResume() {
         super.onResume()
         restoreWindowLayoutAfterResume()
@@ -1237,7 +1194,6 @@ class MainActivity : AppCompatActivity() {
         // Finish a downloaded flexible update / resume a stalled immediate one.
         // Kept for everyone — it's a Play call, not an MMS one.
         inAppUpdateManager?.onResume()
-        scheduleReleaseNotice()
         // Ask (once) to exempt the app from "Manage app if unused" — its
         // default-on hibernation/auto-revoke is what puts the app to sleep and
         // breaks background tracking, push and biometric alerts. Tracking staff
