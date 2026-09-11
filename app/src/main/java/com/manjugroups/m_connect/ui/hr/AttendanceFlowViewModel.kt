@@ -211,7 +211,7 @@ class AttendanceFlowViewModel(
 
     private fun readCachedTodayState(appCtx: Context): AttendanceFlowState? {
         val key = todayCacheKey(appCtx) ?: return null
-        return LocalCache.get<AttendanceFlowState>(appCtx, key)
+        return LocalCache.get(appCtx, key, AttendanceFlowState::class.java)
             ?.copy(isLoading = false, isSubmitting = false)
     }
 

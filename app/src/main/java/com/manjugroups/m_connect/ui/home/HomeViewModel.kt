@@ -460,11 +460,11 @@ class HomeViewModel : ViewModel() {
                     val cpResp = cpDeferred!!.await().getOrThrow()
                     Log.d(
                         TAG,
-                        "CP merge: success=${cpResp.success} total=${cpResp.visits.size} " +
+                        "CP merge: success=${cpResp.success} total=${cpResp.safeVisits.size} " +
                             "error=${cpResp.error}",
                     )
                     if (cpResp.success) {
-                        cpFetched = cpResp.visits.size
+                        cpFetched = cpResp.safeVisits.size
                         // Keep every actionable CP visit the server returned. We deliberately do NOT
                         // filter by scheduledDate here: the previous
                         // today-only / today-or-overdue clamps dropped
@@ -480,7 +480,7 @@ class HomeViewModel : ViewModel() {
                         val hiddenTerminalStatuses = setOf(
                             "completed", "complete", "done", "closed", "cancelled", "canceled",
                         )
-                        val extras = cpResp.visits.mapNotNull { detail ->
+                        val extras = cpResp.safeVisits.mapNotNull { detail ->
                             val id = detail.id ?: return@mapNotNull null
                             val mapped = detail.toTodayVisitOrNull(session?.staffId)
                             val status = mapped?.status

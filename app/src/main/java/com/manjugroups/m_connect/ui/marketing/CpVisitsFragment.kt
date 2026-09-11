@@ -708,7 +708,7 @@ class CpVisitsFragment : Fragment() {
                 // at the bottom. Within each status group, newest-first
                 // by creationTime (= most recently assigned) with
                 // scheduledDate as the legacy-row fallback.
-                allVisits = resp.visits
+                allVisits = resp.safeVisits
                     .filter {
                         requestedScope == CpVisitListScope.ALL ||
                             CpVisitListScopePolicy.belongsToAny(it, allowedOwnerIds)
@@ -744,10 +744,11 @@ class CpVisitsFragment : Fragment() {
                         Toast.LENGTH_SHORT,
                     ).show()
                 } else {
-                    showLoadError("Network error: ${e.message ?: "unknown"}")
+                    val message = cpLoadErrorMessage(e)
+                    showLoadError("Network error: $message")
                     Toast.makeText(
                         requireContext(),
-                        "CP network error: ${e.message ?: "unknown"}",
+                        "CP network error: $message",
                         Toast.LENGTH_LONG,
                     ).show()
                 }
@@ -793,7 +794,7 @@ class CpVisitsFragment : Fragment() {
                     CpVisitListScope.TEAM -> resp.safeDirectReportIds.filter(String::isNotBlank).toSet()
                     CpVisitListScope.ALL -> emptySet()
                 }
-                val incoming = resp.visits
+                val incoming = resp.safeVisits
                     .filter {
                         requestedScope == CpVisitListScope.ALL ||
                             CpVisitListScopePolicy.belongsToAny(it, allowedOwnerIds)
@@ -816,6 +817,11 @@ class CpVisitsFragment : Fragment() {
             }
         }
     }
+
+    private fun cpLoadErrorMessage(error: Throwable): String =
+        error.message?.takeIf { it.isNotBlank() }
+            ?: error::class.java.simpleName.takeIf { it.isNotBlank() }
+            ?: "unknown"
 
     /**
      * Map a marketing CpVisitDetail onto the TodayVisit shape the rest

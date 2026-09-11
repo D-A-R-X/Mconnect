@@ -111,9 +111,7 @@ android {
         applicationId = "com.manjugroups.mconnect"
         minSdk = 24
         targetSdk = 36
-        // Play internal testing is already serving version 76. This hotfix
-        // must be newer for Play Console to accept the replacement bundle.
-        versionCode = 77
+        versionCode = 82
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
