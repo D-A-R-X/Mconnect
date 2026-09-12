@@ -973,16 +973,24 @@ data class CpRevisitInfo(
 )
 
 data class TrackingSession(
-    @com.google.gson.annotations.SerializedName("_id") val id: String? = null,
+    // The Go tracking service names these `sessionId` / `state`; the original
+    // backend used `_id` / `sessionState`. Accept either.
+    @com.google.gson.annotations.SerializedName(value = "_id", alternate = ["sessionId", "id"])
+    val id: String? = null,
     val staffId: String,
     val policyKey: String? = null,
     val contextType: String? = null,
     val contextId: String? = null,
+    @com.google.gson.annotations.SerializedName(value = "sessionState", alternate = ["state"])
     val sessionState: String? = null,
     val deviceId: String? = null,
+    @com.google.gson.annotations.JsonAdapter(EpochMillisAdapter::class)
     val startedAt: Long = 0L,
+    @com.google.gson.annotations.JsonAdapter(EpochMillisAdapter::class)
     val endedAt: Long? = null,
+    @com.google.gson.annotations.JsonAdapter(EpochMillisAdapter::class)
     val lastHeartbeatAt: Long? = null,
+    @com.google.gson.annotations.JsonAdapter(EpochMillisAdapter::class)
     val lastLocationAt: Long? = null,
     val routeExpectedDistanceMeters: Int? = null,
     val routeActualDistanceMeters: Int? = null,
@@ -1056,7 +1064,8 @@ data class TimelinePoint(
     val speed: Double,
     val activity: String,
     val movementMode: String? = null,
-    val recordedAt: Long
+    @com.google.gson.annotations.JsonAdapter(EpochMillisAdapter::class)
+    val recordedAt: Long,
 )
 
 // ── Visit / Trip Models ──
@@ -2633,10 +2642,14 @@ data class TripsResponse(
 )
 
 data class GeoTrip(
-    @com.google.gson.annotations.SerializedName("_id") val id: String,
+    // `tripId` on the Go tracking service, `_id` on the original backend.
+    @com.google.gson.annotations.SerializedName(value = "_id", alternate = ["tripId", "id"])
+    val id: String,
     val staffId: String,
     val status: String? = null,
+    @com.google.gson.annotations.JsonAdapter(EpochMillisAdapter::class)
     val startedAt: Long,
+    @com.google.gson.annotations.JsonAdapter(EpochMillisAdapter::class)
     val endedAt: Long? = null,
     val startLat: Double? = null,
     val startLng: Double? = null,
@@ -2661,7 +2674,9 @@ data class GeoTrip(
 data class GeoTripStop(
     val lat: Double,
     val lng: Double,
+    @com.google.gson.annotations.JsonAdapter(EpochMillisAdapter::class)
     val arrivedAt: Long,
+    @com.google.gson.annotations.JsonAdapter(EpochMillisAdapter::class)
     val departedAt: Long,
     val durationMinutes: Int,
     val address: String? = null
