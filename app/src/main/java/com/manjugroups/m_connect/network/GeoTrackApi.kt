@@ -288,6 +288,27 @@ interface GeoTrackApi {
         @Body body: CpOtpAssistRequest,
     ): CpOtpAssistResponse
 
+    // The other half of the same problem, from the manager's side: an AVP/GM
+    // reads their own team member's live arrival OTP back to them instead of
+    // the staff escalating to the tech team. Gated INSIDE the Convex mutation
+    // by `marketing.cpVisits.revealOtp` plus a reporting-hierarchy scope, and
+    // audited there on both view and copy — the route carries no permission
+    // logic of its own and cannot widen it.
+    @POST("api/marketing/cp-visits/reveal-otp")
+    suspend fun revealCpArrivalOtp(
+        @Header("Authorization") token: String,
+        @Body body: CpOtpRevealRequest,
+    ): CpOtpRevealResponse
+
+    // Separate audit record, so "who looked" and "who took the code away" are
+    // distinguishable after the fact. The scope is re-checked server-side: a
+    // fieldVisitId returned by an earlier reveal is not a capability.
+    @POST("api/marketing/cp-visits/reveal-otp/copied")
+    suspend fun recordCpArrivalOtpCopied(
+        @Header("Authorization") token: String,
+        @Body body: CpOtpRevealCopiedRequest,
+    ): GeoTrackResponse
+
     @POST("api/marketing/cp-visits/geofence-remark")
     suspend fun setCpGeofenceRemark(
         @Header("Authorization") token: String,
@@ -804,7 +825,12 @@ data class LocationPoint(
     val networkType: String,
     val gpsEnabled: Boolean,
     val airplaneMode: Boolean,
-    val recordedAt: Long
+    val recordedAt: Long,
+    // Trip attribution, stamped when the point was captured. Additive: a
+    // deployment that does not read these ignores them, and a point buffered by
+    // an older build sends them as null.
+    val contextType: String? = null,
+    val contextId: String? = null,
 )
 
 data class PushBatchRequest(
@@ -838,6 +864,11 @@ data class HeartbeatRequest(
     val movementMode: String? = null,
     val trackingActive: Boolean? = null,
     val backgroundRestricted: Boolean? = null,
+    // The trip running at this tick. A heartbeat is always sent live, so unlike
+    // a location point this is read at send time — and it is what tells the
+    // backend a trip is still open when the point stream has gone quiet.
+    val contextType: String? = null,
+    val contextId: String? = null,
 )
 
 data class TamperReportRequest(
@@ -2007,6 +2038,37 @@ data class CpOtpAssistResponse(
     val gmName: String? = null,
     val error: String? = null,
 )
+
+/**
+ * [sourceType] mirrors the backend's `otpAssistSourceTypeValidator`. Mobile
+ * always reveals from a CP row, but the field is sent explicitly so the same
+ * route can serve a site-visit source later without a contract change.
+ */
+data class CpOtpRevealRequest(
+    val sourceId: String,
+    val sourceType: String = "client_place_visit",
+)
+
+/**
+ * Every field is nullable because the server answers refusals on this same
+ * shape (`{ success: false, error }`) — "no active OTP", "already verified",
+ * "visit is already completed". Gson does not apply Kotlin defaults to an
+ * explicit JSON null, so a non-null `otp` here would fail the whole parse.
+ */
+data class CpOtpRevealResponse(
+    val success: Boolean = false,
+    val fieldVisitId: String? = null,
+    val clientPlaceVisitId: String? = null,
+    val otp: String? = null,
+    val contactPhoneMasked: String? = null,
+    val resendCount: Int? = null,
+    val attempts: Int? = null,
+    val assignedStaffName: String? = null,
+    val placeName: String? = null,
+    val error: String? = null,
+)
+
+data class CpOtpRevealCopiedRequest(val fieldVisitId: String)
 
 data class MyMarketingCpVisitsResponse(
     val success: Boolean,

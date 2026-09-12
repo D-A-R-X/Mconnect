@@ -14,7 +14,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         PendingChatMessageEntity::class,
         PendingPunchEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class GeoTrackDatabase : RoomDatabase() {
@@ -87,6 +87,16 @@ abstract class GeoTrackDatabase : RoomDatabase() {
             }
         }
 
+        // Additive: buffered points predating this carry NULL and still flush,
+        // they just arrive without a trip attribution — same forward-compatible
+        // shape as the sessionId and staffId columns before them.
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE pending_points ADD COLUMN contextType TEXT")
+                db.execSQL("ALTER TABLE pending_points ADD COLUMN contextId TEXT")
+            }
+        }
+
         private val MIGRATION_4_5 = object : Migration(4, 5) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
@@ -119,7 +129,7 @@ abstract class GeoTrackDatabase : RoomDatabase() {
                 )
                     .addMigrations(
                         MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4,
-                        MIGRATION_4_5, MIGRATION_5_6,
+                        MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
                     )
                     .build()
                 INSTANCE = instance

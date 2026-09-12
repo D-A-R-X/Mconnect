@@ -956,7 +956,16 @@ class HomeViewModel : ViewModel() {
         val kind = if (isSv) "sv" else "cp"
         val name = visit?.placeName?.takeIf { it.isNotBlank() } ?: fallbackName
         val title = (if (isSv) "Site Visit" else "Client Visit") + (name?.let { " · $it" } ?: "")
-        SessionManager(context).setFieldActivity(kind, title, visit?.placeAddress, System.currentTimeMillis())
+        SessionManager(context).setFieldActivity(
+            kind = kind,
+            title = title,
+            sub = visit?.placeAddress,
+            startMs = System.currentTimeMillis(),
+            // The field visit this trip is tracking. GeoTrack telemetry is
+            // stamped with it so the backend can attribute the trip's points
+            // — and therefore its distance — to this visit.
+            refId = visit?.id,
+        )
         com.manjugroups.m_connect.geotrack.service.TrackingNotification.refresh(context)
     }
 

@@ -301,6 +301,7 @@ class DriverStartTripBottomSheet : BottomSheetDialogFragment() {
                     title = "Fleet Trip",
                     sub = "Trip in progress",
                     startMs = System.currentTimeMillis(),
+                    refId = visitId,
                 )
                 com.manjugroups.m_connect.geotrack.service.TrackingNotification.refresh(requireContext())
 

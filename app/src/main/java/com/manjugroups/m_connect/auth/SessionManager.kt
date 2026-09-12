@@ -31,6 +31,14 @@ data class FieldActivity(
     val title: String,
     val sub: String?,
     val startMs: Long,
+    /**
+     * The row this activity is about — the on-duty geoTrips id, the CP field
+     * visit id, the site visit id. Display-only fields ([title], [sub]) cannot
+     * identify a trip, so this is what lets GeoTrack telemetry say WHICH trip a
+     * point belongs to. Null while the id is still being fetched, and on
+     * activities restored from a build that predates it.
+     */
+    val refId: String? = null,
 )
 
 class SessionManager(context: Context) {
@@ -417,23 +425,46 @@ class SessionManager(context: Context) {
     // clears it when the activity ends. Kept deliberately small (4 keys) so
     // reads are cheap enough to happen on notification refresh.
 
-    fun setFieldActivity(kind: String, title: String, sub: String?, startMs: Long) {
+    fun setFieldActivity(
+        kind: String,
+        title: String,
+        sub: String?,
+        startMs: Long,
+        refId: String? = null,
+    ) {
         setCachedString(KEY_FIELD_ACT_KIND, kind)
         setCachedString(KEY_FIELD_ACT_TITLE, title)
         setCachedString(KEY_FIELD_ACT_SUB, sub)
+        setCachedString(KEY_FIELD_ACT_REF, refId)
         memoryCache[KEY_FIELD_ACT_START_MS] = startMs
         prefs.edit().putLong(KEY_FIELD_ACT_START_MS, startMs).apply()
+    }
+
+    /**
+     * Attach the trip id to the activity that is already running.
+     *
+     * On-duty starts the activity immediately (so the notification is right the
+     * moment the user taps) but only learns its geoTrips id when the backend
+     * call returns. Without this the whole trip would stream points with no
+     * trip id. No-op when the activity has since been cleared or replaced, so a
+     * late response can never re-tag a different trip.
+     */
+    fun updateFieldActivityRef(kind: String, refId: String?) {
+        if (getCachedString(KEY_FIELD_ACT_KIND, null) != kind) return
+        setCachedString(KEY_FIELD_ACT_REF, refId)
     }
 
     fun clearFieldActivity() {
         memoryCache.remove(KEY_FIELD_ACT_KIND)
         memoryCache.remove(KEY_FIELD_ACT_TITLE)
         memoryCache.remove(KEY_FIELD_ACT_SUB)
+        memoryCache.remove(KEY_FIELD_ACT_REF)
         memoryCache.remove(KEY_FIELD_ACT_START_MS)
         prefs.edit()
             .remove(KEY_FIELD_ACT_KIND)
             .remove(KEY_FIELD_ACT_TITLE)
             .remove(KEY_FIELD_ACT_SUB)
+            .remove(KEY_FIELD_ACT_REF)
             .remove(KEY_FIELD_ACT_START_MS)
             .apply()
     }
@@ -443,7 +474,13 @@ class SessionManager(context: Context) {
         val kind = getCachedString(KEY_FIELD_ACT_KIND, null) ?: return null
         val title = getCachedString(KEY_FIELD_ACT_TITLE, null) ?: return null
         val start = prefs.getLong(KEY_FIELD_ACT_START_MS, 0L)
-        return FieldActivity(kind, title, getCachedString(KEY_FIELD_ACT_SUB, null), start)
+        return FieldActivity(
+            kind,
+            title,
+            getCachedString(KEY_FIELD_ACT_SUB, null),
+            start,
+            getCachedString(KEY_FIELD_ACT_REF, null),
+        )
     }
 
     fun saveDriverTripStart(visitId: String, startKm: String, startImagePath: String, startTime: String) {
@@ -792,6 +829,7 @@ class SessionManager(context: Context) {
         private const val KEY_FIELD_ACT_KIND = "field_act_kind"
         private const val KEY_FIELD_ACT_TITLE = "field_act_title"
         private const val KEY_FIELD_ACT_SUB = "field_act_sub"
+        private const val KEY_FIELD_ACT_REF = "field_act_ref"
         private const val KEY_FIELD_ACT_START_MS = "field_act_start_ms"
     }
 }

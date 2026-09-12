@@ -11,6 +11,7 @@ import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.manjugroups.m_connect.MainActivity
@@ -18,12 +19,29 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.ActivityGeoConsentBinding
 import com.manjugroups.m_connect.network.ApiService
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 class GeoTrackConsentActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityGeoConsentBinding
     private lateinit var session: SessionManager
-    private var permissionCheckPending = false
+    /**
+     * Which Settings trip is outstanding, or null. A bare boolean could not say
+     * whether the user went to grant fine or background location, and the two
+     * have to resume the chain at different points.
+     */
+    private var settingsReturn: String? = null
+
+    /**
+     * Guards against leaving twice. Several tails can reach [goToMain] — the
+     * setup coroutine, its timeout, and a "Not now" on a permission refusal —
+     * and a second startActivity would stack another MainActivity behind the
+     * one the user is already looking at.
+     */
+    private var navigated = false
+
+    /** True while the post-permission setup runs, so the screen cannot be re-entered. */
+    private var setupInFlight = false
 
     companion object {
         /**
@@ -34,6 +52,17 @@ class GeoTrackConsentActivity : AppCompatActivity() {
          */
         @Volatile
         var isActive = false
+
+        private const val STATE_SETTINGS_RETURN = "settingsReturn"
+        private const val SETTINGS_RETURN_FINE = "fine"
+        private const val SETTINGS_RETURN_BACKGROUND = "background"
+
+        /**
+         * Long enough for the sync to finish on a normal connection, short
+         * enough that a stalled backend does not hold the user on a consent
+         * screen. Whatever does not complete here is retried on Home.
+         */
+        private const val SETUP_TIMEOUT_MS = 8_000L
     }
 
     override fun onDestroy() {
@@ -43,19 +72,39 @@ class GeoTrackConsentActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        // User returned from Settings — check if background location was granted
-        if (permissionCheckPending) {
-            permissionCheckPending = false
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
-                ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED
-            ) {
-                Toast.makeText(this, "Background location granted!", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(this, "Background location not granted — tracking may not work when screen is off", Toast.LENGTH_LONG).show()
+        // Back from Settings. WHICH trip it was matters: a fine-location trip
+        // has to rejoin the chain at background location, while a background
+        // trip must move on even if nothing was granted — re-showing that
+        // dialog on every return is how a user gets stuck in a loop.
+        val pendingReturn = settingsReturn ?: return
+        settingsReturn = null
+        when (pendingReturn) {
+            SETTINGS_RETURN_FINE -> {
+                if (hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)) {
+                    requestBackgroundLocation()
+                } else {
+                    handleLocationPermissionDenied()
+                }
             }
-            requestActivityRecognition()
+            SETTINGS_RETURN_BACKGROUND -> {
+                val granted = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
+                    hasPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                Toast.makeText(
+                    this,
+                    if (granted) {
+                        "Background location granted!"
+                    } else {
+                        "Background location not granted — tracking may not work when screen is off"
+                    },
+                    if (granted) Toast.LENGTH_SHORT else Toast.LENGTH_LONG,
+                ).show()
+                requestActivityRecognition()
+            }
         }
     }
+
+    private fun hasPermission(permission: String): Boolean =
+        ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
 
     private val locationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -64,7 +113,11 @@ class GeoTrackConsentActivity : AppCompatActivity() {
         if (fineGranted) {
             requestBackgroundLocation()
         } else {
-            Toast.makeText(this, "Location permission is required for tracking", Toast.LENGTH_LONG).show()
+            // Previously a Toast and nothing else — a dead end. Once the OS has
+            // recorded two refusals it stops showing the dialog at all, so the
+            // launcher returns instantly with "denied" and the button looked
+            // like it did nothing. There must always be a way off this screen.
+            handleLocationPermissionDenied()
         }
     }
 
@@ -105,6 +158,8 @@ class GeoTrackConsentActivity : AppCompatActivity() {
 
         session = SessionManager(this)
 
+        settingsReturn = savedInstanceState?.getString(STATE_SETTINGS_RETURN)
+
         binding.btnConsent.setOnClickListener {
             recordConsentAndRequestPermissions()
         }
@@ -117,10 +172,67 @@ class GeoTrackConsentActivity : AppCompatActivity() {
         }
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        // The Settings round-trip can outlive this activity on a low-memory
+        // device. Without this the return lands on a fresh consent screen with
+        // no idea it was mid-flow, and the user starts over.
+        outState.putString(STATE_SETTINGS_RETURN, settingsReturn)
+    }
+
     private fun recordConsentAndRequestPermissions() {
+        // Re-entering the chain mid-flight relaunches permission requests on top
+        // of each other and can fire the setup tail twice.
+        if (setupInFlight) return
         session.geoConsentGiven = true
         session.geoConsentDeclined = false
         requestLocationPermissions()
+    }
+
+    /**
+     * Fine location refused — the one branch that used to have no exit.
+     *
+     * Retry is offered only while the OS will still show its dialog. Once the
+     * refusal is permanent, `requestPermissions` returns immediately and a retry
+     * button would just re-trigger the same silent denial, so the only real
+     * options are app settings or leaving.
+     *
+     * "Not now" deliberately keeps consent recorded and drops the user on Home:
+     * tracking simply will not start, and the standing permission-alert
+     * notification already nags for the missing grant. Trapping them here does
+     * not make the permission any more granted.
+     */
+    private fun handleLocationPermissionDenied() {
+        if (isFinishing || isDestroyed) return
+        val canAskAgain = ActivityCompat.shouldShowRequestPermissionRationale(
+            this,
+            Manifest.permission.ACCESS_FINE_LOCATION,
+        )
+        val builder = android.app.AlertDialog.Builder(this)
+            .setTitle("Location permission needed")
+            .setMessage(
+                if (canAskAgain) {
+                    "M Connect cannot track field work without location access. " +
+                        "Please allow it to continue."
+                } else {
+                    "Location access is blocked for M Connect. Turn it on in " +
+                        "Settings → Permissions → Location to enable tracking."
+                },
+            )
+            .setNegativeButton("Not now") { _, _ -> goToMain() }
+        if (canAskAgain) {
+            builder.setPositiveButton("Try again") { _, _ -> requestLocationPermissions() }
+        } else {
+            builder.setPositiveButton("Open Settings") { _, _ ->
+                settingsReturn = SETTINGS_RETURN_FINE
+                startActivity(
+                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = Uri.fromParts("package", packageName, null)
+                    },
+                )
+            }
+        }
+        builder.setCancelable(false).show()
     }
 
     private fun requestLocationPermissions() {
@@ -163,7 +275,7 @@ class GeoTrackConsentActivity : AppCompatActivity() {
                     intent.data = android.net.Uri.fromParts("package", packageName, null)
                     startActivity(intent)
                     // Check permission when user returns
-                    permissionCheckPending = true
+                    settingsReturn = SETTINGS_RETURN_BACKGROUND
                 }
                 .setCancelable(false)
                 .show()
@@ -209,22 +321,62 @@ class GeoTrackConsentActivity : AppCompatActivity() {
             .show()
     }
 
+    /**
+     * Last step: kick tracking off, then leave.
+     *
+     * This used to await two attendance calls and a bootstrap sync — four
+     * network round-trips at a 30s timeout each — before navigating, with the
+     * button still enabled and no sign anything was happening. On a slow
+     * connection the screen sat there for a minute looking dead, and an
+     * exception anywhere in the chain meant `goToMain()` never ran at all and
+     * the user was stranded for good.
+     *
+     * Now: bounded, guarded, and navigation happens in `finally` so there is no
+     * path that leaves the user on this screen. Consent is already persisted
+     * locally, and the same sync re-runs on every MainActivity resume and on
+     * every punch, so finishing it here was never actually required — only
+     * nice to have.
+     */
     private fun startTrackingService() {
+        if (setupInFlight) return
+        setupInFlight = true
+        setBusy(true)
         lifecycleScope.launch {
-            val attendanceActive = runCatching {
-                AttendanceTrackingGate.isClockedInForToday(session.bearerToken, ApiService.create())
-            }.getOrDefault(false)
-            GeoTrackBootstrapSync.sync(
-                context = this@GeoTrackConsentActivity,
-                allowPromptConsent = false,
-                attendanceOpenOverride = attendanceActive,
-            )
-            goToMain()
+            try {
+                withTimeoutOrNull(SETUP_TIMEOUT_MS) {
+                    val attendanceActive = runCatching {
+                        AttendanceTrackingGate.isClockedInForToday(
+                            session.bearerToken,
+                            ApiService.create(),
+                        )
+                    }.getOrDefault(false)
+                    runCatching {
+                        GeoTrackBootstrapSync.sync(
+                            context = this@GeoTrackConsentActivity,
+                            allowPromptConsent = false,
+                            attendanceOpenOverride = attendanceActive,
+                        )
+                    }
+                }
+            } finally {
+                setupInFlight = false
+                goToMain()
+            }
         }
     }
 
+    private fun setBusy(busy: Boolean) {
+        binding.btnConsent.isEnabled = !busy
+        binding.btnDecline.isEnabled = !busy
+        binding.btnConsent.text =
+            if (busy) "Setting up tracking…" else "I Understand and Agree"
+    }
+
     private fun goToMain() {
+        if (navigated) return
+        navigated = true
         startActivity(Intent(this, MainActivity::class.java))
         finish()
     }
+
 }

@@ -27,4 +27,12 @@ data class LocationPointEntity(
     // a service restart, or the next day — never attributed to the wrong
     // session or stranded because the live id was cleared at teardown.
     val sessionId: String? = null,
+    // What the staff was doing when this point was recorded — a CP trip, an
+    // on-duty trip, or the plain shift. Stamped at CAPTURE time for the same
+    // reason as sessionId: a backlog flushed hours later must stay attributed
+    // to the trip it happened on, not to whatever is running at upload time.
+    // This is what lets the backend attribute distance to a trip instead of
+    // falling back to a straight line.
+    val contextType: String? = null,
+    val contextId: String? = null,
 )

@@ -121,6 +121,11 @@ object GeoTrackEventQueue {
                             movementMode = metadata["movementMode"] as? String,
                             trackingActive = metadata["trackingActive"] as? Boolean,
                             backgroundRestricted = metadata["backgroundRestricted"] as? Boolean,
+                            // Replayed from the queued snapshot, not re-read
+                            // from the session: this tick belongs to whatever
+                            // trip was running when it was recorded.
+                            contextType = metadata["contextType"] as? String,
+                            contextId = metadata["contextId"] as? String,
                         ),
                     )
                     resp.success

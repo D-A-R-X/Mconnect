@@ -630,6 +630,12 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
                 )
                 if (resp.success && !resp.tripId.isNullOrBlank()) {
                     sessionRef.onDutyTripId = resp.tripId
+                    // The activity was set before this call so the notification
+                    // was correct the moment the user tapped; only now do we
+                    // know the trip id. Attach it so the rest of the trip's
+                    // GeoTrack points carry the attribution. No-op if on-duty
+                    // was already ended or replaced while this was in flight.
+                    sessionRef.updateFieldActivityRef("onduty", resp.tripId)
                 }
             } catch (_: Exception) {
                 // Network down or server hiccup — the user is still

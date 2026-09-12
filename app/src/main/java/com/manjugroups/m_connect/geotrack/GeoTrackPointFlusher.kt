@@ -85,6 +85,10 @@ object GeoTrackPointFlusher {
                         isMock = e.isMock, batteryPct = e.batteryPct,
                         networkType = e.networkType, gpsEnabled = e.gpsEnabled,
                         airplaneMode = e.airplaneMode, recordedAt = e.recordedAt,
+                        // Carried through from the row, NOT re-read from the
+                        // session: this batch may be a backlog from a trip that
+                        // ended hours ago.
+                        contextType = e.contextType, contextId = e.contextId,
                     )
                 }
                 val resp = try {

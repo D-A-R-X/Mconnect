@@ -28,6 +28,7 @@ import com.manjugroups.m_connect.geotrack.AttendanceDayBoundary
 import com.manjugroups.m_connect.geotrack.GeoTrackFlushWorker
 import com.manjugroups.m_connect.geotrack.GeoTrackPointFlusher
 import com.manjugroups.m_connect.geotrack.data.GeoTrackDatabase
+import com.manjugroups.m_connect.geotrack.trackingContext
 import com.manjugroups.m_connect.geotrack.data.LocationPointEntity
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.HeartbeatRequest
@@ -599,6 +600,7 @@ class GeoTrackService : Service() {
                     val battery = getBatteryLevel()
                     val tickAt = System.currentTimeMillis()
                     val heartbeatRequestId = heartbeatRequestId(tickAt)
+                    val startContext = session.trackingContext()
                     try {
                         api.heartbeat(
                             token = session.bearerToken,
@@ -618,6 +620,8 @@ class GeoTrackService : Service() {
                                 movementMode = lastActivity,
                                 trackingActive = true,
                                 backgroundRestricted = isBackgroundRestricted(),
+                                contextType = startContext.contextType,
+                                contextId = startContext.contextId,
                             )
                         )
                         Log.i(TAG, "Initial heartbeat sent")
@@ -643,6 +647,8 @@ class GeoTrackService : Service() {
                                     put("movementMode", lastActivity)
                                     put("trackingActive", true)
                                     put("backgroundRestricted", isBackgroundRestricted())
+                                    put("contextType", startContext.contextType)
+                                    startContext.contextId?.let { put("contextId", it) }
                                 },
                                 occurredAt = tickAt,
                             )
@@ -749,6 +755,7 @@ class GeoTrackService : Service() {
 
         // Infer activity from speed when activity recognition isn't available
         val activity = inferActivityFromSpeed(location.speed)
+        val capturedContext = session.trackingContext()
 
         val entity = LocationPointEntity(
             lat = location.latitude,
@@ -766,6 +773,11 @@ class GeoTrackService : Service() {
             airplaneMode = isAirplaneModeOn(),
             recordedAt = System.currentTimeMillis(),
             sessionId = session.activeTrackingSessionId,
+            // Which trip this point belongs to, decided HERE rather than at
+            // upload: a backlog flushed after the trip ended must keep the
+            // trip it was recorded on.
+            contextType = capturedContext.contextType,
+            contextId = capturedContext.contextId,
         )
 
         db.locationPointDao().insert(entity)
@@ -1038,6 +1050,7 @@ class GeoTrackService : Service() {
                 val airplane = isAirplaneModeOn()
                 val locEnabled = isLocationEnabled()
                 val heartbeatRequestId = heartbeatRequestId(tickAt)
+                val tickContext = session.trackingContext()
                 // Catch a flight-mode / location-off change whose broadcast we
                 // missed. reportTamper de-dupes, so re-reporting the same state
                 // is cheap and a genuine repeat still fires.
@@ -1062,6 +1075,8 @@ class GeoTrackService : Service() {
                                 movementMode = lastActivity,
                                 trackingActive = true,
                                 backgroundRestricted = isBackgroundRestricted(),
+                                contextType = tickContext.contextType,
+                                contextId = tickContext.contextId,
                             )
                         )
                     }
@@ -1092,6 +1107,8 @@ class GeoTrackService : Service() {
                                 put("movementMode", lastActivity)
                                 put("trackingActive", true)
                                 put("backgroundRestricted", isBackgroundRestricted())
+                                put("contextType", tickContext.contextType)
+                                tickContext.contextId?.let { put("contextId", it) }
                             },
                             occurredAt = tickAt,
                         )
