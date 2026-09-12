@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  "Reveal arrival OTP" — the manager's side of a stuck doorstep.
+
+  Three exclusive states share the block below the header, so the sheet never
+  changes height abruptly: a spinner while the reveal call is in flight, the
+  code itself on success, and a plain message on refusal. The refusal text is
+  the SERVER's wording ("No active OTP is available. Generate OTP first.",
+  "Arrival OTP is already verified.") — it tells the manager what to do next,
+  which a generic "Couldn't reveal OTP" would not.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_dialog_card"
+    android:orientation="vertical"
+    android:paddingStart="20dp"
+    android:paddingTop="10dp"
+    android:paddingEnd="20dp"
+    android:paddingBottom="20dp">
+
+    <View
+        android:layout_width="40dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginBottom="16dp"
+        android:background="@drawable/bg_sheet_handle" />
+
+    <TextView
+        android:id="@+id/tvCpOtpRevealTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:fontFamily="@font/inter_bold"
+        android:text="Reveal arrival OTP"
+        android:textColor="#1D2939"
+        android:textSize="16sp" />
+
+    <TextView
+        android:id="@+id/tvCpOtpRevealSubtitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:fontFamily="@font/inter_regular"
+        android:lineSpacingExtra="2dp"
+        android:textColor="#475467"
+        android:textSize="12sp" />
+
+    <ProgressBar
+        android:id="@+id/pbCpOtpReveal"
+        android:layout_width="28dp"
+        android:layout_height="28dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="28dp"
+        android:layout_marginBottom="28dp" />
+
+    <!-- Success state -->
+    <LinearLayout
+        android:id="@+id/llCpOtpRevealResult"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="18dp"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/tvCpOtpRevealCode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_otp_box"
+            android:fontFamily="@font/geist_mono_semibold"
+            android:gravity="center"
+            android:letterSpacing="0.4"
+            android:paddingTop="16dp"
+            android:paddingBottom="16dp"
+            android:textColor="#1D2939"
+            android:textSize="28sp" />
+
+        <TextView
+            android:id="@+id/tvCpOtpRevealMeta"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:fontFamily="@font/inter_regular"
+            android:gravity="center"
+            android:lineSpacingExtra="2dp"
+            android:textColor="#667085"
+            android:textSize="11sp" />
+
+        <TextView
+            android:id="@+id/btnCpOtpRevealCopy"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/bg_dialog_btn_confirm"
+            android:clickable="true"
+            android:focusable="true"
+            android:fontFamily="@font/inter_semibold"
+            android:gravity="center"
+            android:text="Copy OTP"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp" />
+    </LinearLayout>
+
+    <!-- Refusal / failure state -->
+    <TextView
+        android:id="@+id/tvCpOtpRevealError"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="18dp"
+        android:fontFamily="@font/inter_regular"
+        android:gravity="center"
+        android:lineSpacingExtra="2dp"
+        android:textColor="#B42318"
+        android:textSize="12sp"
+        android:visibility="gone" />
+
+    <!-- Shown from the start, not only after a successful reveal: the manager
+         should know the reveal is attributable BEFORE they ask for it. -->
+    <TextView
+        android:id="@+id/tvCpOtpRevealAudit"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:fontFamily="@font/inter_regular"
+        android:gravity="center"
+        android:text="Viewing and copying this OTP is recorded against your name."
+        android:textColor="#98A2B3"
+        android:textSize="10sp" />
+
+    <TextView
+        android:id="@+id/btnCpOtpRevealClose"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/bg_dialog_btn_cancel"
+        android:clickable="true"
+        android:focusable="true"
+        android:fontFamily="@font/inter_semibold"
+        android:gravity="center"
+        android:text="Close"
+        android:textColor="#344054"
+        android:textSize="14sp" />
+</LinearLayout>

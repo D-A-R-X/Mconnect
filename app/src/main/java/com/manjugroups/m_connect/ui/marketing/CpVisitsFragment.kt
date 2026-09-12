@@ -79,6 +79,14 @@ class CpVisitsFragment : Fragment() {
     private var currentFilter: Filter = Filter.ALL
     private var currentScope: CpVisitListScope = CpVisitListScope.MY
     private var activeOwnershipScope: CpVisitListScope? = null
+    /**
+     * The viewer's reporting team, exactly as the LAST list response reported
+     * it. This is the scope an OTP reveal is allowed within, so it is taken
+     * from the server rather than inferred locally, and it is captured on every
+     * load regardless of the selected scope — it describes the viewer, not the
+     * filter. Empty until a response lands, which fails closed.
+     */
+    private var reportingTeamStaffIds: Set<String> = emptySet()
     private var searchQuery: String = ""
     private var loadedServerSearch: String? = null
     // Debounces the server-side search reload so a super-admin can find an
@@ -703,6 +711,8 @@ class CpVisitsFragment : Fragment() {
                     CpVisitListScope.TEAM -> resp.safeDirectReportIds.filter { it.isNotBlank() }.toSet()
                     CpVisitListScope.ALL -> emptySet()
                 }
+                reportingTeamStaffIds =
+                    resp.safeDirectReportIds.filter { it.isNotBlank() }.toSet()
                 // Sort: ongoing first (in-progress / arrived / reaching),
                 // then pending (scheduled / not started), then completed
                 // at the bottom. Within each status group, newest-first
@@ -1164,12 +1174,70 @@ class CpVisitsFragment : Fragment() {
             itemView = itemView,
         )
 
+        bindRevealOtpAction(visit, itemView)
+
         val params = itemView.layoutParams as? LinearLayout.LayoutParams
             ?: LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         params.bottomMargin = (10 * resources.displayMetrics.density).toInt()
         itemView.layoutParams = params
         return itemView
     }
+
+    /**
+     * "Reveal arrival OTP" — the supported answer to a staff member phoning the
+     * tech team because the client will not read the code out.
+     *
+     * Hidden unless ALL of these hold, so the capability is invisible to
+     * everyone who does not have it:
+     *  • the deployment serves the reveal route (see [CpOtpRevealSupport]),
+     *  • the row is a CP visit with an id to reveal against,
+     *  • arrival is not already verified and the visit is not closed,
+     *  • the viewer holds the IAM key with a GM/AVP designation, and
+     *  • this row's staff is inside the reporting team the SERVER returned.
+     *
+     * The server re-checks every one of those; this is about not offering an
+     * action that would only produce an error toast.
+     */
+    private fun bindRevealOtpAction(visit: TodayVisit, itemView: View) {
+        val button = itemView.findViewById<TextView>(R.id.btnVisitItemRevealOtp) ?: return
+        val cpVisitId = visit.clientPlaceVisitId?.takeIf { it.isNotBlank() }
+        val allowed = CpOtpRevealSupport.isSupported &&
+            cpVisitId != null &&
+            CpOtpRevealAccess.isRevealableStatus(visit.status) &&
+            CpOtpRevealAccess.canRevealFor(
+                isSuperAdmin = isSessionSuperAdmin(),
+                designation = session.designation,
+                permissions = session.iamPermissions,
+                viewerStaffId = session.staffId,
+                // The CP's assigned staff — for a Joint CP this is the outcome
+                // owner, who is the one holding the OTP.
+                targetStaffId = visit.bdoStaffId,
+                reportingTeamStaffIds = reportingTeamStaffIds,
+            )
+        if (!allowed) {
+            button.visibility = View.GONE
+            button.setOnClickListener(null)
+            button.isClickable = false
+            return
+        }
+        button.visibility = View.VISIBLE
+        button.isClickable = true
+        button.setOnClickListener {
+            CpOtpRevealBottomSheet
+                .newInstance(
+                    cpVisitId = cpVisitId,
+                    staffName = visit.bdoName,
+                    placeName = visit.placeName ?: visit.leadName,
+                )
+                .show(parentFragmentManager, "cp-otp-reveal")
+        }
+    }
+
+    /** Mirrors the backend's `staff.isAdmin === true || role === "super-admin"`. */
+    private fun isSessionSuperAdmin(): Boolean =
+        session.isAdmin ||
+            (session.role ?: "").trim().replace(Regex("""[\s_]+"""), "-")
+                .equals("super-admin", ignoreCase = true)
 
     /**
      * Runs [block], retrying up to [times] more times on a transient

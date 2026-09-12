@@ -456,4 +456,26 @@
 
     </LinearLayout>
 
+    <!--
+      Manager-only escape hatch for a staff member stuck on the arrival OTP.
+      Hidden by default: only the CP Visits list ever shows it, and only when
+      the viewer holds `marketing.cpVisits.revealOtp` for THIS row's staff.
+      Every other screen that inflates this row leaves it gone, so Today's Trip
+      on Home is unaffected.
+    -->
+    <TextView
+        android:id="@+id/btnVisitItemRevealOtp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:clickable="true"
+        android:focusable="true"
+        android:fontFamily="@font/inter_medium"
+        android:gravity="center"
+        android:padding="8dp"
+        android:text="Reveal arrival OTP"
+        android:textColor="#B45309"
+        android:textSize="12sp"
+        android:visibility="gone" />
+
 </LinearLayout>
