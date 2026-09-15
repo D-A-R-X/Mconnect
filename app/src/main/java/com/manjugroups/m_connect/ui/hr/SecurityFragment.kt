@@ -656,9 +656,12 @@ class SecurityFragment : Fragment() {
         }
         val builder = AlertDialog.Builder(requireContext())
             .setTitle("Logged-in devices")
+            // One line. The rows now carry their own Sign out control and the
+            // tab header already explains the screen, so a two-line instruction
+            // here only pushed the device list further off a phone screen.
             .setMessage(
-                "$name is signed in on the devices below. " +
-                    if (canLogout) "Sign out one device or all devices." else "You have view-only access.",
+                if (canLogout) "$name's active sessions"
+                else "$name's active sessions - view only",
             )
             .setView(scroll)
             .setNegativeButton("Close", null)
@@ -705,6 +708,17 @@ class SecurityFragment : Fragment() {
         setPadding(dp(12), dp(28), dp(12), dp(28))
     }
 
+    /**
+     * One active session, as a single row.
+     *
+     * Was a stacked card - title, meta, then a full-width "Logout this device"
+     * block - which cost roughly 100dp per device. Three devices plus the
+     * dialog's own title and message did not fit on a phone, so the list the
+     * admin came to read was the part that got scrolled off.
+     *
+     * Now: a device-type icon, the label and its meta line in the middle, and a
+     * compact sign-out on the right. Same information, about half the height.
+     */
     private fun sessionDeviceCard(
         activeSession: ActiveStaffSession,
         staffId: String,
@@ -713,56 +727,93 @@ class SecurityFragment : Fragment() {
         canLogout: Boolean,
     ): View {
         val label = describeSessionDevice(activeSession)
+        val isMobile = activeSession.deviceType == "mobile"
         return LinearLayout(requireContext()).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), dp(12), dp(12), dp(12))
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(12), dp(10), dp(12), dp(10))
             background = GradientDrawable().apply {
                 cornerRadius = dp(12).toFloat()
                 setColor(Color.WHITE)
-                setStroke(dp(1), Color.parseColor("#EAECF0"))
+                // The current session is the one the admin must NOT sign out by
+                // accident, so it is marked on the card itself, not only by a
+                // word in the title.
+                setStroke(
+                    dp(1),
+                    Color.parseColor(if (activeSession.isCurrent) "#B2DDFF" else "#EAECF0"),
+                )
             }
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT,
-            ).apply { bottomMargin = dp(10) }
+            ).apply { bottomMargin = dp(8) }
 
             addView(TextView(context).apply {
-                val kind = if (activeSession.deviceType == "mobile") "Mobile" else "Web"
-                text = "$kind  $label" + if (activeSession.isCurrent) "  This device" else ""
-                textSize = 13f
+                text = if (isMobile) "Mobile" else "Web"
+                textSize = 10f
+                gravity = Gravity.CENTER
                 setTypeface(typeface, Typeface.BOLD)
-                setTextColor(Color.parseColor("#101828"))
+                setTextColor(Color.parseColor(if (isMobile) "#026AA2" else "#5925DC"))
+                setPadding(dp(8), dp(4), dp(8), dp(4))
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(8).toFloat()
+                    setColor(Color.parseColor(if (isMobile) "#F0F9FF" else "#F4F3FF"))
+                }
             })
-            addView(TextView(context).apply {
-                val signedIn = activeSession.createdAt?.let {
-                    SimpleDateFormat("d MMM, h:mm a", Locale.US).format(Date(it.toLong()))
-                } ?: "Unknown"
-                text = "Signed in $signedIn" + activeSession.ip.takeIf { it.isNotBlank() }
-                    .let { ip -> if (ip == null) "" else " · $ip" }
-                textSize = 11f
-                setTextColor(Color.parseColor("#667085"))
-                setPadding(0, dp(4), 0, 0)
-            })
+
+            addView(
+                LinearLayout(context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    layoutParams = LinearLayout.LayoutParams(
+                        0,
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        1f,
+                    ).apply { marginStart = dp(10) }
+
+                    addView(TextView(context).apply {
+                        text = label + if (activeSession.isCurrent) "  ·  This device" else ""
+                        textSize = 13f
+                        maxLines = 2
+                        ellipsize = android.text.TextUtils.TruncateAt.END
+                        setTypeface(typeface, Typeface.BOLD)
+                        setTextColor(Color.parseColor("#101828"))
+                    })
+                    addView(TextView(context).apply {
+                        val signedIn = activeSession.createdAt?.let {
+                            SimpleDateFormat("d MMM, h:mm a", Locale.US).format(Date(it.toLong()))
+                        } ?: "Unknown"
+                        text = signedIn + (
+                            activeSession.ip.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""
+                            )
+                        textSize = 11f
+                        maxLines = 1
+                        ellipsize = android.text.TextUtils.TruncateAt.END
+                        setTextColor(Color.parseColor("#667085"))
+                        setPadding(0, dp(3), 0, 0)
+                    })
+                },
+            )
+
             if (canLogout) {
                 addView(TextView(context).apply {
-                    text = "Logout this device"
+                    text = "Sign out"
                     textSize = 12f
                     gravity = Gravity.CENTER
                     setTypeface(typeface, Typeface.BOLD)
                     setTextColor(Color.parseColor("#B42318"))
-                    setPadding(dp(10), dp(8), dp(10), dp(8))
+                    setPadding(dp(12), dp(7), dp(12), dp(7))
                     background = GradientDrawable().apply {
-                        cornerRadius = dp(18).toFloat()
+                        cornerRadius = dp(16).toFloat()
                         setColor(Color.parseColor("#FEF3F2"))
                         setStroke(dp(1), Color.parseColor("#FDA29B"))
                     }
                     layoutParams = LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
                         LinearLayout.LayoutParams.WRAP_CONTENT,
-                    ).apply { topMargin = dp(10) }
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                    ).apply { marginStart = dp(10) }
                     setOnClickListener {
                         isEnabled = false
-                        text = "Signing out..."
+                        text = "..."
                         viewLifecycleOwner.lifecycleScope.launch {
                             val response = runCatching {
                                 api.logoutStaffDevice(
