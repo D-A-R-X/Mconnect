@@ -21,15 +21,19 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
 
+        <!-- 40dp to match every other back button in the app (CP Visits,
+             Completed Visit Detail, GeoTrack Live all use 40dp) and to clear
+             the 48dp-ish minimum touch target; the old 32dp circle with an
+             18dp glyph was both smaller than the rest and fiddly to hit. -->
         <FrameLayout
-            android:layout_width="32dp"
-            android:layout_height="32dp"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
             android:background="@drawable/bg_trip_detail_back">
 
             <ImageView
                 android:id="@+id/btnTripBack"
-                android:layout_width="18dp"
-                android:layout_height="18dp"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
                 android:layout_gravity="center"
                 android:clickable="true"
                 android:contentDescription="Back"
@@ -51,8 +55,8 @@
             android:textSize="18sp" />
 
         <Space
-            android:layout_width="32dp"
-            android:layout_height="32dp" />
+            android:layout_width="40dp"
+            android:layout_height="40dp" />
     </LinearLayout>
 
     <!-- Content scrolls between the fixed top bar and the pinned action button,
