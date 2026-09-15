@@ -1970,9 +1970,14 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 routePolyline = null
                 if (lastUnavailableRouteKey != routeKey) {
                     lastUnavailableRouteKey = routeKey
+                    // Do NOT promise a retry. The usual cause is the tracking
+                    // service having no GOOGLE_MAPS_SERVER_KEY, which makes
+                    // DrivingRoute fail every time, not intermittently — so
+                    // "try again shortly" sent staff into a loop. Point at the
+                    // thing that does work instead: the Maps app itself.
                     Toast.makeText(
                         requireContext(),
-                        "Road route is temporarily unavailable. Try again shortly.",
+                        "Route line unavailable. Use Open in Google Maps for directions.",
                         Toast.LENGTH_LONG,
                     ).show()
                 }

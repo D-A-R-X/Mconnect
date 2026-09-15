@@ -4,6 +4,14 @@ import com.manjugroups.m_connect.network.StaffData
 
 /** Fast client guard; the create endpoint repeats this with authoritative IAM data. */
 object JointCpTemplateGuard {
+    /**
+     * Field staff do not know what an "IAM template level" is, and there is
+     * nothing they can do about one. What they CAN act on is picking a
+     * different second person, so say only that.
+     */
+    const val SAME_DESIGNATION_MESSAGE =
+        "Both staff have the same designation. A Joint CP needs two different designations."
+
     /** Every valid row returned by the active-staff API is selectable here. */
     fun pickerStaff(items: List<StaffData>): List<StaffData> = items
         .filter { !it.id.isNullOrBlank() }
@@ -27,13 +35,13 @@ object JointCpTemplateGuard {
         if (primaryTemplateId != null && partnerTemplateId != null &&
             primaryTemplateId.equals(partnerTemplateId, ignoreCase = true)
         ) {
-            return "Both staff use the same IAM template. Select staff from different template levels."
+            return SAME_DESIGNATION_MESSAGE
         }
 
         val primaryLevel = primary.iamTemplateLevel
         val partnerLevel = partner.iamTemplateLevel
         if (primaryLevel != null && partnerLevel != null && primaryLevel == partnerLevel) {
-            return "Both staff have the same Joint CP template level. Select one lower-level and one higher-level staff member."
+            return SAME_DESIGNATION_MESSAGE
         }
         return null
     }

@@ -1563,7 +1563,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             message.contains("TEMPLATE_REQUIRED", ignoreCase = true) ||
             message.contains("template is missing", ignoreCase = true)
         ) {
-            "Joint CP template is missing for one of these staff. Ask admin to update the IAM template."
+            "One of these staff has no designation set. Ask your admin to add it."
         } else if (
             message.contains("SAME_TEMPLATE_NOT_ALLOWED", ignoreCase = true) ||
             (
@@ -1571,19 +1571,19 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                     !message.contains("same template level", ignoreCase = true)
             )
         ) {
-            "Both staff use the same IAM template. Select staff from different template levels."
+            JointCpTemplateGuard.SAME_DESIGNATION_MESSAGE
         } else if (
             message.contains("TEMPLATE_LEVEL_REQUIRED", ignoreCase = true) ||
             message.contains("designation level is missing", ignoreCase = true)
         ) {
-            "Joint CP template level is missing. Ask admin to configure a numeric level for both staff members' effective IAM templates."
+            "One of these staff has no designation level set. Ask your admin to add it."
         } else if (
             message.contains("SAME_TEMPLATE_LEVEL_NOT_ALLOWED", ignoreCase = true) ||
             message.contains("different designation levels", ignoreCase = true)
         ) {
-            "Both staff have the same Joint CP template level. Select staff with different template levels."
+            JointCpTemplateGuard.SAME_DESIGNATION_MESSAGE
         } else if (message.contains("INVALID_JOINT_CP_ROLE_PAIR", ignoreCase = true)) {
-            "The selected IAM templates do not form a valid Joint CP role pair. Ask admin to check the templates."
+            "These two staff cannot be paired for a Joint CP. Ask your admin to check their designations."
         } else {
             message
         }
