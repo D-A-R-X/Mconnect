@@ -109,8 +109,11 @@ class CpVisitsFragment : Fragment() {
     // tab switch is what used to make this screen feel slow. Pagination now
     // bounds each render to one page of rows; cards inflate lazily on the
     // first page that shows them and come back from this cache afterwards.
-    private var rowViewCache = java.util.IdentityHashMap<TodayVisit, View>()
-    private var rowsBuiltFor: List<TodayVisit>? = null
+    // Keyed by the visit's STABLE id, not object identity — see CpRowCachePolicy.
+    // Loading another page replaces `allVisits`, so an identity-keyed cache was
+    // discarded on every scroll-triggered fetch and the whole grown window was
+    // re-inflated on the main thread.
+    private val rowViewCache = HashMap<String, Pair<TodayVisit, View>>()
     private var rowsBuiltClockedIn: Boolean? = null
     // Infinite scroll: render 20 rows, extend by 20 as the list nears its end.
     private var cpWindowCtx: String? = null
@@ -253,7 +256,6 @@ class CpVisitsFragment : Fragment() {
         rootView = null
         // Cached rows belong to the destroyed view tree — never reattach them.
         rowViewCache.clear()
-        rowsBuiltFor = null
         rowsBuiltClockedIn = null
         super.onDestroyView()
     }
@@ -474,7 +476,6 @@ class CpVisitsFragment : Fragment() {
             currentFilter = Filter.ALL
             allVisits = emptyList()
             rowViewCache.clear()
-            rowsBuiltFor = null
             hasLoadedOnce = false
             applyPillStyles(root)
             loadVisits()
@@ -519,7 +520,6 @@ class CpVisitsFragment : Fragment() {
                 if (needsReload) {
                     allVisits = emptyList()
                     rowViewCache.clear()
-                    rowsBuiltFor = null
                     hasLoadedOnce = false
                     loadVisits()
                 } else {
@@ -1002,9 +1002,12 @@ class CpVisitsFragment : Fragment() {
 
         // Invalidate the row cache only when the data set is replaced (new
         // fetch) or the clock-in gate flips (row action buttons depend on it).
-        if (rowsBuiltFor !== allVisits || rowsBuiltClockedIn != isClockedIn) {
+        // Only the clock-in gate invalidates everything: it changes the action
+        // button on every row. A new page does NOT, which is the whole point —
+        // rows already built stay built. Per-row staleness is handled by the
+        // value check below.
+        if (rowsBuiltClockedIn != isClockedIn) {
             rowViewCache.clear()
-            rowsBuiltFor = allVisits
             rowsBuiltClockedIn = isClockedIn
         }
 
@@ -1037,9 +1040,26 @@ class CpVisitsFragment : Fragment() {
         // Attach only the current window's rows (20, +20 on scroll).
         list.removeAllViews()
         matched.take(cpPager.limit).forEach { visit ->
-            val rowView = rowViewCache.getOrPut(visit) { createRow(visit, list) }
+            val key = CpRowCachePolicy.keyOf(visit)
+            val cached = rowViewCache[key]
+            val rowView = if (CpRowCachePolicy.canReuse(cached?.first, visit)) {
+                cached!!.second
+            } else {
+                createRow(visit, list).also { rowViewCache[key] = visit to it }
+            }
+            // removeAllViews() above should have cleared every parent, but a
+            // view that still has one would throw IllegalStateException and take
+            // the screen down. Detaching first makes that impossible.
+            (rowView.parent as? ViewGroup)?.removeView(rowView)
             rowView.visibility = View.VISIBLE
             list.addView(rowView)
+        }
+
+        // Keep the cache bounded to what the active filter can show; otherwise
+        // it holds a view for every row ever rendered this session.
+        val live = CpRowCachePolicy.liveKeys(matched)
+        if (rowViewCache.size > live.size) {
+            rowViewCache.keys.retainAll(live)
         }
 
         if (matched.isEmpty()) {
