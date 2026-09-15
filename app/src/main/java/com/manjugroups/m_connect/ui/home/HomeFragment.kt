@@ -1500,8 +1500,63 @@ class HomeFragment : Fragment() {
         // Fleet "completed offline" — the admin marked this SV as done without
         // a live trip; the site incharge must record the outcome from mobile.
         val isFleetOutcomePending = visit.completedOffline == true && visit.outcome.isNullOrBlank()
+        // Joint CP whose outcome is submitted but not yet reviewed. Matched
+        // FIRST below: it is neither in-progress nor completed, so without its
+        // own branch this row fell through to the else and told a staff member
+        // who had already done the OTP and the outcome to "Start Trip" again.
+        val jointPendingReview =
+            status == com.manjugroups.m_connect.ui.marketing.JOINT_PENDING_REVIEW
+        // Outcome recorded outside the client's geofence, held for the GM. Same
+        // hole as above: not in-progress, not completed, no branch — so Home
+        // told a staff member who had finished the visit to start it again.
+        // The CP Visits list has handled this for months; Home never did.
+        val pendingGmApproval = status == "pending_gm_approval" || status == "pending-gm-approval"
 
         when {
+            jointPendingReview -> {
+                val workflow = visit.joint?.workflow
+                val viewerIsReviewer = workflow?.reviewerStaffId
+                    ?.trim()?.takeIf { it.isNotEmpty() } == session.staffId?.trim()
+                statusText.text = "Pending Review"
+                statusPill.background =
+                    requireContext().getDrawable(R.drawable.bg_home_trip_status_progress)
+                statusText.setTextColor(android.graphics.Color.parseColor("#B54708"))
+                action.text = if (viewerIsReviewer) {
+                    "Review outcome"
+                } else {
+                    workflow?.reviewerName?.trim()?.takeIf { it.isNotEmpty() }
+                        ?.let { "Awaiting: $it" } ?: "Awaiting review"
+                }
+                actionBtn.background = requireContext().getDrawable(
+                    if (viewerIsReviewer) {
+                        R.drawable.bg_home_trip_action_ready
+                    } else {
+                        R.drawable.bg_home_trip_action_disabled
+                    },
+                )
+                action.setTextColor(
+                    if (viewerIsReviewer) {
+                        android.graphics.Color.WHITE
+                    } else {
+                        android.graphics.Color.parseColor("#475467")
+                    },
+                )
+                actionIcon.visibility = View.GONE
+                eta.text = if (viewerIsReviewer) "Review pending" else "With reviewer"
+            }
+            pendingGmApproval -> {
+                statusText.text = "Pending Approval"
+                statusPill.background =
+                    requireContext().getDrawable(R.drawable.bg_home_trip_status_progress)
+                statusText.setTextColor(android.graphics.Color.parseColor("#B54708"))
+                action.text = visit.approvalGmName?.trim()?.takeIf { it.isNotEmpty() }
+                    ?.let { "Awaiting: $it" } ?: "Awaiting GM"
+                actionBtn.background =
+                    requireContext().getDrawable(R.drawable.bg_home_trip_action_disabled)
+                action.setTextColor(android.graphics.Color.parseColor("#475467"))
+                actionIcon.visibility = View.GONE
+                eta.text = "With approver"
+            }
             needsCpDetails -> {
                 statusText.text = "Reaching"
                 statusPill.background = requireContext().getDrawable(R.drawable.bg_home_trip_status_progress)
