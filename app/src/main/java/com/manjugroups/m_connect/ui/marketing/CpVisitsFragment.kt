@@ -568,8 +568,13 @@ class CpVisitsFragment : Fragment() {
         !visit.cpVisit?.postponeReasons.isNullOrEmpty() ||
             visit.cpVisit?.outcome.equals("postponed", ignoreCase = true)
 
+    // A Joint CP awaiting its reviewer is still LIVE work, so it belongs with
+    // In Progress rather than Scheduled, and must never fall under Completed.
+    // The dedicated branch in applyStatusAndAction runs before the in-progress
+    // one, so this only affects filtering and sorting.
     private fun isInProgress(status: String): Boolean = status in setOf(
-        "in-progress", "in_progress", "ongoing", "started", "active", "arrived"
+        "in-progress", "in_progress", "ongoing", "started", "active", "arrived",
+        JOINT_PENDING_REVIEW,
     )
 
     private fun isCompleted(status: String): Boolean = status in setOf(
@@ -1299,6 +1304,7 @@ class CpVisitsFragment : Fragment() {
         // the visit isn't final until the GM approves (→ completed) or rejects
         // (→ reopened for this staff).
         val pendingApproval = status == "pending_gm_approval"
+        val jointPendingReview = status == JOINT_PENDING_REVIEW
         val needsCpDetails = (visit.tripType == "client_place" || visit.clientPlaceVisitId != null) &&
             status == "arrived" && visit.cpVisit?.outcome.isNullOrBlank()
         // "Outcome pending" — the trip is over (status=completed) but the
@@ -1355,6 +1361,45 @@ class CpVisitsFragment : Fragment() {
                 actionIcon.visibility = View.VISIBLE
                 actionIcon.imageTintList = null
                 tapMode = TapMode.COMPLETED_DETAIL
+            }
+            jointPendingReview -> {
+                // Outcome submitted, waiting on the higher-level reviewer. Tell
+                // each side what THEY are waiting on: the reviewer gets a live
+                // action, the owner gets the reviewer's name so they know who
+                // to chase rather than a dead "Completed".
+                statusPill.background = ContextCompat.getDrawable(ctx, R.drawable.bg_home_trip_status_progress)
+                statusDot.background = ContextCompat.getDrawable(ctx, R.drawable.bg_home_trip_status_dot)
+                statusText.text = "Pending Review"
+                statusText.setTextColor(Color.parseColor("#B54708"))
+
+                val workflow = visit.joint?.workflow
+                val viewerIsReviewer = workflow?.reviewerStaffId
+                    ?.trim()?.takeIf { it.isNotEmpty() } == session.staffId?.trim()
+                actionBtn.background = ContextCompat.getDrawable(
+                    ctx,
+                    if (viewerIsReviewer) {
+                        R.drawable.bg_home_trip_action_ready
+                    } else {
+                        R.drawable.bg_cpv_action_completed
+                    },
+                )
+                actionLabel.text = if (viewerIsReviewer) {
+                    "Review outcome"
+                } else {
+                    workflow?.reviewerName?.trim()?.takeIf { it.isNotEmpty() }
+                        ?.let { "Awaiting: $it" } ?: "Awaiting review"
+                }
+                actionLabel.setTextColor(
+                    if (viewerIsReviewer) Color.WHITE else Color.parseColor("#1F7A3F"),
+                )
+                actionIcon.setImageResource(
+                    if (viewerIsReviewer) R.drawable.ic_home_trip_play else R.drawable.ic_cpv_action_completed,
+                )
+                actionIcon.visibility = View.VISIBLE
+                actionIcon.imageTintList = null
+                // Both sides open the trip screen: it polls the workflow every
+                // five seconds and renders the precise waiting message.
+                tapMode = TapMode.TRIP
             }
             isOutcomePending -> {
                 // CP visit's trip is complete but the outcome was never
@@ -1568,7 +1613,7 @@ class CpVisitsFragment : Fragment() {
         return when (s) {
             "in-progress", "in_progress", "ongoing", "started", "active",
             "arrived", "arrival_verified", "arrival-verified",
-            "on_site", "on-site", "reaching" -> 0
+            "on_site", "on-site", "reaching", JOINT_PENDING_REVIEW -> 0
             "completed", "complete", "done", "closed",
             "cancelled", "canceled" -> 2
             else -> 1

@@ -101,6 +101,14 @@ fun resolveParticipantCpEffectiveStatus(
     if (server.lowercase(Locale.US) in TERMINAL_CP_STATUSES) return server
     if ((cpCompletedAt ?: 0L) > 0L || (fieldVisitCompletedAt ?: 0L) > 0L) return "completed"
 
+    // A Joint CP is NOT finished when one participant's own leg finishes. The
+    // visit closes only when the higher-level reviewer adds their remark and
+    // completes it. The owner's leg goes to "completed" the moment they submit
+    // their outcome for review, and that outranks everything else below, so the
+    // card used to read "Completed" while the reviewer had not even looked at
+    // it — and the row offered no way back into the workflow.
+    if (joint != null && jointReviewStillOpen(joint)) return JOINT_PENDING_REVIEW
+
     val participant = joint.participantFor(currentStaffId)?.status?.trim().orEmpty()
     val candidates = if (participant.isNotEmpty()) {
         listOf(participant, server, cp)
@@ -116,6 +124,34 @@ fun resolveParticipantCpEffectiveStatus(
         mostAdvanced
     }
 }
+
+/**
+ * The card status for a Joint CP whose outcome is submitted but not yet
+ * reviewed. Deliberately its own value rather than reusing "arrived" or
+ * "completed": both of those already drive actions that are wrong here.
+ */
+const val JOINT_PENDING_REVIEW = "pending_joint_review"
+
+/**
+ * True while the Joint CP workflow is still running.
+ *
+ * Only answers from the workflow the SERVER resolved. When a payload carries no
+ * workflow — an older deployment, or a list shape that omits it — this returns
+ * false and the previous behaviour stands, so a missing field can never strand
+ * a genuinely finished visit in a pending state.
+ */
+private fun jointReviewStillOpen(joint: JointCpSummary): Boolean {
+    val state = joint.workflow?.state?.trim()?.lowercase(Locale.US).orEmpty()
+    if (state.isEmpty()) return false
+    return state !in TERMINAL_JOINT_WORKFLOW_STATES
+}
+
+private val TERMINAL_JOINT_WORKFLOW_STATES = setOf(
+    "completed",
+    "complete",
+    "cancelled",
+    "canceled",
+)
 
 private fun cpStatusProgressRank(status: String): Int = when (
     status.trim().lowercase(Locale.US).replace('-', '_')
