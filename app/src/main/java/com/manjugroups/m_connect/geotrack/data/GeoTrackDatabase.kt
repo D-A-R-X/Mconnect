@@ -131,6 +131,23 @@ abstract class GeoTrackDatabase : RoomDatabase() {
                         MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4,
                         MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
                     )
+                    // A DOWNGRADE must never brick the app. Room has no reverse
+                    // migrations, so a phone that ran a newer build and then went
+                    // back to an older one - an internal build then a Play
+                    // rollback, or a staged release pulled back - opens a v7 file
+                    // with a v6 schema and throws
+                    // "A migration from 7 to 6 was required but not found" on
+                    // EVERY database access, on a background dispatcher, killing
+                    // the process. Seen in production on 2026-09-15 after the v7
+                    // tracking-context columns shipped.
+                    //
+                    // This database is a store-and-forward BUFFER, not system of
+                    // record: points, events and punches here are replayed to the
+                    // backend and are worth far less than a working app. Dropping
+                    // it on a downgrade is the right trade, and mirrors what the
+                    // iOS GeoTrack store already does when its own migration
+                    // fails.
+                    .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
                     .build()
                 INSTANCE = instance
                 instance
