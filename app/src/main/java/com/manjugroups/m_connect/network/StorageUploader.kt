@@ -183,7 +183,7 @@ object StorageUploader {
                         purpose = purpose.wireValue,
                     ),
                 )
-                if (response.code() == 404 || response.code() == 503) return PreferredResult.Unavailable
+                if (isPreferredPathUnavailable(response.code())) return PreferredResult.Unavailable
                 if (response.isSuccessful) {
                     contract = response.body()
                     return@repeat
@@ -325,9 +325,27 @@ object StorageUploader {
         if (error is SocketTimeoutException) "Connection timed out."
         else "Network error. Check your connection."
 
+    /**
+     * Codes that mean "try the other upload path", not "give up".
+     *
+     * 401 is here deliberately. The storage route validates the token by calling
+     * Convex `validateSession` and swallows EVERY failure as
+     * `.catch(() => null)` -> "invalid session", so a slow or erroring Convex
+     * produces a 401 that has nothing to do with the user's session. Failing the
+     * upload outright told a staff member at a client's door that their login
+     * was bad, when a retry on the compatibility endpoint usually just works.
+     *
+     * If the session really is dead the fallback 401s too and the user still
+     * gets an error - just a correct one, one step later.
+     */
+    private fun isPreferredPathUnavailable(code: Int): Boolean =
+        code == 404 || code == 503 || code == 401
+
     private fun httpMessage(code: Int, stage: String): String = when (code) {
         400 -> "$stage request was invalid."
-        401 -> "Session could not be verified for this upload."
+        // Stage included, unlike before: without it a report of this message
+        // could not be traced to creation, upload or completion.
+        401 -> "$stage was rejected. Please retry."
         413 -> "File is too large."
         415 -> "Unsupported file type."
         503 -> "Storage service is temporarily unavailable."
