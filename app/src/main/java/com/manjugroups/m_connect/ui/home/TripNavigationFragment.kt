@@ -351,14 +351,19 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         mapFullScreenContainer = view.findViewById(R.id.mapFullScreenContainer)
         mapFullScreenHost = view.findViewById(R.id.mapFullScreenHost)
         view.findViewById<View>(R.id.btnMapExpand)?.setOnClickListener { expandMap() }
+        // NOTE: R.id.btnOpenInMaps is the misnamed START TRIP cta (it holds
+        // ivStartTripIcon / tvStartTripLabel). The maps action is the separate
+        // button inside the client address card.
+        view.findViewById<View>(R.id.btnOpenClientInMaps)
+            ?.setOnClickListener { openInGoogleMaps() }
         view.findViewById<View>(R.id.btnMapCollapse)?.setOnClickListener { collapseMap() }
 
-        // Edge-to-edge shell: drop the top bar below the status bar so the back
-        // button + title don't sit under the notch / status icons.
-        view.findViewById<View>(R.id.topBar)?.let {
-            com.manjugroups.m_connect.ui.common.BottomActionInsets
-                .applyStatusBarTop(it)
-        }
+        // NO status-bar padding here on purpose. onResume calls
+        // MainActivity.setTopBarAppearance(fullBleed = false), which gives the
+        // activity's statusBarBackground a real height of resolveTopInset() —
+        // the fragment container already starts BELOW the status bar. Adding
+        // the inset again as padding pushed the header down by a second full
+        // status-bar height, which is the excessive gap under "Trip Details".
 
         // Edge-to-edge shell: lift the pinned action row above the gesture nav
         // bar (and the main tab bar when visible) so the swipe button isn't
@@ -1104,7 +1109,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             staffCard?.visibility = View.GONE
         }
 
-        val lmoRow = view.findViewById<View>(R.id.rowTripLmo)
+        val lmoRow = view.findViewById<View>(R.id.lmoCard)
         val lmo = lmoName?.takeIf { it.isNotBlank() }
         if (lmo != null) {
             view.findViewById<TextView>(R.id.tvTripLmo)?.text = lmo
@@ -2020,10 +2025,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     }
 
     private fun openInGoogleMaps() {
-        val dest = destination ?: run {
-            Toast.makeText(requireContext(), "Destination unavailable", Toast.LENGTH_SHORT).show()
-            return
-        }
+        val dest = destination ?: return openMapsForAddress()
         val uri = Uri.parse("google.navigation:q=${dest.latitude},${dest.longitude}&mode=d")
         val intent = Intent(Intent.ACTION_VIEW, uri).apply {
             setPackage("com.google.android.apps.maps")
@@ -2034,6 +2036,35 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             // Fallback: any maps-capable app
             val webUri = Uri.parse(
                 "https://www.google.com/maps/dir/?api=1&destination=${dest.latitude},${dest.longitude}&travelmode=driving"
+            )
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW, webUri))
+            } catch (_: ActivityNotFoundException) {
+                Toast.makeText(requireContext(), "No maps app available", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    /**
+     * No coordinates on the visit — search Maps for the client's address text
+     * instead of refusing outright. Plenty of CP rows carry a full address but
+     * were never geocoded, and "Destination unavailable" left the field staff
+     * with nothing to tap.
+     */
+    private fun openMapsForAddress() {
+        val address = view?.findViewById<TextView>(R.id.tvClientAddressFull)
+            ?.text?.toString()?.trim()
+            ?.takeIf { it.isNotEmpty() && !it.equals("Address not available", ignoreCase = true) }
+        if (address == null) {
+            Toast.makeText(requireContext(), "Destination unavailable", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val uri = Uri.parse("geo:0,0?q=" + Uri.encode(address))
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, uri))
+        } catch (_: ActivityNotFoundException) {
+            val webUri = Uri.parse(
+                "https://www.google.com/maps/search/?api=1&query=" + Uri.encode(address),
             )
             try {
                 startActivity(Intent(Intent.ACTION_VIEW, webUri))
