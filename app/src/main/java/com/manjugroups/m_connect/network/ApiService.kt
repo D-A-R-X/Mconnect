@@ -2517,6 +2517,13 @@ data class NotificationData(
     val referenceType: String?,
     val read: Boolean = false,
     val createdAt: String?,
+    // Where the work lives on the web, e.g. "/hr/salary-slips?month=8&year=2026".
+    // The backend resolves this for EVERY notification
+    // (notifications.listByUser -> resolveNotificationActionUrls), but the app
+    // never declared it, so a notification with no mobile screen dead-ended on
+    // "open the related screen from the menu". Nullable because older rows and
+    // un-resolvable references legitimately have none.
+    val actionUrl: String? = null,
     @SerializedName("_creationTime") val creationTime: Double? = null
 )
 

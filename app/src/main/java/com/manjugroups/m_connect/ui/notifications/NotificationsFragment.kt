@@ -356,6 +356,15 @@ class NotificationsFragment : Fragment() {
                 // Task Manager queue (the referenceId is a dailyTasks id, not a
                 // project-task id, so the project TaskDetail screen can't show it).
                 "dailyTask" -> TaskManagerFragment.newInstance()
+                // Aliases and screens that exist on mobile but were never
+                // mapped, so every one of these notifications dead-ended.
+                "siteVisit" -> SiteVisitsFragment()
+                "issue" -> com.manjugroups.m_connect.ui.issues.IssuesFragment()
+                "fine-deduction" -> com.manjugroups.m_connect.ui.hr.FinesDeductionsFragment()
+                "customerCollection" ->
+                    com.manjugroups.m_connect.ui.library.collections.CollectionsFragment()
+                "geo-trip", "geotrack-tamper" ->
+                    com.manjugroups.m_connect.ui.hr.GeoTrackLiveFragment()
                 else -> null
             }
 
@@ -377,6 +386,23 @@ class NotificationsFragment : Fragment() {
                     ).show()
                     loadNotifications()
                 }
+                // No mobile screen for this one. The backend already tells us
+                // where the work lives on the web (actionUrl, e.g.
+                // "/hr/salary-slips?month=8&year=2026") and the app was
+                // throwing it away, leaving the user on a dead end with no way
+                // to reach the thing they were just notified about. Hand them
+                // the deep link instead — same sheet the Task Manager uses for
+                // web-only tasks, so Open and Copy behave identically.
+                webLinkFor(notification) != null -> {
+                    com.manjugroups.m_connect.ui.tasks.WebTaskLinkBottomSheet
+                        .newInstance(
+                            title = notification.title?.trim()?.takeIf { it.isNotEmpty() }
+                                ?: "This update",
+                            url = webLinkFor(notification)!!,
+                        )
+                        .show(parentFragmentManager, "notification_web_link")
+                    loadNotifications()
+                }
                 else -> {
                     Toast.makeText(
                         requireContext(),
@@ -387,6 +413,22 @@ class NotificationsFragment : Fragment() {
                 }
             }
         }
+    }
+
+    /**
+     * Absolute web URL for a notification with no mobile screen, or null.
+     *
+     * Uses BuildConfig.APP_URL rather than a hardcoded host so a staging build
+     * links into staging. Relative paths are the norm from the backend
+     * ("/task-manager?taskId=…"); an absolute one is passed through untouched.
+     */
+    private fun webLinkFor(
+        notification: com.manjugroups.m_connect.network.NotificationData,
+    ): String? {
+        val path = notification.actionUrl?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        if (path.startsWith("http://") || path.startsWith("https://")) return path
+        val base = com.manjugroups.m_connect.BuildConfig.APP_URL.trimEnd('/')
+        return base + if (path.startsWith("/")) path else "/$path"
     }
 
     /**
