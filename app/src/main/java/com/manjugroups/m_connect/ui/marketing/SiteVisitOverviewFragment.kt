@@ -1308,24 +1308,21 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         // Vehicle type first — computeWebParityStepIndex reads it.
         isOwnVehicleSelected = proposed?.travelMode == "own_vehicle" || visit.vehiclePreference == "own_vehicle"
 
-        // Compute the SAME step index that drives the visible stepper, then open
-        // the outcome whenever the client has reached the site (ON SITE, step 4)
-        // through DROPPED / DONE. This mirrors the web (canRecordOutcomeNow:
-        // status in on_counselling / picked_from_site / dropped) AND survives the
-        // cab case where sv.status lags behind the fleet's travelDesk* return leg
-        // — the earlier status-only check left the outcome greyed at DROPPED.
-        // isOutcomeLocked still closes it the moment an outcome is recorded.
+        // The stepper index still drives the visible progress, but NOT the
+        // outcome gate. Opening the outcome at ON SITE (step 4) or when the cab
+        // reached the site let staff record an outcome before the client's QR
+        // scan; the form then advanced the visit to On Counselling itself. The
+        // outcome opens only once the SERVER status has reached counselling or
+        // later (on_counselling / picked_from_site / dropped / completed), the
+        // same set the web's canRecordOutcomeNow and setOutcome accept. The
+        // server already reports a dropped cab trip without an outcome as
+        // on_site until the QR scan, so the cab case is covered by status.
         val outcomeStepIndex = if (effStatus.isNotEmpty()) {
             computeWebParityStepIndex(status = effStatus, snapshot = proposed)
         } else 0
-        val fleetReachedSite = proposed?.travelDeskOnSiteAt != null ||
-            proposed?.travelDeskPickedFromSiteAt != null ||
-            proposed?.travelDeskEndedAt != null
         outcomeStatusEligible =
             isOutcomeStatusEligible(effStatus) ||
-            isOutcomeStatusEligible(visit.status) ||
-            fleetReachedSite ||
-            outcomeStepIndex >= ON_SITE_STEP_INDEX
+            isOutcomeStatusEligible(visit.status)
         isFleetOutcomePending = visit.completedOffline == true && visit.outcome.isNullOrBlank()
         updatePostponeVisibility(effStatus)
         updateCancelVisibility(effStatus)
@@ -1669,7 +1666,6 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         // Cab web-parity stepper index for "On Site" (Scheduled 0 · Assigned 1 ·
         // Reached CP 2 · Picked from CP 3 · On Site 4 · Consulting 5 · Picked
         // from Site 6 · Dropped 7 · Done 8). Outcome opens at this step or later.
-        private const val ON_SITE_STEP_INDEX = 4
         private const val ARG_VISIT_ID = "arg_visit_id"
         private const val ARG_CLIENT_PLACE_VISIT_ID = "arg_client_place_visit_id"
         private const val ARG_PLACE_NAME = "arg_place_name"

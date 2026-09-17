@@ -52,7 +52,6 @@ import com.manjugroups.m_connect.network.SetOutcomeRequest
 import com.manjugroups.m_connect.network.StorageUploader
 import com.manjugroups.m_connect.network.ManualProfilePatch
 import com.manjugroups.m_connect.network.SetSiteVisitOutcomeRequest
-import com.manjugroups.m_connect.network.SiteVisitIdRequest
 import com.manjugroups.m_connect.network.SvNotInterestedDetail
 import com.manjugroups.m_connect.network.UpdateTelecallerLeadRequest
 import com.manjugroups.m_connect.network.SiteVisitAttendeeRequest
@@ -5270,16 +5269,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         btnSubmit?.text = "Saving…"
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                // setOutcome(follow_up) accepts on_counselling/picked_from_site/
-                // dropped. The outcome buttons only unlock from on_counselling,
-                // but mark it best-effort in case the SV row still trails at
-                // on_site (no-ops for already-eligible statuses).
-                runCatching {
-                    geoApi.markSiteVisitOnCounselling(
-                        session.bearerToken,
-                        SiteVisitIdRequest(id = svId),
-                    )
-                }
+                // No markOnCounselling here: counselling starts ONLY from the
+                // client's QR scan. Advancing on_site -> on_counselling from the
+                // outcome form let a DSV reach On Counselling without any scan.
+                // setOutcome rejects on_site, and that is surfaced below.
                 val resp = geoApi.setSiteVisitOutcomeConfirmed(
                     session.bearerToken,
                     SetSiteVisitOutcomeRequest(
@@ -5422,20 +5415,12 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                             finishCtaSave("Missing site visit id")
                             return@launch
                         }
-                    // The backend's setOutcome only accepts a visit already in
-                    // on_counselling / picked_from_site / dropped. The outcome
-                    // buttons, however, unlock at On Site — so a manual close from
-                    // status="on_site" hit setOutcome's assertTransition and 500'd.
-                    // The QR flow advances on_site → on_counselling first; mirror
-                    // that here. Best-effort: it only transitions from on_site, so
-                    // for the already-eligible statuses it no-ops (error ignored)
-                    // and setOutcome below still runs.
-                    runCatching {
-                        geoApi.markSiteVisitOnCounselling(
-                            session.bearerToken,
-                            SiteVisitIdRequest(id = svId),
-                        )
-                    }
+                    // setOutcome only accepts on_counselling / picked_from_site /
+                    // dropped. Do NOT advance on_site -> on_counselling here:
+                    // that silently skipped the client QR scan (a DSV opened On
+                    // Counselling with no scan, and a failed save left it there
+                    // with the outcome enabled on the web). Counselling starts
+                    // only from the QR scan; the rejection is explained below.
                     val resp = geoApi.setSiteVisitOutcomeConfirmed(
                         session.bearerToken,
                         SetSiteVisitOutcomeRequest(
@@ -5578,7 +5563,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private fun notInterestedDetailsFromForm(): List<SvNotInterestedDetail> =
         niPicksFromForm().map { SvNotInterestedDetail(reason = it.reason, detail = it.detail) }
 
-    private fun finishCtaSave(error: String) {
+    private fun finishCtaSave(rawError: String) {
+        val error = com.manjugroups.m_connect.ui.marketing.siteVisitOutcomeUserMessage(rawError)
         btnSubmit?.isClickable = true
         btnSubmit?.text = "Save"
         if (otherOutcomeSaving) {
