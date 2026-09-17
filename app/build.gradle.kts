@@ -1,6 +1,9 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.secrets)
 }
 
 fun envOrEmpty(name: String): String = System.getenv(name) ?: ""
@@ -57,22 +60,17 @@ val requiredFirebaseConfig = listOf(
 )
 val missingFirebaseConfig = requiredFirebaseConfig.filter { firebaseConfig(it).isBlank() }
 
-val googleMapsApiKey = envOrDefault(
-    "GOOGLE_MAPS_ANDROID_KEY",
-    envOrDefault(
-        "CONVEX_GOOGLE_MAPS_ANDROID_KEY",
-        envOrDefault(
-            "GOOGLE_MAPS_API_KEY",
-            envOrDefault(
-                "NEXT_PUBLIC_GOOGLE_MAPS_WEB_KEY",
-                envOrDefault(
-                    "NEXT_PUBLIC_GOOGLE_MAPS_ANDROID_KEY",
-                    gradleProp("GOOGLE_MAPS_ANDROID_KEY")
-                )
-            )
-        )
-    )
-)
+// The Maps key comes from secrets.properties (gitignored). A machine without it
+// silently falls back to local.defaults.properties = DEFAULT_API_KEY, which
+// builds fine and ships a blank map. Read it here so release builds can refuse.
+val releaseMapsApiKey: String = rootProject.file("secrets.properties").let { file ->
+    if (!file.exists()) "" else Properties()
+        .apply { file.inputStream().use { load(it) } }
+        .getProperty("MAPS_API_KEY")
+        .orEmpty()
+        .trim()
+}
+
 // Point the Android client at the same Convex deployment the web admin uses.
 // Build-time overrides still apply (env NEXT_PUBLIC_CONVEX_SITE_URL or
 // MCONNECT_BASE_URL), so a release pipeline can swap in the prod URL without
@@ -126,8 +124,6 @@ android {
         buildConfigField("String", "FIREBASE_API_KEY", "\"${firebaseConfig("FIREBASE_API_KEY")}\"")
         buildConfigField("String", "FIREBASE_GCM_SENDER_ID", "\"${firebaseConfig("FIREBASE_GCM_SENDER_ID")}\"")
         buildConfigField("String", "FIREBASE_STORAGE_BUCKET", "\"${firebaseConfig("FIREBASE_STORAGE_BUCKET")}\"")
-        buildConfigField("String", "GOOGLE_MAPS_API_KEY", "\"${googleMapsApiKey}\"")
-        manifestPlaceholders["googleMapsApiKey"] = googleMapsApiKey
     }
 
     buildTypes {
@@ -161,6 +157,10 @@ tasks.configureEach {
             check(missingFirebaseConfig.isEmpty()) {
                 "Missing Firebase client config: ${missingFirebaseConfig.joinToString()}. " +
                     "Provide environment variables or app/google-services.json."
+            }
+            check(releaseMapsApiKey.isNotEmpty() && releaseMapsApiKey != "DEFAULT_API_KEY") {
+                "Missing Google Maps key: add MAPS_API_KEY=<Android-restricted key> to " +
+                    "secrets.properties in the project root, or every map in this build is blank."
             }
         }
     }
@@ -217,4 +217,15 @@ dependencies {
     testImplementation(libs.okhttp.mockwebserver)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+}
+
+// Google Maps key (Maps SDK for Android). Google's Secrets Gradle Plugin reads
+// MAPS_API_KEY from secrets.properties (gitignored, one per machine/CI) and
+// falls back to local.defaults.properties (committed placeholder). It becomes
+// the ${MAPS_API_KEY} manifest placeholder. Only an Android-restricted key
+// (package com.manjugroups.mconnect + SHA-1) works here: a website-restricted
+// web/backend key or an iOS key fails with "Authorization failure".
+secrets {
+    propertiesFileName = "secrets.properties"
+    defaultPropertiesFileName = "local.defaults.properties"
 }

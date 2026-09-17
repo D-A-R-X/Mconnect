@@ -16,3 +16,6 @@ local.properties
 
 # Firebase Android client config (drop-in for local/debug push; supplied via env in CI)
 app/google-services.json
+
+# Google Maps key for Android (Secrets Gradle Plugin)
+secrets.properties
