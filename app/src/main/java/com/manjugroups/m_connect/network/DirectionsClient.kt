@@ -73,6 +73,11 @@ object DirectionsClient {
                 formattedAddress = resp.formattedAddress,
                 name = resp.name,
             )
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // The caller's screen went away (e.g. Android destroyed it while the
+            // camera app was open). That is not a route failure: rethrow so the
+            // caller stops, instead of reporting "Route line unavailable".
+            throw e
         } catch (e: Exception) {
             android.util.Log.w("DirectionsClient", "Backend geocode call failed", e)
             null
@@ -120,6 +125,11 @@ object DirectionsClient {
                 distanceText = formatDistance(distMeters),
                 durationText = formatDuration(durSeconds),
             )
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // The caller's screen went away (e.g. Android destroyed it while the
+            // camera app was open). That is not a route failure: rethrow so the
+            // caller stops, instead of reporting "Route line unavailable".
+            throw e
         } catch (e: Exception) {
             android.util.Log.w("DirectionsClient", "Backend route call failed", e)
             null

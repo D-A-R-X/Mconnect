@@ -2002,7 +2002,7 @@ class FlexibleDisplayStringDeserializer : JsonDeserializer<String?> {
 
 data class JointCpLocationRequest(
     val id: String,
-    val fieldVisitId: String,
+    val fieldVisitId: String?,
     val lat: Double,
     val lng: Double,
     val accuracyMeters: Float? = null,
@@ -2011,7 +2011,10 @@ data class JointCpLocationRequest(
 
 data class JointCpSubmitReviewRequest(
     val id: String,
-    val fieldVisitId: String,
+    // Optional on the server, where it is only a cross-check and is validated
+    // as a strict fieldVisits id. Send null (omitted by Gson) rather than a CP
+    // id, which fails with ArgumentValidationError.
+    val fieldVisitId: String?,
     val lat: Double? = null,
     val lng: Double? = null,
     val accuracyMeters: Float? = null,

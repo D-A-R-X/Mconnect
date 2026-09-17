@@ -76,10 +76,31 @@ class JointCpPendingReviewStatusTest {
     }
 
     @Test
-    fun `it stays pending even before the owner submits`() {
+    fun `before the owner submits the trip is still live, not pending review`() {
+        // Regression: every non-terminal state used to read as pending review,
+        // which dropped the trip screen back to "Start Trip" after the OTP.
+        for (state in listOf("awaiting_both_trips", "awaiting_owner_arrival", "awaiting_owner_outcome")) {
+            assertEquals(
+                state,
+                "arrived",
+                resolve(joint(state, ownerLegStatus = "arrived"), owner),
+            )
+        }
+    }
+
+    @Test
+    fun `a submitted owner leg with a completed field visit still reads pending review`() {
+        // Submitting completes the owner's field visit, so completedAt is set.
         assertEquals(
             JOINT_PENDING_REVIEW,
-            resolve(joint("in_progress", ownerLegStatus = "arrived"), owner),
+            resolveParticipantCpEffectiveStatus(
+                serverEffectiveStatus = null,
+                cpStatus = "pending_review",
+                parentFieldVisitStatus = "completed",
+                joint = joint("pending_review"),
+                currentStaffId = owner,
+                fieldVisitCompletedAt = 1_789_000_000_000L,
+            ),
         )
     }
 

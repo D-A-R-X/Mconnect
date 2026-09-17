@@ -320,6 +320,43 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         }
     }
 
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        restoreArrivalCaptureState(savedInstanceState)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        // The system camera is a separate app. On phones with little free
+        // memory Android destroys this screen while it is open and rebuilds it
+        // when the photo comes back. Without this, the in-memory photo path was
+        // gone, so a photo the staff DID take was reported as
+        // "Photo capture cancelled" and the arrival flow reset.
+        pendingArrivalPhoto?.let { outState.putString(STATE_ARRIVAL_PHOTO_PATH, it.absolutePath) }
+        pendingArrivalPhotoUri?.let { outState.putParcelable(STATE_ARRIVAL_PHOTO_URI, it) }
+        pendingArrivalLat?.let { outState.putDouble(STATE_ARRIVAL_LAT, it) }
+        pendingArrivalLng?.let { outState.putDouble(STATE_ARRIVAL_LNG, it) }
+        pendingArrivalOtpPhoneMasked?.let { outState.putString(STATE_ARRIVAL_PHONE_MASKED, it) }
+        pendingArrivalStorageId?.let { outState.putString(STATE_ARRIVAL_STORAGE_ID, it) }
+        outState.putBoolean(STATE_ARRIVAL_IN_PROGRESS, arrivalInProgress)
+        outState.putBoolean(STATE_CP_NO_PATH_CAPTURE, cpNoPathPhotoCapture)
+        outState.putBoolean(STATE_GIFT_POST_OTP_CAPTURE, isGiftDistributionPostOtpPhotoCapture)
+    }
+
+    private fun restoreArrivalCaptureState(state: Bundle?) {
+        state ?: return
+        state.getString(STATE_ARRIVAL_PHOTO_PATH)?.let { pendingArrivalPhoto = File(it) }
+        @Suppress("DEPRECATION")
+        (state.getParcelable<Uri>(STATE_ARRIVAL_PHOTO_URI))?.let { pendingArrivalPhotoUri = it }
+        if (state.containsKey(STATE_ARRIVAL_LAT)) pendingArrivalLat = state.getDouble(STATE_ARRIVAL_LAT)
+        if (state.containsKey(STATE_ARRIVAL_LNG)) pendingArrivalLng = state.getDouble(STATE_ARRIVAL_LNG)
+        state.getString(STATE_ARRIVAL_PHONE_MASKED)?.let { pendingArrivalOtpPhoneMasked = it }
+        state.getString(STATE_ARRIVAL_STORAGE_ID)?.let { pendingArrivalStorageId = it }
+        arrivalInProgress = state.getBoolean(STATE_ARRIVAL_IN_PROGRESS, false)
+        cpNoPathPhotoCapture = state.getBoolean(STATE_CP_NO_PATH_CAPTURE, false)
+        isGiftDistributionPostOtpPhotoCapture = state.getBoolean(STATE_GIFT_POST_OTP_CAPTURE, false)
+    }
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -779,12 +816,21 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     private fun submitJointCpForReview() {
         if (jointMutationInProgress) return
         val cpId = cpVisitId ?: return
-        val fieldId = visitId ?: return
-        val expectedOutcomeRevision = jointWorkflow?.outcomeRevision
+        val fieldId = com.manjugroups.m_connect.ui.marketing.jointCpFieldVisitIdOrNull(visitId, cpId)
+        var expectedOutcomeRevision = jointWorkflow?.outcomeRevision
         jointMutationInProgress = true
         renderArrivalPhase(alreadyArrived = true)
         viewLifecycleOwner.lifecycleScope.launch {
             try {
+                // Saving the outcome writes a new draft revision on the server,
+                // so the revision cached before the sheet opened is now stale
+                // and submit-review rejects it ("outcome changed"). Read the
+                // revision the save just produced.
+                val latest = runCatching { geoApi.getJointCpWorkflow(session.bearerToken, cpId) }
+                    .getOrNull()
+                    ?.takeIf { it.success }
+                    ?.workflow
+                latest?.outcomeRevision?.let { expectedOutcomeRevision = it }
                 val response = geoApi.submitJointCpReview(
                     session.bearerToken,
                     java.util.UUID.randomUUID().toString(),
@@ -1257,6 +1303,22 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                             renderArrivalPhase(alreadyArrived = false)
                         }
                     }
+                    com.manjugroups.m_connect.ui.marketing.JOINT_PENDING_REVIEW -> {
+                        // Owner has sent the outcome; the reviewer still has to
+                        // add remarks and complete. Both OTP and outcome are
+                        // done, so this must never fall to the "Start Trip"
+                        // else-branch — renderJointWorkflowActions shows
+                        // "Review outcome" or "Waiting for …" instead.
+                        visitStarted = true
+                        arrivalConfirmedForProgress = true
+                        cpVisitDecisionCaptured = true
+                        serverOutcomePendingFinalClose = false
+                        showTripStartTime()
+                        applyStatusPill("Pending Review")
+                        btnOpenMaps?.visibility = View.GONE
+                        swipeArrived?.visibility = View.GONE
+                        renderArrivalPhase(alreadyArrived = true)
+                    }
                     "completed", "complete", "done", "closed" -> {
                         visitStarted = true
                         cpVisitDecisionCaptured = true
@@ -1556,7 +1618,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 tripStatusPill?.background = ctx.getDrawable(R.drawable.bg_cpv_status_cancelled)
                 tvStatus?.setTextColor(Color.parseColor("#B42318"))
             }
-            "postponed", "pending approval" -> {
+            "postponed", "pending approval", "pending review" -> {
                 tripStatusPill?.background = ctx.getDrawable(R.drawable.bg_home_trip_status_progress)
                 tvStatus?.setTextColor(Color.parseColor("#B54708"))
             }
@@ -1582,6 +1644,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         val stage = when (label.lowercase(Locale.getDefault())) {
             "complete", "completed", "done" -> 4
             "reaching" -> if (arrivalConfirmedForProgress) 3 else 2
+            "pending review" -> 3
             "enroute", "en route", "in progress", "in-progress" -> 1
             else -> 0
         }
@@ -1968,7 +2031,13 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             if (result == null || result.polyline.size < 2) {
                 routePolyline?.remove()
                 routePolyline = null
-                if (lastUnavailableRouteKey != routeKey) {
+                // Only tell the user when they can see this screen. A fetch that
+                // finishes while the camera app (or anything else) is on top
+                // used to toast over it. Leave the key unset so the next
+                // visible attempt can still explain a real failure.
+                val visible = isAdded &&
+                    viewLifecycleOwner.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)
+                if (visible && lastUnavailableRouteKey != routeKey) {
                     lastUnavailableRouteKey = routeKey
                     // Do NOT promise a retry. The usual cause is the tracking
                     // service having no GOOGLE_MAPS_SERVER_KEY, which makes
@@ -4028,6 +4097,15 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         // fires for the same completions the server holds for GM approval.
         private const val GEOFENCE_APPROVAL_RADIUS_METERS = 300.0
         private const val JOINT_WORKFLOW_POLL_MS = 5_000L
+        private const val STATE_ARRIVAL_PHOTO_PATH = "state_arrival_photo_path"
+        private const val STATE_ARRIVAL_PHOTO_URI = "state_arrival_photo_uri"
+        private const val STATE_ARRIVAL_LAT = "state_arrival_lat"
+        private const val STATE_ARRIVAL_LNG = "state_arrival_lng"
+        private const val STATE_ARRIVAL_PHONE_MASKED = "state_arrival_phone_masked"
+        private const val STATE_ARRIVAL_STORAGE_ID = "state_arrival_storage_id"
+        private const val STATE_ARRIVAL_IN_PROGRESS = "state_arrival_in_progress"
+        private const val STATE_CP_NO_PATH_CAPTURE = "state_cp_no_path_capture"
+        private const val STATE_GIFT_POST_OTP_CAPTURE = "state_gift_post_otp_capture"
         private const val ARG_VISIT_ID = "arg_visit_id"
         private const val ARG_PLACE_ID = "arg_place_id"
         private const val ARG_PLACE_NAME = "arg_place_name"

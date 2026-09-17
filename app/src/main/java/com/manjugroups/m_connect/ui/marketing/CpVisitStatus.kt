@@ -84,6 +84,19 @@ fun resolveCpFieldVisitId(
     ?: parentFieldVisitId?.trim()?.takeIf(String::isNotEmpty)
     ?: cpVisitId
 
+/**
+ * The field-visit id to send as a Joint CP cross-check, or null.
+ *
+ * [resolveCpFieldVisitId] falls back to the CP id when no leg id is known yet,
+ * which is right for the tolerant visit/OTP routes. The Joint CP mutations
+ * validate `fieldVisitId` as a strict fieldVisits id, so a CP id there fails
+ * the whole request with "ArgumentValidationError: Found ID ... from table
+ * clientPlaceVisits". The field is optional, so omit it instead.
+ */
+fun jointCpFieldVisitIdOrNull(fieldVisitId: String?, cpVisitId: String?): String? =
+    fieldVisitId?.trim()
+        ?.takeIf { it.isNotEmpty() && it != cpVisitId?.trim() }
+
 /** Terminal parent state wins; otherwise a Joint CP actor sees their own leg state. */
 fun resolveParticipantCpEffectiveStatus(
     serverEffectiveStatus: String?,
@@ -99,15 +112,14 @@ fun resolveParticipantCpEffectiveStatus(
     if (cp.lowercase(Locale.US) in TERMINAL_CP_STATUSES) return cp
     val server = serverEffectiveStatus?.trim().orEmpty()
     if (server.lowercase(Locale.US) in TERMINAL_CP_STATUSES) return server
-    if ((cpCompletedAt ?: 0L) > 0L || (fieldVisitCompletedAt ?: 0L) > 0L) return "completed"
-
     // A Joint CP is NOT finished when one participant's own leg finishes. The
     // visit closes only when the higher-level reviewer adds their remark and
-    // completes it. The owner's leg goes to "completed" the moment they submit
-    // their outcome for review, and that outranks everything else below, so the
-    // card used to read "Completed" while the reviewer had not even looked at
-    // it — and the row offered no way back into the workflow.
+    // completes it. Submitting for review completes the owner's field visit
+    // (so fieldVisitCompletedAt is set), which is why this must be checked
+    // BEFORE the completed-timestamp shortcut below.
     if (joint != null && jointReviewStillOpen(joint)) return JOINT_PENDING_REVIEW
+
+    if ((cpCompletedAt ?: 0L) > 0L || (fieldVisitCompletedAt ?: 0L) > 0L) return "completed"
 
     val participant = joint.participantFor(currentStaffId)?.status?.trim().orEmpty()
     val candidates = if (participant.isNotEmpty()) {
@@ -141,16 +153,19 @@ const val JOINT_PENDING_REVIEW = "pending_joint_review"
  * a genuinely finished visit in a pending state.
  */
 private fun jointReviewStillOpen(joint: JointCpSummary): Boolean {
-    val state = joint.workflow?.state?.trim()?.lowercase(Locale.US).orEmpty()
-    if (state.isEmpty()) return false
-    return state !in TERMINAL_JOINT_WORKFLOW_STATES
+    val state = joint.workflow?.state?.trim()?.lowercase(Locale.US)?.replace('-', '_').orEmpty()
+    return state in JOINT_REVIEW_OPEN_STATES
 }
 
-private val TERMINAL_JOINT_WORKFLOW_STATES = setOf(
-    "completed",
-    "complete",
-    "cancelled",
-    "canceled",
+/**
+ * Only the states AFTER the owner has sent the outcome. The server's earlier
+ * states (awaiting_both_trips, awaiting_owner_arrival, awaiting_owner_outcome)
+ * are live trips: treating them as pending review hid the swipe/outcome
+ * actions and dropped the trip screen back to "Start Trip".
+ */
+private val JOINT_REVIEW_OPEN_STATES = setOf(
+    "pending_review",
+    "reviewing",
 )
 
 private fun cpStatusProgressRank(status: String): Int = when (
