@@ -181,7 +181,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     private var jointWorkflow: JointCpWorkflow? = null
     private var jointWorkflowPollJob: Job? = null
     private var jointMutationInProgress = false
-    private var autoOpenedJointReviewRevision: Long? = null
+    private var autoOpenedJointReview = false
 
     // True when this Trip Details is rendering a pure SV row (no CP
     // behind it). Set from the visitCategory arg; lets renderPreStartPhase
@@ -719,13 +719,16 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     bindJointCp(it, response.visit?.joint ?: jointSummary)
                     applyJointWorkflowPresentation(it, workflow)
                 }
+                // Offer the review once per screen. Keying this on the outcome
+                // revision reopened the form on every poll after the reviewer's
+                // own edits bumped the revision, stacking it over the remarks
+                // dialog.
                 if (jointCpReviewerCanReview(workflow) &&
-                    autoOpenedJointReviewRevision != workflow.outcomeRevision &&
+                    !autoOpenedJointReview &&
                     !isOpeningOutcomeSheet
                 ) {
-                    autoOpenedJointReviewRevision = workflow.outcomeRevision
-                    isOpeningOutcomeSheet = true
-                    btnCompleteCpDetails?.post { showCpCompletionSheet() }
+                    autoOpenedJointReview = true
+                    btnCompleteCpDetails?.post { showJointReviewChoice() }
                 }
             }
             .onFailure {
@@ -766,6 +769,11 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             "Review $owner's outcome and make any required changes"
         workflow.actorRole == "reviewer" ->
             "Waiting for $owner to submit the outcome"
+        workflow.actorRole == "outcome_owner" && jointCpAwaitingReviewerTrip(workflow) -> {
+            val reviewer = workflow.reviewerName?.trim()?.takeIf { it.isNotEmpty() }
+                ?: "the higher-level partner"
+            "Waiting for $reviewer to start their trip"
+        }
         jointCpOutcomeOwnerCanEnterOutcome(workflow) ->
             "OTP verified. Complete the outcome and send it for review"
         workflow.actorRole == "outcome_owner" ->
@@ -808,6 +816,11 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     ?: "outcome owner"
                 "Waiting for $owner"
             }
+            jointCpAwaitingReviewerTrip(workflow) -> {
+                val reviewer = workflow.reviewerName?.trim()?.takeIf { it.isNotEmpty() }
+                    ?: "partner"
+                "Waiting for $reviewer to start"
+            }
             else -> "Waiting for partner"
         }
         return true
@@ -831,6 +844,9 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     ?.takeIf { it.success }
                     ?.workflow
                 latest?.outcomeRevision?.let { expectedOutcomeRevision = it }
+                checkNotNull(expectedOutcomeRevision) {
+                    "Couldn't load the Joint CP outcome. Check your connection and try again."
+                }
                 val response = geoApi.submitJointCpReview(
                     session.bearerToken,
                     java.util.UUID.randomUUID().toString(),
@@ -889,6 +905,37 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         }
     }
 
+    /**
+     * The reviewer's decision: complete the owner's outcome as submitted, or
+     * edit it first.
+     *
+     * Reviewing used to force the full outcome form. Saving it re-recorded the
+     * outcome (a client-not-met outcome was flipped to met, then rejected), and
+     * every save bumped the draft revision so completion failed with
+     * OUTCOME_REVISION_CONFLICT. Completing as submitted needs no re-save.
+     */
+    private fun showJointReviewChoice() {
+        if (!isAdded || jointMutationInProgress) return
+        val workflow = jointWorkflow ?: return
+        if (!jointCpReviewerCanReview(workflow)) return
+        val owner = workflow.outcomeOwnerName?.trim()?.takeIf { it.isNotEmpty() } ?: "The outcome owner"
+        val summary = workflow.outcomeSummary?.trim()?.takeIf { it.isNotEmpty() }
+            ?: workflow.outcome?.replace('_', ' ')?.trim()?.takeIf { it.isNotEmpty() }
+            ?: "No outcome details were returned."
+        AlertDialog.Builder(requireContext())
+            .setTitle("Review Joint CP outcome")
+            .setMessage("$owner submitted:\n\n$summary")
+            .setPositiveButton("Complete with remarks") { _, _ -> requestJointReviewerRemarkThenComplete() }
+            .setNeutralButton("Edit outcome") { _, _ ->
+                if (!isOpeningOutcomeSheet) {
+                    isOpeningOutcomeSheet = true
+                    showCpCompletionSheet()
+                }
+            }
+            .setNegativeButton("Later", null)
+            .show()
+    }
+
     private fun requestJointReviewerRemarkThenComplete() {
         if (jointMutationInProgress) return
         val input = EditText(requireContext()).apply {
@@ -936,7 +983,18 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         renderArrivalPhase(alreadyArrived = true)
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val workflow = jointWorkflow
+                val latest = runCatching { geoApi.getJointCpWorkflow(session.bearerToken, cpId) }
+                    .getOrNull()
+                    ?.takeIf { it.success && it.workflow != null }
+                    ?.let {
+                        resolvedJointCpWorkflowForActor(
+                            it.workflow!!,
+                            session.staffId,
+                            it.visit?.joint ?: jointSummary,
+                        )
+                    }
+                latest?.let { jointWorkflow = it }
+                val workflow = latest ?: jointWorkflow
                     ?: error("The submitted outcome is not ready for review completion")
                 val revision = jointCpReviewRevision(workflow)
                     ?: error("The submitted outcome is not ready for review completion")
@@ -1276,6 +1334,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     cpCompletedAt = cp.completedAt,
                     fieldVisitCompletedAt = cp.fieldVisit?.completedAt,
                     arrivalOtpVerifiedAt = cp.arrivalProof?.otpVerifiedAt,
+                    parentFieldVisitId = cp.fieldVisitId,
                 )
                     .lowercase(Locale.getDefault())
                 serverOutcomePendingFinalClose = persistedOutcome != null && effective !in setOf(
@@ -2319,7 +2378,10 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             // Continue into the normal completion flow (client-seen → photo →
             // OTP). Extracted so the out-of-geofence warning below can gate it.
             val proceed = {
-                arrivalConfirmedForProgress = true
+                // Arrival is confirmed only when the OTP verifies. Setting this
+                // here let the joint workflow poll swap the swipe for the
+                // outcome button mid-arrival; a cancelled or failed OTP then
+                // left no way back to the swipe.
                 applyStatusPill("Reaching")
                 swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
                 CpClientSeenBottomSheet().showOnce(parentFragmentManager, "cp_client_seen")
@@ -3604,7 +3666,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         val workflow = jointWorkflow
         if (isJointCpWorkflow() && workflow != null) {
             if (jointCpReviewerCanReview(workflow)) {
-                showCpCompletionSheet()
+                showJointReviewChoice()
             } else if (jointCpOutcomeOwnerCanEnterOutcome(workflow)) {
                 showCpCompletionSheet()
             } else {

@@ -47,8 +47,17 @@ internal fun jointCpReviewerCanReview(workflow: JointCpWorkflow?): Boolean {
 internal fun jointCpOutcomeOwnerCanEnterOutcome(workflow: JointCpWorkflow?): Boolean {
     if (!workflow?.actorRole.equals("outcome_owner", ignoreCase = true)) return false
     val state = workflow?.state?.trim()?.lowercase(Locale.US)?.replace('-', '_')
-    return state !in setOf("pending_review", "reviewing", "completed", "cancelled", "canceled")
+    // awaiting_both_trips: the reviewer has not started their trip. The server
+    // rejects submit-review until both trips are started, so letting the owner
+    // fill the outcome here only ended in a failed submit.
+    return state !in setOf(
+        "awaiting_both_trips", "pending_review", "reviewing", "completed", "cancelled", "canceled",
+    )
 }
+
+/** True while the reviewer has not started their own trip yet. */
+internal fun jointCpAwaitingReviewerTrip(workflow: JointCpWorkflow?): Boolean =
+    workflow?.state?.trim()?.lowercase(Locale.US)?.replace('-', '_') == "awaiting_both_trips"
 
 /** Reviewer completion is sequence- and role-gated, never proximity-gated. */
 internal fun jointCpReviewRevision(workflow: JointCpWorkflow?): Long? = workflow
@@ -61,6 +70,15 @@ internal fun isJointCpSubmissionConfirmed(
 ): Boolean {
     val state = workflow?.state?.trim()?.lowercase(Locale.US)?.replace('-', '_')
     if (state !in setOf("pending_review", "reviewing", "completed")) return false
+    // "completed" confirms a submit only if it went THROUGH review. A Joint CP
+    // converted to a Site Visit is closed directly by the server with no
+    // submission or review, and used to be reported as "Outcome sent for
+    // review" while neither trip was closed.
+    if (state == "completed" && workflow?.submittedAt == null && workflow?.reviewedAt == null &&
+        workflow?.reviewedByName.isNullOrBlank()
+    ) {
+        return false
+    }
     if (expectedOutcomeRevision == null) return true
     return workflow?.outcomeRevision?.let { it >= expectedOutcomeRevision } == true
 }

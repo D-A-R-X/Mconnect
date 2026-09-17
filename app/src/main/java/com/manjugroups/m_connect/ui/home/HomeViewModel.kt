@@ -687,6 +687,7 @@ class HomeViewModel : ViewModel() {
                 cpCompletedAt = this.completedAt,
                 fieldVisitCompletedAt = this.fieldVisit?.completedAt,
                 arrivalOtpVerifiedAt = this.arrivalProof?.otpVerifiedAt,
+                parentFieldVisitId = this.fieldVisitId,
             )
         val displayDate = resolveCpActivityDate(
             scheduledDate = scheduled,

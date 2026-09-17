@@ -396,7 +396,7 @@ class CpCompletionContractTest {
         )
         assertTrue(
             isJointCpSubmissionConfirmed(
-                JointCpWorkflow(state = "completed", outcomeRevision = 5),
+                JointCpWorkflow(state = "completed", outcomeRevision = 5, submittedAt = 1L, reviewedAt = 2L),
                 expectedOutcomeRevision = 4,
             ),
         )

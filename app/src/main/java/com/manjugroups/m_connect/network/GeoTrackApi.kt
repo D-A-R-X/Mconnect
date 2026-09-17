@@ -1972,6 +1972,15 @@ data class JointCpWorkflow(
     val reviewedByName: String? = null,
     val reviewedByTemplateName: String? = null,
     val completedAt: Long? = null,
+    // Each participant's OWN trip. The CP row's effectiveStatus / arrivalProof
+    // come from the parent field visit (the owner's), so these are the only
+    // per-participant truth the workflow carries.
+    val ownerFieldVisitId: String? = null,
+    val reviewerFieldVisitId: String? = null,
+    val ownerTripStatus: String? = null,
+    val reviewerTripStatus: String? = null,
+    val submittedAt: Long? = null,
+    val reviewedAt: Long? = null,
 )
 
 /** Accepts the legacy string and the newer structured Joint CP summary. */

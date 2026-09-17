@@ -78,11 +78,18 @@ fun resolveCpFieldVisitId(
     parentFieldVisitId: String?,
     joint: JointCpSummary?,
     currentStaffId: String?,
-): String = joint.participantFor(currentStaffId)?.fieldVisitId
-    ?.trim()
-    ?.takeIf(String::isNotEmpty)
-    ?: parentFieldVisitId?.trim()?.takeIf(String::isNotEmpty)
-    ?: cpVisitId
+): String {
+    val participant = joint.participantFor(currentStaffId)
+    if (participant != null) {
+        // A participant must never fall back to the PARENT field visit: that is
+        // the outcome owner's trip, so a reviewer whose leg id was missing
+        // started the owner's trip and their own leg stayed unstarted, which
+        // later blocked submit-review. The CP id is resolved by the server to
+        // the acting staff member's own leg.
+        return participant.fieldVisitId?.trim()?.takeIf(String::isNotEmpty) ?: cpVisitId
+    }
+    return parentFieldVisitId?.trim()?.takeIf(String::isNotEmpty) ?: cpVisitId
+}
 
 /**
  * The field-visit id to send as a Joint CP cross-check, or null.
@@ -107,6 +114,7 @@ fun resolveParticipantCpEffectiveStatus(
     cpCompletedAt: Long? = null,
     fieldVisitCompletedAt: Long? = null,
     arrivalOtpVerifiedAt: Long? = null,
+    parentFieldVisitId: String? = null,
 ): String {
     val cp = cpStatus?.trim().orEmpty()
     if (cp.lowercase(Locale.US) in TERMINAL_CP_STATUSES) return cp
@@ -119,18 +127,95 @@ fun resolveParticipantCpEffectiveStatus(
     // BEFORE the completed-timestamp shortcut below.
     if (joint != null && jointReviewStillOpen(joint)) return JOINT_PENDING_REVIEW
 
+    val participant = joint.participantFor(currentStaffId)
+    if (joint != null && participant != null) {
+        return jointParticipantStatus(
+            joint = joint,
+            participant = participant,
+            currentStaffId = currentStaffId,
+            server = server,
+            cp = cp,
+            parentFieldVisitStatus = parentFieldVisitStatus,
+            parentFieldVisitId = parentFieldVisitId,
+            cpCompletedAt = cpCompletedAt,
+            fieldVisitCompletedAt = fieldVisitCompletedAt,
+            arrivalOtpVerifiedAt = arrivalOtpVerifiedAt,
+        )
+    }
+
     if ((cpCompletedAt ?: 0L) > 0L || (fieldVisitCompletedAt ?: 0L) > 0L) return "completed"
 
-    val participant = joint.participantFor(currentStaffId)?.status?.trim().orEmpty()
-    val candidates = if (participant.isNotEmpty()) {
-        listOf(participant, server, cp)
-    } else {
-        listOf(parentFieldVisitStatus?.trim().orEmpty(), server, cp)
-    }.filter(String::isNotEmpty)
+    val candidates = listOf(parentFieldVisitStatus?.trim().orEmpty(), server, cp)
+        .filter(String::isNotEmpty)
 
     val mostAdvanced = candidates.maxByOrNull(::cpStatusProgressRank)
         ?: "scheduled"
     return if ((arrivalOtpVerifiedAt ?: 0L) > 0L && cpStatusProgressRank(mostAdvanced) < 3) {
+        "arrived"
+    } else {
+        mostAdvanced
+    }
+}
+
+/**
+ * A Joint CP participant's status from THEIR OWN trip only.
+ *
+ * The CP row's effectiveStatus, fieldVisit and arrivalProof all come from the
+ * parent field visit, which is the outcome owner's. Mixing them in made the
+ * reviewer's card read "in progress / arrived" as soon as the junior started,
+ * so the reviewer never saw Start Trip, their own leg never started, and the
+ * junior's submit-review was then rejected (both trips must be started).
+ *
+ * The parent-derived values count only when the parent field visit IS this
+ * participant's trip.
+ */
+private fun jointParticipantStatus(
+    joint: JointCpSummary,
+    participant: JointCpParticipant,
+    currentStaffId: String?,
+    server: String,
+    cp: String,
+    parentFieldVisitStatus: String?,
+    parentFieldVisitId: String?,
+    cpCompletedAt: Long?,
+    fieldVisitCompletedAt: Long?,
+    arrivalOtpVerifiedAt: Long?,
+): String {
+    val actorId = currentStaffId?.trim().orEmpty()
+    val workflow = joint.workflow
+    val isOwner = workflow?.outcomeOwnerStaffId?.trim()?.equals(actorId, ignoreCase = true) == true ||
+        (workflow?.outcomeOwnerStaffId.isNullOrBlank() &&
+            participant.workflowRole.equals("outcome_owner", ignoreCase = true))
+    val isReviewer = workflow?.reviewerStaffId?.trim()?.equals(actorId, ignoreCase = true) == true
+    val ownTripStatus = when {
+        isOwner -> workflow?.ownerTripStatus
+        isReviewer -> workflow?.reviewerTripStatus
+        else -> null
+    }?.trim().orEmpty()
+
+    val legFieldVisitId = participant.fieldVisitId?.trim().orEmpty()
+    val parentId = parentFieldVisitId?.trim().orEmpty()
+    val parentIsOwnTrip = when {
+        legFieldVisitId.isNotEmpty() && parentId.isNotEmpty() -> legFieldVisitId == parentId
+        // No leg id to compare: the parent field visit is linked to the owner.
+        else -> isOwner
+    }
+
+    if ((cpCompletedAt ?: 0L) > 0L) return "completed"
+    if (parentIsOwnTrip && (fieldVisitCompletedAt ?: 0L) > 0L) return "completed"
+
+    val candidates = buildList {
+        add(participant.status?.trim().orEmpty())
+        add(ownTripStatus)
+        if (parentIsOwnTrip) {
+            add(parentFieldVisitStatus?.trim().orEmpty())
+            add(server)
+            add(cp)
+        }
+    }.filter(String::isNotEmpty)
+
+    val mostAdvanced = candidates.maxByOrNull(::cpStatusProgressRank) ?: "scheduled"
+    return if (parentIsOwnTrip && (arrivalOtpVerifiedAt ?: 0L) > 0L && cpStatusProgressRank(mostAdvanced) < 3) {
         "arrived"
     } else {
         mostAdvanced
