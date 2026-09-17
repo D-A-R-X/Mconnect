@@ -29,6 +29,11 @@ object GeoTrackBootstrapSync {
         val session = SessionManager(appContext)
         if (!session.isLoggedIn) return false
         if (!session.geoTrackingEnabled) {
+            // The stored flag may be stale (it used to change only at login).
+            // Re-check before concluding this staff member must not be tracked.
+            runCatching { GeoTrackingFlagRefresher.refresh(appContext) }
+        }
+        if (!session.geoTrackingEnabled) {
             endDirectSession(appContext, session, api, lat, lng, "tracking_not_enabled")
             return false
         }
@@ -200,7 +205,10 @@ object GeoTrackBootstrapSync {
                         reason = reason,
                     ),
                 ).success
-            }.getOrDefault(false)
+            }.getOrElse { error ->
+                // Unknown session = already ended; queueing it would retry forever.
+                error is retrofit2.HttpException && GeoTrackQueuePolicy.isStopAlreadyGone(error.code())
+            }
             if (stopped) {
                 session.activeTrackingSessionId = null
             } else {

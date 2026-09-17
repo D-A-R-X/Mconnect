@@ -2108,6 +2108,12 @@ class MainActivity : AppCompatActivity() {
             PushTokenManager.syncCurrentToken(this@MainActivity, session)
         }
 
+        // Before the tracking sync: GeoTrack may have been enabled or disabled
+        // on the server since this session was created.
+        runCatching {
+            com.manjugroups.m_connect.geotrack.GeoTrackingFlagRefresher.refresh(this@MainActivity, force = true)
+        }
+
         runCatching {
             syncTrackingBootstrap()
         }

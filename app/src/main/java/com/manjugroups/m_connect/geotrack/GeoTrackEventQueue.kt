@@ -170,17 +170,30 @@ object GeoTrackEventQueue {
                     val stoppedSessionId = (metadata["sessionId"] as? String)
                         ?.takeIf { it.isNotBlank() }
                         ?: return@runCatching false
-                    val response = api.stopDirectTracking(
-                        token = session.bearerToken,
-                        idempotencyKey = requestId,
-                        body = DirectTrackingStopRequest(
-                            sessionId = stoppedSessionId,
-                            endedAt = (metadata["endedAt"] as? Number)?.toLong() ?: occurredAt,
-                            lat = (metadata["lat"] as? Number)?.toDouble(),
-                            lng = (metadata["lng"] as? Number)?.toDouble(),
-                            reason = (metadata["reason"] as? String) ?: "attendance_session_closed",
-                        ),
-                    )
+                    val response = try {
+                        api.stopDirectTracking(
+                            token = session.bearerToken,
+                            idempotencyKey = requestId,
+                            body = DirectTrackingStopRequest(
+                                sessionId = stoppedSessionId,
+                                endedAt = (metadata["endedAt"] as? Number)?.toLong() ?: occurredAt,
+                                lat = (metadata["lat"] as? Number)?.toDouble(),
+                                lng = (metadata["lng"] as? Number)?.toDouble(),
+                                reason = (metadata["reason"] as? String) ?: "attendance_session_closed",
+                            ),
+                        )
+                    } catch (e: retrofit2.HttpException) {
+                        if (!GeoTrackQueuePolicy.isStopAlreadyGone(e.code())) throw e
+                        // 404 "tracking record not found": the service has no such
+                        // session (already ended, or it belongs to a different
+                        // backend). Retrying can never succeed, and a stuck stop
+                        // was replayed on every flush — 13 times in two minutes
+                        // on a device — so treat it as done.
+                        if (session.activeTrackingSessionId == stoppedSessionId) {
+                            session.activeTrackingSessionId = null
+                        }
+                        return@runCatching true
+                    }
                     if (response.success && session.activeTrackingSessionId == stoppedSessionId) {
                         session.activeTrackingSessionId = null
                     }

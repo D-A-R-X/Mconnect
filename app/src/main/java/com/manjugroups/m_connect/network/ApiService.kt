@@ -57,6 +57,10 @@ interface ApiService {
     @GET("api/auth/validate-session")
     suspend fun validateSession(@Header("Authorization") token: String): ValidateSessionResponse
 
+    /** Same route, parsed so a missing flag stays null instead of defaulting to false. */
+    @GET("api/auth/validate-session")
+    suspend fun validateSessionFlags(@Header("Authorization") token: String): SessionFlagsResponse
+
     @GET
     suspend fun lookupPincode(@Url url: String): List<PincodeLookupEnvelope>
 
@@ -1643,6 +1647,8 @@ data class UserInfo(
     val canBill: Boolean = false,
 )
 data class ValidateSessionResponse(val success: Boolean, val user: UserInfo?)
+data class SessionFlagsResponse(val success: Boolean = false, val user: SessionFlagsUser? = null)
+data class SessionFlagsUser(val geoTrackingEnabled: Boolean? = null)
 data class PincodeLookupEnvelope(
     @SerializedName("Status") val status: String? = null,
     @SerializedName("PostOffice") val postOffice: List<PincodePostOffice>? = null
