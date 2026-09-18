@@ -294,10 +294,31 @@ class HomeViewModel : ViewModel() {
             // punch from nowhere.
             val address = reverseGeocode(context, lat, lng)
             try {
-                // Step 1: Upload photo if available
+                // Step 1: Upload the selfie. A punch is NEVER recorded without
+                // the selfie the staff took: this used to punch with photo=null
+                // whenever the upload failed, so attendance landed on the web
+                // with time and GPS but no photo (seen on 15 Sep while uploads
+                // were failing with "Session could not be verified").
                 var storageId: String? = null
                 if (photoFile != null && photoFile.exists()) {
-                    storageId = uploadPhoto(bearerToken, photoFile)
+                    val upload = uploadPhoto(bearerToken, photoFile)
+                    storageId = upload.storageId?.takeIf { it.isNotBlank() }
+                    if (storageId == null) {
+                        if (upload.isNetworkError) {
+                            // Unreachable: the catch below queues the punch WITH
+                            // its selfie and the real tap time.
+                            throw java.io.IOException(upload.errorMessage ?: "Selfie upload failed")
+                        }
+                        _uiState.value = current.copy(isPunching = false)
+                        _punchEvent.emit(
+                            PunchEvent.Error(
+                                "Failed to upload selfie." +
+                                    (upload.errorMessage?.let { " $it" } ?: "") +
+                                    " Please try again.",
+                            ),
+                        )
+                        return@launch
+                    }
                 }
 
                 // Step 2: Call punch API. The address was resolved above.
@@ -994,7 +1015,7 @@ class HomeViewModel : ViewModel() {
         }
     }
 
-    private suspend fun uploadPhoto(bearerToken: String, file: File): String? {
+    private suspend fun uploadPhoto(bearerToken: String, file: File): StorageUploader.Result {
         // Retries transient failures; punch selfies from field locations
         // regularly hit flaky networks and a single attempt loses the punch.
         return StorageUploader.upload(
@@ -1002,7 +1023,7 @@ class HomeViewModel : ViewModel() {
             bearerToken,
             file,
             purpose = com.manjugroups.m_connect.network.MobileStoragePurpose.ATTENDANCE_PHOTO,
-        ).storageId
+        )
     }
 
     /** Parse ISO timestamp like "2026-04-08T14:40:10+05:30" to display format "02:40 PM" */

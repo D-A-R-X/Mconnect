@@ -62,18 +62,26 @@ class PunchSyncWorker(
 
         for (p in pending) {
             try {
-                val storageId = p.photoPath?.let { path ->
-                    val f = File(path)
-                    if (f.exists()) {
-                        runCatching {
-                            StorageUploader.upload(
-                                api,
-                                token,
-                                f,
-                                purpose = com.manjugroups.m_connect.network.MobileStoragePurpose.ATTENDANCE_PHOTO,
-                            ).storageId
-                        }.getOrNull()
-                    } else null
+                val photo = p.photoPath?.let(::File)?.takeIf { it.exists() }
+                val storageId = photo?.let { f ->
+                    runCatching {
+                        StorageUploader.upload(
+                            api,
+                            token,
+                            f,
+                            purpose = com.manjugroups.m_connect.network.MobileStoragePurpose.ATTENDANCE_PHOTO,
+                        ).storageId
+                    }.getOrNull()?.takeIf { it.isNotBlank() }
+                }
+                // The selfie is part of the punch. Keep the row and retry rather
+                // than recording it without the photo, which is how punches
+                // reached the web with time and GPS but no selfie. After many
+                // failed attempts, record it without the photo so the staff
+                // member's attendance itself is never lost.
+                if (photo != null && storageId == null && p.attemptCount < MAX_SELFIE_UPLOAD_ATTEMPTS) {
+                    networkFailure = true
+                    dao.bumpAttempt(p.id, "Selfie upload failed")
+                    continue
                 }
                 val request = PunchRequest(
                     latitude = p.latitude,
@@ -125,6 +133,9 @@ class PunchSyncWorker(
 
     companion object {
         private const val UNIQUE_WORK = "attendance-punch-sync"
+
+        /** Retries (WorkManager backoff) before a punch is recorded without its selfie. */
+        private const val MAX_SELFIE_UPLOAD_ATTEMPTS = 20
 
         /** Schedule a flush; runs as soon as the network is available. Safe to
          *  call repeatedly (KEEP keeps a pending run rather than piling up). */
