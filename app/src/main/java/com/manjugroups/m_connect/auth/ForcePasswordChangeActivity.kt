@@ -24,6 +24,11 @@ import kotlinx.coroutines.launch
 
 class ForcePasswordChangeActivity : AppCompatActivity() {
 
+    // Cap extreme system font sizes; see FontScale.
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(com.manjugroups.m_connect.util.FontScale.cap(newBase))
+    }
+
     private lateinit var binding: ActivityForcePasswordChangeBinding
     private lateinit var session: SessionManager
     private val api = ApiService.create()

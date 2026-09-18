@@ -187,6 +187,7 @@ dependencies {
     // GeoTrack dependencies
     implementation(libs.play.services.location)
     implementation(libs.play.services.maps)
+    implementation(libs.play.services.auth.api.phone)
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     implementation(libs.workmanager)

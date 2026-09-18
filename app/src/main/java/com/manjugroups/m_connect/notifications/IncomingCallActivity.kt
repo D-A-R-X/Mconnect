@@ -28,6 +28,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class IncomingCallActivity : AppCompatActivity() {
+
+    // Cap extreme system font sizes; see FontScale.
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(com.manjugroups.m_connect.util.FontScale.cap(newBase))
+    }
     private val timeoutHandler = Handler(Looper.getMainLooper())
     private var ringtone: Ringtone? = null
     private var vibrator: Vibrator? = null

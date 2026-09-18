@@ -108,6 +108,13 @@ object UnusedAppRestrictions {
                 context.packageName,
             )
         }.getOrNull() ?: return null
+        // Android 12+ answers with App info itself; scroll to and highlight the
+        // "Pause app activity if unused" switch rather than the top of the page.
+        // (Android 11 opens the permissions page, where the switch is the
+        // only toggle.)
+        if (intent.action == android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS) {
+            AppSettingsDeepLink.highlight(intent, AppSettingsDeepLink.KEY_UNUSED_APP)
+        }
         return intent.takeIf { it.resolveActivity(context.packageManager) != null }
     }
 

@@ -3464,7 +3464,8 @@ class HomeFragment : Fragment() {
                 .setStartDelay(800)
                 .setDuration(400)
                 .withEndAction {
-                    startFloatingAnimations()
+                    // Not if it was dismissed while fading in.
+                    if (!session.hasSeenEdgeQrTooltip) startFloatingAnimations()
                 }
                 .start()
         }
@@ -3474,12 +3475,19 @@ class HomeFragment : Fragment() {
                 session.hasSeenEdgeQrTooltip = true
                 stopFloatingAnimations()
                 (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(true)
-                binding.edgeQrTourDimBg.animate().alpha(0f).setDuration(250).withEndAction {
+                // setStartDelay(0) matters: a ViewPropertyAnimator keeps its
+                // settings between calls, and the fade-in set an 800 ms start
+                // delay. Without resetting it the dismiss waited ~1 s before
+                // anything moved, so a single tap on X looked ignored.
+                binding.edgeQrTourDimBg.animate().cancel()
+                binding.edgeQrTooltip.animate().cancel()
+                binding.edgeQrTourDimBg.animate().alpha(0f).setStartDelay(0).setDuration(150).withEndAction {
                     if (_binding != null) binding.edgeQrTourDimBg.visibility = android.view.View.GONE
                 }.start()
                 binding.edgeQrTooltip.animate()
                     .alpha(0f)
-                    .setDuration(250)
+                    .setStartDelay(0)
+                    .setDuration(150)
                     .withEndAction {
                         if (_binding != null) {
                             binding.edgeQrTooltip.visibility = android.view.View.GONE

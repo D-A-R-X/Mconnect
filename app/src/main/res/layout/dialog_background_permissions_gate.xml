@@ -448,6 +448,44 @@
             android:focusableInTouchMode="false" />
     </LinearLayout>
 
+    <!-- One tap: every permission, one system prompt after another. -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnGateAllowAll"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:layout_marginTop="20dp"
+        android:fontFamily="@font/inter_semibold"
+        android:text="Allow all"
+        android:textAllCaps="false"
+        android:textSize="16sp"
+        app:backgroundTint="?attr/colorAccentPrimary"
+        app:cornerRadius="12dp" />
+
+    <!-- Manual fallback for phones that block an automatic prompt. -->
+    <TextView
+        android:id="@+id/tvGateManualHint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:fontFamily="@font/inter_regular"
+        android:gravity="center"
+        android:text="If anything is still off, tap its row to turn it on yourself."
+        android:textColor="#475467"
+        android:textSize="13sp" />
+
+    <TextView
+        android:id="@+id/btnGateManualSettings"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:background="?attr/selectableItemBackground"
+        android:fontFamily="@font/inter_semibold"
+        android:gravity="center"
+        android:minHeight="44dp"
+        android:text="Set up in phone settings instead"
+        android:textColor="?attr/colorAccentPrimary"
+        android:textSize="14sp" />
+
     <!-- Hidden status text + continue (used internally by Kotlin code) -->
     <TextView
         android:id="@+id/tvGateStatus"

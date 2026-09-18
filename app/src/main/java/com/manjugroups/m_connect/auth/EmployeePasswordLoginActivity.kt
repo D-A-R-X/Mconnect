@@ -29,6 +29,11 @@ import java.net.UnknownHostException
 
 class EmployeePasswordLoginActivity : AppCompatActivity() {
 
+    // Cap extreme system font sizes; see FontScale.
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(com.manjugroups.m_connect.util.FontScale.cap(newBase))
+    }
+
     private lateinit var binding: ActivityEmployeePasswordLoginBinding
     private lateinit var session: SessionManager
     private val api = ApiService.create()
@@ -198,7 +203,9 @@ class EmployeePasswordLoginActivity : AppCompatActivity() {
                 PendingPasswordChangeCredential.clear()
             }
             session.geoTrackingEnabled = user.geoTrackingEnabled
-            session.geoConsentGiven = false
+            // A staff member who already agreed on this device is not asked again.
+            session.geoConsentGiven = com.manjugroups.m_connect.geotrack.GeoTrackConsentStore
+                .hasAgreed(this@EmployeePasswordLoginActivity, session.staffId)
             session.geoConsentDeclined = false
             session.shouldTrackNow = false
             session.activeTrackingSessionId = null

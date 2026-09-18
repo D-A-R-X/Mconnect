@@ -55,6 +55,18 @@ class GeoTrackService : Service() {
         private const val TRACKING_VERIFY_INTERVAL_MS = 10L * 60 * 1000
         private const val SYNC_INTERVAL_MS = 30_000L
         private const val HEARTBEAT_INTERVAL_MS = 75_000L
+        /** A tick this close to due is sent rather than waited out. */
+        private const val HEARTBEAT_EARLY_SLACK_MS = 5_000L
+        /** Keeps the CPU up between the alarm firing and the heartbeat send. */
+        private const val HEARTBEAT_TICK_WAKELOCK_MS = 20_000L
+        private const val HEARTBEAT_ALARM_REQUEST_CODE = 9102
+        private const val ACTION_HEARTBEAT_TICK = "com.manjugroups.m_connect.geotrack.HEARTBEAT_TICK"
+        /**
+         * A connectivity drop shorter than this (Wi-Fi → mobile handover, a
+         * lift, a tunnel) is not reported: the timeline showed "Network
+         * Offline" for every one of them.
+         */
+        private const val NETWORK_OFFLINE_CONFIRM_MS = 60_000L
         private const val LOCATION_INTERVAL_MS = 10_000L
         // Idle-shift power saving: when clocked in but physically STILL with no
         // active trip/visit, relax GPS to balanced/long-interval so the chip
@@ -168,6 +180,27 @@ class GeoTrackService : Service() {
     @Volatile private var trackingInitialized = false
     @Volatile private var verifiedAttendanceDay: String? = null
     private val offlineStartedAt = AtomicLong(0L)
+    /** True once NETWORK_OFFLINE was actually queued for the current outage. */
+    private val offlineReported = AtomicBoolean(false)
+
+    /**
+     * Networks that currently offer internet, from our own network callback.
+     *
+     * `ConnectivityManager.activeNetwork` is deliberately null while Android
+     * BLOCKS this app's network (Doze, app standby, Data Saver) even though the
+     * phone is online, and the per-network callback fires onLost for Wi-Fi
+     * while mobile data is still up. Both made the app report "no network"
+     * for a phone that had one, which the web timeline shows as "Network
+     * Offline". The phone is offline only when this set is empty.
+     */
+    private val availableNetworks = java.util.concurrent.ConcurrentHashMap.newKeySet<android.net.Network>()
+
+    /**
+     * Wakes the heartbeat loop early: from the heartbeat alarm, or from a
+     * location fix that arrives while a heartbeat is overdue.
+     */
+    private val heartbeatWake = kotlinx.coroutines.channels.Channel<Unit>(kotlinx.coroutines.channels.Channel.CONFLATED)
+    @Volatile private var lastHeartbeatAt = 0L
     private var consecutiveSyncFailures = 0
     private var lastTrackingVerifyAt = 0L
 
@@ -251,6 +284,11 @@ class GeoTrackService : Service() {
         override fun onLocationResult(result: LocationResult) {
             val best = result.locations.maxByOrNull { it.accuracy.let { a -> -a } } ?: return
             serviceScope.launch { processLocation(best) }
+            // A fix wakes the CPU anyway: send an overdue heartbeat now rather
+            // than whenever the sleeping loop's timer next gets CPU time.
+            if (System.currentTimeMillis() - lastHeartbeatAt >= HEARTBEAT_INTERVAL_MS) {
+                heartbeatWake.trySend(Unit)
+            }
         }
     }
 
@@ -285,6 +323,8 @@ class GeoTrackService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+
+        if (intent?.action == ACTION_HEARTBEAT_TICK) onHeartbeatAlarm()
 
         if (trackingInitialized || startupGateJob?.isActive == true) {
             return START_STICKY
@@ -405,6 +445,7 @@ class GeoTrackService : Service() {
         // it no-ops when the buffer is already empty.
         GeoTrackFlushWorker.enqueue(applicationContext)
 
+        cancelHeartbeatAlarm()
         syncJob?.cancel()
         heartbeatJob?.cancel()
         startupGateJob?.cancel()
@@ -836,6 +877,7 @@ class GeoTrackService : Service() {
                 .build()
             val cb = object : ConnectivityManager.NetworkCallback() {
                 override fun onAvailable(network: android.net.Network) {
+                    availableNetworks.add(network)
                     Log.i(TAG, "Network available — kicking immediate sync")
                     consecutiveSyncFailures = 0
                     serviceScope.launch {
@@ -847,6 +889,10 @@ class GeoTrackService : Service() {
                     }
                 }
                 override fun onLost(network: android.net.Network) {
+                    availableNetworks.remove(network)
+                    // One network going (Wi-Fi dropping while mobile data is
+                    // up) is not "offline".
+                    if (availableNetworks.isNotEmpty()) return
                     Log.d(TAG, "Network lost — points will buffer locally")
                     serviceScope.launch {
                         try { markNetworkOfflineIfNeeded() } catch (_: Exception) {}
@@ -866,6 +912,7 @@ class GeoTrackService : Service() {
             getSystemService(ConnectivityManager::class.java)?.unregisterNetworkCallback(cb)
         } catch (_: Exception) {}
         networkCallback = null
+        availableNetworks.clear()
     }
 
     /**
@@ -1173,14 +1220,76 @@ class GeoTrackService : Service() {
                         )
                     }
                 }
+                lastHeartbeatAt = tickAt
                 // Wait AFTER sending — the first tick now fires at loop start, so
                 // a freshly (re)started service marks the staffer online within
-                // seconds instead of after a full interval. Combined with the
-                // widened server freshness window (8 min vs the 2-min tick), this
-                // stops an active-but-stationary user from flickering offline.
-                delay(HEARTBEAT_INTERVAL_MS)
+                // seconds instead of after a full interval.
+                awaitNextHeartbeat()
             }
         }
+    }
+
+    /**
+     * Waits until the next heartbeat is due.
+     *
+     * This used to be a plain `delay(75s)`. Coroutine delays run on the
+     * monotonic clock, which stops while the CPU is suspended — and with no
+     * session-long wakelock (removed for battery), a still phone with the
+     * screen off suspends for many minutes. Heartbeats stopped, the geo
+     * service raised HEARTBEAT_MISSED after 5 minutes, and the web timeline
+     * showed that as "Network Offline" for a phone with a working network.
+     *
+     * Now the wait is measured on the wall clock and can be cut short by the
+     * heartbeat alarm (allowed to fire while idle) or by a location fix.
+     */
+    private suspend fun awaitNextHeartbeat() {
+        scheduleHeartbeatAlarm()
+        while (true) {
+            val remaining = HEARTBEAT_INTERVAL_MS - (System.currentTimeMillis() - lastHeartbeatAt)
+            if (remaining <= HEARTBEAT_EARLY_SLACK_MS) return
+            withTimeoutOrNull(remaining) { heartbeatWake.receive() } ?: return
+        }
+    }
+
+    private fun heartbeatAlarmIntent(): PendingIntent =
+        PendingIntent.getService(
+            this,
+            HEARTBEAT_ALARM_REQUEST_CODE,
+            Intent(this, GeoTrackService::class.java).setAction(ACTION_HEARTBEAT_TICK),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+
+    /**
+     * Inexact but allowed in Doze, so it needs no exact-alarm permission. In
+     * deep idle Android spaces these out (roughly every 9+ minutes); the
+     * location-fix wake covers the time in between.
+     */
+    private fun scheduleHeartbeatAlarm() {
+        runCatching {
+            val am = getSystemService(ALARM_SERVICE) as AlarmManager
+            am.setAndAllowWhileIdle(
+                AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                SystemClock.elapsedRealtime() + HEARTBEAT_INTERVAL_MS,
+                heartbeatAlarmIntent(),
+            )
+        }.onFailure { Log.w(TAG, "Heartbeat alarm not scheduled: ${it.message}") }
+    }
+
+    private fun cancelHeartbeatAlarm() {
+        runCatching {
+            (getSystemService(ALARM_SERVICE) as AlarmManager).cancel(heartbeatAlarmIntent())
+        }
+    }
+
+    private fun onHeartbeatAlarm() {
+        // The alarm's own wake window ends when onStartCommand returns; hold the
+        // CPU just long enough for the loop to pick the tick up and send.
+        runCatching {
+            (getSystemService(POWER_SERVICE) as PowerManager)
+                .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MConnect::HeartbeatTick")
+                .acquire(HEARTBEAT_TICK_WAKELOCK_MS)
+        }
+        heartbeatWake.trySend(Unit)
     }
 
     // ── DB Cleanup Loop ──
@@ -1381,6 +1490,16 @@ class GeoTrackService : Service() {
     private suspend fun markNetworkOfflineIfNeeded() {
         val now = System.currentTimeMillis()
         if (!offlineStartedAt.compareAndSet(0L, now)) return
+        // Report only an outage that lasts; stamp it with when it began.
+        serviceScope.launch {
+            delay(NETWORK_OFFLINE_CONFIRM_MS)
+            if (offlineStartedAt.get() != now || hasNetwork()) return@launch
+            try { reportNetworkOffline(now) } catch (_: Exception) {}
+        }
+    }
+
+    private suspend fun reportNetworkOffline(now: Long) {
+        offlineReported.set(true)
         GeoTrackEventQueue.enqueueDistinct(
             this,
             "NETWORK_OFFLINE",
@@ -1398,6 +1517,8 @@ class GeoTrackService : Service() {
     private suspend fun markNetworkOnlineIfNeeded() {
         val startedAt = offlineStartedAt.getAndSet(0L)
         if (startedAt <= 0L) return
+        // A blip that never became a reported outage needs no "back online".
+        if (!offlineReported.getAndSet(false)) return
         val now = System.currentTimeMillis()
         GeoTrackEventQueue.enqueue(
             this,
@@ -1514,7 +1635,9 @@ class GeoTrackService : Service() {
         return results[0]
     }
 
+    /** Whether the PHONE has internet — not whether Android lets this app use it right now. */
     private fun hasNetwork(): Boolean {
+        if (networkCallback != null) return availableNetworks.isNotEmpty()
         val cm = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
         val caps = cm.getNetworkCapabilities(cm.activeNetwork ?: return false) ?: return false
         return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)

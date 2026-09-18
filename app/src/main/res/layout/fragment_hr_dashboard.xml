@@ -61,7 +61,8 @@
 
             <LinearLayout
                 android:id="@+id/attendanceHeaderTextGroup"
-                android:layout_width="234dp"
+                android:layout_width="match_parent"
+                android:layout_marginEnd="128dp"
                 android:layout_height="wrap_content"
                 android:layout_gravity="top|start"
                 android:layout_marginStart="28dp"
@@ -70,24 +71,30 @@
 
                 <TextView
                     android:id="@+id/tvAttendanceHeaderTitle"
-                    android:layout_width="wrap_content"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:fontFamily="@font/inter_semibold"
                     android:includeFontPadding="false"
                     android:text="Let’s Clock-In!"
                     android:textColor="#FEFEFE"
-                    android:textSize="24sp" />
+                    android:textSize="24sp"
+                    android:maxLines="1"
+                    app:autoSizeTextType="uniform"
+                    app:autoSizeMinTextSize="16sp"
+                    app:autoSizeStepGranularity="1sp" />
 
                 <TextView
                     android:id="@+id/tvAttendanceHeaderSubtitle"
-                    android:layout_width="wrap_content"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="1dp"
                     android:fontFamily="@font/inter_medium"
                     android:includeFontPadding="false"
                     android:text="Don’t miss your clock in schedule"
                     android:textColor="#D9D6FE"
-                    android:textSize="14sp" />
+                    android:textSize="14sp"
+                    android:maxLines="2"
+                    android:ellipsize="end" />
             </LinearLayout>
 
             <ImageView
@@ -310,14 +317,18 @@
 
                         <TextView
                             android:id="@+id/tvTodayHours"
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="8dp"
                             android:fontFamily="@font/inter_semibold"
                             android:includeFontPadding="false"
                             android:text="00:00 Hrs"
                             android:textColor="#101828"
-                            android:textSize="22sp" />
+                            android:textSize="22sp"
+                            android:maxLines="1"
+                            app:autoSizeTextType="uniform"
+                            app:autoSizeMinTextSize="13sp"
+                            app:autoSizeStepGranularity="1sp" />
                     </LinearLayout>
 
                     <LinearLayout
@@ -333,7 +344,7 @@
                         android:paddingBottom="12dp">
 
                         <LinearLayout
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:gravity="center_vertical"
                             android:orientation="horizontal">
@@ -346,26 +357,35 @@
                                 app:tint="#475467" />
 
                             <TextView
-                                android:layout_width="wrap_content"
+                                android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_marginStart="6dp"
                                 android:fontFamily="@font/inter_medium"
                                 android:includeFontPadding="false"
                                 android:text="This Pay Period"
                                 android:textColor="#475467"
-                                android:textSize="12sp" />
+                                android:textSize="12sp"
+                                android:layout_weight="1"
+                                android:maxLines="1"
+                                app:autoSizeTextType="uniform"
+                                app:autoSizeMinTextSize="9sp"
+                                app:autoSizeStepGranularity="1sp" />
                         </LinearLayout>
 
                         <TextView
                             android:id="@+id/tvPayPeriodHours"
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="8dp"
                             android:fontFamily="@font/inter_semibold"
                             android:includeFontPadding="false"
                             android:text="00:00 Hrs"
                             android:textColor="#101828"
-                            android:textSize="22sp" />
+                            android:textSize="22sp"
+                            android:maxLines="1"
+                            app:autoSizeTextType="uniform"
+                            app:autoSizeMinTextSize="13sp"
+                            app:autoSizeStepGranularity="1sp" />
                     </LinearLayout>
                 </LinearLayout>
 
@@ -519,13 +539,17 @@
 
                         <TextView
                             android:id="@+id/tvLatestTotalHours"
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="3dp"
                             android:fontFamily="@font/inter_medium"
                             android:text="08:00:00 hrs"
                             android:textColor="#344054"
-                            android:textSize="16sp" />
+                            android:textSize="16sp"
+                            android:maxLines="1"
+                            app:autoSizeTextType="uniform"
+                            app:autoSizeMinTextSize="11sp"
+                            app:autoSizeStepGranularity="1sp" />
                     </LinearLayout>
 
                     <LinearLayout
@@ -544,7 +568,7 @@
 
                         <TextView
                             android:id="@+id/tvLatestRange"
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="3dp"
                             android:ellipsize="end"
@@ -553,7 +577,10 @@
                             android:singleLine="true"
                             android:text="09:00 AM - 05:00 PM"
                             android:textColor="#344054"
-                            android:textSize="16sp" />
+                            android:textSize="16sp"
+                            app:autoSizeTextType="uniform"
+                            app:autoSizeMinTextSize="11sp"
+                            app:autoSizeStepGranularity="1sp" />
                     </LinearLayout>
                 </LinearLayout>
             </LinearLayout>
@@ -628,13 +655,17 @@
 
                         <TextView
                             android:id="@+id/tvHistoryHours2"
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="3dp"
                             android:fontFamily="@font/inter_medium"
                             android:text="08:00:00 hrs"
                             android:textColor="#344054"
-                            android:textSize="16sp" />
+                            android:textSize="16sp"
+                            android:maxLines="1"
+                            app:autoSizeTextType="uniform"
+                            app:autoSizeMinTextSize="11sp"
+                            app:autoSizeStepGranularity="1sp" />
                     </LinearLayout>
 
                     <LinearLayout
@@ -653,7 +684,7 @@
 
                         <TextView
                             android:id="@+id/tvHistoryRange2"
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="3dp"
                             android:ellipsize="end"
@@ -662,7 +693,10 @@
                             android:singleLine="true"
                             android:text="09:00 AM - 05:00 PM"
                             android:textColor="#344054"
-                            android:textSize="16sp" />
+                            android:textSize="16sp"
+                            app:autoSizeTextType="uniform"
+                            app:autoSizeMinTextSize="11sp"
+                            app:autoSizeStepGranularity="1sp" />
                     </LinearLayout>
                 </LinearLayout>
             </LinearLayout>
@@ -728,13 +762,17 @@
 
                         <TextView
                             android:id="@+id/tvHistoryHours3"
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="3dp"
                             android:fontFamily="@font/inter_medium"
                             android:text="08:00:00 hrs"
                             android:textColor="#344054"
-                            android:textSize="16sp" />
+                            android:textSize="16sp"
+                            android:maxLines="1"
+                            app:autoSizeTextType="uniform"
+                            app:autoSizeMinTextSize="11sp"
+                            app:autoSizeStepGranularity="1sp" />
                     </LinearLayout>
 
                     <LinearLayout
@@ -753,7 +791,7 @@
 
                         <TextView
                             android:id="@+id/tvHistoryRange3"
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="3dp"
                             android:ellipsize="end"
@@ -762,7 +800,10 @@
                             android:singleLine="true"
                             android:text="09:00 AM - 05:00 PM"
                             android:textColor="#344054"
-                            android:textSize="16sp" />
+                            android:textSize="16sp"
+                            app:autoSizeTextType="uniform"
+                            app:autoSizeMinTextSize="11sp"
+                            app:autoSizeStepGranularity="1sp" />
                     </LinearLayout>
                 </LinearLayout>
             </LinearLayout>

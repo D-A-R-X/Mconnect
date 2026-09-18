@@ -49,6 +49,11 @@ import com.manjugroups.m_connect.ui.common.commitOnce
 
 class MainActivity : AppCompatActivity() {
 
+    // Cap extreme system font sizes; see FontScale.
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(com.manjugroups.m_connect.util.FontScale.cap(newBase))
+    }
+
     companion object {
         const val TAB_HOME = 0
         const val TAB_HR = 1
@@ -2216,14 +2221,8 @@ class MainActivity : AppCompatActivity() {
                 com.manjugroups.m_connect.geotrack.BackgroundPermissionsGateDialog
                     .showIfNeeded(supportFragmentManager, this)
             } else {
-                runCatching {
-                    startActivity(
-                        Intent(
-                            android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                            android.net.Uri.fromParts("package", packageName, null),
-                        ),
-                    )
-                }
+                // Guided, with fallbacks down to the phone's main Settings.
+                com.manjugroups.m_connect.util.SettingsGuide.allTracking(this)
             }
             return
         }

@@ -52,6 +52,7 @@ object GeoTrackBootstrapSync {
             return session.shouldTrackNow
         }
 
+        GeoTrackConsentStore.reconcile(appContext, session)
         if (!session.geoConsentGiven) {
             session.shouldTrackNow = false
             GeoTrackService.stop(appContext)

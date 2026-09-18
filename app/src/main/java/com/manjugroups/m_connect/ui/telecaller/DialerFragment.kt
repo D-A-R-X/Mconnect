@@ -492,11 +492,17 @@ class DialerFragment : Fragment() {
                         },
                     )
                 }.onFailure {
-                    Toast.makeText(
+                    // No dedicated full-screen page: this app's notification
+                    // settings, where the switch lives on those phones.
+                    com.manjugroups.m_connect.util.SettingsGuide.show(
                         requireContext(),
-                        "Open app settings and allow full-screen notifications.",
-                        Toast.LENGTH_LONG,
-                    ).show()
+                        "Allow full-screen notifications",
+                        listOf(
+                            "Open Notifications for M-connect",
+                            "Turn on \"Full-screen notifications\" (or \"Allow full screen intents\")",
+                        ),
+                        com.manjugroups.m_connect.util.AppSettingsDeepLink.notifications(requireContext()),
+                    )
                 }
             }
             .show()

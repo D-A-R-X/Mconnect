@@ -84,7 +84,7 @@ class LogoutBottomSheet : BottomSheetDialogFragment() {
             // the mid-shift logout tamper signal (Room-buffered by enqueue, so
             // it survives even if the flush times out) and the push-token
             // unregister. Capped so a dead connection can't hang the UI.
-            kotlinx.coroutines.withTimeoutOrNull(2000) {
+            kotlinx.coroutines.withTimeoutOrNull(1500) {
                 if (session.shouldTrackNow) {
                     runCatching {
                         com.manjugroups.m_connect.geotrack.GeoTrackEventQueue.enqueue(
@@ -102,25 +102,29 @@ class LogoutBottomSheet : BottomSheetDialogFragment() {
                 }
                 runCatching { PushTokenManager.unregisterCurrentToken(ctx, session) }
             }
-            // Free the SERVER session before clearing local — this is what
-            // releases the single-device login block so the staff can sign in on
-            // another phone. Retry with a generous timeout so a slow logout hop
-            // (e.g. the external dialer call the endpoint makes) still lands;
-            // otherwise the server session stays active and re-login is refused.
-            var serverLoggedOut = false
-            repeat(2) { attempt ->
-                if (serverLoggedOut) return@repeat
-                kotlinx.coroutines.withTimeoutOrNull(8000) {
-                    val success = runCatching {
-                        if (session.isExternalFleetPrincipal) {
-                            travelDeskApi.logout(session.bearerToken).success
-                        } else {
-                            api.logout(session.bearerToken).success
-                        }
-                    }.getOrDefault(false)
-                    if (success) serverLoggedOut = true
+            // Free the SERVER session (this releases the single-device login
+            // block) in the background instead of waiting for it here. The
+            // endpoint makes an external dialer call and was awaited with up to
+            // 2 x 8 s, so a slow network kept the Logout button spinning for
+            // ~18 s. The token is captured first because clearSession wipes it.
+            val token = session.bearerToken
+            val externalFleet = session.isExternalFleetPrincipal
+            val logoutApi = api
+            val logoutTravelDeskApi = travelDeskApi
+            serverLogoutScope.launch {
+                repeat(3) { attempt ->
+                    val done = kotlinx.coroutines.withTimeoutOrNull(10_000) {
+                        runCatching {
+                            if (externalFleet) {
+                                logoutTravelDeskApi.logout(token).success
+                            } else {
+                                logoutApi.logout(token).success
+                            }
+                        }.getOrDefault(false)
+                    } == true
+                    if (done) return@launch
+                    if (attempt < 2) kotlinx.coroutines.delay(1_000L * (attempt + 1))
                 }
-                if (!serverLoggedOut && attempt < 1) kotlinx.coroutines.delay(400)
             }
             session.clearSession()
             // Stop tracking, clear every notification, cancel background work
@@ -137,6 +141,11 @@ class LogoutBottomSheet : BottomSheetDialogFragment() {
     }
 
     companion object {
+        /** Outlives the sheet and activity so the server logout still lands. */
+        private val serverLogoutScope = kotlinx.coroutines.CoroutineScope(
+            kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO,
+        )
+
         fun newInstance(): LogoutBottomSheet {
             return LogoutBottomSheet()
         }

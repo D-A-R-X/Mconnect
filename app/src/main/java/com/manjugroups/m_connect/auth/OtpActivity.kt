@@ -1,6 +1,9 @@
 package com.manjugroups.m_connect.auth
 
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
@@ -13,7 +16,12 @@ import android.text.style.StyleSpan
 import android.view.KeyEvent
 import android.view.View
 import android.widget.EditText
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.core.content.ContextCompat
+import com.google.android.gms.auth.api.phone.SmsRetriever
+import com.google.android.gms.common.api.CommonStatusCodes
+import com.google.android.gms.common.api.Status
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -32,6 +40,11 @@ import kotlinx.coroutines.launch
 
 class OtpActivity : AppCompatActivity() {
 
+    // Cap extreme system font sizes; see FontScale.
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(com.manjugroups.m_connect.util.FontScale.cap(newBase))
+    }
+
     private lateinit var binding: ActivityOtpBinding
     private lateinit var session: SessionManager
     private val viewModel: AuthViewModel by viewModels()
@@ -41,6 +54,45 @@ class OtpActivity : AppCompatActivity() {
     private var countDownTimer: CountDownTimer? = null
     private var canResend = false
     private var bootstrapJob: kotlinx.coroutines.Job? = null
+
+    // Set while the boxes are filled programmatically, so each box's watcher
+    // does not re-distribute or move focus mid-fill.
+    private var fillingOtp = false
+    private var isVerifying = false
+    private var smsReceiverRegistered = false
+
+    /**
+     * SMS User Consent: Android shows "Allow Mconnect to read this message?"
+     * for the OTP SMS; on Allow the code fills the boxes and verifies. Needs no
+     * change to the SMS text (unlike the SMS Retriever API, which needs an app
+     * hash in the message). If the staff declines or it never appears, the
+     * boxes stay fully editable.
+     */
+    private val smsConsentLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode != RESULT_OK) return@registerForActivityResult
+        val message = result.data?.getStringExtra(SmsRetriever.EXTRA_SMS_MESSAGE)
+        OtpCodeParser.extract(message)?.let { fillOtp(it, autoVerify = true) }
+    }
+
+    private val smsConsentReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != SmsRetriever.SMS_RETRIEVED_ACTION) return
+            val extras = intent.extras ?: return
+            @Suppress("DEPRECATION")
+            val status = extras.get(SmsRetriever.EXTRA_STATUS) as? Status ?: return
+            if (status.statusCode != CommonStatusCodes.SUCCESS) return
+            @Suppress("DEPRECATION")
+            val consentIntent = extras.getParcelable<Intent>(SmsRetriever.EXTRA_CONSENT_INTENT) ?: return
+            // Only launch Google Play services' own consent screen, and never
+            // with URI grants attached (intent-redirection hardening).
+            val target = consentIntent.resolveActivity(packageManager)
+            val grants = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            if (target?.packageName != "com.google.android.gms" || consentIntent.flags and grants != 0) return
+            runCatching { smsConsentLauncher.launch(consentIntent) }
+        }
+    }
 
     companion object {
         const val EXTRA_PHONE = "extra_phone"
@@ -106,18 +158,55 @@ class OtpActivity : AppCompatActivity() {
         setupListeners()
         collectState()
         startTimer()
+        startSmsConsent()
 
         otpBoxes.forEach { it.clearFocus() }
     }
 
     private fun setupOtpBoxes() {
+        // Android's autofill / keyboard OTP suggestion targets the first box.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            otpBoxes.forEachIndexed { index, box ->
+                if (index == 0) {
+                    box.setAutofillHints("smsOTPCode") // androidx HintConstants.AUTOFILL_HINT_SMS_OTP
+                    box.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_YES
+                } else {
+                    box.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
+                }
+            }
+        }
         otpBoxes.forEachIndexed { index, editText ->
+            // The style caps each box at 1 character. That silently cut a
+            // keyboard OTP suggestion or a paste ("482913") down to "4", so the
+            // code the keyboard had already read never reached the boxes.
+            // Accept the whole code here and spread it across the boxes.
+            editText.filters = arrayOf(android.text.InputFilter.LengthFilter(OtpCodeParser.OTP_LENGTH))
             editText.addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
                 override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
                 override fun afterTextChanged(s: Editable?) {
-                    if (s?.length == 1 && index < otpBoxes.lastIndex) {
-                        otpBoxes[index + 1].requestFocus()
+                    if (fillingOtp) return
+                    val digits = OtpCodeParser.digits(s)
+                    when {
+                        digits.length > 1 -> {
+                            // A whole code (autofill, keyboard suggestion,
+                            // paste) or a second key press in a full box.
+                            if (digits.length >= OtpCodeParser.OTP_LENGTH) {
+                                fillOtp(digits.takeLast(OtpCodeParser.OTP_LENGTH), autoVerify = true)
+                            } else {
+                                fillFrom(index, digits)
+                            }
+                        }
+                        s != null && s.length != digits.length -> {
+                            // Non-digit input: keep only the digit, if any.
+                            fillingOtp = true
+                            editText.setText(digits.take(1))
+                            editText.setSelection(editText.text.length)
+                            fillingOtp = false
+                        }
+                        digits.length == 1 && index < otpBoxes.lastIndex -> {
+                            otpBoxes[index + 1].requestFocus()
+                        }
                     }
                     updateOtpBoxStyles()
                 }
@@ -151,6 +240,54 @@ class OtpActivity : AppCompatActivity() {
 
     private fun getOtp(): String = otpBoxes.joinToString("") { it.text.toString() }
 
+    /** Writes a full code into the six boxes; optionally submits it. */
+    private fun fillOtp(code: String, autoVerify: Boolean) {
+        val digits = OtpCodeParser.digits(code).take(OtpCodeParser.OTP_LENGTH)
+        if (digits.length != OtpCodeParser.OTP_LENGTH) return
+        fillingOtp = true
+        otpBoxes.forEachIndexed { i, box -> box.setText(digits[i].toString()) }
+        fillingOtp = false
+        otpBoxes.last().requestFocus()
+        otpBoxes.last().setSelection(otpBoxes.last().text.length)
+        updateOtpBoxStyles()
+        binding.tvOtpError.visibility = View.GONE
+        if (autoVerify && !isVerifying) verifyOtp()
+    }
+
+    /** Spreads a partial run of digits forward from [start]. */
+    private fun fillFrom(start: Int, digits: String) {
+        fillingOtp = true
+        var i = start
+        for (d in digits) {
+            if (i > otpBoxes.lastIndex) break
+            otpBoxes[i].setText(d.toString())
+            i++
+        }
+        fillingOtp = false
+        val next = minOf(i, otpBoxes.lastIndex)
+        otpBoxes[next].requestFocus()
+        otpBoxes[next].setSelection(otpBoxes[next].text.length)
+        if (getOtp().length == OtpCodeParser.OTP_LENGTH && !isVerifying) verifyOtp()
+    }
+
+    /** Listens for the OTP SMS for up to five minutes (SMS User Consent). */
+    private fun startSmsConsent() {
+        runCatching {
+            SmsRetriever.getClient(this).startSmsUserConsent(null)
+            if (!smsReceiverRegistered) {
+                ContextCompat.registerReceiver(
+                    this,
+                    smsConsentReceiver,
+                    IntentFilter(SmsRetriever.SMS_RETRIEVED_ACTION),
+                    SmsRetriever.SEND_PERMISSION,
+                    null,
+                    ContextCompat.RECEIVER_EXPORTED,
+                )
+                smsReceiverRegistered = true
+            }
+        }
+    }
+
     private fun setupListeners() {
         binding.btnVerify.setOnClickListener {
             val otp = getOtp()
@@ -169,11 +306,14 @@ class OtpActivity : AppCompatActivity() {
                     if (agencyDriver) null else LoginDeviceInfo.capture(applicationContext),
                 )
                 startTimer()
+                // A resent code is a new SMS: listen again.
+                startSmsConsent()
             }
         }
     }
 
     private fun verifyOtp() {
+        isVerifying = true
         binding.tvOtpError.visibility = View.GONE
         // Attach device identity + telemetry so the backend can bind this staff
         // account to this one device (agency-driver logins skip binding).
@@ -231,6 +371,7 @@ class OtpActivity : AppCompatActivity() {
                             viewModel.resetState()
                         }
                         is AuthUiState.Error -> {
+                            isVerifying = false
                             resetButton()
                             binding.tvOtpError.text = state.message
                             binding.tvOtpError.visibility = View.VISIBLE
@@ -297,7 +438,9 @@ class OtpActivity : AppCompatActivity() {
         session.externalFleetCanBill = response.user?.canBill == true
         session.mustChangePassword = false
         session.geoTrackingEnabled = response.user?.geoTrackingEnabled == true
-        session.geoConsentGiven = false
+        // A staff member who already agreed on this device is not asked again.
+        session.geoConsentGiven = com.manjugroups.m_connect.geotrack.GeoTrackConsentStore
+            .hasAgreed(this@OtpActivity, session.staffId)
         session.geoConsentDeclined = false
         session.shouldTrackNow = false
         session.activeTrackingSessionId = null
@@ -668,5 +811,9 @@ class OtpActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         countDownTimer?.cancel()
+        if (smsReceiverRegistered) {
+            runCatching { unregisterReceiver(smsConsentReceiver) }
+            smsReceiverRegistered = false
+        }
     }
 }

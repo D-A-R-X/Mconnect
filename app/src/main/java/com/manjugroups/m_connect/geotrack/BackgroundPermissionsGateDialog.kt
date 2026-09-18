@@ -24,8 +24,8 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import androidx.fragment.app.FragmentManager
 import com.manjugroups.m_connect.R
+import com.manjugroups.m_connect.util.SettingsGuide
 import com.manjugroups.m_connect.util.UnusedAppRestrictions
-import java.util.Locale
 
 /**
  * Non-dismissible gate Bottom Sheet — premium mockup UI with Custom Switches.
@@ -157,6 +157,13 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
     // they do not have can never lock them out of the app.
     private var unusedAppSatisfied = false
 
+    private val permissionSetup = TrackingPermissionSetup(
+        caller = this,
+        activity = { activity },
+        onProgress = { view?.let(::refreshStatus) },
+        onFinished = { onAllowAllFinished() },
+    )
+
     // ── Lifecycle ──────────────────────────────────────────────────
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
@@ -206,7 +213,17 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        // Click row elements to trigger relevant permission logic
+        view.findViewById<View>(R.id.btnGateAllowAll).setOnClickListener {
+            permissionSetup.start()
+        }
+        // Always-available manual route, for phones where both "Allow all"
+        // and a row's own shortcut fail.
+        view.findViewById<View>(R.id.btnGateManualSettings).setOnClickListener {
+            SettingsGuide.allTracking(requireContext())
+        }
+
+        // Rows stay as the manual path: each opens just its own setting, for
+        // phones where a step of "Allow all" is blocked or unsupported.
         view.findViewById<View>(R.id.rowLocation).setOnClickListener {
             val ctx = requireContext()
             val deviceLocationOk = isDeviceLocationEnabled(ctx)
@@ -250,7 +267,7 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
             val current = isAutostartEnabled(ctx)
             setAutostartEnabled(ctx, !current)
             if (!current && isAutostartManaged()) {
-                openOemAutostartSettings()
+                SettingsGuide.autostart(ctx, OemAutostart.candidateIntents())
             }
             refreshStatus(view)
         }
@@ -269,8 +286,7 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
                 refreshStatus(view)
                 return@setOnClickListener
             }
-            runCatching { startActivity(intent) }
-                .onFailure { refreshStatus(view) }
+            SettingsGuide.unusedApp(ctx, intent)
         }
 
         refreshStatus(view)
@@ -344,13 +360,21 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
             REQUEST_FG_LOCATION -> {
                 if (grantResults.isNotEmpty() && grantResults[0] != PackageManager.PERMISSION_GRANTED) {
                     if (!shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION)) {
-                        Toast.makeText(context, "Location permission is required. Please enable it in Settings.", Toast.LENGTH_LONG).show()
-                        openAppDetailsSettings()
+                        SettingsGuide.location(requireContext())
                     }
                 }
                 recheckAndMaybeDismiss()
             }
             REQUEST_BG_LOCATION -> {
+                val ctx = context
+                if (ctx != null && !hasBackgroundLocation(ctx) &&
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+                    !shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                ) {
+                    // Android stops showing the prompt after refusals; the
+                    // app's page is the only way left.
+                    SettingsGuide.backgroundLocation(ctx)
+                }
                 recheckAndMaybeDismiss()
             }
             REQUEST_ACTIVITY_RECOGNITION -> {
@@ -361,8 +385,7 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
                         // Permanently denied → the runtime dialog won't show
                         // again; send them to app settings so they're never
                         // locked on the non-dismissible sheet.
-                        Toast.makeText(context, "Physical activity permission is required. Please enable it in Settings.", Toast.LENGTH_LONG).show()
-                        openAppDetailsSettings()
+                        SettingsGuide.physicalActivity(requireContext())
                     }
                 }
                 recheckAndMaybeDismiss()
@@ -371,6 +394,18 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
     }
 
     // ── Internal ──────────────────────────────────────────────────
+
+    private fun onAllowAllFinished() {
+        val ctx = context ?: return
+        recheckAndMaybeDismiss()
+        if (isAdded && !(allGranted(ctx) && unusedAppSatisfied)) {
+            Toast.makeText(
+                ctx,
+                "Some settings need to be turned on by hand. Tap each row that is still off.",
+                Toast.LENGTH_LONG,
+            ).show()
+        }
+    }
 
     private fun recheckAndMaybeDismiss() {
         if (!isAdded || isDetached) return
@@ -405,6 +440,7 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
         val activityOk = hasActivityRecognition(ctx)
         val batOk = hasBatteryOptIgnored(ctx)
         val autostartOk = isAutostartEnabled(ctx)
+        root.findViewById<View>(R.id.btnGateAllowAll).isEnabled = !permissionSetup.isRunning
 
         root.findViewById<SwitchCompat>(R.id.switchLocation).isChecked = deviceLocationOk && fgOk
         root.findViewById<SwitchCompat>(R.id.switchBgLocation).isChecked = bgOk
@@ -433,8 +469,10 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
                 REQUEST_FG_LOCATION,
             )
         } else if (!isDeviceLocationEnabled(ctx)) {
+            // The Location page itself: its main switch is the only setting on
+            // it. Only if this phone has no such page, the guided route.
             runCatching { startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)) }
-                .onFailure { openAppDetailsSettings() }
+                .onFailure { SettingsGuide.deviceLocation(ctx) }
         }
     }
 
@@ -451,7 +489,7 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
                 REQUEST_BG_LOCATION,
             )
         } else {
-            openAppDetailsSettings()
+            SettingsGuide.location(ctx)
         }
     }
 
@@ -475,86 +513,16 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
         }
         runCatching { startActivity(intent) }
             .onFailure {
-                runCatching {
-                    startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-                }
+                // No Allow/Deny dialog on this phone: the guided route to this
+                // app's Battery row, not the phone-wide list of every app.
+                SettingsGuide.battery(requireContext())
             }
     }
 
-    private fun openOemAutostartSettings() {
-        val ctx = requireContext()
-        val brand = Build.MANUFACTURER.lowercase(Locale.US)
-        val candidates = when {
-            brand.contains("xiaomi") || brand.contains("redmi") || brand.contains("poco") -> listOf(
-                "com.miui.securitycenter" to "com.miui.permcenter.autostart.AutoStartManagementActivity",
-                "com.miui.securitycenter" to "com.miui.appmanager.ApplicationsDetailsActivity",
-            )
-            brand.contains("vivo") -> listOf(
-                "com.iqoo.secure" to "com.iqoo.secure.ui.phoneoptimize.AddWhiteListActivity",
-                "com.vivo.permissionmanager" to "com.vivo.permissionmanager.activity.BgStartUpManagerActivity",
-            )
-            brand.contains("oppo") || brand.contains("realme") -> listOf(
-                "com.coloros.safecenter" to "com.coloros.safecenter.permission.startup.StartupAppListActivity",
-                "com.oppo.safe" to "com.oppo.safe.permission.startup.StartupAppListActivity",
-                "com.coloros.safecenter" to "com.coloros.safecenter.startupapp.StartupAppListActivity",
-            )
-            brand.contains("huawei") || brand.contains("honor") -> listOf(
-                "com.huawei.systemmanager" to "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity",
-                "com.huawei.systemmanager" to "com.huawei.systemmanager.optimize.process.ProtectActivity",
-            )
-            brand.contains("samsung") -> listOf(
-                "com.samsung.android.lool" to "com.samsung.android.sm.ui.battery.BatteryActivity",
-            )
-            brand.contains("oneplus") -> listOf(
-                "com.oneplus.security" to "com.oneplus.security.chainlaunch.view.ChainLaunchAppListActivity",
-            )
-            else -> emptyList()
-        }
-        for ((pkg, cls) in candidates) {
-            val intent = Intent().apply {
-                component = android.content.ComponentName(pkg, cls)
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            }
-            try {
-                ctx.startActivity(intent)
-                return
-            } catch (_: Exception) { /* next */ }
-        }
-        openAppDetailsSettings()
-    }
+    private fun isAutostartManaged(): Boolean = OemAutostart.isManaged()
 
-    private fun openAppDetailsSettings() {
-        runCatching {
-            startActivity(
-                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                    data = Uri.fromParts("package", requireContext().packageName, null)
-                },
-            )
-        }
-    }
+    private fun isAutostartEnabled(ctx: Context): Boolean = OemAutostart.isMarkedEnabled(ctx)
 
-    private fun isAutostartManaged(): Boolean {
-        val brand = Build.MANUFACTURER.lowercase(Locale.US)
-        return brand.contains("xiaomi") ||
-            brand.contains("redmi") ||
-            brand.contains("poco") ||
-            brand.contains("vivo") ||
-            brand.contains("oppo") ||
-            brand.contains("realme") ||
-            brand.contains("huawei") ||
-            brand.contains("honor") ||
-            brand.contains("oneplus")
-    }
-
-    private fun isAutostartEnabled(ctx: Context): Boolean {
-        return ctx.getSharedPreferences("permissions_gate", Context.MODE_PRIVATE)
-            .getBoolean("autostart_enabled", false)
-    }
-
-    private fun setAutostartEnabled(ctx: Context, enabled: Boolean) {
-        ctx.getSharedPreferences("permissions_gate", Context.MODE_PRIVATE)
-            .edit()
-            .putBoolean("autostart_enabled", enabled)
-            .apply()
-    }
+    private fun setAutostartEnabled(ctx: Context, enabled: Boolean) =
+        OemAutostart.markEnabled(ctx, enabled)
 }

@@ -266,7 +266,9 @@
                         android:fontFamily="@font/inter_medium"
                         android:includeFontPadding="false"
                         android:text="Home"
-                        android:textSize="11sp" />
+                        android:textSize="11sp"
+                        android:maxLines="1"
+                        android:ellipsize="end" />
                 </LinearLayout>
             </FrameLayout>
 
@@ -305,7 +307,9 @@
                         android:fontFamily="@font/inter_medium"
                         android:includeFontPadding="false"
                         android:text="Attendance"
-                        android:textSize="11sp" />
+                        android:textSize="11sp"
+                        android:maxLines="1"
+                        android:ellipsize="end" />
                 </LinearLayout>
             </FrameLayout>
 
@@ -344,7 +348,9 @@
                         android:fontFamily="@font/inter_medium"
                         android:includeFontPadding="false"
                         android:text="Chat"
-                        android:textSize="11sp" />
+                        android:textSize="11sp"
+                        android:maxLines="1"
+                        android:ellipsize="end" />
                 </LinearLayout>
             </FrameLayout>
 
@@ -383,7 +389,9 @@
                         android:fontFamily="@font/inter_medium"
                         android:includeFontPadding="false"
                         android:text="Apps"
-                        android:textSize="11sp" />
+                        android:textSize="11sp"
+                        android:maxLines="1"
+                        android:ellipsize="end" />
                 </LinearLayout>
             </FrameLayout>
         </com.manjugroups.m_connect.ui.custom.GlassNavBar>
