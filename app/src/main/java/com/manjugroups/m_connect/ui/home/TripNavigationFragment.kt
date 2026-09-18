@@ -916,8 +916,26 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
      */
     private fun showJointReviewChoice() {
         if (!isAdded || jointMutationInProgress) return
+        // Read the workflow first. The cached copy can be a poll old — and a
+        // stale one silently did nothing, so "Review outcome" looked dead until
+        // the staff member refreshed the screen.
+        viewLifecycleOwner.lifecycleScope.launch {
+            refreshJointWorkflow()
+            if (!isAdded) return@launch
+            showJointReviewChoiceNow()
+        }
+    }
+
+    private fun showJointReviewChoiceNow() {
         val workflow = jointWorkflow ?: return
-        if (!jointCpReviewerCanReview(workflow)) return
+        if (!jointCpReviewerCanReview(workflow)) {
+            Toast.makeText(
+                requireContext(),
+                com.manjugroups.m_connect.ui.marketing.JointCpReviewFlow.reviewUnavailableMessage(workflow),
+                Toast.LENGTH_LONG,
+            ).show()
+            return
+        }
         val owner = workflow.outcomeOwnerName?.trim()?.takeIf { it.isNotEmpty() } ?: "The outcome owner"
         val summary = workflow.outcomeSummary?.trim()?.takeIf { it.isNotEmpty() }
             ?: workflow.outcome?.replace('_', ' ')?.trim()?.takeIf { it.isNotEmpty() }

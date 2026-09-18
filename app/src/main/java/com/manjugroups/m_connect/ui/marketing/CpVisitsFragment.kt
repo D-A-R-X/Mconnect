@@ -193,6 +193,10 @@ class CpVisitsFragment : Fragment() {
         attendanceVm.loadTodayAttendance(session.bearerToken, requireContext())
         // A GM may have cleared approvals elsewhere (push → queue); re-check.
         refreshApprovalsBanner()
+        // Returning from the trip screen KEEPS this fragment's view, so without
+        // this the list still showed the state from before the outcome was
+        // submitted or the review completed ("still Enroute after completing").
+        if (hasLoadedVisitsOnce) loadVisits()
     }
 
     // ---------- GM approvals entry ----------
@@ -601,7 +605,10 @@ class CpVisitsFragment : Fragment() {
 
     // ---------- Data loading + render ----------
 
+    private var hasLoadedVisitsOnce = false
+
     private fun loadVisits() {
+        hasLoadedVisitsOnce = true
         val root = rootView ?: return
         val skeletonContainer = root.findViewById<View>(R.id.skeletonContainer)
         val empty = root.findViewById<View>(R.id.cpvEmptyState)
@@ -1418,9 +1425,12 @@ class CpVisitsFragment : Fragment() {
                 )
                 actionIcon.visibility = View.VISIBLE
                 actionIcon.imageTintList = null
-                // Both sides open the trip screen: it polls the workflow every
-                // five seconds and renders the precise waiting message.
-                tapMode = TapMode.TRIP
+                // The reviewer reviews right here: reading the workflow on tap
+                // and showing the dialog. Opening the trip screen meant waiting
+                // for its five-second poll, so Review looked dead until the
+                // staff member refreshed. The owner still opens the trip
+                // screen, which shows who they are waiting for.
+                tapMode = if (viewerIsReviewer) TapMode.JOINT_REVIEW else TapMode.TRIP
             }
             isOutcomePending -> {
                 // CP visit's trip is complete but the outcome was never
@@ -1592,6 +1602,17 @@ class CpVisitsFragment : Fragment() {
                 actionBtn.isClickable = true
                 actionBtn.setOnClickListener(openNav)
             }
+            TapMode.JOINT_REVIEW -> {
+                val review: (View) -> Unit = {
+                    val cpId = visit.clientPlaceVisitId?.takeIf { id -> id.isNotBlank() }
+                        ?: visit.id
+                    JointCpReviewFlow.start(this, cpId) { if (isAdded) loadVisits() }
+                }
+                itemView.isClickable = true
+                itemView.setOnClickListener(review)
+                actionBtn.isClickable = true
+                actionBtn.setOnClickListener(review)
+            }
             TapMode.COMPLETED_DETAIL -> {
                 val openDetail: (View) -> Unit = { openCompletedDetail(visit) }
                 itemView.isClickable = true
@@ -1641,7 +1662,7 @@ class CpVisitsFragment : Fragment() {
         }
     }
 
-    private enum class TapMode { TRIP, COMPLETED_DETAIL, CLOCK_IN, REOPEN_CONFIRM, NONE }
+    private enum class TapMode { TRIP, COMPLETED_DETAIL, CLOCK_IN, REOPEN_CONFIRM, NONE, JOINT_REVIEW }
 
     /**
      * Reopens [CompleteCpVisitBottomSheet] for a CP visit whose trip is

@@ -1511,12 +1511,13 @@ class HomeFragment : Fragment() {
         // told a staff member who had finished the visit to start it again.
         // The CP Visits list has handled this for months; Home never did.
         val pendingGmApproval = status == "pending_gm_approval" || status == "pending-gm-approval"
+        val viewerIsJointReviewer = visit.joint?.workflow?.reviewerStaffId
+            ?.trim()?.takeIf { it.isNotEmpty() } == session.staffId?.trim()
 
         when {
             jointPendingReview -> {
                 val workflow = visit.joint?.workflow
-                val viewerIsReviewer = workflow?.reviewerStaffId
-                    ?.trim()?.takeIf { it.isNotEmpty() } == session.staffId?.trim()
+                val viewerIsReviewer = viewerIsJointReviewer
                 statusText.text = "Pending Review"
                 statusPill.background =
                     requireContext().getDrawable(R.drawable.bg_home_trip_status_progress)
@@ -1735,7 +1736,22 @@ class HomeFragment : Fragment() {
                 actionBtn.setOnClickListener(openNav)
             }
         } else {
-            if (isFleetOutcomePending) {
+            if (jointPendingReview && viewerIsJointReviewer) {
+                // Review right here: read the workflow on tap, then show the
+                // dialog. Opening the trip screen meant waiting for its
+                // five-second poll, so the action looked dead until refresh.
+                val review: (View) -> Unit = {
+                    val cpId = visit.clientPlaceVisitId?.takeIf { id -> id.isNotBlank() } ?: visit.id
+                    com.manjugroups.m_connect.ui.marketing.JointCpReviewFlow.start(this, cpId) {
+                        if (isAdded) viewModel.loadTodayVisits(session.bearerToken, requireContext())
+                    }
+                }
+                itemView.isClickable = true
+                itemView.isFocusable = true
+                itemView.setOnClickListener(review)
+                actionBtn.isClickable = true
+                actionBtn.setOnClickListener(review)
+            } else if (isFleetOutcomePending) {
                 // Fleet trip completed offline by admin — the site incharge
                 // must record the outcome (booking/postpone/not interested).
                 val openOutcome: (View) -> Unit = {
