@@ -23,6 +23,7 @@ import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.BuildConfig
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.geotrack.AttendanceTrackingGate
+import com.manjugroups.m_connect.geotrack.GeoTrackBootstrapSync
 import com.manjugroups.m_connect.geotrack.GeoTrackEventQueue
 import com.manjugroups.m_connect.geotrack.AttendanceDayBoundary
 import com.manjugroups.m_connect.geotrack.GeoTrackFlushWorker
@@ -50,6 +51,8 @@ class GeoTrackService : Service() {
         private const val TAG = "GeoTrackSvc"
         private const val NOTIFICATION_ID = 9001
         private const val CHANNEL_ID = "geotrack_channel"
+        /** How often the service re-checks clock-in state and its session id. */
+        private const val TRACKING_VERIFY_INTERVAL_MS = 10L * 60 * 1000
         private const val SYNC_INTERVAL_MS = 30_000L
         private const val HEARTBEAT_INTERVAL_MS = 75_000L
         private const val LOCATION_INTERVAL_MS = 10_000L
@@ -166,6 +169,7 @@ class GeoTrackService : Service() {
     @Volatile private var verifiedAttendanceDay: String? = null
     private val offlineStartedAt = AtomicLong(0L)
     private var consecutiveSyncFailures = 0
+    private var lastTrackingVerifyAt = 0L
 
     private var locationThread: HandlerThread? = null
     private var fusedLocationRegistered = false
@@ -919,6 +923,60 @@ class GeoTrackService : Service() {
         stopSelf()
     }
 
+    /**
+     * Keeps this device's tracking session and clock-in state in step with the
+     * server, on a slow cadence.
+     *
+     * Two production faults come from never re-checking:
+     *
+     * 1. **"Offline" while the app is open and points keep arriving.** Every
+     *    point is stamped with the session id held here at capture time, and
+     *    the service derives "online" from that session. Once the server had
+     *    ended the session (clock-out elsewhere, attendance day rollover, a
+     *    session started on another device), this device kept stamping the dead
+     *    id, so each point refreshed "last seen" while forcing the row Offline.
+     *    Seen live in production: the live row's session id did not match the
+     *    staff member's current active session.
+     * 2. **Tracking continuing after clock-out.** A clock-out from the web, a
+     *    biometric device or another phone never reached this service, which
+     *    only checked attendance at cold start and at the day boundary.
+     *
+     * @return false when tracking has been stopped and the caller loop must end.
+     */
+    private suspend fun verifyTrackingStillValid(): Boolean {
+        val now = System.currentTimeMillis()
+        if (now - lastTrackingVerifyAt < TRACKING_VERIFY_INTERVAL_MS) return true
+        lastTrackingVerifyAt = now
+
+        // An outage must never stop a live shift: only an authoritative
+        // "closed" ends tracking.
+        if (AttendanceTrackingGate.hasOpenSessionNow(session.bearerToken) == false) {
+            Log.i(TAG, "Attendance closed elsewhere — ending tracking")
+            stopForClosedAttendance("attendance_session_closed")
+            return false
+        }
+
+        val response = runCatching { api.getCurrentTrackingSession(session.bearerToken) }.getOrNull()
+        if (response?.success != true) return true
+        val active = response.data?.takeIf { it.state.equals("active", ignoreCase = true) }
+        val activeId = active?.sessionId?.takeIf { it.isNotBlank() }
+        when {
+            activeId == null -> {
+                // The server has no open session, but this staff member is
+                // clocked in: open one so the points being captured right now
+                // are attributed to a live session instead of a dead one.
+                Log.w(TAG, "No active tracking session on the server — re-opening")
+                runCatching { GeoTrackBootstrapSync.sync(this@GeoTrackService, api = api) }
+            }
+            activeId != session.activeTrackingSessionId -> {
+                Log.w(TAG, "Adopting the server's active tracking session")
+                session.activeTrackingSessionId = activeId
+                session.shouldTrackNow = true
+            }
+        }
+        return true
+    }
+
     private suspend fun queueDirectTrackingEnd(reason: String) {
         val sessionId = session.activeTrackingSessionId ?: return
         val endedAt = System.currentTimeMillis()
@@ -1039,6 +1097,7 @@ class GeoTrackService : Service() {
                     stopForClosedAttendance("India attendance day ended")
                     break
                 }
+                if (!verifyTrackingStillValid()) break
                 // Self-heal the ongoing permission alert every tick: clears it
                 // the moment the staff grants the last missing permission, and
                 // re-posts it if the OS dropped it (Android 14+ can).
