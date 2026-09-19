@@ -197,6 +197,14 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
     private var btnNotInterested: LinearLayout? = null
     private var btnPostponed: LinearLayout? = null
     private var btnOther: LinearLayout? = null
+    private var layoutOutcomeButtons: View? = null
+    private var layoutOutcomeRecorded: View? = null
+    private var tvOutcomeRecordedLabel: TextView? = null
+    private var tvOutcomeRecordedDetail: TextView? = null
+    private var tvOutcomeSubtitle: TextView? = null
+    /** The recorded outcome (or terminal status) shown read-only once locked. */
+    private var recordedOutcome: String? = null
+    private var recordedOutcomeDetail: String? = null
     private var btnPostponeSiteVisit: LinearLayout? = null
     private var btnCancelSiteVisit: LinearLayout? = null
 
@@ -338,6 +346,11 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         btnNotInterested = view.findViewById(R.id.btnOutcomeNotInterested)
         btnPostponed = view.findViewById(R.id.btnOutcomePostponed)
         btnOther = view.findViewById(R.id.btnOutcomeOther)
+        layoutOutcomeButtons = view.findViewById(R.id.layoutOutcomeButtons)
+        layoutOutcomeRecorded = view.findViewById(R.id.layoutOutcomeRecorded)
+        tvOutcomeRecordedLabel = view.findViewById(R.id.tvOutcomeRecordedLabel)
+        tvOutcomeRecordedDetail = view.findViewById(R.id.tvOutcomeRecordedDetail)
+        tvOutcomeSubtitle = view.findViewById(R.id.tvOutcomeSubtitle)
         btnPostponeSiteVisit = view.findViewById(R.id.btnPostponeSiteVisit)
         btnPostponeSiteVisit?.visibility = View.GONE
         btnPostponeSiteVisit?.setOnClickListener {
@@ -471,6 +484,8 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         // pending) — only an actually recorded/terminal outcome status does.
         // bindEnriched() re-derives this from the full visit once it loads.
         isOutcomeLocked = isOutcomeRecordedStatus(rawStatus)
+        recordedOutcome = rawStatus.takeIf { isOutcomeLocked }
+        recordedOutcomeDetail = null
         outcomeStatusEligible = isOutcomeStatusEligible(rawStatus)
         currentTerminalLabel = terminalStepLabelFor(rawStatus)
         updatePostponeVisibility(rawStatus)
@@ -515,6 +530,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         isOwnVehicleSelected =
             argTravelMode == "own_vehicle" || argVehiclePref == "own_vehicle"
         toggleStepperVisibility()
+        refreshCallButtons()
 
         // Stepper state mapping
         val stepIndex = mapStatusToStepIndex(rawStatus)
@@ -820,6 +836,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
             // Outcome buttons activation gate — only once counselling has
             // started (client QR scan) and through the later statuses, until
             // the outcome is recorded. Not driven by the driver's stepper.
+            setOutcomeRecordedMode(isOutcomeLocked)
             if (isOutcomeLocked) {
                 lockOutcomeButtons("This site visit outcome is already completed.")
             } else if (outcomeStatusEligible || isFleetOutcomePending) {
@@ -996,6 +1013,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
             // started (client QR scan) and through the later statuses, until
             // the outcome is recorded. A cab merely reaching "on site" (driver
             // stepper) must NOT open it.
+            setOutcomeRecordedMode(isOutcomeLocked)
             if (isOutcomeLocked) {
                 lockOutcomeButtons("This site visit outcome is already completed.")
             } else if (outcomeStatusEligible || isFleetOutcomePending) {
@@ -1118,7 +1136,68 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         tvCallDriver?.text = callLabel("Driver", driverDisplayName)
         setCallButtonEnabled(btnCallClient, !clientPhone.isNullOrBlank())
         setCallButtonEnabled(btnCallDriver, !driverPhone.isNullOrBlank())
+        // Own-vehicle visits have no driver: hide the button instead of
+        // showing a dead one, and let Call Client take the full row.
+        btnCallDriver?.visibility = if (isOwnVehicleSelected) View.GONE else View.VISIBLE
+        (btnCallClient?.layoutParams as? ViewGroup.MarginLayoutParams)?.let { lp ->
+            val end = if (isOwnVehicleSelected) 0 else (5 * resources.displayMetrics.density).toInt()
+            if (lp.marginEnd != end) {
+                lp.marginEnd = end
+                btnCallClient?.layoutParams = lp
+            }
+        }
     }
+
+    /**
+     * Once an outcome is recorded it is final here: show it as a read-only
+     * card instead of three greyed-out buttons that looked tappable.
+     */
+    private fun setOutcomeRecordedMode(recorded: Boolean) {
+        layoutOutcomeButtons?.visibility = if (recorded) View.GONE else View.VISIBLE
+        layoutOutcomeRecorded?.visibility = if (recorded) View.VISIBLE else View.GONE
+        tvOutcomeSubtitle?.text = if (recorded) {
+            "Outcome recorded for this site visit."
+        } else {
+            "Capture the visit result once the client has reviewed the plot."
+        }
+        if (!recorded) return
+        val (label, color) = outcomeLabel(recordedOutcome)
+        tvOutcomeRecordedLabel?.text = "✓  $label"
+        tvOutcomeRecordedLabel?.setTextColor(color)
+        val detail = recordedOutcomeDetail?.takeIf { it.isNotBlank() }
+        tvOutcomeRecordedDetail?.text = detail
+        tvOutcomeRecordedDetail?.visibility = if (detail == null) View.GONE else View.VISIBLE
+    }
+
+    /** Same precedence as [isOutcomeAlreadyRecorded]: the SV's own fields first. */
+    private fun captureRecordedOutcome(visit: CpVisitDetail) {
+        val sv = visit.proposedSiteVisit
+        val outcome = (if (sv != null) sv.outcome else visit.outcome)?.takeIf { it.isNotBlank() }
+        val converted = (if (sv != null) sv.convertedBookingId else visit.convertedBookingId) != null
+        val cancelled = (if (sv != null) sv.cancelledAt else visit.cancelledAt) != null
+        val status = if (sv?.status?.isNotBlank() == true) sv.status else visit.status
+        recordedOutcome = when {
+            outcome != null -> outcome
+            converted -> "converted_to_booking"
+            cancelled -> "cancelled"
+            else -> status
+        }
+        recordedOutcomeDetail = listOfNotNull(
+            visit.postponeReasons?.filter { it.isNotBlank() }?.takeIf { it.isNotEmpty() }?.joinToString(", "),
+            visit.clientNoShowReason?.takeIf { it.isNotBlank() },
+        ).firstOrNull()
+    }
+
+    private fun outcomeLabel(value: String?): Pair<String, Int> =
+        when (value?.trim()?.lowercase(Locale.US)) {
+            "converted_to_booking", "converted", "booked" -> "Converted as Booking" to Color.parseColor("#067647")
+            "not_interested" -> "Client Not Interested" to Color.parseColor("#B42318")
+            "follow_up", "followup", "postponed" -> "Follow up" to Color.parseColor("#B54708")
+            "cancelled", "canceled" -> "Site Visit Cancelled" to Color.parseColor("#475467")
+            "no_show" -> "Client No-show" to Color.parseColor("#475467")
+            "other" -> "Other" to Color.parseColor("#344054")
+            else -> "Outcome recorded" to Color.parseColor("#344054")
+        }
 
     private fun callLabel(role: String, name: String?): String =
         name?.takeIf { it.isNotBlank() && it != "—" }?.let { "Call $it" } ?: "Call $role"
@@ -1306,9 +1385,11 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         hasFleetOnSite = proposed?.travelDeskOnSiteAt != null
         currentTerminalLabel = terminalStepLabelFor(effStatus)
         isOutcomeLocked = isOutcomeAlreadyRecorded(visit)
+        captureRecordedOutcome(visit)
 
         // Vehicle type first — computeWebParityStepIndex reads it.
         isOwnVehicleSelected = proposed?.travelMode == "own_vehicle" || visit.vehiclePreference == "own_vehicle"
+        refreshCallButtons()
 
         // The stepper index still drives the visible progress, but NOT the
         // outcome gate. Opening the outcome at ON SITE (step 4) or when the cab

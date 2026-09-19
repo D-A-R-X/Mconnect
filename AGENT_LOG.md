@@ -14188,3 +14188,42 @@ implemented or validated until the iOS repository/path is made available.
 
 ## 2026-09-19 — Switched to prod and built
 - Hosts set to prod (build.gradle, GeoTrackApi, ModernDialerWebViewBridge, TaskNavRouter); no dev hosts left in source. 350/350 unit tests pass; debug APK built 14:05 (dex has only prod hosts). Not installed (not asked); not pushed.
+
+## 2026-09-19 — Pushed app 5077a33b (main + merge, both remotes)
+- 148 files: still-phone GPS fix, clock-out cleanup, consent at app open, fast clock-in, safe toasts (crash fix), frosted BackButton on 51 screens, Loans loading. Prod hosts verified, 350/350 tests, pre-push hook passed. .idea file left out.
+- Working tree switched back to DEV and the dev APK built; NOT installed (phone 77cd83cc disconnected). iOS (FoundationChat) clock-out/relaunch fix is still unpushed (not asked).
+
+## 2026-09-19 — SV list card "—" client vs detail "Vijay" — backend cause
+- List card reads /api/sitevisits/my leadName/leadPhone (TodayVisit). The Convex list mapper enrichSiteVisitForMobile never reads sv.clientId (the detail's directClient) or lead.manualProfile.clientName, so BDO-created SVs without a lead or CP go out with no name. The row has no other client fields, so no mobile fallback is possible. Handoff: reports/SV_LIST_CLIENT_NAME_MISSING_2026-09-19.md. No app change.
+
+## 2026-09-19 — SV overview: read-only recorded outcome + no Call Driver for own vehicle
+- SiteVisitOverviewFragment: once the outcome is locked (same isOutcomeAlreadyRecorded / status rules), the outcome buttons are replaced by a read-only card (layoutOutcomeRecorded: "✓ Converted as Booking" green / "Client Not Interested" red / "Follow up" amber / Cancelled / No-show / Other, plus postpone or no-show reason); subtitle "Outcome recorded for this site visit." Buttons are unchanged when nothing is recorded. The outcome comes from the SV's own fields first (captureRecordedOutcome).
+- Call Driver is hidden for own_vehicle (from list args and after the enriched fetch); Call Client takes the full width.
+- Built (dev hosts). Not pushed; iOS not changed.
+
+## 2026-09-19 — Mandatory app update as a full-screen page
+- InAppUpdateManager rewritten: any Play update (IMMEDIATE preferred, else FLEXIBLE with install as soon as downloaded) or a backend-required version shows a mandatory page; Play cancel/fail returns to the page; no idle/operational gates any more (staff clocked in all day never saw the old prompt). Safe because punches/points/events persist and BootReceiver restarts tracking on MY_PACKAGE_REPLACED.
+- New layout view_mandatory_update.xml (added over the window via addContentView): app icon, "Update required", message, progress, one green Update button (bg_attendance_btn_primary), no cancel; OnBackPressedCallback blocks Back while it is shown. The old appUpdateCard is kept hidden.
+- Removed OperationalUpdateGate + OperationalUpdatePolicyTest (policy obsolete). 343/348 pass (5 prod-URL tests on dev hosts). Not visually verified (needs a real Play update). Not pushed.
+
+## 2026-09-19 — Switched to prod
+- Hosts set to prod; no dev hosts in source; 348/348 unit tests pass; the debug APK has only prod hosts. Not installed (phone disconnected). Uncommitted: SV outcome card + Call Driver, mandatory update page.
+
+## 2026-09-19 — WhatsApp sales bot: account lock (whatsapp-apis-main, lex, uncommitted)
+- Spec: changes apply only to the Manju sales bot. Reverted the shared worker.go account-resolution change (it also carries utility/OTP traffic). Restored the original 3-action project page and TestProjectViewHasOnlyRequestedActions.
+- Added SALES_BOT_ACCOUNT_ID lock: config guard fails closed for the bot only (API and worker still start); QueueInbound rejects other accounts before any DB query and requires active purpose=sales; Process re-checks and marks others ignored; outbound is blocked unless the conversation's account is the configured one.
+- Tests: account_lock_test, config_test, DB integration test (gated on TEST_DATABASE_URL, skipped locally). go test ./... passes. deploy.sh and .env.example require and validate the UUID.
+- docs/sales-bot-bugs-and-fixes.md updated (A1, B5, flow map, changed files, new section G). CI/CD workflow and deploy_from_git.sh not started: they need runner/server access and approval. Nothing pushed.
+
+### Session (2026-09-19) - Mconnect-Aivida fork created + seeded
+- New sibling repo/folder C:\Users\surya\Projects\Mconnect-Aivida = fork of Mconnect for company
+  Aivida ("clone but modified"). Cloned from Mconnect merge @5077a33b + copied current in-flight
+  WIP (in-app/mandatory-update refactor: InAppUpdateManager/MainActivity/view_mandatory_update,
+  removed OperationalUpdateGate+test; SV overview outcome-recorded UI). Seed commit c12a6e55.
+- Remotes: origin=github.com/D-A-R-X/Mconnect-Aivida (SEEDED to branch main, tracked), upstream=
+  github.com/manjugroupsdev/Mconnect (to pull Mconnect updates in). Excluded from seed: .idea,
+  .kotlin, reports/, AGENT_LOG (local-only).
+- RULE (saved memory mconnect-aivida-workflow): "push aivida"->push origin main; "pull aivida"->
+  pull origin main; "sync from mconnect"->upstream. Aivida moves ONLY when named; bare push/pull
+  stays Mconnect. Aivida still on Mconnect backend until its own backend/branding is built.
+- This chat pivots to work on Aivida going forward.

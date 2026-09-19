@@ -32,7 +32,6 @@ import com.manjugroups.m_connect.notifications.PushTokenManager
 import com.manjugroups.m_connect.notifications.WorkflowNotificationRoute
 import com.manjugroups.m_connect.update.InAppUpdateManager
 import com.manjugroups.m_connect.update.InAppUpdateUiState
-import com.manjugroups.m_connect.update.OperationalUpdateGate
 import com.manjugroups.m_connect.ui.chat.ChatListFragment
 import com.manjugroups.m_connect.ui.chat.ChatMessagesFragment
 import com.manjugroups.m_connect.ui.home.HomeFragment
@@ -90,6 +89,13 @@ class MainActivity : AppCompatActivity() {
     // Google Play in-app updates. Initialized in onCreate only once we know the
     // user stays in the shell (past the login / force-password redirects).
     private var inAppUpdateManager: InAppUpdateManager? = null
+    /** Full-screen mandatory update page, laid over the whole window. */
+    private var updatePage: View? = null
+    private val updatePageBackBlocker = object : androidx.activity.OnBackPressedCallback(false) {
+        // While an update is required, Back does nothing: there is no way
+        // past the page except updating.
+        override fun handleOnBackPressed() = Unit
+    }
     private var currentTab = 0
     private var cachedTopInset = 0
     private var cachedBottomInset = 0
@@ -275,17 +281,24 @@ class MainActivity : AppCompatActivity() {
 
         // The update coordinator can emit immediately, so it must start only
         // after activity_main and its update views have been inflated.
-        val updateGate = OperationalUpdateGate(this, session, api)
+        updatePage = layoutInflater.inflate(R.layout.view_mandatory_update, null).also { page ->
+            addContentView(
+                page,
+                android.view.ViewGroup.LayoutParams(
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                ),
+            )
+            page.findViewById<View>(R.id.mandatoryUpdateButton).setOnClickListener {
+                inAppUpdateManager?.performPrimaryAction()
+            }
+        }
+        onBackPressedDispatcher.addCallback(this, updatePageBackBlocker)
         inAppUpdateManager = InAppUpdateManager(
             activity = this,
             api = api,
-            isUiIdle = ::isUpdateUiIdle,
-            isOperationallyIdle = updateGate::isSafeToUpdate,
             onUiStateChanged = ::renderAppUpdateState,
         ).also { it.start() }
-        findViewById<TextView>(R.id.appUpdateAction)?.setOnClickListener {
-            inAppUpdateManager?.performPrimaryAction()
-        }
 
         // Pending-tasks nudge docked on the nav — count of incomplete My
         // Tasks; the Complete chip routes the newest task to where it's DONE
@@ -515,7 +528,6 @@ class MainActivity : AppCompatActivity() {
         // header/tab state never bleeds in from the popped fragment.
         supportFragmentManager.addOnBackStackChangedListener {
             syncChromeToBackStack()
-            inAppUpdateManager?.onHostStateChanged()
         }
 
         currentTab = normalizeTab(savedInstanceState?.getInt(KEY_CURRENT_TAB, TAB_HOME) ?: TAB_HOME)
@@ -1284,72 +1296,71 @@ class MainActivity : AppCompatActivity() {
         iamPollJob = null
     }
 
+    /**
+     * Every available update is mandatory: a full-screen page with one green
+     * Update button, no cancel. The old dismissible card stays hidden.
+     */
     private fun renderAppUpdateState(state: InAppUpdateUiState) {
-        val card = findViewById<View>(R.id.appUpdateCard) ?: return
-        val title = findViewById<TextView>(R.id.appUpdateTitle) ?: return
-        val subtitle = findViewById<TextView>(R.id.appUpdateSubtitle) ?: return
-        val progress = findViewById<ProgressBar>(R.id.appUpdateProgress) ?: return
-        val action = findViewById<TextView>(R.id.appUpdateAction) ?: return
+        findViewById<View>(R.id.appUpdateCard)?.visibility = View.GONE
+        val page = updatePage ?: return
+        val title = page.findViewById<TextView>(R.id.mandatoryUpdateTitle)
+        val message = page.findViewById<TextView>(R.id.mandatoryUpdateMessage)
+        val progress = page.findViewById<ProgressBar>(R.id.mandatoryUpdateProgress)
+        val status = page.findViewById<TextView>(R.id.mandatoryUpdateStatus)
+        val button = page.findViewById<TextView>(R.id.mandatoryUpdateButton)
 
         if (state == InAppUpdateUiState.Hidden) {
-            card.visibility = View.GONE
+            page.visibility = View.GONE
+            updatePageBackBlocker.isEnabled = false
             return
         }
-        card.visibility = View.VISIBLE
+        page.visibility = View.VISIBLE
+        page.bringToFront()
+        updatePageBackBlocker.isEnabled = true
         progress.visibility = View.GONE
-        action.visibility = View.GONE
-        action.isEnabled = true
+        status.visibility = View.GONE
+        button.isEnabled = true
+        button.alpha = 1f
+        title.text = "Update required"
+
+        fun busy(text: String, percent: Int? = null) {
+            progress.visibility = View.VISIBLE
+            progress.isIndeterminate = percent == null
+            percent?.let { progress.progress = it }
+            status.text = text
+            status.visibility = View.VISIBLE
+            button.isEnabled = false
+            button.alpha = 0.6f
+        }
 
         when (state) {
             InAppUpdateUiState.Hidden -> Unit
             is InAppUpdateUiState.Available -> {
-                title.text = if (state.required) "Update required" else "Update available"
-                subtitle.text = "Download the latest MConnect version"
-                action.text = if (state.required) "Update now" else "Update"
-                action.visibility = View.VISIBLE
+                message.text = "A new version of M-Connect is available. Please update to keep using the app."
+                button.text = "Update now"
             }
             InAppUpdateUiState.Preparing -> {
-                title.text = "Updating MConnect"
-                subtitle.text = "Preparing download"
-                progress.isIndeterminate = true
-                progress.visibility = View.VISIBLE
+                message.text = "Getting the latest version of M-Connect ready."
+                button.text = "Updating…"
+                busy("Preparing download")
             }
             is InAppUpdateUiState.Downloading -> {
-                title.text = "Updating MConnect"
-                subtitle.text = state.progressPercent?.let { "Downloading $it%" } ?: "Downloading update"
-                progress.isIndeterminate = state.progressPercent == null
-                state.progressPercent?.let { progress.progress = it }
-                progress.visibility = View.VISIBLE
+                message.text = "Downloading the latest version of M-Connect."
+                button.text = "Updating…"
+                busy(state.progressPercent?.let { "Downloading $it%" } ?: "Downloading", state.progressPercent)
             }
             InAppUpdateUiState.ReadyToRestart -> {
-                title.text = "Update ready"
-                subtitle.text = "Restart to install the new version"
-                action.text = "Restart"
-                action.visibility = View.VISIBLE
-            }
-            InAppUpdateUiState.CheckingRestartSafety -> {
-                title.text = "Update ready"
-                subtitle.text = "Checking that your work is safely synced"
-                progress.isIndeterminate = true
-                progress.visibility = View.VISIBLE
-            }
-            InAppUpdateUiState.WaitingForIdle -> {
-                title.text = "Update ready"
-                subtitle.text = "Finish active work, then restart"
-                action.text = "Retry"
-                action.visibility = View.VISIBLE
+                message.text = "The update is downloaded. Install it to continue."
+                button.text = "Install update"
             }
             InAppUpdateUiState.Installing -> {
-                title.text = "Installing update"
-                subtitle.text = "MConnect will restart shortly"
-                progress.isIndeterminate = true
-                progress.visibility = View.VISIBLE
+                message.text = "Installing the update. M-Connect will restart by itself."
+                button.text = "Installing…"
+                busy("Installing")
             }
             is InAppUpdateUiState.ExternalRequired -> {
-                title.text = "Update required"
-                subtitle.text = "MConnect ${state.version} is available"
-                action.text = "Open Store"
-                action.visibility = View.VISIBLE
+                message.text = "M-Connect ${state.version} is required. Please update to keep using the app."
+                button.text = "Update now"
             }
         }
     }
@@ -1368,15 +1379,6 @@ class MainActivity : AppCompatActivity() {
         inAppUpdateManager = null
         super.onDestroy()
     }
-
-    private fun isUpdateUiIdle(): Boolean {
-        if (isFinishing || isChangingConfigurations) return false
-        if (supportFragmentManager.backStackEntryCount != 0) return false
-        return supportFragmentManager.fragments.none { fragment ->
-            (fragment as? androidx.fragment.app.DialogFragment)?.dialog?.isShowing == true
-        }
-    }
-
 
     private fun startIamPolling() {
         if (iamPollJob?.isActive == true) return
@@ -1656,8 +1658,7 @@ class MainActivity : AppCompatActivity() {
             // the final status-bar color and icon contrast.
             if (currentTab == index && supportFragmentManager.backStackEntryCount == 0) {
                 applyTopBarForTab(index)
-                inAppUpdateManager?.onHostStateChanged()
-            }
+                }
         }
         transaction.commit()
         prewarmNeighbours()

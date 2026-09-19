@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Mandatory update page. Covers the whole app (added over the activity
+  window by MainActivity) and swallows touches; there is no cancel or close,
+  and Back is consumed while it is visible. The only way forward is the green
+  Update button.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/mandatoryUpdatePage"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/colorSurfacePrimary"
+    android:clickable="true"
+    android:elevation="24dp"
+    android:focusable="true"
+    android:visibility="gone">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:paddingHorizontal="32dp"
+        android:paddingBottom="96dp">
+
+        <ImageView
+            android:layout_width="104dp"
+            android:layout_height="104dp"
+            android:contentDescription="@null"
+            android:scaleType="fitCenter"
+            android:src="@mipmap/ic_launcher_round" />
+
+        <TextView
+            android:id="@+id/mandatoryUpdateTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="28dp"
+            android:fontFamily="@font/inter_bold"
+            android:gravity="center"
+            android:text="Update required"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textSize="22sp" />
+
+        <TextView
+            android:id="@+id/mandatoryUpdateMessage"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:fontFamily="@font/inter_regular"
+            android:gravity="center"
+            android:lineSpacingExtra="3dp"
+            android:text="A new version of M-Connect is available. Please update to keep using the app."
+            android:textColor="?attr/colorForegroundMuted"
+            android:textSize="14sp" />
+
+        <ProgressBar
+            android:id="@+id/mandatoryUpdateProgress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="6dp"
+            android:layout_marginTop="24dp"
+            android:max="100"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/mandatoryUpdateStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:fontFamily="@font/inter_medium"
+            android:textColor="?attr/colorForegroundMuted"
+            android:textSize="12sp"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <!-- The app's primary green button (same as Clock In / Clock Out). -->
+    <TextView
+        android:id="@+id/mandatoryUpdateButton"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:layout_gravity="bottom"
+        android:layout_marginHorizontal="24dp"
+        android:layout_marginBottom="32dp"
+        android:background="@drawable/bg_attendance_btn_primary"
+        android:fontFamily="@font/inter_semibold"
+        android:gravity="center"
+        android:text="Update now"
+        android:textColor="@android:color/white"
+        android:textSize="16sp" />
+</FrameLayout>

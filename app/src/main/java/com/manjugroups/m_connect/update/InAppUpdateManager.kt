@@ -27,20 +27,28 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
- * Drives Google Play flexible updates without interrupting operational work.
+ * Makes every available update MANDATORY.
  *
- * The host supplies two fail-closed gates: the UI must be on its idle Home root,
- * and the operational gate must confirm that attendance, tracking, field work,
- * calls, and offline queues are inactive. Release priority never bypasses them.
+ * Any update Google Play offers, or a minimum version required by the backend
+ * (`/api/mobile/app-version`), puts up a full-screen page with a single Update
+ * button: no cancel, no close, Back is blocked. It shows on any screen, even
+ * mid-shift.
  *
- * Dev and sideloaded builds remain safe: Play reports no update and this becomes
- * a no-op. A flexible update still requires Google's one-time user consent.
+ * This used to be an optional "Update available" card that appeared only on the
+ * idle Home screen once attendance, tracking and offline queues were all quiet,
+ * so staff who stay clocked in all day almost never saw it. Forcing it is safe:
+ * punches, GeoTrack points and events are stored on the device and survive the
+ * update, and BootReceiver restarts tracking on MY_PACKAGE_REPLACED.
+ *
+ * Play's IMMEDIATE flow is preferred (Play drives download and install
+ * full-screen). If only FLEXIBLE is allowed, the page shows the download and
+ * installs as soon as it finishes. Backing out of Play's screen simply returns
+ * to the page. Dev and sideloaded builds get no Play update; for them only the
+ * backend policy applies.
  */
 class InAppUpdateManager(
     private val activity: AppCompatActivity,
     private val api: ApiService,
-    private val isUiIdle: () -> Boolean,
-    private val isOperationallyIdle: suspend () -> Boolean,
     private val onUiStateChanged: (InAppUpdateUiState) -> Unit,
 ) {
     private val manager: AppUpdateManager = AppUpdateManagerFactory.create(activity)
@@ -50,10 +58,10 @@ class InAppUpdateManager(
             ActivityResultContracts.StartIntentSenderForResult(),
         ) { result: ActivityResult ->
             if (result.resultCode != Activity.RESULT_OK) {
-                Log.w(TAG, "In-app update flow not completed (resultCode=${result.resultCode})")
-                updateAction = null
-                emit(InAppUpdateUiState.Hidden)
-                pendingUpdateInfo = null
+                // Backed out of Play's screen: the update is still required,
+                // so the page stays up with its Update button.
+                Log.w(TAG, "Update flow not completed (resultCode=${result.resultCode})")
+                emit(InAppUpdateUiState.Available(required = true))
                 checkForUpdate()
             }
         }
@@ -63,31 +71,21 @@ class InAppUpdateManager(
             InstallStatus.PENDING -> emit(InAppUpdateUiState.Preparing)
             InstallStatus.DOWNLOADING -> emit(
                 InAppUpdateUiState.Downloading(
-                    downloadProgressPercentage(
-                        state.bytesDownloaded(),
-                        state.totalBytesToDownload(),
-                    ),
+                    downloadProgressPercentage(state.bytesDownloaded(), state.totalBytesToDownload()),
                 ),
             )
-            InstallStatus.DOWNLOADED -> {
-                if (isForeground) handleDownloadedUpdate()
-                else completeDownloadedUpdateInBackground()
-            }
+            InstallStatus.DOWNLOADED -> installDownloaded()
             InstallStatus.INSTALLING -> emit(InAppUpdateUiState.Installing)
             InstallStatus.INSTALLED -> emit(InAppUpdateUiState.Hidden)
             InstallStatus.CANCELED, InstallStatus.FAILED -> {
-                updateAction = null
-                emit(InAppUpdateUiState.Hidden)
+                emit(InAppUpdateUiState.Available(required = true))
                 checkForUpdate()
             }
         }
     }
 
     private var listenerRegistered = false
-    private var isForeground = false
-    private var safetyJob: Job? = null
     private var availabilityJob: Job? = null
-    private var pendingUpdateInfo: AppUpdateInfo? = null
     private var updateAction: UpdateAction? = null
     private var remotePolicy: RequiredRemoteUpdate? = restoreRemotePolicy()
     private var lastRemoteCheckMs = 0L
@@ -101,7 +99,6 @@ class InAppUpdateManager(
     }
 
     fun onResume() {
-        isForeground = true
         checkForUpdate()
         availabilityJob?.cancel()
         availabilityJob = activity.lifecycleScope.launch {
@@ -112,41 +109,19 @@ class InAppUpdateManager(
         }
     }
 
-    /** Re-evaluate a cached update when navigation or operational state changes. */
-    fun onHostStateChanged() {
-        if (!isForeground || !isUiIdle()) return
-        pendingUpdateInfo?.let(::handleUpdateInfoInForeground) ?: checkForUpdate()
-    }
-
-    private fun checkForUpdate() {
-        manager.appUpdateInfo
-            .addOnSuccessListener(::handleUpdateInfoInForeground)
-            .addOnFailureListener { error ->
-                Log.d(TAG, "appUpdateInfo check failed: ${error.message}")
-                checkRemotePolicy()
-            }
-    }
-
-    /** Install a downloaded update in the background only after all work is idle. */
     fun onAppBackgrounded() {
-        isForeground = false
         availabilityJob?.cancel()
         availabilityJob = null
+        // A flexible update that finished downloading is installed right away.
         manager.appUpdateInfo
             .addOnSuccessListener { info ->
-                if (info.installStatus() == InstallStatus.DOWNLOADED) {
-                    completeDownloadedUpdateInBackground()
-                }
+                if (info.installStatus() == InstallStatus.DOWNLOADED) installDownloaded()
             }
-            .addOnFailureListener { /* Retry on the next background or foreground check. */ }
     }
 
     fun destroy() {
-        safetyJob?.cancel()
-        safetyJob = null
         availabilityJob?.cancel()
         availabilityJob = null
-        pendingUpdateInfo = null
         updateAction = null
         if (listenerRegistered) {
             runCatching { manager.unregisterListener(installListener) }
@@ -154,56 +129,49 @@ class InAppUpdateManager(
         }
     }
 
-    private fun handleUpdateInfoInForeground(info: AppUpdateInfo) {
-        val installStatus = info.installStatus()
-        val hasActionableUpdate =
-            installStatus == InstallStatus.PENDING ||
-                installStatus == InstallStatus.DOWNLOADING ||
-                installStatus == InstallStatus.DOWNLOADED ||
-                installStatus == InstallStatus.INSTALLING ||
-                info.updateAvailability() == UpdateAvailability.DEVELOPER_TRIGGERED_UPDATE_IN_PROGRESS ||
-                (info.updateAvailability() == UpdateAvailability.UPDATE_AVAILABLE &&
-                    (info.isUpdateTypeAllowed(AppUpdateType.FLEXIBLE) ||
-                        info.isUpdateTypeAllowed(AppUpdateType.IMMEDIATE)))
-        pendingUpdateInfo = info.takeIf { hasActionableUpdate }
-        if (!hasActionableUpdate) {
-            updateAction = null
-            emit(InAppUpdateUiState.Hidden)
-            checkRemotePolicy()
-        }
+    private fun checkForUpdate() {
+        manager.appUpdateInfo
+            .addOnSuccessListener(::handleUpdateInfo)
+            .addOnFailureListener { error ->
+                Log.d(TAG, "appUpdateInfo check failed: ${error.message}")
+                checkRemotePolicy()
+            }
+    }
+
+    private fun handleUpdateInfo(info: AppUpdateInfo) {
+        val status = info.installStatus()
+        val availability = info.updateAvailability()
         when {
-            installStatus == InstallStatus.PENDING -> emit(InAppUpdateUiState.Preparing)
-
-            installStatus == InstallStatus.DOWNLOADING -> emit(InAppUpdateUiState.Preparing)
-
-            installStatus == InstallStatus.INSTALLING -> emit(InAppUpdateUiState.Installing)
-
-            installStatus == InstallStatus.DOWNLOADED ->
-                handleDownloadedUpdate()
-
-            // An older version may already have started an immediate flow.
-            info.updateAvailability() ==
-                UpdateAvailability.DEVELOPER_TRIGGERED_UPDATE_IN_PROGRESS ->
-                runWhenSafe { launchImmediate(info) }
-
-            info.updateAvailability() == UpdateAvailability.UPDATE_AVAILABLE &&
-                info.isUpdateTypeAllowed(AppUpdateType.FLEXIBLE) ->
-                runWhenSafe {
-                    updateAction = UpdateAction.PlayFlexible(info)
-                    emit(InAppUpdateUiState.Available(required = false))
-                }
-
-            info.updateAvailability() == UpdateAvailability.UPDATE_AVAILABLE &&
-                info.isUpdateTypeAllowed(AppUpdateType.IMMEDIATE) ->
-                runWhenSafe {
-                    updateAction = UpdateAction.PlayImmediate(info)
-                    emit(InAppUpdateUiState.Available(required = true))
-                }
+            status == InstallStatus.DOWNLOADED -> installDownloaded()
+            status == InstallStatus.INSTALLING -> emit(InAppUpdateUiState.Installing)
+            status == InstallStatus.PENDING || status == InstallStatus.DOWNLOADING ->
+                emit(InAppUpdateUiState.Preparing)
+            // An immediate flow already in progress (e.g. the app was killed
+            // mid-update): resume it.
+            availability == UpdateAvailability.DEVELOPER_TRIGGERED_UPDATE_IN_PROGRESS -> {
+                updateAction = UpdateAction.PlayImmediate(info)
+                launchImmediate(info)
+            }
+            availability == UpdateAvailability.UPDATE_AVAILABLE &&
+                info.isUpdateTypeAllowed(AppUpdateType.IMMEDIATE) -> {
+                updateAction = UpdateAction.PlayImmediate(info)
+                emit(InAppUpdateUiState.Available(required = true))
+            }
+            availability == UpdateAvailability.UPDATE_AVAILABLE &&
+                info.isUpdateTypeAllowed(AppUpdateType.FLEXIBLE) -> {
+                updateAction = UpdateAction.PlayFlexible(info)
+                emit(InAppUpdateUiState.Available(required = true))
+            }
+            else -> {
+                updateAction = null
+                emit(InAppUpdateUiState.Hidden)
+                checkRemotePolicy()
+            }
         }
     }
 
     private fun checkRemotePolicy() {
-        remotePolicy?.let(::showRemotePolicyWhenSafe)
+        remotePolicy?.let(::showRemotePolicy)
         val now = android.os.SystemClock.elapsedRealtime()
         if (lastRemoteCheckMs != 0L && now - lastRemoteCheckMs < REMOTE_CHECK_INTERVAL_MS) return
         lastRemoteCheckMs = now
@@ -219,15 +187,13 @@ class InAppUpdateManager(
             }.getOrNull() ?: return@launch
             remotePolicy = response.toRequiredUpdate()
             persistRemotePolicy(remotePolicy)
-            remotePolicy?.let(::showRemotePolicyWhenSafe)
+            remotePolicy?.let(::showRemotePolicy)
         }
     }
 
-    private fun showRemotePolicyWhenSafe(policy: RequiredRemoteUpdate) {
-        runWhenSafe {
-            updateAction = UpdateAction.External(policy.updateUrl)
-            emit(InAppUpdateUiState.ExternalRequired(policy.version))
-        }
+    private fun showRemotePolicy(policy: RequiredRemoteUpdate) {
+        updateAction = UpdateAction.External(policy.updateUrl)
+        emit(InAppUpdateUiState.ExternalRequired(policy.version))
     }
 
     private fun MobileAppVersionResponse.toRequiredUpdate(): RequiredRemoteUpdate? {
@@ -263,72 +229,28 @@ class InAppUpdateManager(
         }.apply()
     }
 
-    private fun handleDownloadedUpdate() {
-        updateAction = UpdateAction.Restart
-        emit(InAppUpdateUiState.ReadyToRestart)
-    }
-
+    /** The page's green button. */
     fun performPrimaryAction() {
         when (val action = updateAction) {
-            is UpdateAction.PlayFlexible -> runWhenSafe { launchFlexible(action.info) }
-            is UpdateAction.PlayImmediate -> runWhenSafe { launchImmediate(action.info) }
-            is UpdateAction.External -> runWhenSafe {
-                runCatching {
-                    activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(action.url)))
-                }.onFailure { Log.w(TAG, "Opening update URL failed: ${it.message}") }
-            }
-            UpdateAction.Restart -> requestSafeRestart()
-            null -> Unit
+            is UpdateAction.PlayImmediate -> launchImmediate(action.info)
+            is UpdateAction.PlayFlexible -> launchFlexible(action.info)
+            is UpdateAction.External -> runCatching {
+                activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(action.url)))
+            }.onFailure { Log.w(TAG, "Opening update URL failed: ${it.message}") }
+            UpdateAction.Restart -> installDownloaded()
+            null -> checkForUpdate()
         }
     }
 
-    private fun requestSafeRestart() {
-        if (!isForeground) return
-        emit(InAppUpdateUiState.CheckingRestartSafety)
-        safetyJob?.cancel()
-        safetyJob = activity.lifecycleScope.launch {
-            val safe = isUiIdle() && runCatching { isOperationallyIdle() }.getOrDefault(false)
-            if (!safe || !isForeground) {
-                emit(InAppUpdateUiState.WaitingForIdle)
-                return@launch
-            }
-            emit(InAppUpdateUiState.Installing)
-            manager.completeUpdate().addOnFailureListener { error ->
-                Log.w(TAG, "Completing downloaded update failed: ${error.message}")
-                emit(InAppUpdateUiState.ReadyToRestart)
-            }
+    /** A downloaded (flexible) update is required: install it now. */
+    private fun installDownloaded() {
+        updateAction = UpdateAction.Restart
+        emit(InAppUpdateUiState.Installing)
+        manager.completeUpdate().addOnFailureListener { error ->
+            Log.w(TAG, "Completing downloaded update failed: ${error.message}")
+            emit(InAppUpdateUiState.ReadyToRestart)
         }
     }
-
-    private fun completeDownloadedUpdateInBackground() {
-        if (isForeground) return
-        runWhenSafe(requireForeground = false) {
-            manager.completeUpdate().addOnFailureListener { error ->
-                Log.w(TAG, "Background update completion failed: ${error.message}")
-                emit(InAppUpdateUiState.ReadyToRestart)
-            }
-        }
-    }
-
-    private fun runWhenSafe(
-        requireForeground: Boolean = true,
-        action: () -> Unit,
-    ) {
-        if ((requireForeground && !isUiIdle()) || !hasExpectedVisibility(requireForeground)) return
-        safetyJob?.cancel()
-        safetyJob = activity.lifecycleScope.launch {
-            val safe = runCatching { isOperationallyIdle() }.getOrDefault(false)
-            if (
-                !safe ||
-                (requireForeground && !isUiIdle()) ||
-                !hasExpectedVisibility(requireForeground)
-            ) return@launch
-            action()
-        }
-    }
-
-    private fun hasExpectedVisibility(requireForeground: Boolean): Boolean =
-        if (requireForeground) isForeground else !isForeground
 
     private fun emit(state: InAppUpdateUiState) {
         activity.runOnUiThread { onUiStateChanged(state) }
@@ -343,7 +265,7 @@ class InAppUpdateManager(
                 AppUpdateOptions.newBuilder(AppUpdateType.IMMEDIATE).build(),
             )
         }.onFailure {
-            Log.w(TAG, "Resuming immediate update failed: ${it.message}")
+            Log.w(TAG, "Starting immediate update failed: ${it.message}")
             emit(InAppUpdateUiState.Available(required = true))
         }
     }
@@ -358,7 +280,7 @@ class InAppUpdateManager(
             )
         }.onFailure {
             Log.w(TAG, "Starting flexible update failed: ${it.message}")
-            emit(InAppUpdateUiState.Available(required = false))
+            emit(InAppUpdateUiState.Available(required = true))
         }
     }
 
@@ -392,8 +314,6 @@ sealed interface InAppUpdateUiState {
     data object Preparing : InAppUpdateUiState
     data class Downloading(val progressPercent: Int?) : InAppUpdateUiState
     data object ReadyToRestart : InAppUpdateUiState
-    data object CheckingRestartSafety : InAppUpdateUiState
-    data object WaitingForIdle : InAppUpdateUiState
     data object Installing : InAppUpdateUiState
     data class ExternalRequired(val version: String) : InAppUpdateUiState
 }
