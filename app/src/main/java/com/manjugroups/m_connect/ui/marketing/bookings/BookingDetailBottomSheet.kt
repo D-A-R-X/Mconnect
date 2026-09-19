@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.marketing.bookings
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.app.Dialog
 import android.app.AlertDialog
 import android.graphics.Color
@@ -802,7 +804,7 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
                     getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                         val txId = input.text?.toString()?.trim().orEmpty()
                         if (txId.isBlank()) {
-                            Toast.makeText(requireContext(), "Transaction ID / Ref No is required to approve", Toast.LENGTH_SHORT).show()
+                            toastSafe("Transaction ID / Ref No is required to approve")
                             return@setOnClickListener
                         }
                         dismiss()
@@ -827,16 +829,16 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
                     ),
                 )
                 if (!resp.success) {
-                    Toast.makeText(requireContext(), resp.error ?: "Approve failed", Toast.LENGTH_LONG).show()
+                    toastSafe(resp.error ?: "Approve failed", Toast.LENGTH_LONG)
                     return@launch
                 }
                 pendingProofStorageId = null
                 pendingProofFileName = null
-                Toast.makeText(requireContext(), "Approved Successfully", Toast.LENGTH_SHORT).show()
+                toastSafe("Approved Successfully")
                 setFragmentResult(RESULT_KEY, bundleOf("bookingId" to b.id))
                 loadBooking()
             } catch (e: Exception) {
-                Toast.makeText(requireContext(), e.message ?: "Approve failed", Toast.LENGTH_LONG).show()
+                toastSafe(e.message ?: "Approve failed", Toast.LENGTH_LONG)
             }
         }
     }
@@ -854,7 +856,7 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
             .setPositiveButton("Reject") { _, _ ->
                 val reason = input.text?.toString()?.trim().orEmpty()
                 if (reason.isBlank()) {
-                    Toast.makeText(requireContext(), "Reason is required", Toast.LENGTH_SHORT).show()
+                    toastSafe("Reason is required")
                     return@setPositiveButton
                 }
                 rejectBooking(reason)
@@ -868,14 +870,14 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
             try {
                 val resp = api.rejectBooking(session.bearerToken, b.id, BookingRejectRequest(reason))
                 if (!resp.success) {
-                    Toast.makeText(requireContext(), resp.error ?: "Reject failed", Toast.LENGTH_LONG).show()
+                    toastSafe(resp.error ?: "Reject failed", Toast.LENGTH_LONG)
                     return@launch
                 }
-                Toast.makeText(requireContext(), "Rejected", Toast.LENGTH_SHORT).show()
+                toastSafe("Rejected")
                 setFragmentResult(RESULT_KEY, bundleOf("bookingId" to b.id))
                 loadBooking()
             } catch (e: Exception) {
-                Toast.makeText(requireContext(), e.message ?: "Reject failed", Toast.LENGTH_LONG).show()
+                toastSafe(e.message ?: "Reject failed", Toast.LENGTH_LONG)
             }
         }
     }
@@ -886,7 +888,7 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
         val mobileNumber = value("mobileNumber")
         val bookingDate = value("bookingDate")
         if (clientName.isBlank() || mobileNumber.isBlank() || bookingDate.isBlank()) {
-            Toast.makeText(requireContext(), "Client name, mobile and booking date are required", Toast.LENGTH_SHORT).show()
+            toastSafe("Client name, mobile and booking date are required")
             return
         }
         val bookingCost = number("bookingCost")
@@ -922,7 +924,7 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
         // when the field has a value, so partial edits on a draft aren't blocked
         // by fields the operator hasn't filled yet. ──────────────────────────
         fun fail(msg: String): Boolean {
-            Toast.makeText(requireContext(), msg, Toast.LENGTH_LONG).show(); return true
+            toastSafe(msg, Toast.LENGTH_LONG); return true
         }
         fun digitsOf(key: String) = value(key).filter { it.isDigit() }
         val phoneChecks = listOf(
@@ -1030,15 +1032,15 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
             try {
                 val resp = api.updateBooking(session.bearerToken, b.id, req)
                 if (!resp.success) {
-                    Toast.makeText(requireContext(), resp.error ?: "Update failed", Toast.LENGTH_LONG).show()
+                    toastSafe(resp.error ?: "Update failed", Toast.LENGTH_LONG)
                     return@launch
                 }
-                Toast.makeText(requireContext(), "Booking updated", Toast.LENGTH_SHORT).show()
+                toastSafe("Booking updated")
                 setFragmentResult(RESULT_KEY, bundleOf("bookingId" to b.id))
                 setEditMode(false)
                 loadBooking()
             } catch (e: Exception) {
-                Toast.makeText(requireContext(), e.message ?: "Update failed", Toast.LENGTH_LONG).show()
+                toastSafe(e.message ?: "Update failed", Toast.LENGTH_LONG)
             } finally {
                 saveButton.isEnabled = true
             }

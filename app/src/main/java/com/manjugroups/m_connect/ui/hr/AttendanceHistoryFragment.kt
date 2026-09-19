@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.hr
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.os.Bundle
 import com.manjugroups.m_connect.ui.common.setupPullToRefresh
 import android.util.TypedValue
@@ -1627,13 +1629,13 @@ class AttendanceHistoryFragment : Fragment() {
                     try {
                         val resp = api.holdAttendance(session.bearerToken, RejectRequest(id, reason))
                         if (resp.success) {
-                            Toast.makeText(requireContext(), "Put on hold", Toast.LENGTH_SHORT).show()
+                            toastSafe("Put on hold")
                             refreshAllData(showSkeleton = false, forceRefresh = true)
                         } else {
-                            Toast.makeText(requireContext(), resp.error ?: "Failed to hold", Toast.LENGTH_SHORT).show()
+                            toastSafe(resp.error ?: "Failed to hold")
                         }
                     } catch (e: Exception) {
-                        Toast.makeText(requireContext(), "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                        toastSafe("Error: ${e.message}")
                     }
                 }
             }
@@ -1649,13 +1651,13 @@ class AttendanceHistoryFragment : Fragment() {
                     ApproveAttendanceRequest(id, approvedAttendance, isRequest = if (isRequest) true else null)
                 )
                 if (resp.success) {
-                    Toast.makeText(requireContext(), "Approved successfully", Toast.LENGTH_SHORT).show()
+                    toastSafe("Approved successfully")
                     refreshAllData(showSkeleton = false, forceRefresh = true)
                 } else {
-                    Toast.makeText(requireContext(), "Failed to approve", Toast.LENGTH_SHORT).show()
+                    toastSafe("Failed to approve")
                 }
             } catch (e: Exception) {
-                Toast.makeText(requireContext(), "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                toastSafe("Error: ${e.message}")
             }
         }
     }
@@ -1668,13 +1670,13 @@ class AttendanceHistoryFragment : Fragment() {
                     RejectRequest(id, reason, isRequest = if (isRequest) true else null)
                 )
                 if (resp.success) {
-                    Toast.makeText(requireContext(), "Rejected successfully", Toast.LENGTH_SHORT).show()
+                    toastSafe("Rejected successfully")
                     refreshAllData(showSkeleton = false, forceRefresh = true)
                 } else {
-                    Toast.makeText(requireContext(), "Failed to reject", Toast.LENGTH_SHORT).show()
+                    toastSafe("Failed to reject")
                 }
             } catch (e: Exception) {
-                Toast.makeText(requireContext(), "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                toastSafe("Error: ${e.message}")
             }
         }
     }

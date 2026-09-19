@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.library
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.graphics.Color
 import android.os.Bundle
 import android.text.Html
@@ -78,7 +80,7 @@ class ManageRatesBottomSheet : BottomSheetDialogFragment() {
     private fun loadSettings() {
         val token = session.bearerToken
         if (token.isBlank()) {
-            Toast.makeText(requireContext(), "Session expired — sign in again.", Toast.LENGTH_SHORT).show()
+            toastSafe("Session expired — sign in again.")
             dismiss()
             return
         }
@@ -176,7 +178,7 @@ class ManageRatesBottomSheet : BottomSheetDialogFragment() {
                 }
                 session.ratePerKm = request.kmRate.toInputText()
                 session.ratePackage = request.packageAmount.toInputText()
-                Toast.makeText(requireContext(), "Rates saved successfully", Toast.LENGTH_SHORT).show()
+                toastSafe("Rates saved successfully")
                 dismiss()
             } catch (e: CancellationException) {
                 throw e

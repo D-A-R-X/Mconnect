@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.chat
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
@@ -102,7 +104,7 @@ class LocationShareBottomSheet : BottomSheetDialogFragment() {
         btnShare.setOnClickListener {
             val loc = lastKnownLocation
             if (loc == null) {
-                Toast.makeText(requireContext(), "Acquiring GPS Lock... Please wait.", Toast.LENGTH_SHORT).show()
+                toastSafe("Acquiring GPS Lock... Please wait.")
                 return@setOnClickListener
             }
 

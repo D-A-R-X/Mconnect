@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.library
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.graphics.Color
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -63,7 +65,7 @@ class AppLibraryFragment : Fragment() {
         if (granted) {
             openScreen(com.manjugroups.m_connect.ui.library.frontdesk.QrScannerFragment())
         } else {
-            Toast.makeText(requireContext(), "Camera permission is required to scan QR codes", Toast.LENGTH_SHORT).show()
+            toastSafe("Camera permission is required to scan QR codes")
         }
     }
 

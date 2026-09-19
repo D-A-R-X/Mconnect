@@ -23,16 +23,12 @@
         android:layout_height="56dp"
         android:background="?attr/colorSurfacePrimary">
 
-        <ImageView
+        <com.manjugroups.m_connect.ui.common.BackButton
             android:id="@+id/btnTaskManagerBack"
             android:layout_width="32dp"
             android:layout_height="32dp"
             android:layout_gravity="start|center_vertical"
-            android:layout_marginStart="14dp"
-            android:contentDescription="Back"
-            android:padding="6dp"
-            android:src="@drawable/ic_arrow_left"
-            app:tint="?attr/colorForegroundPrimary" />
+            android:layout_marginStart="14dp" />
 
         <TextView
             android:layout_width="wrap_content"

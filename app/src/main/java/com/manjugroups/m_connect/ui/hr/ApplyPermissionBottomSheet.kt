@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.hr
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.app.Dialog
 import android.app.TimePickerDialog
 import android.graphics.Color
@@ -190,7 +192,7 @@ class ApplyPermissionBottomSheet : BottomSheetDialogFragment() {
         val reason = etReason?.text?.toString()?.trim().orEmpty() // Optional
 
         if (date.isNullOrBlank() || from.isNullOrBlank() || to.isNullOrBlank()) {
-            Toast.makeText(requireContext(), "Fill all required fields", Toast.LENGTH_SHORT).show()
+            toastSafe("Fill all required fields")
             return
         }
 
@@ -217,14 +219,14 @@ class ApplyPermissionBottomSheet : BottomSheetDialogFragment() {
                     )
                 )
                 if (resp.success) {
-                    Toast.makeText(requireContext(), "Permission applied!", Toast.LENGTH_SHORT).show()
+                    toastSafe("Permission applied!")
                     parentFragmentManager.setFragmentResult(RESULT_KEY_APPLIED, Bundle().apply { putBoolean("success", true) })
                     dismissAllowingStateLoss()
                 } else {
-                    Toast.makeText(requireContext(), resp.error ?: "Failed", Toast.LENGTH_SHORT).show()
+                    toastSafe(resp.error ?: "Failed")
                 }
             } catch (e: Exception) {
-                Toast.makeText(requireContext(), parseErrorMessage(e), Toast.LENGTH_SHORT).show()
+                toastSafe(parseErrorMessage(e))
             }
             tvSubmit?.visibility = View.VISIBLE
             skeletonSubmit?.let { SkeletonUtils.stopSkeletonPulse(it) }

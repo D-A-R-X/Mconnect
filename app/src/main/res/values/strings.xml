@@ -40,4 +40,5 @@
     <string name="employee_id_coming_soon">Employee ID sign in will be available soon.</string>
     <string name="joint_cp">Joint CP</string>
     <string name="joint_cp_toggle_summary">Add a second staff to this visit</string>
+    <string name="back_button_description">Back</string>
 </resources>

@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
+import com.manjugroups.m_connect.ui.common.navigateUp
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
@@ -99,7 +100,10 @@ class DailyLogFragment : Fragment() {
         }
         ViewCompat.requestApplyInsets(binding.root)
 
-        binding.btnDailyLogBack.setOnClickListener { parentFragmentManager.popBackStack() }
+        // Opened from Apps / notifications as a pushed screen; the button was
+        // left `gone` in the layout and nothing ever showed it.
+        binding.btnDailyLogBack.visibility = View.VISIBLE
+        binding.btnDailyLogBack.setOnClickListener { navigateUp() }
         binding.btnDailyLogAdd.setOnClickListener { onAddClicked() }
         binding.tabNewEntry.setOnClickListener { showTab(true) }
         binding.tabDpr.setOnClickListener { showTab(false) }

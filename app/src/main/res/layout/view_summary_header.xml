@@ -4,7 +4,10 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content">
 
+    <!-- Height and top padding are set in code from the real status-bar /
+         notch height (SummaryHeaderView.applyTopInset). -->
     <FrameLayout
+        android:id="@+id/summaryHeaderRoot"
         android:layout_width="match_parent"
         android:layout_height="195dp"
         android:background="@drawable/bg_attendance_header_gradient"
@@ -23,40 +26,49 @@
             android:scaleType="fitCenter"
             android:contentDescription="Banner" />
 
+        <!-- Back chip + title block in one row, same as the Attendance top bar. -->
         <LinearLayout
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_gravity="top|start"
-            android:layout_marginTop="32dp"
-            android:orientation="vertical">
+            android:layout_marginTop="20dp"
+            android:layout_marginEnd="132dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
-            <ImageView
+            <com.manjugroups.m_connect.ui.common.BackButton
                 android:id="@+id/btnBack"
-                android:layout_width="22dp"
-                android:layout_height="22dp"
-                android:clickable="true"
-                android:contentDescription="Back"
-                android:focusable="true"
-                android:src="@drawable/ic_arrow_left"
-                android:visibility="gone"
-                app:tint="@android:color/white" />
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_marginEnd="12dp"
+                android:visibility="gone" />
 
-            <TextView
-                android:id="@+id/tvHeaderTitle"
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:fontFamily="@font/inter_bold"
-                android:textColor="@android:color/white"
-                android:textSize="20sp" />
+                android:layout_weight="1"
+                android:orientation="vertical">
 
-            <TextView
-                android:id="@+id/tvHeaderSubtitle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:fontFamily="@font/inter_semibold"
-                android:textColor="#E2E8F0"
-                android:textSize="14sp" />
+                <TextView
+                    android:id="@+id/tvHeaderTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/inter_bold"
+                    android:maxLines="1"
+                    android:textColor="@android:color/white"
+                    android:textSize="20sp" />
+
+                <TextView
+                    android:id="@+id/tvHeaderSubtitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:ellipsize="end"
+                    android:fontFamily="@font/inter_semibold"
+                    android:maxLines="1"
+                    android:textColor="#E2E8F0"
+                    android:textSize="14sp" />
+            </LinearLayout>
         </LinearLayout>
     </FrameLayout>
 </merge>

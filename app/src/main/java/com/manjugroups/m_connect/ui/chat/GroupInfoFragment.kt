@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.chat
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -691,6 +693,6 @@ class GroupInfoFragment : Fragment() {
     }
 
     private fun toast(message: String) {
-        Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
+        toastSafe(message)
     }
 }

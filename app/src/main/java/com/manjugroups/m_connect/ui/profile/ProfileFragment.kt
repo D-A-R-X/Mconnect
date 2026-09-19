@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.profile
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.Manifest
 import android.graphics.Color
 import android.os.Build
@@ -227,7 +229,7 @@ class ProfileFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             runCatching { PushTokenManager.syncCurrentToken(appContext, session) }
         }
-        Toast.makeText(requireContext(), "Notifications Enabled", Toast.LENGTH_SHORT).show()
+        toastSafe("Notifications Enabled")
     }
 
     /**
@@ -241,7 +243,7 @@ class ProfileFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             runCatching { PushTokenManager.unregisterCurrentToken(appContext, session) }
         }
-        Toast.makeText(requireContext(), "Notifications Disabled", Toast.LENGTH_SHORT).show()
+        toastSafe("Notifications Disabled")
     }
 
     private fun initialsFor(name: String): String {

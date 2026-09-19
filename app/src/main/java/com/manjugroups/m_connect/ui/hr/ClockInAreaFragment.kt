@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.hr
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.app.Activity
 import android.Manifest
 import android.content.ClipData
@@ -49,7 +51,9 @@ import com.manjugroups.m_connect.network.TodayShiftSchedule
 import com.manjugroups.m_connect.ui.common.navigateUp
 import com.manjugroups.m_connect.ui.common.pushDetail
 import java.util.Calendar
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -109,7 +113,7 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
             updateUserLocationOnMap()
         } else {
             binding.tvProfileLatLng.text = "Location permission not granted"
-            Toast.makeText(requireContext(), "Location permission is needed to show your map position.", Toast.LENGTH_SHORT).show()
+            toastSafe("Location permission is needed to show your map position.")
         }
     }
 
@@ -175,24 +179,15 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
                 HomeFenceWarningDialog.show(parentFragmentManager)
                 return@setOnClickListener
             }
-            if (lastGoodFix != null) {
-                beginPunchCapture(PunchMode.PUNCH_IN)
-                return@setOnClickListener
+            // Open the camera straight away. Waiting for a GPS fix first (up to
+            // ~16 s on a cold start) is what made Clock In feel dead. The fix
+            // is warmed in the background while the selfie is taken; a null
+            // location is still allowed downstream, and the server's home-block
+            // check stays the final word.
+            if (lastGoodFix == null) {
+                viewLifecycleOwner.lifecycleScope.launch { freshFixOrNull() }
             }
-            // No fix yet — resolve one BEFORE launching the camera, so the
-            // user isn't dead-ended by the GPS toast after taking a selfie.
-            binding.layoutPunchLoading.visibility = View.VISIBLE
-            viewLifecycleOwner.lifecycleScope.launch {
-                // Warm up a location fix, but a null (offline / indoors) must NOT
-                // stop the clock-in — begin the capture anyway. Location is
-                // re-fetched after the selfie and a null location is allowed
-                // downstream (the punch records + queues offline).
-                fetchLocationOrNull()
-                if (_binding == null) return@launch
-                binding.layoutPunchLoading.visibility = View.GONE
-                updateAreaBanner()
-                beginPunchCapture(PunchMode.PUNCH_IN)
-            }
+            beginPunchCapture(PunchMode.PUNCH_IN)
         }
 
         loadTodayShift()
@@ -479,7 +474,7 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
         val imageFile = createPunchPhotoFile()
         if (imageFile == null) {
             isLaunchingCamera = false
-            Toast.makeText(requireContext(), "Unable to create selfie file.", Toast.LENGTH_SHORT).show()
+            toastSafe("Unable to create selfie file.")
             return
         }
         pendingPunchImageFile = imageFile
@@ -544,7 +539,7 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
         }.getOrDefault(false)
         if (!copied || !target.exists() || target.length() <= 0L) {
             isLaunchingCamera = false
-            Toast.makeText(requireContext(), "Failed to read captured selfie.", Toast.LENGTH_SHORT).show()
+            toastSafe("Failed to read captured selfie.")
             return
         }
 
@@ -552,8 +547,11 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
             // Best-effort location. Offline / indoors it may be null — that must
             // NOT block the clock-in. The punch still records and queues offline
             // when there's no network; the backend accepts an optional location.
-            val location = fetchLocationOrNull()
-            val address = location?.let { resolveAddress(it) }
+            val location = freshFixOrNull()
+            // Geocoder does network I/O; on the main thread it froze the screen
+            // right after the selfie.
+            val address = location?.let { withContext(Dispatchers.IO) { resolveAddress(it) } }
+            if (_binding == null) return@launch
             isLaunchingCamera = false
             navigateToPunchDetail(
                 mode = mode,
@@ -607,6 +605,13 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
                 targetVisitId = arguments?.getString(ARG_TARGET_VISIT_ID),
             ),
         )
+    }
+
+    /** A fix taken within [FRESH_FIX_MS] is reused; otherwise a new one is fetched. */
+    private suspend fun freshFixOrNull(): Location? {
+        val recent = lastGoodFix
+        if (recent != null && System.currentTimeMillis() - recent.time <= FRESH_FIX_MS) return recent
+        return fetchLocationOrNull()
     }
 
     @android.annotation.SuppressLint("MissingPermission")
@@ -681,7 +686,7 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
             lastFenceStatus = "Grant location permission to enforce home fence"
             return false
         }
-        val loc = fetchLocationOrNull()
+        val loc = freshFixOrNull()
         if (loc == null || (loc.latitude == 0.0 && loc.longitude == 0.0)) {
             lastFenceStatus = "Waiting for GPS fix…"
             return false
@@ -762,7 +767,14 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
         if (geofenceWatcherJob?.isActive == true) return
         geofenceWatcherJob = viewLifecycleOwner.lifecycleScope.launch {
             while (isActive && _binding != null) {
-                refreshGeofenceState()
+                // Run each check to completion before the next. Launching one
+                // every 5 s while each could wait up to 16 s on GPS stacked
+                // several high-accuracy requests at once — the clock-in lag.
+                val inside = computeInsideHomeFence()
+                if (_binding == null) break
+                isInsideHomeFence = inside
+                applyGeofenceToButton()
+                updateAreaBanner()
                 delay(5_000L)
             }
         }
@@ -790,6 +802,8 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
 
     companion object {
         private const val ARG_TARGET_VISIT_ID = "arg_target_visit_id"
+        /** How old a GPS fix may be and still count as "where the staff is now". */
+        private const val FRESH_FIX_MS = 30_000L
 
         /**
          * @param targetVisitId when set, a successful PUNCH_IN emits

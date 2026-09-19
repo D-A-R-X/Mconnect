@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.notifications
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.content.res.ColorStateList
 import android.graphics.Typeface
 import android.os.Bundle
@@ -480,7 +482,7 @@ class NotificationsFragment : Fragment() {
 
     private fun toast(message: String) {
         if (!isAdded) return
-        Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
+        toastSafe(message)
     }
 
     override fun onDestroyView() {

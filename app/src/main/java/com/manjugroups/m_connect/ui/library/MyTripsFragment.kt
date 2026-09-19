@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.library
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -172,7 +174,7 @@ class MyTripsFragment : Fragment() {
             parentFragmentManager.popBackStack()
         }
         binding.btnCalendar.setOnClickListener {
-            Toast.makeText(requireContext(), "Calendar filter coming soon", Toast.LENGTH_SHORT).show()
+            toastSafe("Calendar filter coming soon")
         }
     }
 
@@ -437,7 +439,7 @@ class MyTripsFragment : Fragment() {
                 // Future/Ready trip start bottom sheet
                 val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
                 if (visit.scheduledDate > todayStr) {
-                    Toast.makeText(requireContext(), "This trip is scheduled for a future date.", Toast.LENGTH_SHORT).show()
+                    toastSafe("This trip is scheduled for a future date.")
                 } else {
                     DriverStartTripBottomSheet.newInstance(visit.id, visit.scheduledDate)
                         .showOnce(parentFragmentManager, "driver_start_trip")

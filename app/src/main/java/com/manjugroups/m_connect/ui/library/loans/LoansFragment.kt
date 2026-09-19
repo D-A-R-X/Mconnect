@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.library.loans
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
@@ -53,6 +55,9 @@ class LoansFragment : Fragment() {
     private val previous = mutableListOf<Loan>()
 
     private var loaded = false
+    /** The in-flight My Loans request; a new load replaces it. */
+    private var loadJob: kotlinx.coroutines.Job? = null
+    private var skeletonAnim: android.animation.ObjectAnimator? = null
 
     private val TAB_LOANS = 0
     private val TAB_SALARY = 1
@@ -191,10 +196,18 @@ class LoansFragment : Fragment() {
         val session = SessionManager(requireContext())
         val token = session.bearerToken
         val staffId = session.staffId?.takeIf { it.isNotBlank() }
-        viewLifecycleOwner.lifecycleScope.launch {
+        // One load at a time: returning to the screen, pulling to refresh and
+        // create/cancel results all reload, and an older, slower response
+        // could land after a newer one and overwrite it.
+        loadJob?.cancel()
+        // The backend reads each loan's repayments one by one, so this can
+        // take a while; show skeleton cards instead of a blank page.
+        if (!loaded) showLoansSkeleton(true)
+        loadJob = viewLifecycleOwner.lifecycleScope.launch {
             runCatching { api.getMyLoans(token, staffId = staffId) }
                 .onSuccess { response ->
                     if (_binding == null) return@onSuccess
+                    showLoansSkeleton(false)
                     allActive.clear()
                     allPrevious.clear()
                     allActive.addAll(LoanMapper.mapLoanList(response.pending, LoanStatus.PENDING))
@@ -205,12 +218,16 @@ class LoansFragment : Fragment() {
                     render()
                 }
                 .onFailure { err ->
-                    if (_binding == null) return@onFailure
+                    // Leaving the screen cancels this load. runCatching also
+                    // catches that, and it surfaced as "Couldn't load loans …
+                    // Job was cancelled" on the next screen, with a debug id.
+                    if (err is kotlinx.coroutines.CancellationException) throw err
+                    if (_binding == null || !isAdded) return@onFailure
+                    showLoansSkeleton(false)
                     loaded = true
                     android.widget.Toast.makeText(
                         requireContext(),
-                        "Couldn't load loans (staffId=${staffId ?: "null"}): " +
-                            "${err.message ?: "network error"}",
+                        "Couldn't load loans. Check your connection and try again.",
                         android.widget.Toast.LENGTH_LONG
                     ).show()
                     updateTabSelection()
@@ -255,6 +272,20 @@ class LoansFragment : Fragment() {
         // tab — matches the iOS UX and the rest of this screen's labels.
         binding.tvRequestedLoansTitle.text =
             if (selectedTab == TAB_LOANS) "Requested Loans" else "Requested Advances"
+    }
+
+    private fun showLoansSkeleton(show: Boolean) {
+        val container = _binding?.loansSkeleton ?: return
+        skeletonAnim?.cancel()
+        skeletonAnim = null
+        if (show) {
+            container.visibility = View.VISIBLE
+            skeletonAnim = com.manjugroups.m_connect.ui.common.SkeletonLoader.show(container, count = 3)
+        } else {
+            container.removeAllViews()
+            container.alpha = 1f
+            container.visibility = View.GONE
+        }
     }
 
     private fun render() {
@@ -720,11 +751,11 @@ class LoansFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             runCatching { api.cancelLoan(token, com.manjugroups.m_connect.network.IdRequest(loanId)) }
                 .onSuccess {
-                    android.widget.Toast.makeText(requireContext(), "Loan cancelled", android.widget.Toast.LENGTH_SHORT).show()
+                    toastSafe("Loan cancelled")
                     loadFromApi()
                 }
                 .onFailure { err ->
-                    android.widget.Toast.makeText(requireContext(), "Failed to cancel loan: ${err.message}", android.widget.Toast.LENGTH_SHORT).show()
+                    toastSafe("Failed to cancel loan: ${err.message}")
                 }
         }
     }
@@ -850,7 +881,7 @@ class LoansFragment : Fragment() {
                 )
             }
                 .onSuccess {
-                    android.widget.Toast.makeText(requireContext(), "Loan rejected", android.widget.Toast.LENGTH_SHORT).show()
+                    toastSafe("Loan rejected")
                     // Refresh both the approvals queue AND My Loans, so the
                     // rejected request reappears under Previous with its
                     // Rejected tag instead of vanishing.
@@ -981,6 +1012,9 @@ class LoansFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        skeletonAnim?.cancel()
+        skeletonAnim = null
+        loadJob = null
         super.onDestroyView()
         _binding = null
     }

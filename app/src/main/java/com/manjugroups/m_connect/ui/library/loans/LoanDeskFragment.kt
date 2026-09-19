@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.library.loans
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.graphics.Color
 import android.os.Bundle
 import android.text.Editable
@@ -714,7 +716,7 @@ class LoanDeskFragment : Fragment() {
     }
 
     private fun toast(message: String) {
-        Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
+        toastSafe(message)
     }
 
     /**

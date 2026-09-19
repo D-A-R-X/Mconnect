@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.chat
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -397,7 +399,7 @@ class ChatContactInfoFragment : Fragment() {
     }
 
     private fun toast(message: String) {
-        Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
+        toastSafe(message)
     }
 
     override fun onDestroyView() {

@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.chat
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Dialog
@@ -43,12 +45,13 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
     }
 
     /**
-     * Attendance-selfie mode: locks the camera to the FRONT lens and removes
-     * every route to another source — the lens-switch button, the gallery
-     * picker and video mode are all hidden. Punch proof must be a live selfie,
-     * and the system camera intent this replaced could not enforce that (its
-     * facing extras are OEM hints and the user can always flip the lens).
-     * Off by default, so chat / CP / form callers are unaffected.
+     * Attendance-selfie mode: a live photo only — the gallery picker and video
+     * mode are hidden, so punch proof cannot come from a saved image. It
+     * starts on the FRONT lens, but the lens switch stays available: some
+     * staff phones have a missing or unusable front camera. A phone with no
+     * front camera starts on the back one, and the switch is hidden when the
+     * phone has only one lens. Off by default, so chat / CP / form callers are
+     * unaffected.
      */
     private var selfieOnly = false
 
@@ -254,7 +257,6 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
             dismiss()
         }
         btnSwitch.setOnClickListener {
-            if (selfieOnly) return@setOnClickListener // front lens is locked
             cameraLensFacing = if (cameraLensFacing == CameraSelector.LENS_FACING_BACK) {
                 CameraSelector.LENS_FACING_FRONT
             } else {
@@ -273,7 +275,7 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
 
         if (selfieOnly) {
             // Hide, don't just disable: an inert-looking button reads as a bug.
-            btnSwitch.visibility = View.GONE
+            // The lens switch stays (see setSelfieOnly).
             btnGallery.visibility = View.GONE
             modeTabs.visibility = View.GONE
             cameraLensFacing = CameraSelector.LENS_FACING_FRONT
@@ -332,6 +334,20 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
     private fun bindCameraUseCases() {
         val cameraProvider = cameraProvider ?: return
         cameraProvider.unbindAll()
+
+        // A phone without the requested lens (no front camera, or one the
+        // system doesn't expose) falls back to the other one instead of
+        // failing to bind; with a single lens there is nothing to switch to.
+        val front = runCatching { cameraProvider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA) }.getOrDefault(false)
+        val back = runCatching { cameraProvider.hasCamera(CameraSelector.DEFAULT_BACK_CAMERA) }.getOrDefault(false)
+        if (cameraLensFacing == CameraSelector.LENS_FACING_FRONT && !front && back) {
+            cameraLensFacing = CameraSelector.LENS_FACING_BACK
+        } else if (cameraLensFacing == CameraSelector.LENS_FACING_BACK && !back && front) {
+            cameraLensFacing = CameraSelector.LENS_FACING_FRONT
+        }
+        if (::btnSwitch.isInitialized) {
+            btnSwitch.visibility = if (front && back) View.VISIBLE else View.GONE
+        }
 
         val cameraSelector = CameraSelector.Builder()
             .requireLensFacing(cameraLensFacing)
@@ -393,13 +409,13 @@ class CustomCameraBottomSheet : BottomSheetDialogFragment() {
             camera?.cameraControl?.enableTorch(enableTorch)
 
         } catch (exc: Exception) {
-            Toast.makeText(requireContext(), "Failed to bind camera", Toast.LENGTH_SHORT).show()
+            toastSafe("Failed to bind camera")
         }
     }
 
     private fun toggleFlash() {
         if (activeMode == Mode.VIDEO) {
-            Toast.makeText(requireContext(), "Flash not supported in Video mode", Toast.LENGTH_SHORT).show()
+            toastSafe("Flash not supported in Video mode")
             return
         }
         flashMode = when (flashMode) {

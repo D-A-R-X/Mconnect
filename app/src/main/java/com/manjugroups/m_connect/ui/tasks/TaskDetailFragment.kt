@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.tasks
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.animation.ObjectAnimator
 import android.graphics.Color
 import android.os.Bundle
@@ -62,14 +64,14 @@ class TaskDetailFragment : Fragment() {
 
         setFragmentResultListener(TaskUpdateBottomSheet.RESULT_KEY) { _, bundle ->
             if (bundle.getBoolean(TaskUpdateBottomSheet.KEY_UPDATED)) {
-                Toast.makeText(requireContext(), "Task updated", Toast.LENGTH_SHORT).show()
+                toastSafe("Task updated")
                 taskId?.let { loadDetail(view, it) }
             }
         }
 
         val id = taskId
         if (id.isNullOrBlank()) {
-            Toast.makeText(requireContext(), "Missing task id", Toast.LENGTH_SHORT).show()
+            toastSafe("Missing task id")
             navigateUp()
             return
         }

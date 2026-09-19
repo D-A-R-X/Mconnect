@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.library.land
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
@@ -227,7 +229,7 @@ class LandInspectionFragment : Fragment() {
 
     private fun showError(message: String) {
         if (_binding == null) return
-        android.widget.Toast.makeText(requireContext(), message, android.widget.Toast.LENGTH_LONG).show()
+        toastSafe(message, android.widget.Toast.LENGTH_LONG)
     }
 
     /**

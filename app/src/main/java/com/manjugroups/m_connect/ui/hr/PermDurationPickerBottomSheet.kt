@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.hr
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.app.Dialog
 import android.app.TimePickerDialog
 import android.graphics.Color
@@ -134,7 +136,7 @@ class PermDurationPickerBottomSheet : BottomSheetDialogFragment() {
         if (from == null || to == null) return
 
         if (!isValidTimeRange(from, to)) {
-            Toast.makeText(requireContext(), "To time must be after from time", Toast.LENGTH_SHORT).show()
+            toastSafe("To time must be after from time")
             return
         }
 

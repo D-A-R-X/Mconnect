@@ -25,23 +25,11 @@
             android:paddingHorizontal="16dp"
             android:paddingVertical="14dp">
 
-            <FrameLayout
+            <com.manjugroups.m_connect.ui.common.BackButton
                 android:id="@+id/btnLoansEmptyBack"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
-                android:background="@drawable/bg_home_new_action_circle"
-                android:clickable="true"
-                android:focusable="true"
-                android:visibility="gone">
-
-                <ImageView
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:layout_gravity="center"
-                    android:contentDescription="@null"
-                    android:src="@drawable/ic_arrow_left"
-                    app:tint="#0B61CA" />
-            </FrameLayout>
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:visibility="gone" />
 
             <TextView
                 android:layout_width="0dp"
@@ -110,25 +98,13 @@
                     android:layout_marginEnd="140dp"
                     android:orientation="vertical">
 
-                    <FrameLayout
+                    <com.manjugroups.m_connect.ui.common.BackButton
                         android:id="@+id/btnLoansBack"
-                        android:layout_width="36dp"
-                        android:layout_height="36dp"
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
                         android:layout_marginStart="16dp"
                         android:layout_marginTop="16dp"
-                        android:background="@drawable/bg_home_header_avatar"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:visibility="gone">
-
-                        <ImageView
-                            android:layout_width="20dp"
-                            android:layout_height="20dp"
-                            android:layout_gravity="center"
-                            android:contentDescription="@null"
-                            android:src="@drawable/ic_arrow_left"
-                            app:tint="#FFFFFF" />
-                    </FrameLayout>
+                        android:visibility="gone" />
 
                     <TextView
                         android:id="@+id/tvLoansTitle"
@@ -932,6 +908,16 @@
               lists are both empty; otherwise it stays GONE. Keeps the
               darx layoutPreviousLoans wrapper above intact.
             -->
+            <!-- Skeleton cards while My Loans loads (first load only). -->
+            <LinearLayout
+                android:id="@+id/loansSkeleton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingHorizontal="16dp"
+                android:paddingTop="16dp"
+                android:visibility="gone" />
+
             <com.manjugroups.m_connect.ui.common.EmptyStateView
                 android:id="@+id/inlineLoansEmptyState"
                 android:layout_width="match_parent"
@@ -941,7 +927,7 @@
                 android:visibility="gone"
                 app:es_image="@drawable/img_loans_empty"
                 app:es_title="No Loans Yet"
-                app:es_description="Stay organized by creating or joining teams. Groups help you manage tasks, track progress, and collaborate with your team in one place." />
+                app:es_description="You haven't applied for a loan or salary advance yet. Tap + to apply." />
             </LinearLayout> <!-- /loansWhiteWrapper -->
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>

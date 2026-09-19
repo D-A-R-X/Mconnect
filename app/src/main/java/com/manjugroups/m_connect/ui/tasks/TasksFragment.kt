@@ -1,5 +1,6 @@
 package com.manjugroups.m_connect.ui.tasks
 
+import com.manjugroups.m_connect.ui.common.navigateUp
 import android.animation.ObjectAnimator
 import android.graphics.Color
 import android.os.Bundle
@@ -86,6 +87,10 @@ class TasksFragment : Fragment() {
             insets
         }
         androidx.core.view.ViewCompat.requestApplyInsets(headerContainer)
+        // My Tasks is opened from Apps as a pushed screen: give it a way back.
+        view.findViewById<View>(R.id.btnTasksBack).setOnClickListener {
+            navigateUp()
+        }
 
         // White panel: rounded TOP corners + white bg. The panel overlaps the
         // fixed blue header by -28dp (see the layout) and, because every

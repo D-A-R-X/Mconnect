@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.telecaller
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -198,7 +200,7 @@ class MyLeadsFragment : Fragment() {
     private fun openModernDialer(rawPhone: String?) {
         val phone = rawPhone?.filter { it.isDigit() }.orEmpty()
         if (phone.length < 10) {
-            Toast.makeText(requireContext(), "No valid phone number on this lead", Toast.LENGTH_SHORT).show()
+            toastSafe("No valid phone number on this lead")
             return
         }
         parentFragmentManager.beginTransaction()

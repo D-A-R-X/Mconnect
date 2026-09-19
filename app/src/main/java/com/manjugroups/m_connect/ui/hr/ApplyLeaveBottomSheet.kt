@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.hr
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.app.Dialog
 import android.graphics.Color
 import android.os.Bundle
@@ -257,11 +259,11 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
     private fun promptSubmitConfirmation() {
         if (selectedLeaveType == "compensatory") {
             if (selectedCredit == null) {
-                Toast.makeText(requireContext(), "Select a comp-off credit", Toast.LENGTH_SHORT).show()
+                toastSafe("Select a comp-off credit")
                 return
             }
             if (selectedFromMillis == null) {
-                Toast.makeText(requireContext(), "Select the day to take", Toast.LENGTH_SHORT).show()
+                toastSafe("Select the day to take")
                 return
             }
             SubmitLeaveConfirmSheet
@@ -274,11 +276,11 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
         val toMillis = selectedToMillis
 
         if (fromMillis == null || toMillis == null) {
-            Toast.makeText(requireContext(), "Select leave duration", Toast.LENGTH_SHORT).show()
+            toastSafe("Select leave duration")
             return
         }
         if (toMillis < fromMillis) {
-            Toast.makeText(requireContext(), "To date must be on or after from date", Toast.LENGTH_SHORT).show()
+            toastSafe("To date must be on or after from date")
             return
         }
         SubmitLeaveConfirmSheet
@@ -329,7 +331,7 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
 
     private fun showCompCreditSheet() {
         if (compCredits.isEmpty()) {
-            Toast.makeText(requireContext(), "No comp-off credits available", Toast.LENGTH_SHORT).show()
+            toastSafe("No comp-off credits available")
             return
         }
         val dialog = BottomSheetDialog(requireContext())
@@ -440,11 +442,11 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
         val reason = etReason?.text?.toString()?.trim().orEmpty()
 
         if (fromMillis == null || toMillis == null) {
-            Toast.makeText(requireContext(), "Select leave duration", Toast.LENGTH_SHORT).show()
+            toastSafe("Select leave duration")
             return
         }
         if (toMillis < fromMillis) {
-            Toast.makeText(requireContext(), "To date must be on or after from date", Toast.LENGTH_SHORT).show()
+            toastSafe("To date must be on or after from date")
             return
         }
 
@@ -481,10 +483,10 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
                 if (resp.success) {
                     LeaveSubmittedSuccessSheet.newInstance().showOnce(parentFragmentManager, "leave_submitted_success")
                 } else {
-                    Toast.makeText(requireContext(), resp.error ?: "Failed", Toast.LENGTH_SHORT).show()
+                    toastSafe(resp.error ?: "Failed")
                 }
             } catch (e: Exception) {
-                Toast.makeText(requireContext(), parseErrorMessage(e), Toast.LENGTH_SHORT).show()
+                toastSafe(parseErrorMessage(e))
             }
             tvSubmit?.visibility = View.VISIBLE
             skeletonSubmit?.let { SkeletonUtils.stopSkeletonPulse(it) }
@@ -498,11 +500,11 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
         val credit = selectedCredit
         val dayMillis = selectedFromMillis
         if (credit == null) {
-            Toast.makeText(requireContext(), "Select a comp-off credit", Toast.LENGTH_SHORT).show()
+            toastSafe("Select a comp-off credit")
             return
         }
         if (dayMillis == null) {
-            Toast.makeText(requireContext(), "Select the day to take", Toast.LENGTH_SHORT).show()
+            toastSafe("Select the day to take")
             return
         }
         val date = apiDateFormat.format(dayMillis)
@@ -530,10 +532,10 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
                 if (resp.success) {
                     LeaveSubmittedSuccessSheet.newInstance().showOnce(parentFragmentManager, "leave_submitted_success")
                 } else {
-                    Toast.makeText(requireContext(), resp.error ?: "Failed", Toast.LENGTH_SHORT).show()
+                    toastSafe(resp.error ?: "Failed")
                 }
             } catch (e: Exception) {
-                Toast.makeText(requireContext(), parseErrorMessage(e), Toast.LENGTH_SHORT).show()
+                toastSafe(parseErrorMessage(e))
             }
             tvSubmit?.visibility = View.VISIBLE
             skeletonSubmit?.let { SkeletonUtils.stopSkeletonPulse(it) }
@@ -636,7 +638,7 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
         val compEarnedMillis: Long? = if (isComp) {
             val credit = selectedCredit
             if (credit == null) {
-                Toast.makeText(requireContext(), "Select a comp-off credit first", Toast.LENGTH_SHORT).show()
+                toastSafe("Select a comp-off credit first")
                 return
             }
             credit.earnedDate?.let { runCatching { apiDateFormat.parse(it)?.time }.getOrNull() }
@@ -808,7 +810,7 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
         submitButton.setOnClickListener {
             val pickedFrom = tempFrom
             if (pickedFrom == null) {
-                Toast.makeText(requireContext(), "Select leave start date", Toast.LENGTH_SHORT).show()
+                toastSafe("Select leave start date")
                 return@setOnClickListener
             }
             val pickedTo = tempTo ?: pickedFrom

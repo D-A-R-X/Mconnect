@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.home
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.Manifest
 import android.util.Log
 import android.app.Dialog
@@ -1905,7 +1907,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             val phone = textOrNull(etClientMobile?.text) ?: textOrNull(tvFormPhone?.text) ?: ""
             val digits = phone.filter { it.isDigit() }.takeLast(10)
             if (digits.length < 10) {
-                Toast.makeText(requireContext(), "Enter 10-digit client mobile first", Toast.LENGTH_SHORT).show()
+                toastSafe("Enter 10-digit client mobile first")
                 return@setOnClickListener
             }
             if (exchangeSourceCandidates.isEmpty()) {
@@ -1920,7 +1922,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             val phone = textOrNull(etBookExchangeMobile?.text) ?: textOrNull(etClientMobile?.text) ?: textOrNull(tvFormPhone?.text) ?: ""
             val digits = phone.filter { it.isDigit() }.takeLast(10)
             if (digits.length < 10) {
-                Toast.makeText(requireContext(), "Enter 10-digit booked mobile first", Toast.LENGTH_SHORT).show()
+                toastSafe("Enter 10-digit booked mobile first")
                 return@setOnClickListener
             }
             if (internalExchangeCandidates.isEmpty()) {
@@ -1935,13 +1937,13 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         view?.findViewById<View>(R.id.rowBookExchangeInternalPlot)?.setOnClickListener {
             val projName = textOrNull(tvBookExchangeInternalProject?.text)
             if (projName.isNullOrBlank() || projName == "Select old project") {
-                Toast.makeText(requireContext(), "Pick old project first", Toast.LENGTH_SHORT).show()
+                toastSafe("Pick old project first")
                 return@setOnClickListener
             }
             val plots = internalExchangeCandidates.filter { it.projectName.equals(projName, ignoreCase = true) }
             val options = plots.mapNotNull { it.plotNo?.trim() }.filter { it.isNotEmpty() }.distinct()
             if (options.isEmpty()) {
-                Toast.makeText(requireContext(), "No confirmed old plots found for $projName", Toast.LENGTH_SHORT).show()
+                toastSafe("No confirmed old plots found for $projName")
                 return@setOnClickListener
             }
             picker("Select Old Plot", options) { selectedPlot ->
@@ -2446,7 +2448,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 } else {
                     internalExchangeCandidates = emptyList()
                     if (isAdded && onDone != null) {
-                        Toast.makeText(requireContext(), resp.error ?: "No confirmed booking matches this mobile", Toast.LENGTH_SHORT).show()
+                        toastSafe(resp.error ?: "No confirmed booking matches this mobile")
                     }
                 }
             } catch (e: Exception) {
@@ -2458,7 +2460,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private fun showExchangeProjectPicker() {
         val projects = internalExchangeCandidates.mapNotNull { it.projectName?.trim() }.filter { it.isNotEmpty() }.distinct()
         if (projects.isEmpty()) {
-            Toast.makeText(requireContext(), "No confirmed old projects found for this mobile", Toast.LENGTH_SHORT).show()
+            toastSafe("No confirmed old projects found for this mobile")
             return
         }
         picker("Select Old Project", projects) { selectedProj ->
@@ -2480,7 +2482,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 } else {
                     exchangeSourceCandidates = emptyList()
                     if (isAdded && onDone != null) {
-                        Toast.makeText(requireContext(), resp.error ?: "No confirmed property found for this mobile", Toast.LENGTH_SHORT).show()
+                        toastSafe(resp.error ?: "No confirmed property found for this mobile")
                     }
                 }
             } catch (e: Exception) {
@@ -2491,7 +2493,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
 
     private fun showExchangeLinkedPropertyPicker() {
         if (exchangeSourceCandidates.isEmpty()) {
-            Toast.makeText(requireContext(), "No confirmed property found for this mobile", Toast.LENGTH_SHORT).show()
+            toastSafe("No confirmed property found for this mobile")
             return
         }
         val options = exchangeSourceCandidates.map { "${it.projectName ?: "Project"} / Plot ${it.plotNo ?: "—"}" }
@@ -3292,7 +3294,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 // "no match" and the client miss was also clean.
                 if (isAdded) {
                     val msg = leadLookupError ?: "No existing record for $phone — fill the form"
-                    Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
+                    toastSafe(msg)
                 }
                 return@launch
             }
@@ -3329,7 +3331,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 }
                 client?.let { prefillFromClient(it, ::fill) }
                 if (lead != null || client != null) {
-                    Toast.makeText(requireContext(), "Client details auto-filled from database", Toast.LENGTH_SHORT).show()
+                    toastSafe("Client details auto-filled from database")
                 }
             } finally {
                 isUpdatingFields = false
@@ -4166,7 +4168,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         refreshStaffSaveRadios()
         clearError()
         renderState()
-        Toast.makeText(requireContext(), "Booking form cleared", Toast.LENGTH_SHORT).show()
+        toastSafe("Booking form cleared")
     }
 
     // ---- Pickers ----------------------------------------------------
@@ -4588,7 +4590,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             recomputeBookingFinanceDerivedFields()
             tvPlotPrefillStatus?.visibility = View.VISIBLE
             if (isAdded) {
-                Toast.makeText(requireContext(), "Plot pricing filled from project settings", Toast.LENGTH_SHORT).show()
+                toastSafe("Plot pricing filled from project settings")
             }
         } catch (e: Exception) {
             Log.e("BookingPlot", "Crash in applyBookingPlotPrefill", e)
@@ -5176,7 +5178,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 val serverMessage = extractHttpErrorMessage(e)
                 val message = serverMessage ?: e.message ?: "Network error"
                 finishCtaSiteVisit(message)
-                Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
+                toastSafe(message, Toast.LENGTH_LONG)
             }
         }
     }
@@ -5513,7 +5515,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 val wasOtherOutcome = otherOutcomeSaving
                 finishCtaSave(message)
                 if (!wasOtherOutcome) {
-                    Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
+                    toastSafe(message, Toast.LENGTH_LONG)
                 }
             }
         }
@@ -5569,7 +5571,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         btnSubmit?.text = "Save"
         if (otherOutcomeSaving) {
             otherOutcomeSaving = false
-            Toast.makeText(requireContext(), error, Toast.LENGTH_LONG).show()
+            toastSafe(error, Toast.LENGTH_LONG)
             if (lockedFromProposedSv) {
                 if (!outcomeChosen) {
                     maybeShowOutcomePicker()
@@ -6589,8 +6591,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 // for the Toast which writes its text directly.
                 val raw = e.message ?: "Network error"
                 finishCta(error = raw)
-                Toast.makeText(requireContext(), humanizeServerError(raw), Toast.LENGTH_LONG)
-                    .show()
+                toastSafe(humanizeServerError(raw), Toast.LENGTH_LONG)
             }
         }
     }

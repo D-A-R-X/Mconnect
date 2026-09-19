@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.tasks
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.Color
@@ -254,7 +256,7 @@ class TaskManagerFragment : Fragment() {
                 throw ce
             } catch (e: Exception) {
                 if (allTasks.isEmpty()) {
-                    Toast.makeText(requireContext(), "Couldn't load tasks", Toast.LENGTH_SHORT).show()
+                    toastSafe("Couldn't load tasks")
                     emptyState?.visibility = View.VISIBLE
                 }
             } finally {
@@ -458,7 +460,7 @@ class TaskManagerFragment : Fragment() {
                     (activity as? com.manjugroups.m_connect.MainActivity)
                         ?.refreshTasksBanner(force = true)
                 } else {
-                    Toast.makeText(requireContext(), resp.error ?: "Update failed", Toast.LENGTH_SHORT).show()
+                    toastSafe(resp.error ?: "Update failed")
                 }
             } catch (ce: kotlinx.coroutines.CancellationException) {
                 throw ce

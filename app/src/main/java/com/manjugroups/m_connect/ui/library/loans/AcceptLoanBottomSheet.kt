@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.library.loans
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.app.Dialog
 import android.graphics.Bitmap
 import android.graphics.Color
@@ -64,7 +66,7 @@ class AcceptLoanBottomSheet(
 
         binding.btnSubmit.setOnClickListener {
             if (binding.signaturePad.isEmpty()) {
-                Toast.makeText(requireContext(), "Please draw your signature first", Toast.LENGTH_SHORT).show()
+                toastSafe("Please draw your signature first")
                 return@setOnClickListener
             }
             submitApproval()
@@ -157,7 +159,7 @@ class AcceptLoanBottomSheet(
                 withContext(Dispatchers.IO) { api.approveLoan(token, req) }
 
                 binding.btnSubmit.text = "Success!"
-                Toast.makeText(requireContext(), "Loan approved successfully", Toast.LENGTH_SHORT).show()
+                toastSafe("Loan approved successfully")
                 onSuccess()
                 dismiss()
             } catch (e: Exception) {

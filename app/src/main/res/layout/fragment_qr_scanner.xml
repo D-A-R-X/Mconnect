@@ -131,17 +131,10 @@
             android:orientation="horizontal"
             android:paddingHorizontal="16dp">
 
-            <ImageView
+            <com.manjugroups.m_connect.ui.common.BackButton
                 android:id="@+id/btnBack"
                 android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:background="@drawable/bg_circle_blue_light"
-                android:backgroundTint="#40FFFFFF"
-                android:clickable="true"
-                android:focusable="true"
-                android:padding="8dp"
-                android:src="@drawable/ic_back_blue"
-                app:tint="#FFFFFF" />
+                android:layout_height="32dp" />
 
             <TextView
                 android:layout_width="0dp"

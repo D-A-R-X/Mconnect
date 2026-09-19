@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.hr
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.app.AlertDialog
 import android.graphics.Color
 import android.os.Bundle
@@ -83,7 +85,7 @@ class AttendanceReviewFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.event.collect { msg ->
-                    Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
+                    toastSafe(msg)
                 }
             }
         }

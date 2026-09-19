@@ -15,18 +15,12 @@
         android:paddingTop="8dp"
         android:paddingBottom="10dp">
 
-        <ImageView
+        <com.manjugroups.m_connect.ui.common.BackButton
             android:id="@+id/btnBack"
             android:layout_width="32dp"
             android:layout_height="32dp"
             android:layout_alignParentStart="true"
-            android:layout_centerVertical="true"
-            android:background="@drawable/frame_21472"
-            android:src="@drawable/ic_back_blue"
-            android:scaleType="centerInside"
-            android:contentDescription="Back"
-            android:clickable="true"
-            android:focusable="true" />
+            android:layout_centerVertical="true" />
 
         <LinearLayout
             android:layout_width="wrap_content"

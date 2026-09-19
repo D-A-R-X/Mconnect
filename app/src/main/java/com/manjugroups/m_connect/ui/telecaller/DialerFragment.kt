@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.telecaller
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.Manifest
 import android.app.NotificationManager
 import android.content.Context
@@ -387,7 +389,7 @@ class DialerFragment : Fragment() {
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
         if (granted) selectAudioRoute(AudioRoute.BLUETOOTH)
-        else Toast.makeText(requireContext(), "Bluetooth permission is required to use a headset", Toast.LENGTH_LONG).show()
+        else toastSafe("Bluetooth permission is required to use a headset", Toast.LENGTH_LONG)
     }
 
     private fun renderAgentStatus() {
@@ -402,7 +404,7 @@ class DialerFragment : Fragment() {
 
     private fun setAgentStatus(status: String) {
         if (dialerConfig?.configured != true) {
-            Toast.makeText(requireContext(), "Modern Dialer is not configured for this account", Toast.LENGTH_LONG).show()
+            toastSafe("Modern Dialer is not configured for this account", Toast.LENGTH_LONG)
             return
         }
         ModernDialerWebViewBridge.setAgentStatus(status)
@@ -595,7 +597,7 @@ class DialerFragment : Fragment() {
         callIcon?.visibility = View.INVISIBLE
         callSkeleton?.visibility = View.VISIBLE
         callSkeleton?.let { SkeletonUtils.startSkeletonPulse(it) }
-        Toast.makeText(requireContext(), "Placing call...", Toast.LENGTH_SHORT).show()
+        toastSafe("Placing call...")
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 keepCallProcessActive(phone)
@@ -610,9 +612,9 @@ class DialerFragment : Fragment() {
                     return@launch
                 }
                 ModernDialerWebViewBridge.requestState()
-                Toast.makeText(requireContext(), "Calling $phone...", Toast.LENGTH_SHORT).show()
+                toastSafe("Calling $phone...")
             } catch (e: Exception) {
-                Toast.makeText(requireContext(), "Modern Dialer could not start. Please retry.", Toast.LENGTH_LONG).show()
+                toastSafe("Modern Dialer could not start. Please retry.", Toast.LENGTH_LONG)
                 resetCallState()
             } finally {
                 calling = false
@@ -636,7 +638,7 @@ class DialerFragment : Fragment() {
                 agentStatus = event.stringPayload("status") ?: agentStatus
                 renderAgentStatus()
             }
-            "agent:status-error" -> Toast.makeText(requireContext(), "Could not update dialer status", Toast.LENGTH_LONG).show()
+            "agent:status-error" -> toastSafe("Could not update dialer status", Toast.LENGTH_LONG)
             "call:incoming" -> {
                 activeNumber = event.stringPayload("from") ?: "Incoming call"
                 callStage = CallStage.INCOMING
@@ -678,14 +680,14 @@ class DialerFragment : Fragment() {
             "call:ended" -> resetCallState("completed")
             "call:error" -> {
                 event.stringPayload("message")?.let { message ->
-                    Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
+                    toastSafe(message, Toast.LENGTH_LONG)
                 }
                 resetCallState("failed")
             }
             "call:incoming-suppressed" -> resetCallState("missed")
             "media:restarting" -> {
                 tvConnection?.text = "Reconnecting audio"
-                Toast.makeText(requireContext(), "Reconnecting call audio...", Toast.LENGTH_SHORT).show()
+                toastSafe("Reconnecting call audio...")
             }
             "media:diagnostic-server" -> {
                 val state = event.stringPayload("connectionState")
@@ -696,7 +698,7 @@ class DialerFragment : Fragment() {
             }
             "media:error" -> {
                 event.stringPayload("message")?.let { message ->
-                    Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
+                    toastSafe(message, Toast.LENGTH_LONG)
                 }
                 tvConnection?.text = "Audio unavailable"
             }
@@ -743,7 +745,7 @@ class DialerFragment : Fragment() {
     private fun selectAudioRoute(route: AudioRoute) {
         val am = context?.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
         if (!applyAudioRoute(am, route)) {
-            Toast.makeText(requireContext(), "No Bluetooth call device is connected", Toast.LENGTH_SHORT).show()
+            toastSafe("No Bluetooth call device is connected")
             return
         }
         audioRoute = route

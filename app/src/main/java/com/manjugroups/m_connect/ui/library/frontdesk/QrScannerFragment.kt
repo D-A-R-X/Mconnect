@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.library.frontdesk
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.Manifest
 import android.content.pm.PackageManager
 import android.animation.ObjectAnimator
@@ -267,7 +269,7 @@ class QrScannerFragment : Fragment() {
                 cameraProvider = cameraProviderFuture.get()
                 bindCameraUseCases()
             } catch (e: Exception) {
-                Toast.makeText(requireContext(), "Failed to start camera: ${e.message}", Toast.LENGTH_SHORT).show()
+                toastSafe("Failed to start camera: ${e.message}")
             }
         }, ContextCompat.getMainExecutor(requireContext()))
     }
@@ -299,7 +301,7 @@ class QrScannerFragment : Fragment() {
                 imageAnalysis
             )
         } catch (e: Exception) {
-            Toast.makeText(requireContext(), "Camera binding failed: ${e.message}", Toast.LENGTH_SHORT).show()
+            toastSafe("Camera binding failed: ${e.message}")
         }
     }
 
@@ -553,7 +555,7 @@ class QrScannerFragment : Fragment() {
             if (_binding == null) return@launch
             val response = outcome.getOrNull()
             if (response?.success == true) {
-                Toast.makeText(requireContext(), "Counselling started", Toast.LENGTH_SHORT).show()
+                toastSafe("Counselling started")
                 openSiteVisitOutcome(siteVisitId, leadTemperature)
             } else {
                 // Counselling did NOT start (route missing, not authorised, or an
@@ -565,7 +567,7 @@ class QrScannerFragment : Fragment() {
                 val msg = response?.error
                     ?: outcome.exceptionOrNull()?.message
                     ?: "Couldn't start counselling. Try again, or ask the Site Incharge to start it."
-                Toast.makeText(requireContext(), msg, Toast.LENGTH_LONG).show()
+                toastSafe(msg, Toast.LENGTH_LONG)
                 resumeScanning()
             }
         }
@@ -585,12 +587,12 @@ class QrScannerFragment : Fragment() {
                     if (_binding == null) return@launch
                     showRealVerification(resolved)
                 } else {
-                    Toast.makeText(requireContext(), resp.error ?: "Invitation not found", Toast.LENGTH_LONG).show()
+                    toastSafe(resp.error ?: "Invitation not found", Toast.LENGTH_LONG)
                     resumeScanning()
                 }
             } catch (e: Exception) {
                 if (_binding == null) return@launch
-                Toast.makeText(requireContext(), "Couldn't load invitation: ${e.message ?: "network error"}", Toast.LENGTH_LONG).show()
+                toastSafe("Couldn't load invitation: ${e.message ?: "network error"}", Toast.LENGTH_LONG)
                 resumeScanning()
             }
         }
@@ -757,7 +759,7 @@ class QrScannerFragment : Fragment() {
 
     private fun confirmCheckout(inv: InvitationDetail) {
         val invitationId = currentInvitationId ?: run {
-            Toast.makeText(requireContext(), "Missing invitation reference", Toast.LENGTH_SHORT).show()
+            toastSafe("Missing invitation reference")
             return
         }
         binding.btnConfirmAdmission.isEnabled = false
@@ -786,7 +788,7 @@ class QrScannerFragment : Fragment() {
                 )
                 updateHistoryStatus(invitationId, "checked_out")
             } else {
-                Toast.makeText(requireContext(), "Check-out failed", Toast.LENGTH_LONG).show()
+                toastSafe("Check-out failed", Toast.LENGTH_LONG)
             }
         }
     }
@@ -880,7 +882,7 @@ class QrScannerFragment : Fragment() {
     private fun confirmAdmission(inv: InvitationDetail) {
         val invitationId = currentInvitationId
         if (invitationId == null) {
-            Toast.makeText(requireContext(), "Missing invitation reference", Toast.LENGTH_SHORT).show()
+            toastSafe("Missing invitation reference")
             return
         }
         binding.btnConfirmAdmission.isEnabled = false
@@ -906,12 +908,12 @@ class QrScannerFragment : Fragment() {
                         inv.copy(checkinState = "in", checkinAt = System.currentTimeMillis()),
                     )
                 } else {
-                    Toast.makeText(requireContext(), resp.error ?: "Check-in failed", Toast.LENGTH_LONG).show()
+                    toastSafe(resp.error ?: "Check-in failed", Toast.LENGTH_LONG)
                 }
             } catch (e: Exception) {
                 if (_binding == null) return@launch
                 binding.btnConfirmAdmission.isEnabled = true
-                Toast.makeText(requireContext(), "Check-in failed: ${e.message ?: "network error"}", Toast.LENGTH_LONG).show()
+                toastSafe("Check-in failed: ${e.message ?: "network error"}", Toast.LENGTH_LONG)
             }
         }
     }
@@ -1105,7 +1107,7 @@ class QrScannerFragment : Fragment() {
             saveScanToHistory(historyJson.toString())
             
             binding.visitorVerificationContainer.visibility = View.GONE
-            Toast.makeText(requireContext(), "Admission Confirmed for $primaryName", Toast.LENGTH_SHORT).show()
+            toastSafe("Admission Confirmed for $primaryName")
             
             // Resume scan, camera, and laser line
             binding.laserLine.visibility = View.VISIBLE

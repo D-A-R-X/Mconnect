@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.library
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.graphics.Color
 import android.os.Bundle
 import android.text.Html
@@ -161,7 +163,7 @@ class CreateDriverBottomSheet : BottomSheetDialogFragment() {
                 val address = binding.etDriverAddress.text.toString().trim()
                 val category = binding.etDriverCategory.text.toString().trim()
                 if (name.isEmpty() || phone.isEmpty() || address.isEmpty() || category.isEmpty()) {
-                    Toast.makeText(requireContext(), "Please fill all fields", Toast.LENGTH_SHORT).show()
+                    toastSafe("Please fill all fields")
                     return@setOnClickListener
                 }
                 onSaveCallback?.invoke(name, phone, address, category.lowercase())
@@ -183,19 +185,19 @@ class CreateDriverBottomSheet : BottomSheetDialogFragment() {
                 val address = binding.etDriverAddress.text.toString().trim()
                 val category = binding.etDriverCategory.text.toString().trim()
                 if (name.isEmpty()) {
-                    Toast.makeText(requireContext(), "Please enter name", Toast.LENGTH_SHORT).show()
+                    toastSafe("Please enter name")
                     return@setOnClickListener
                 }
                 if (phone.isEmpty()) {
-                    Toast.makeText(requireContext(), "Please enter phone number", Toast.LENGTH_SHORT).show()
+                    toastSafe("Please enter phone number")
                     return@setOnClickListener
                 }
                 if (address.isEmpty()) {
-                    Toast.makeText(requireContext(), "Please enter address", Toast.LENGTH_SHORT).show()
+                    toastSafe("Please enter address")
                     return@setOnClickListener
                 }
                 if (category.isEmpty()) {
-                    Toast.makeText(requireContext(), "Please select category", Toast.LENGTH_SHORT).show()
+                    toastSafe("Please select category")
                     return@setOnClickListener
                 }
                 onCreateCallback?.invoke(name, phone, address, category.lowercase())

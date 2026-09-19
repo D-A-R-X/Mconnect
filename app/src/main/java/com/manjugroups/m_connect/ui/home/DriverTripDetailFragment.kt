@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.home
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
@@ -291,7 +293,7 @@ class DriverTripDetailFragment : Fragment(), OnMapReadyCallback {
         } else if (address.isNotBlank()) {
             Uri.parse("geo:0,0?q=${Uri.encode(address)}")
         } else {
-            Toast.makeText(requireContext(), "No location for this trip", Toast.LENGTH_SHORT).show()
+            toastSafe("No location for this trip")
             return
         }
         runCatching { startActivity(Intent(Intent.ACTION_VIEW, uri)) }

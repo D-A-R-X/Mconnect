@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.marketing
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.graphics.Color
 import android.os.Bundle
 import android.util.TypedValue
@@ -1045,7 +1047,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         btnOther?.alpha = 0.4f
 
         val lockedToast: (View) -> Unit = {
-            Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
+            toastSafe(message)
         }
         btnBooking?.setOnClickListener(lockedToast)
         btnNotInterested?.setOnClickListener(lockedToast)
@@ -1090,7 +1092,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         }
         val targetVisitId = visitId
         if (targetVisitId.isNullOrBlank()) {
-            Toast.makeText(requireContext(), "Site visit id is missing", Toast.LENGTH_SHORT).show()
+            toastSafe("Site visit id is missing")
             return
         }
         CompleteCpVisitBottomSheet
@@ -1132,7 +1134,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
     private fun dialPhone(phone: String?) {
         val number = phone?.trim().orEmpty()
         if (number.isBlank()) {
-            Toast.makeText(requireContext(), "No number available", Toast.LENGTH_SHORT).show()
+            toastSafe("No number available")
             return
         }
         runCatching {
@@ -1143,7 +1145,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
                 ),
             )
         }.onFailure {
-            Toast.makeText(requireContext(), "Couldn't open the dialer", Toast.LENGTH_SHORT).show()
+            toastSafe("Couldn't open the dialer")
         }
     }
 

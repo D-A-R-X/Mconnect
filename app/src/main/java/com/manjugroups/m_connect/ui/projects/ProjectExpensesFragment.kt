@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.projects
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.content.res.ColorStateList
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -102,7 +104,7 @@ class ProjectExpensesFragment : Fragment() {
         }
         androidx.core.view.ViewCompat.requestApplyInsets(expenseHeader)
 
-        view.findViewById<ImageView>(R.id.btnBack).setOnClickListener {
+        view.findViewById<android.view.View>(R.id.btnBack).setOnClickListener {
             navigateUp()
         }
 
@@ -154,7 +156,7 @@ class ProjectExpensesFragment : Fragment() {
         btnAddExpense.setOnClickListener {
             val projectId = selectedProjectId
             if (projectId == null) {
-                Toast.makeText(requireContext(), "Pick a project first", Toast.LENGTH_SHORT).show()
+                toastSafe("Pick a project first")
                 return@setOnClickListener
             }
             ExpenseCreateBottomSheet
@@ -244,8 +246,7 @@ class ProjectExpensesFragment : Fragment() {
                     ).show()
                 }
             } catch (e: Exception) {
-                Toast.makeText(requireContext(), e.message ?: "Network error", Toast.LENGTH_LONG)
-                    .show()
+                toastSafe(e.message ?: "Network error", Toast.LENGTH_LONG)
             }
         }
     }
@@ -389,8 +390,7 @@ class ProjectExpensesFragment : Fragment() {
                     ).show()
                 }
             } catch (e: Exception) {
-                Toast.makeText(requireContext(), e.message ?: "Network error", Toast.LENGTH_LONG)
-                    .show()
+                toastSafe(e.message ?: "Network error", Toast.LENGTH_LONG)
             } finally {
                 // Clear the pull-to-refresh spinner whether the load
                 // succeeded or failed — leaving it spinning forever after

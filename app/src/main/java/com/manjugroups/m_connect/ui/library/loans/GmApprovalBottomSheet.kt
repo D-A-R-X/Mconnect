@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.library.loans
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.app.Dialog
 import android.graphics.BitmapFactory
 import android.graphics.Color
@@ -123,7 +125,7 @@ class GmApprovalBottomSheet(
     /** Open a nominee's e-signature full screen (the expand button on each box). */
     private fun showSignatureFullscreen(storageId: String?, who: String) {
         if (storageId.isNullOrBlank()) {
-            Toast.makeText(requireContext(), "No signature available yet", Toast.LENGTH_SHORT).show()
+            toastSafe("No signature available yet")
             return
         }
         val density = resources.displayMetrics.density

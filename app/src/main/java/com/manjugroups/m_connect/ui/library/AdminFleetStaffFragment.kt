@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.library
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.graphics.Color
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -97,7 +99,7 @@ class AdminFleetStaffFragment : Fragment() {
     private fun showLoadError(message: String) {
         binding.tvStaffEmpty.visibility = View.VISIBLE
         binding.tvStaffEmpty.text = message
-        Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
+        toastSafe(message)
     }
 
     private fun filter(query: String) {
@@ -186,7 +188,7 @@ class AdminFleetStaffFragment : Fragment() {
                     ).show()
                     return@launch
                 }
-                Toast.makeText(requireContext(), successMessage, Toast.LENGTH_SHORT).show()
+                toastSafe(successMessage)
                 refresh()
             } catch (e: CancellationException) {
                 throw e

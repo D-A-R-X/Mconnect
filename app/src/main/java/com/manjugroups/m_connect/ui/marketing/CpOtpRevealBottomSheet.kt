@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.marketing
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.app.Dialog
 import android.content.ClipData
 import android.content.ClipDescription
@@ -183,7 +185,7 @@ class CpOtpRevealBottomSheet : BottomSheetDialogFragment() {
             }
         }
         clipboard.setPrimaryClip(clip)
-        Toast.makeText(requireContext(), "OTP copied", Toast.LENGTH_SHORT).show()
+        toastSafe("OTP copied")
 
         // Best effort: the copy already happened locally, so a failed audit
         // write must not be reported as a failed copy. The server records the

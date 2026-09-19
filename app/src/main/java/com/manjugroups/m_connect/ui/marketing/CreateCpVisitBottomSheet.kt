@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.marketing
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.app.AlertDialog
 import android.app.Dialog
 import android.app.TimePickerDialog
@@ -1515,7 +1517,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun toast(message: String) {
-        Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
+        toastSafe(message)
     }
 
     /** Pull the backend's real error out of an HTTP failure body. Business errors

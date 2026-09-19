@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.hr
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.animation.ObjectAnimator
 import com.manjugroups.m_connect.ui.common.BottomActionInsets
 import com.manjugroups.m_connect.ui.common.dismissRefresh
@@ -122,7 +124,8 @@ class PermissionsFragment : Fragment() {
         }
 
         binding.summaryHeader.setOnBackClickListener { navigateUp() }
-        binding.summaryHeader.setBackButtonVisible(screenMode == MODE_APPROVAL)
+        // Always pushed on top of another screen, so both modes need a way back.
+        binding.summaryHeader.setBackButtonVisible(true)
         BottomActionInsets.applyAboveSystemNavAndTabs(binding.btnApplyPermission)
         binding.btnAdvancedPermissionFilter.setOnClickListener { showAdvancedFilters() }
         parentFragmentManager.setFragmentResultListener(
@@ -472,7 +475,7 @@ class PermissionsFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.event.collect { msg ->
-                    Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
+                    toastSafe(msg)
                 }
             }
         }
@@ -813,6 +816,13 @@ class PermissionsFragment : Fragment() {
     override fun onResume() {
         super.onResume()
         (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(false)
+        // The header draws behind the status bar; don't inherit a white strip
+        // from whichever screen was open before.
+        (activity as? com.manjugroups.m_connect.MainActivity)?.setTopBarAppearance(
+            android.graphics.Color.parseColor("#0B61CA"),
+            darkStatusIcons = false,
+            fullBleed = true,
+        )
     }
 
     override fun onDestroyView() {

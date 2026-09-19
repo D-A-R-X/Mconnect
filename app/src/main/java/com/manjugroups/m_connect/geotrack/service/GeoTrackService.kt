@@ -129,6 +129,27 @@ class GeoTrackService : Service() {
             // shift's notification starts neutral (no stale cross-day timer).
             SessionManager(context.applicationContext).clearFieldActivity()
             context.stopService(Intent(context, GeoTrackService::class.java))
+            removeActivityTransitions(context.applicationContext)
+        }
+
+        /**
+         * The activity-transition registration is held by Play services, not
+         * by our process. onDestroy removes it, but when Android kills the
+         * process mid-shift onDestroy never runs, and the registration kept
+         * waking the app after clock-out. Rebuild the same PendingIntent
+         * (request code 100, see registerActivityRecognition) and remove it.
+         */
+        @SuppressLint("MissingPermission")
+        private fun removeActivityTransitions(context: Context) {
+            runCatching {
+                val pi = PendingIntent.getBroadcast(
+                    context, 100,
+                    Intent(context, ActivityRecognitionReceiver::class.java),
+                    PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_MUTABLE,
+                ) ?: return
+                ActivityRecognition.getClient(context).removeActivityTransitionUpdates(pi)
+                pi.cancel()
+            }
         }
 
         fun hasRequiredLocationPermissions(context: Context): Boolean {
@@ -525,15 +546,22 @@ class GeoTrackService : Service() {
     /**
      * The fused location request for the current power mode.
      *  - precise (default): HIGH_ACCURACY @ 10s — full path fidelity.
-     *  - low power (idle+still): BALANCED @ 2.5 min + 40 m min-distance so the
-     *    GPS chip idles; a cheap wifi/cell fix still arrives occasionally and,
-     *    the instant it shows motion, we snap back to precise.
+     *  - low power (idle+still): BALANCED @ 2.5 min so the GPS chip idles;
+     *    a cheap wifi/cell fix arrives every interval and, the instant it
+     *    shows motion, we snap back to precise.
+     *
+     * No minimum distance in low power. It used to be 40 m, and a phone that
+     * is still never moves 40 m, so Android delivered NO fix at all: the day
+     * recorded zero points and the live map kept whatever position the row
+     * last had (a (0,0) or (13,80) placeholder, or yesterday's spot), which
+     * is the "shows me somewhere else" report. Storage is already limited for
+     * a still phone (one point per 5 min within 50 m, see processLocation), so
+     * dropping the filter adds a cheap fix every 2.5 min and no upload volume.
      */
     private fun buildFusedRequest(lowPower: Boolean): LocationRequest {
         return if (lowPower) {
             LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, IDLE_LOCATION_INTERVAL_MS)
                 .setMinUpdateIntervalMillis(60_000)
-                .setMinUpdateDistanceMeters(40f)
                 .setWaitForAccurateLocation(false)
                 .build()
         } else {

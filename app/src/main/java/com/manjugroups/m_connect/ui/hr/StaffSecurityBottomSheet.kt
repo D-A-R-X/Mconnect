@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.hr
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.app.AlertDialog
 import android.graphics.Color
 import android.graphics.Typeface
@@ -637,7 +639,7 @@ class StaffSecurityBottomSheet : BottomSheetDialogFragment() {
             }
             inFlight = false
             if (!isAdded) return@launch
-            Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
+            toastSafe(message, Toast.LENGTH_LONG)
             // Re-read rather than guessing the new state.
             load()
             parentFragmentManager.setFragmentResult(RESULT_KEY, Bundle.EMPTY)

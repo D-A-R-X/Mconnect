@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.projects
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.os.Bundle
@@ -49,7 +51,7 @@ class ExpenseDetailBottomSheet : BottomSheetDialogFragment() {
         // same pattern as the other project-flow bottom sheets.
 
         if (expenseId.isBlank()) {
-            Toast.makeText(requireContext(), "Missing expense id", Toast.LENGTH_SHORT).show()
+            toastSafe("Missing expense id")
             dismissAllowingStateLoss()
             return
         }
@@ -68,8 +70,7 @@ class ExpenseDetailBottomSheet : BottomSheetDialogFragment() {
                 }
                 bindExpense(view, resp.expense)
             } catch (e: Exception) {
-                Toast.makeText(requireContext(), e.message ?: "Network error", Toast.LENGTH_LONG)
-                    .show()
+                toastSafe(e.message ?: "Network error", Toast.LENGTH_LONG)
                 dismissAllowingStateLoss()
             }
         }

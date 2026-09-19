@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.library
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.graphics.Color
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -416,7 +418,7 @@ class AdminFleetTripsFragment : Fragment() {
                     val clipboard = requireContext().getSystemService(android.content.Context.CLIPBOARD_SERVICE)
                         as android.content.ClipboardManager
                     clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Driver trip link", url))
-                    Toast.makeText(requireContext(), "Driver link copied.", Toast.LENGTH_SHORT).show()
+                    toastSafe("Driver link copied.")
                 }
             },
             onResendDriverWhatsapp = if (!useMmsFleet && !trip.driverTripUrl.isNullOrBlank()) {
@@ -518,7 +520,7 @@ class AdminFleetTripsFragment : Fragment() {
             }.getOrNull()
             if (_binding == null) return@launch
             if (response?.success == true) {
-                Toast.makeText(requireContext(), "Trip status updated.", Toast.LENGTH_SHORT).show()
+                toastSafe("Trip status updated.")
                 refresh()
             } else {
                 Toast.makeText(
@@ -549,7 +551,7 @@ class AdminFleetTripsFragment : Fragment() {
     ) {
         val token = session.bearerToken
         if (token.isBlank()) {
-            Toast.makeText(requireContext(), "Session expired — sign in again.", Toast.LENGTH_SHORT).show()
+            toastSafe("Session expired — sign in again.")
             return
         }
         val sheet = parentFragmentManager.findFragmentByTag("AdminFleetTripManageSheet")
@@ -650,7 +652,7 @@ class AdminFleetTripsFragment : Fragment() {
                         }
                     }
                 }
-                Toast.makeText(requireContext(), "Progress updated", Toast.LENGTH_SHORT).show()
+                toastSafe("Progress updated")
                 sheet?.dismissAllowingStateLoss()
                 refresh()
             } catch (e: Exception) {
@@ -663,11 +665,11 @@ class AdminFleetTripsFragment : Fragment() {
 
     private fun openCompleteOfflineSheet(trip: AdminTrip) {
         if (session.isExternalFleetAgencyOperator && !session.canBillExternalFleet) {
-            Toast.makeText(requireContext(), "Billing access is required.", Toast.LENGTH_SHORT).show()
+            toastSafe("Billing access is required.")
             return
         }
         if (!session.canCompleteOfflineFleet()) {
-            Toast.makeText(requireContext(), "You don't have permission to complete trips offline.", Toast.LENGTH_SHORT).show()
+            toastSafe("You don't have permission to complete trips offline.")
             return
         }
         if (trip.cancelled && !useMmsFleet) {
@@ -697,7 +699,7 @@ class AdminFleetTripsFragment : Fragment() {
 
     private fun openCancellationBilling(trip: AdminTrip) {
         if (!session.canBillExternalFleet) {
-            Toast.makeText(requireContext(), "Billing access is required.", Toast.LENGTH_SHORT).show()
+            toastSafe("Billing access is required.")
             return
         }
         val input = android.widget.EditText(requireContext()).apply {
@@ -714,7 +716,7 @@ class AdminFleetTripsFragment : Fragment() {
             .setPositiveButton("Save") { _, _ ->
                 val amount = input.text.toString().trim().toDoubleOrNull()
                 if (amount == null || amount < 0) {
-                    Toast.makeText(requireContext(), "Enter a valid amount.", Toast.LENGTH_SHORT).show()
+                    toastSafe("Enter a valid amount.")
                     return@setPositiveButton
                 }
                 viewLifecycleOwner.lifecycleScope.launch {
@@ -735,7 +737,7 @@ class AdminFleetTripsFragment : Fragment() {
                     }.getOrNull()
                     if (_binding == null) return@launch
                     if (response?.success == true) {
-                        Toast.makeText(requireContext(), "Cancellation billing saved.", Toast.LENGTH_SHORT).show()
+                        toastSafe("Cancellation billing saved.")
                         refresh()
                     } else {
                         Toast.makeText(
@@ -773,12 +775,12 @@ class AdminFleetTripsFragment : Fragment() {
             .setPositiveButton("Submit") { _, _ ->
                 val extraKm = input.text.toString().trim().toDoubleOrNull()
                 if (extraKm == null || extraKm <= 0) {
-                    Toast.makeText(requireContext(), "Enter extra kilometres greater than zero.", Toast.LENGTH_SHORT).show()
+                    toastSafe("Enter extra kilometres greater than zero.")
                     return@setPositiveButton
                 }
                 val token = session.bearerToken
                 if (token.isBlank()) {
-                    Toast.makeText(requireContext(), "Session expired — sign in again.", Toast.LENGTH_SHORT).show()
+                    toastSafe("Session expired — sign in again.")
                     return@setPositiveButton
                 }
                 viewLifecycleOwner.lifecycleScope.launch {
@@ -790,7 +792,7 @@ class AdminFleetTripsFragment : Fragment() {
                     }.getOrNull()
                     if (_binding == null) return@launch
                     if (response?.success == true) {
-                        Toast.makeText(requireContext(), "Extra km submitted for review.", Toast.LENGTH_SHORT).show()
+                        toastSafe("Extra km submitted for review.")
                         refresh()
                     } else {
                         Toast.makeText(
@@ -807,7 +809,7 @@ class AdminFleetTripsFragment : Fragment() {
     private fun submitCompleteOffline(trip: AdminTrip, result: CompleteOfflineTripResult) {
         val token = session.bearerToken
         if (token.isBlank()) {
-            Toast.makeText(requireContext(), "Session expired â€” sign in again.", Toast.LENGTH_SHORT).show()
+            toastSafe("Session expired â€” sign in again.")
             return
         }
         allocateJob?.cancel()
@@ -924,7 +926,7 @@ class AdminFleetTripsFragment : Fragment() {
     private fun removeDriver(trip: AdminTrip) {
         val token = session.bearerToken
         if (token.isBlank()) {
-            Toast.makeText(requireContext(), "Session expired — sign in again.", Toast.LENGTH_SHORT).show()
+            toastSafe("Session expired — sign in again.")
             return
         }
         allocateJob?.cancel()
@@ -938,7 +940,7 @@ class AdminFleetTripsFragment : Fragment() {
             }.getOrNull()
             if (_binding == null) return@launch
             if (resp?.success == true) {
-                Toast.makeText(requireContext(), "Driver removed — back to Pending.", Toast.LENGTH_SHORT).show()
+                toastSafe("Driver removed — back to Pending.")
                 refresh()
             } else {
                 Toast.makeText(
@@ -1013,7 +1015,7 @@ class AdminFleetTripsFragment : Fragment() {
     ) {
         val token = session.bearerToken
         if (token.isBlank()) {
-            Toast.makeText(requireContext(), "Session expired — sign in again.", Toast.LENGTH_SHORT).show()
+            toastSafe("Session expired — sign in again.")
             return
         }
         CreateDriverBottomSheet.newInstance { name, phone, address, category ->
@@ -1038,7 +1040,7 @@ class AdminFleetTripsFragment : Fragment() {
                         category = category,
                     )
                     onCreated(created)
-                    Toast.makeText(requireContext(), "Driver added.", Toast.LENGTH_SHORT).show()
+                    toastSafe("Driver added.")
                 } else {
                     Toast.makeText(
                         requireContext(),
@@ -1056,13 +1058,13 @@ class AdminFleetTripsFragment : Fragment() {
     private fun submitAllocate(trip: TravelDeskTrip, result: AllocateVehicleResult) {
         val token = session.bearerToken
         if (token.isBlank()) {
-            Toast.makeText(requireContext(), "Session expired — sign in again.", Toast.LENGTH_SHORT).show()
+            toastSafe("Session expired — sign in again.")
             return
         }
         // No id means the row didn't parse as a real site visit; allocating
         // against it would fail server-side anyway.
         val siteVisitId = trip.id?.takeIf { it.isNotBlank() } ?: run {
-            Toast.makeText(requireContext(), "This trip can't be allocated.", Toast.LENGTH_SHORT).show()
+            toastSafe("This trip can't be allocated.")
             return
         }
         allocateJob?.cancel()

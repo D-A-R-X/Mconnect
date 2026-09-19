@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.home
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.app.DatePickerDialog
 import android.app.Dialog
 import android.content.ContentResolver
@@ -509,7 +511,7 @@ class CollectionPaymentEntryBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun toast(message: String) {
-        Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
+        toastSafe(message)
     }
 
     companion object {

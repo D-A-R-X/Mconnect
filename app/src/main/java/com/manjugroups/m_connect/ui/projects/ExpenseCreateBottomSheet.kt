@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.projects
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
@@ -137,7 +139,7 @@ class ExpenseCreateBottomSheet : BottomSheetDialogFragment() {
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
         if (granted) launchCamera()
-        else Toast.makeText(requireContext(), "Camera permission is required", Toast.LENGTH_SHORT).show()
+        else toastSafe("Camera permission is required")
     }
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
@@ -239,11 +241,11 @@ class ExpenseCreateBottomSheet : BottomSheetDialogFragment() {
         btnSave.setOnClickListener {
             val amount = etAmount.text?.toString()?.toDoubleOrNull()
             if (amount == null || amount <= 0) {
-                Toast.makeText(requireContext(), "Enter a valid amount", Toast.LENGTH_SHORT).show()
+                toastSafe("Enter a valid amount")
                 return@setOnClickListener
             }
             if (projectId.isBlank()) {
-                Toast.makeText(requireContext(), "Missing project context", Toast.LENGTH_SHORT).show()
+                toastSafe("Missing project context")
                 return@setOnClickListener
             }
             btnSave.isEnabled = false
@@ -264,7 +266,7 @@ class ExpenseCreateBottomSheet : BottomSheetDialogFragment() {
                     )
                     if (resp.success) {
                         setFragmentResult(RESULT_KEY, Bundle.EMPTY)
-                        Toast.makeText(requireContext(), "Expense saved", Toast.LENGTH_SHORT).show()
+                        toastSafe("Expense saved")
                         dismissAllowingStateLoss()
                     } else {
                         Toast.makeText(
@@ -275,7 +277,7 @@ class ExpenseCreateBottomSheet : BottomSheetDialogFragment() {
                         btnSave.isEnabled = true
                     }
                 } catch (e: Exception) {
-                    Toast.makeText(requireContext(), e.message ?: "Network error", Toast.LENGTH_LONG).show()
+                    toastSafe(e.message ?: "Network error", Toast.LENGTH_LONG)
                     btnSave.isEnabled = true
                 }
             }
@@ -308,7 +310,7 @@ class ExpenseCreateBottomSheet : BottomSheetDialogFragment() {
 
     private fun launchCamera() {
         val f = createReceiptFile("receipt_cam_") ?: run {
-            Toast.makeText(requireContext(), "Unable to create photo file", Toast.LENGTH_SHORT).show()
+            toastSafe("Unable to create photo file")
             return
         }
         cameraFile = f
@@ -319,7 +321,7 @@ class ExpenseCreateBottomSheet : BottomSheetDialogFragment() {
                 f,
             )
         }.getOrElse {
-            Toast.makeText(requireContext(), "Unable to open camera", Toast.LENGTH_SHORT).show()
+            toastSafe("Unable to open camera")
             return
         }
         cameraUri = uri
@@ -331,7 +333,7 @@ class ExpenseCreateBottomSheet : BottomSheetDialogFragment() {
         try {
             cameraLauncher.launch(intent)
         } catch (_: ActivityNotFoundException) {
-            Toast.makeText(requireContext(), "No camera app available", Toast.LENGTH_SHORT).show()
+            toastSafe("No camera app available")
         }
     }
 
@@ -344,7 +346,7 @@ class ExpenseCreateBottomSheet : BottomSheetDialogFragment() {
                 receipts.add(receipt)
                 addThumbnail(file, receipt)
             } else {
-                Toast.makeText(requireContext(), "Couldn't upload photo, try again", Toast.LENGTH_SHORT).show()
+                toastSafe("Couldn't upload photo, try again")
             }
         }
     }

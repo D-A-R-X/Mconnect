@@ -16,16 +16,10 @@
         android:orientation="horizontal"
         android:paddingHorizontal="16dp">
 
-        <ImageView
+        <com.manjugroups.m_connect.ui.common.BackButton
             android:id="@+id/btnMapViewerBack"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:clickable="true"
-            android:contentDescription="Back"
-            android:focusable="true"
-            android:src="@drawable/ic_back_chevron"
-            app:tint="?attr/colorForegroundPrimary" />
+            android:layout_width="32dp"
+            android:layout_height="32dp" />
 
         <TextView
             android:id="@+id/tvMapViewerTitle"

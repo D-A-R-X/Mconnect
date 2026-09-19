@@ -94,7 +94,7 @@ Note: in deep Doze Android spaces allow-while-idle alarms roughly 9+ minutes apa
 
 ```bash
 # Share of today's timeline events that are HEARTBEAT_MISSED vs real NETWORK_OFFLINE
-curl -s "https://api-geo.theairix.com/api/tracking/tamper?staffId=<id>&limit=200" |
+curl -s "https://api-geo.theairix.com/api/tracking/tamper-events?staffId=<id>&limit=200" |
   python -c "import sys,json,collections;d=json.load(sys.stdin).get('data',[]);print(collections.Counter(e.get('eventType') for e in d))"
 ```
 

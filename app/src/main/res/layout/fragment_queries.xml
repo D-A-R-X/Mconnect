@@ -33,18 +33,11 @@
             android:layout_weight="1"
             android:orientation="vertical">
 
-            <ImageView
+            <com.manjugroups.m_connect.ui.common.BackButton
                 android:id="@+id/btnQueriesBack"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:clickable="true"
-                android:contentDescription="Back"
-                android:focusable="true"
-                android:padding="6dp"
-                android:src="@drawable/ic_arrow_left"
-                android:visibility="gone"
-                app:tint="@android:color/white" />
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:visibility="gone" />
 
             <TextView
                 android:layout_width="wrap_content"

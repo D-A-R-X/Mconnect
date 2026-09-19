@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.hr
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -74,13 +76,13 @@ class SelfieCameraFragment : Fragment(), OnMapReadyCallback {
         if (!isAdded || _binding == null) return@registerForActivityResult
         if (!success) {
             setProcessing(false)
-            Toast.makeText(requireContext(), "Selfie capture cancelled.", Toast.LENGTH_SHORT).show()
+            toastSafe("Selfie capture cancelled.")
             return@registerForActivityResult
         }
         val imageFile = pendingImageFile
         if (imageFile == null || !imageFile.exists()) {
             setProcessing(false)
-            Toast.makeText(requireContext(), "Failed to read captured selfie.", Toast.LENGTH_SHORT).show()
+            toastSafe("Failed to read captured selfie.")
             return@registerForActivityResult
         }
 
@@ -205,7 +207,7 @@ class SelfieCameraFragment : Fragment(), OnMapReadyCallback {
     private fun launchCamera() {
         val imageFile = createPunchPhotoFile()
         if (imageFile == null) {
-            Toast.makeText(requireContext(), "Unable to create selfie file.", Toast.LENGTH_SHORT).show()
+            toastSafe("Unable to create selfie file.")
             return
         }
         pendingImageFile = imageFile

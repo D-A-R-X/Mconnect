@@ -49,15 +49,10 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <ImageView
+            <com.manjugroups.m_connect.ui.common.BackButton
                 android:id="@+id/btnBack"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
-                android:src="@drawable/ic_arrow_left"
-                android:padding="6dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                app:tint="@android:color/white"
-                android:contentDescription="@string/back" />
+                android:layout_width="32dp"
+                android:layout_height="32dp" />
 
             <TextView
                 android:layout_width="wrap_content"

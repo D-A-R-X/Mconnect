@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.marketing
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.app.AlertDialog
 import android.graphics.Color
 import android.graphics.Typeface
@@ -482,7 +484,7 @@ class CpApprovalQueueFragment : Fragment() {
             if (!isAdded) { submitting = false; return@launch }
             submitting = false
             if (resp?.success == true) {
-                Toast.makeText(requireContext(), "Approved", Toast.LENGTH_SHORT).show()
+                toastSafe("Approved")
                 notifyChanged()
                 load()
             } else {

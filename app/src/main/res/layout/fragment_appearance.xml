@@ -13,21 +13,11 @@
         android:layout_height="56dp"
         android:paddingHorizontal="24dp">
 
-        <FrameLayout
+        <com.manjugroups.m_connect.ui.common.BackButton
             android:id="@+id/btnAppearanceBack"
             android:layout_width="32dp"
             android:layout_height="32dp"
-            android:layout_gravity="center_vertical|start"
-            android:background="@drawable/bg_profile_back_circle"
-            android:clickable="true"
-            android:focusable="true">
-
-            <ImageView
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:contentDescription="Back"
-                android:src="@drawable/ic_back_chevron" />
-        </FrameLayout>
+            android:layout_gravity="center_vertical|start" />
 
         <TextView
             android:layout_width="wrap_content"

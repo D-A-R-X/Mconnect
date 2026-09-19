@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.library.loans
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.Manifest
 import android.app.Activity
 import android.app.Dialog
@@ -154,7 +156,7 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
         val result = GmsDocumentScanningResult.fromActivityResultIntent(activityResult.data)
         val pdf = result?.pdf
         if (pdf == null || pdf.pageCount <= 0) {
-            Toast.makeText(requireContext(), "No scanned pages were returned", Toast.LENGTH_SHORT).show()
+            toastSafe("No scanned pages were returned")
             return@registerForActivityResult
         }
         startUploadFromUri(
@@ -207,7 +209,7 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
         if (granted) launchCamera()
-        else Toast.makeText(requireContext(), "Camera permission is required", Toast.LENGTH_SHORT).show()
+        else toastSafe("Camera permission is required")
     }
 
     fun setOnSubmittedListener(listener: (uploads: List<SubmittedDoc>) -> Unit) {
@@ -536,7 +538,7 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
                 persistDraft()
                 updateSubmitButtonState()
                 onDocumentChanged?.invoke(slot.label, null, response.loanCase)
-                Toast.makeText(requireContext(), "Document deleted", Toast.LENGTH_SHORT).show()
+                toastSafe("Document deleted")
             } catch (error: Exception) {
                 slot.uploadJob = null
                 slot.state = previousState
@@ -548,7 +550,7 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
                 } else {
                     error.message ?: "Delete failed. Check your network and retry."
                 }
-                Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
+                toastSafe(message, Toast.LENGTH_LONG)
             }
         }
     }
@@ -740,7 +742,7 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
         persistDraft()
         updateSubmitButtonState()
         if (isAdded) {
-            Toast.makeText(requireContext(), "${slot.label}: $message", Toast.LENGTH_SHORT).show()
+            toastSafe("${slot.label}: $message")
         }
     }
 
@@ -882,7 +884,7 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
 
     private fun launchCamera() {
         val f = createTempPhotoFile("loandesk_cam_") ?: run {
-            Toast.makeText(requireContext(), "Unable to create photo file", Toast.LENGTH_SHORT).show()
+            toastSafe("Unable to create photo file")
             return
         }
         cameraFile = f
@@ -893,7 +895,7 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
                 f,
             )
         }.getOrElse {
-            Toast.makeText(requireContext(), "Unable to open camera", Toast.LENGTH_SHORT).show()
+            toastSafe("Unable to open camera")
             return
         }
         cameraUri = uri
@@ -905,7 +907,7 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
         try {
             cameraLauncher.launch(intent)
         } catch (_: ActivityNotFoundException) {
-            Toast.makeText(requireContext(), "No camera app available", Toast.LENGTH_SHORT).show()
+            toastSafe("No camera app available")
         }
     }
 
@@ -1014,7 +1016,7 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
             val url = com.manjugroups.m_connect.network.MobileStorageFiles.resolve(storageId)
             if (url == null) {
                 progressBar.visibility = View.GONE
-                Toast.makeText(requireContext(), "Couldn't load preview", Toast.LENGTH_SHORT).show()
+                toastSafe("Couldn't load preview")
                 return@showPreviewDialog
             }
             imageView.load(url) {
@@ -1027,7 +1029,7 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
                     },
                     onError = { _, _ ->
                         progressBar.visibility = View.GONE
-                        Toast.makeText(requireContext(), "Couldn't load preview", Toast.LENGTH_SHORT).show()
+                        toastSafe("Couldn't load preview")
                     },
                 )
             }
@@ -1037,7 +1039,7 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
     private fun openRemotePdf(storageId: String) {
         val url = com.manjugroups.m_connect.network.MobileStorageFiles.resolve(storageId)
         if (url == null) {
-            Toast.makeText(requireContext(), "Couldn't open PDF", Toast.LENGTH_SHORT).show()
+            toastSafe("Couldn't open PDF")
             return
         }
         openDocument(Uri.parse(url), "application/pdf", grantRead = false)
@@ -1054,7 +1056,7 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
             runCatching {
                 startActivity(Intent(Intent.ACTION_VIEW, uri))
             }.onFailure {
-                Toast.makeText(requireContext(), "No PDF viewer is installed", Toast.LENGTH_SHORT).show()
+                toastSafe("No PDF viewer is installed")
             }
         }
     }

@@ -64,21 +64,10 @@
         android:paddingHorizontal="16dp"
         android:paddingVertical="10dp">
 
-        <FrameLayout
+        <com.manjugroups.m_connect.ui.common.BackButton
             android:id="@+id/btnBack"
             android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:background="@drawable/bg_attendance_topbar_icon"
-            android:clickable="true"
-            android:focusable="true">
-
-            <ImageView
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:layout_gravity="center"
-                android:contentDescription="@null"
-                android:src="@drawable/ic_attendance_back" />
-        </FrameLayout>
+            android:layout_height="32dp" />
 
         <TextView
             android:layout_width="0dp"

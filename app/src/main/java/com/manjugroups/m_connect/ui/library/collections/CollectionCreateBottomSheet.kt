@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.library.collections
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.Manifest
 import android.app.Activity
 import android.app.Dialog
@@ -151,7 +153,7 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
         if (granted) launchCamera()
-        else Toast.makeText(requireContext(), "Camera permission is required", Toast.LENGTH_SHORT).show()
+        else toastSafe("Camera permission is required")
     }
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
@@ -643,7 +645,7 @@ class CollectionCreateBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun toast(message: String) {
-        Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
+        toastSafe(message)
     }
 
     companion object {

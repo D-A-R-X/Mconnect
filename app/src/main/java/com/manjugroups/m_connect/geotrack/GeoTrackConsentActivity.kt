@@ -149,7 +149,13 @@ class GeoTrackConsentActivity : AppCompatActivity() {
     private fun goToMain() {
         if (navigated) return
         navigated = true
-        startActivity(Intent(this, MainActivity::class.java))
+        // Back to the MainActivity underneath, not a second copy: a new instance
+        // repainted stale cached attendance ("Clock In") over a punch the
+        // staff member had just made.
+        startActivity(
+            Intent(this, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+        )
         finish()
     }
 

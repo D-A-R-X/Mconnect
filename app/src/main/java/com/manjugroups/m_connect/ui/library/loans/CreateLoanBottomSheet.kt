@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.library.loans
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.app.AlertDialog
 import android.app.DatePickerDialog
 import android.app.Dialog
@@ -157,7 +159,7 @@ class CreateLoanBottomSheet : BottomSheetDialogFragment() {
 
     private fun showNomineePicker(nomineeNumber: Int) {
         if (staffList.isEmpty()) {
-            Toast.makeText(requireContext(), "Loading staff members...", Toast.LENGTH_SHORT).show()
+            toastSafe("Loading staff members...")
             return
         }
 
@@ -206,60 +208,60 @@ class CreateLoanBottomSheet : BottomSheetDialogFragment() {
     private fun submitLoanRequest() {
         val n1 = selectedNominee1
         if (n1 == null) {
-            Toast.makeText(requireContext(), "Please select Nominee 1", Toast.LENGTH_SHORT).show()
+            toastSafe("Please select Nominee 1")
             return
         }
 
         val n2 = selectedNominee2
         if (n2 == null) {
-            Toast.makeText(requireContext(), "Please select Nominee 2", Toast.LENGTH_SHORT).show()
+            toastSafe("Please select Nominee 2")
             return
         }
 
         if (n1.id == n2.id) {
-            Toast.makeText(requireContext(), "Nominee 1 and Nominee 2 cannot be the same person", Toast.LENGTH_SHORT).show()
+            toastSafe("Nominee 1 and Nominee 2 cannot be the same person")
             return
         }
 
         val amountStr = binding.etLoanAmount.text.toString().trim()
         val amount = amountStr.toDoubleOrNull()
         if (amount == null || amount <= 0) {
-            Toast.makeText(requireContext(), "Please enter a valid loan amount", Toast.LENGTH_SHORT).show()
+            toastSafe("Please enter a valid loan amount")
             return
         }
 
         val disDate = disbursedDateIso
         if (disDate.isNullOrBlank()) {
-            Toast.makeText(requireContext(), "Please select a disbursed date", Toast.LENGTH_SHORT).show()
+            toastSafe("Please select a disbursed date")
             return
         }
 
         val repMonth = repaymentMonthIso
         if (repMonth.isNullOrBlank()) {
-            Toast.makeText(requireContext(), "Please select a repayment start month", Toast.LENGTH_SHORT).show()
+            toastSafe("Please select a repayment start month")
             return
         }
 
         val tenureStr = binding.etTenure.text.toString().trim()
         val tenure = tenureStr.toDoubleOrNull()
         if (tenure == null || tenure <= 0) {
-            Toast.makeText(requireContext(), "Please enter a valid tenure", Toast.LENGTH_SHORT).show()
+            toastSafe("Please enter a valid tenure")
             return
         }
         if (tenure > 6.0) {
-            Toast.makeText(requireContext(), "Tenure cannot exceed 6 months", Toast.LENGTH_SHORT).show()
+            toastSafe("Tenure cannot exceed 6 months")
             return
         }
 
         val doc = originalDocument
         if (doc.isNullOrBlank()) {
-            Toast.makeText(requireContext(), "Please select the original document to submit", Toast.LENGTH_SHORT).show()
+            toastSafe("Please select the original document to submit")
             return
         }
 
         val purpose = binding.etLoanPurpose.text.toString().trim()
         if (purpose.isBlank()) {
-            Toast.makeText(requireContext(), "Please enter the purpose of the loan", Toast.LENGTH_SHORT).show()
+            toastSafe("Please enter the purpose of the loan")
             return
         }
 
@@ -291,10 +293,10 @@ class CreateLoanBottomSheet : BottomSheetDialogFragment() {
                 if (resp.success) {
                     clearDraft()
                     setFragmentResult(RESULT_KEY, Bundle.EMPTY)
-                    Toast.makeText(requireContext(), "Loan requested successfully", Toast.LENGTH_SHORT).show()
+                    toastSafe("Loan requested successfully")
                     dismissAllowingStateLoss()
                 } else {
-                    Toast.makeText(requireContext(), resp.error ?: "Failed to request loan", Toast.LENGTH_LONG).show()
+                    toastSafe(resp.error ?: "Failed to request loan", Toast.LENGTH_LONG)
                     binding.btnSubmitLoan.isEnabled = true
                     binding.btnSubmitLoan.alpha = 1f
                 }
@@ -314,7 +316,7 @@ class CreateLoanBottomSheet : BottomSheetDialogFragment() {
                 binding.btnSubmitLoan.alpha = 1f
             } catch (e: Exception) {
                 if (_binding == null) return@launch
-                Toast.makeText(requireContext(), e.message ?: "Network error", Toast.LENGTH_LONG).show()
+                toastSafe(e.message ?: "Network error", Toast.LENGTH_LONG)
                 binding.btnSubmitLoan.isEnabled = true
                 binding.btnSubmitLoan.alpha = 1f
             }

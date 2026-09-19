@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.marketing.bookings
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.app.AlertDialog
 import android.graphics.Color
 import android.net.Uri
@@ -813,7 +815,7 @@ class BookingCreateFragment : Fragment() {
     }
 
     private fun fail(message: String) { toast(message) }
-    private fun toast(message: String) { Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show() }
+    private fun toast(message: String) { toastSafe(message, Toast.LENGTH_LONG) }
     private fun normalizePhone(v: String): String = v.filter { it.isDigit() }.takeLast(10)
     private fun fmt(v: Double): String = String.format(Locale("en", "IN"), "%,d", v.toLong())
     private fun todayYmd(): String = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Calendar.getInstance().time)

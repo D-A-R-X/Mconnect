@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.library.loans
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.app.Dialog
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -79,7 +81,7 @@ class CreateSalaryAdvanceBottomSheet : BottomSheetDialogFragment() {
         val amountStr = binding.etSalaryRequirement.text.toString().trim()
         val amount = amountStr.toDoubleOrNull()
         if (amount == null || amount <= 0) {
-            Toast.makeText(requireContext(), "Please enter a valid amount", Toast.LENGTH_SHORT).show()
+            toastSafe("Please enter a valid amount")
             return
         }
 
@@ -101,10 +103,10 @@ class CreateSalaryAdvanceBottomSheet : BottomSheetDialogFragment() {
                 if (resp.success) {
                     clearDraft()
                     setFragmentResult(RESULT_KEY, Bundle.EMPTY)
-                    Toast.makeText(requireContext(), "Salary advance requested successfully", Toast.LENGTH_SHORT).show()
+                    toastSafe("Salary advance requested successfully")
                     dismissAllowingStateLoss()
                 } else {
-                    Toast.makeText(requireContext(), resp.error ?: "Failed to request advance", Toast.LENGTH_LONG).show()
+                    toastSafe(resp.error ?: "Failed to request advance", Toast.LENGTH_LONG)
                     binding.btnSubmitAdvance.isEnabled = true
                     binding.btnSubmitAdvance.alpha = 1f
                 }
@@ -125,7 +127,7 @@ class CreateSalaryAdvanceBottomSheet : BottomSheetDialogFragment() {
                 binding.btnSubmitAdvance.alpha = 1f
             } catch (e: Exception) {
                 if (_binding == null) return@launch
-                Toast.makeText(requireContext(), e.message ?: "Network error", Toast.LENGTH_LONG).show()
+                toastSafe(e.message ?: "Network error", Toast.LENGTH_LONG)
                 binding.btnSubmitAdvance.isEnabled = true
                 binding.btnSubmitAdvance.alpha = 1f
             }

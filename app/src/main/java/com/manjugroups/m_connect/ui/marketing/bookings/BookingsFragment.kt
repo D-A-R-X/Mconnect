@@ -119,7 +119,7 @@ class BookingsFragment : Fragment() {
         }
         androidx.core.view.ViewCompat.requestApplyInsets(topBar)
 
-        view.findViewById<ImageView>(R.id.btnBookingsBack)
+        view.findViewById<android.view.View>(R.id.btnBookingsBack)
             .setOnClickListener { navigateUp() }
 
         btnCreate = view.findViewById<ImageView>(R.id.btnCreateBooking).apply {

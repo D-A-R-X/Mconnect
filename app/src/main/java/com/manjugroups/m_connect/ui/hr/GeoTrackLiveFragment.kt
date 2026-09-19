@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.hr
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.graphics.Color
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -70,7 +72,7 @@ class GeoTrackLiveFragment : Fragment(), OnMapReadyCallback {
         session = SessionManager(requireContext())
 
         if (!session.hasPermission("attendance.liveTracking")) {
-            Toast.makeText(requireContext(), "GeoTrack Live access is not enabled for this account", Toast.LENGTH_SHORT).show()
+            toastSafe("GeoTrack Live access is not enabled for this account")
             navigateUp()
             return
         }
@@ -150,7 +152,7 @@ class GeoTrackLiveFragment : Fragment(), OnMapReadyCallback {
                 setLoading(false)
                 binding.tvMapEmpty.visibility = View.VISIBLE
                 binding.tvMapEmpty.text = error.message ?: "Failed to load GeoTrack Live data"
-                Toast.makeText(requireContext(), error.message ?: "Failed to load GeoTrack Live", Toast.LENGTH_SHORT).show()
+                toastSafe(error.message ?: "Failed to load GeoTrack Live")
             }
         }
     }
@@ -191,7 +193,7 @@ class GeoTrackLiveFragment : Fragment(), OnMapReadyCallback {
                 routeDistanceMeters = 0
                 renderSelection()
                 renderMap()
-                Toast.makeText(requireContext(), error.message ?: "Failed to load staff route", Toast.LENGTH_SHORT).show()
+                toastSafe(error.message ?: "Failed to load staff route")
             }
             setLoading(false)
         }

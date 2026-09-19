@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.home
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
@@ -76,7 +78,7 @@ class DriverStartTripBottomSheet : BottomSheetDialogFragment() {
         if (result.resultCode == Activity.RESULT_OK && file != null && file.exists()) {
             showCapturedPhoto(file)
         } else {
-            if (isAdded) Toast.makeText(requireContext(), "Camera capture cancelled", Toast.LENGTH_SHORT).show()
+            if (isAdded) toastSafe("Camera capture cancelled")
         }
     }
 
@@ -85,7 +87,7 @@ class DriverStartTripBottomSheet : BottomSheetDialogFragment() {
     ) { uri ->
         if (!isAdded || uri == null) return@registerForActivityResult
         val file = copyUriToTempFile(uri) ?: run {
-            if (isAdded) Toast.makeText(requireContext(), "Could not read image", Toast.LENGTH_SHORT).show()
+            if (isAdded) toastSafe("Could not read image")
             return@registerForActivityResult
         }
         showCapturedPhoto(file)
@@ -97,7 +99,7 @@ class DriverStartTripBottomSheet : BottomSheetDialogFragment() {
         if (granted) {
             launchCamera()
         } else {
-            if (isAdded) Toast.makeText(requireContext(), "Camera permission is required", Toast.LENGTH_SHORT).show()
+            if (isAdded) toastSafe("Camera permission is required")
         }
     }
 
@@ -206,7 +208,7 @@ class DriverStartTripBottomSheet : BottomSheetDialogFragment() {
                 file
             )
         }.getOrElse {
-            if (isAdded) Toast.makeText(requireContext(), "Unable to open camera", Toast.LENGTH_SHORT).show()
+            if (isAdded) toastSafe("Unable to open camera")
             return
         }
         currentPhotoUri = uri
@@ -223,7 +225,7 @@ class DriverStartTripBottomSheet : BottomSheetDialogFragment() {
         try {
             cameraLauncher.launch(intent)
         } catch (e: ActivityNotFoundException) {
-            Toast.makeText(requireContext(), "No camera application found", Toast.LENGTH_SHORT).show()
+            toastSafe("No camera application found")
         }
     }
 
@@ -250,12 +252,12 @@ class DriverStartTripBottomSheet : BottomSheetDialogFragment() {
 
         val kmText = etStartKm.text.toString().trim()
         if (kmText.isEmpty()) {
-            Toast.makeText(requireContext(), "Please enter starting Km", Toast.LENGTH_SHORT).show()
+            toastSafe("Please enter starting Km")
             return
         }
         val file = currentPhotoFile
         if (file == null || !file.exists()) {
-            Toast.makeText(requireContext(), "Please capture a photo of the odometer", Toast.LENGTH_SHORT).show()
+            toastSafe("Please capture a photo of the odometer")
             return
         }
 
@@ -265,7 +267,7 @@ class DriverStartTripBottomSheet : BottomSheetDialogFragment() {
                 val startKm = kmText.toDoubleOrNull()
                 if (startKm == null || startKm < 0) {
                     btnSubmit.isEnabled = true
-                    Toast.makeText(requireContext(), "Please enter a valid starting Km", Toast.LENGTH_SHORT).show()
+                    toastSafe("Please enter a valid starting Km")
                     return@launch
                 }
 
@@ -310,7 +312,7 @@ class DriverStartTripBottomSheet : BottomSheetDialogFragment() {
             } catch (e: Exception) {
                 if (!isAdded) return@launch
                 btnSubmit.isEnabled = true
-                Toast.makeText(requireContext(), readApiError(e), Toast.LENGTH_LONG).show()
+                toastSafe(readApiError(e), Toast.LENGTH_LONG)
             }
         }
     }

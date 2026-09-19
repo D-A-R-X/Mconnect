@@ -30,16 +30,11 @@
             android:layout_height="40dp"
             android:background="@drawable/bg_trip_detail_back">
 
-            <ImageView
+            <com.manjugroups.m_connect.ui.common.BackButton
                 android:id="@+id/btnTripBack"
-                android:layout_width="22dp"
-                android:layout_height="22dp"
-                android:layout_gravity="center"
-                android:clickable="true"
-                android:contentDescription="Back"
-                android:focusable="true"
-                android:src="@drawable/ic_arrow_left"
-                app:tint="#0B61CA" />
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_gravity="center" />
         </FrameLayout>
 
         <TextView

@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.profile
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.app.Dialog
 import android.graphics.Bitmap
 import android.net.Uri
@@ -175,9 +177,9 @@ class ProfileEditBottomSheet : BottomSheetDialogFragment() {
                 session.userPhotoUrl = msg
                 uploadedPhotoPath = msg
                 applyPhotoPreview(msg)
-                Toast.makeText(requireContext(), "Profile photo updated", Toast.LENGTH_SHORT).show()
+                toastSafe("Profile photo updated")
             } else {
-                Toast.makeText(requireContext(), "Couldn't update photo: $msg", Toast.LENGTH_LONG).show()
+                toastSafe("Couldn't update photo: $msg", Toast.LENGTH_LONG)
             }
         }
     }
@@ -210,7 +212,7 @@ class ProfileEditBottomSheet : BottomSheetDialogFragment() {
         val newName = etEditName.text.toString().trim()
 
         if (newName.isEmpty()) {
-            Toast.makeText(requireContext(), "Name cannot be empty", Toast.LENGTH_SHORT).show()
+            toastSafe("Name cannot be empty")
             return
         }
 
@@ -236,11 +238,11 @@ class ProfileEditBottomSheet : BottomSheetDialogFragment() {
             btnSaveProfile.isEnabled = true
             if (ok) {
                 session.userName = newName
-                Toast.makeText(requireContext(), "Profile updated successfully", Toast.LENGTH_SHORT).show()
+                toastSafe("Profile updated successfully")
                 setFragmentResult(REQUEST_KEY, bundleOf(RESULT_UPDATED to true))
                 dismiss()
             } else {
-                Toast.makeText(requireContext(), "Error: $errorMsg", Toast.LENGTH_LONG).show()
+                toastSafe("Error: $errorMsg", Toast.LENGTH_LONG)
             }
         }
     }

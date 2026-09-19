@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.issues
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.Manifest
 import android.app.Dialog
 import android.content.pm.PackageManager
@@ -66,7 +68,7 @@ class CreateIssueBottomSheet : BottomSheetDialogFragment() {
 
     private fun showProjectPicker() {
         if (projects.isEmpty()) {
-            Toast.makeText(requireContext(), "Loading projects…", Toast.LENGTH_SHORT).show()
+            toastSafe("Loading projects…")
             return
         }
         val options = projects.map { SearchableOption(it, it.name ?: "Untitled", it.status) }
@@ -108,7 +110,7 @@ class CreateIssueBottomSheet : BottomSheetDialogFragment() {
         if (granted) {
             startRecordingFlow()
         } else {
-            Toast.makeText(requireContext(), "Permission to record audio is required", Toast.LENGTH_SHORT).show()
+            toastSafe("Permission to record audio is required")
         }
     }
 
@@ -214,7 +216,7 @@ class CreateIssueBottomSheet : BottomSheetDialogFragment() {
                 binding.ivRecordIcon.setImageResource(R.drawable.ic_chat_stop)
                 handler.post(timerRunnable)
             }.onFailure {
-                Toast.makeText(requireContext(), "Failed to start audio recording", Toast.LENGTH_SHORT).show()
+                toastSafe("Failed to start audio recording")
                 resetRecordingState()
             }
         } else {
@@ -257,7 +259,7 @@ class CreateIssueBottomSheet : BottomSheetDialogFragment() {
                 binding.btnPlayPreview.setImageResource(R.drawable.ic_chat_pause)
                 binding.tvAudioStatus.text = "Playing voice note..."
             }.onFailure {
-                Toast.makeText(requireContext(), "Failed to play audio preview", Toast.LENGTH_SHORT).show()
+                toastSafe("Failed to play audio preview")
                 stopPreviewPlayback()
             }
         } else {
@@ -305,11 +307,11 @@ class CreateIssueBottomSheet : BottomSheetDialogFragment() {
 
         val projectId = selectedProjectId
         if (projectId.isNullOrBlank()) {
-            Toast.makeText(requireContext(), "Please select a project", Toast.LENGTH_SHORT).show()
+            toastSafe("Please select a project")
             return
         }
         if (title.isEmpty()) {
-            Toast.makeText(requireContext(), "Title is compulsory", Toast.LENGTH_SHORT).show()
+            toastSafe("Title is compulsory")
             return
         }
 

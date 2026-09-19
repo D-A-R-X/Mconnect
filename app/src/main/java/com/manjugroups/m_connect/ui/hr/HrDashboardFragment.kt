@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.hr
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.app.Activity
 import android.Manifest
 import android.content.ClipData
@@ -57,6 +59,9 @@ import java.util.Calendar
 import com.manjugroups.m_connect.ui.common.showOnce
 import com.manjugroups.m_connect.ui.common.commitOnce
 
+private const val FENCE_FIX_MAX_AGE_MS = 30_000L
+private const val FENCE_FIX_TIMEOUT_MS = 8_000L
+
 class HrDashboardFragment : Fragment() {
 
     private var _binding: FragmentHrDashboardBinding? = null
@@ -88,6 +93,14 @@ class HrDashboardFragment : Fragment() {
      */
     private var hasShownAttendanceContentOnce = false
     private var isLaunchingCamera = false
+    /** Last GPS fix used for the home-fence check, reused while fresh. */
+    private var lastFenceFix: Location? = null
+    /**
+     * The home fence only gates Clock In, so GPS is read only while Clock In
+     * is the available action — not while clocked in, and not after a mobile
+     * clock-out (the screen then reads "Clocked Out" and nothing uses it).
+     */
+    private var fenceCheckNeeded = true
     /** True once a capture came back, so the dismiss callback can tell a
      *  confirmed selfie from the user backing out of the camera. */
     private var punchSelfieHandled = false
@@ -513,6 +526,7 @@ class HrDashboardFragment : Fragment() {
                     //      gate punch (in OR out) becomes the latest event and
                     //      returns to state 2 — so he can clock out again
                     //      whenever he wants.
+                    fenceCheckNeeded = !(state.hasClockedInToday || state.clockedOutOnMobile)
                     if (state.hasClockedInToday && !state.clockedOutOnMobile) {
                         binding.clockInButtonGroup.visibility = View.GONE
                         binding.clockedInButtonGroup.visibility = View.VISIBLE
@@ -761,7 +775,7 @@ class HrDashboardFragment : Fragment() {
                 flowViewModel.events.collect { event ->
                     when (event) {
                         is AttendanceFlowEvent.Error -> {
-                            Toast.makeText(requireContext(), event.message, Toast.LENGTH_SHORT).show()
+                            toastSafe(event.message)
                         }
 
                         is AttendanceFlowEvent.SubmissionFailed -> {
@@ -830,7 +844,7 @@ class HrDashboardFragment : Fragment() {
         val imageFile = createPunchPhotoFile()
         if (imageFile == null) {
             isLaunchingCamera = false
-            Toast.makeText(requireContext(), "Unable to create selfie file.", Toast.LENGTH_SHORT).show()
+            toastSafe("Unable to create selfie file.")
             return
         }
         pendingPunchImageFile = imageFile
@@ -895,7 +909,7 @@ class HrDashboardFragment : Fragment() {
         }.getOrDefault(false)
         if (!copied || !target.exists() || target.length() <= 0L) {
             isLaunchingCamera = false
-            Toast.makeText(requireContext(), "Failed to read captured selfie.", Toast.LENGTH_SHORT).show()
+            toastSafe("Failed to read captured selfie.")
             return
         }
 
@@ -904,7 +918,10 @@ class HrDashboardFragment : Fragment() {
             // NOT block the clock-in. The punch still records and queues offline
             // when there's no network; the backend accepts an optional location.
             val location = fetchLocationOrNull()
-            val address = location?.let { resolveAddress(it) }
+            // Geocoder does network I/O — keep it off the main thread.
+            val address = location?.let {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { resolveAddress(it) }
+            }
             isLaunchingCamera = false
             navigateToPunchDetail(
                 mode = mode,
@@ -1284,7 +1301,7 @@ class HrDashboardFragment : Fragment() {
         // Field activity ended → return the tracking notification to its
         // neutral shift line.
         com.manjugroups.m_connect.geotrack.service.TrackingNotification.refresh(appCtx)
-        Toast.makeText(requireContext(), "On Duty completed.", Toast.LENGTH_SHORT).show()
+        toastSafe("On Duty completed.")
         updateOnDutyButtonUi()
         val isClockedIn = flowViewModel.uiState.value.isClockedIn
         updateHeaderTexts(isClockedIn, animateDynamicIsland = true)
@@ -1360,12 +1377,24 @@ class HrDashboardFragment : Fragment() {
             lastFenceStatus = "Grant location permission to enforce home fence"
             return false
         }
-        val loc = try {
-            val client = LocationServices.getFusedLocationProviderClient(requireContext())
-            val token = CancellationTokenSource().token
-            client.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, token).await()
-                ?: client.lastLocation.await()
-        } catch (_: Exception) { null }
+        // Reuse a fix from the last 30 s. Every 5 s this used to start a new
+        // high-accuracy request with no timeout (one could hang on a cold
+        // GPS), which piled up and made the Attendance screen lag.
+        val recent = lastFenceFix
+        val loc = if (recent != null && System.currentTimeMillis() - recent.time <= FENCE_FIX_MAX_AGE_MS) {
+            recent
+        } else {
+            val cts = CancellationTokenSource()
+            try {
+                val client = LocationServices.getFusedLocationProviderClient(requireContext())
+                kotlinx.coroutines.withTimeoutOrNull(FENCE_FIX_TIMEOUT_MS) {
+                    client.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cts.token).await()
+                } ?: run { cts.cancel(); client.lastLocation.await() }
+            } catch (_: Exception) {
+                cts.cancel()
+                null
+            }?.also { lastFenceFix = it }
+        }
         if (loc == null) {
             lastFenceStatus = "Waiting for GPS fix…"
             return false
@@ -1421,7 +1450,17 @@ class HrDashboardFragment : Fragment() {
         if (geofenceWatcherJob?.isActive == true) return
         geofenceWatcherJob = viewLifecycleOwner.lifecycleScope.launch {
             while (isActive && _binding != null) {
-                refreshGeofenceState()
+                if (!fenceCheckNeeded) {
+                    delay(5_000L)
+                    continue
+                }
+                // One check at a time (see computeInsideHomeFence).
+                val inside = computeInsideHomeFence()
+                if (_binding == null) break
+                if (inside != isInsideHomeFence) {
+                    isInsideHomeFence = inside
+                    applyGeofenceToButton()
+                }
                 // Tighter than the original 15 s so the button reacts
                 // within a few seconds of the staff stepping in/out of
                 // their home radius.

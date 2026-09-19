@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.library
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.graphics.Color
 import android.os.Bundle
 import android.text.Html
@@ -234,7 +236,7 @@ class CreateVehicleBottomSheet : BottomSheetDialogFragment() {
             binding.btnSubmitCreate.setOnClickListener {
                 if (formSnapshot() == initialSnapshot) return@setOnClickListener
                 val result = collectForm() ?: run {
-                    Toast.makeText(requireContext(), "Please fill all required fields", Toast.LENGTH_SHORT).show()
+                    toastSafe("Please fill all required fields")
                     return@setOnClickListener
                 }
                 onSaveCallback?.invoke(result)
@@ -354,7 +356,7 @@ class CreateVehicleBottomSheet : BottomSheetDialogFragment() {
 
     private fun validateAndSubmit() {
         val result = collectForm() ?: run {
-            Toast.makeText(requireContext(), "Please fill all required fields", Toast.LENGTH_SHORT).show()
+            toastSafe("Please fill all required fields")
             return
         }
         onCreateCallback?.invoke(result)

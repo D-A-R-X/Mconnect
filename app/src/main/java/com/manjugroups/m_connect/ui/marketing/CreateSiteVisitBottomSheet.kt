@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.marketing
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.app.DatePickerDialog
 import android.app.Dialog
 import android.app.TimePickerDialog
@@ -522,7 +524,7 @@ class CreateSiteVisitBottomSheet : BottomSheetDialogFragment() {
         val parsed = SimpleDateFormat("HH:mm", Locale.US).parse(value)!!
         SimpleDateFormat("h:mm a", Locale.getDefault()).format(parsed)
     }.getOrDefault(value)
-    private fun toast(message: String) = Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
+    private fun toast(message: String) = toastSafe(message, Toast.LENGTH_LONG)
     private val Int.dp: Int get() = (this * resources.displayMetrics.density).toInt()
 
     companion object {

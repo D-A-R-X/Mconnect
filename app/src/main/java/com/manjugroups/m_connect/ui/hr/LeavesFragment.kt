@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.hr
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.animation.ObjectAnimator
 import com.manjugroups.m_connect.ui.common.BottomActionInsets
 import com.manjugroups.m_connect.ui.common.dismissRefresh
@@ -126,7 +128,9 @@ class LeavesFragment : Fragment() {
         }
 
         binding.summaryHeader.setOnBackClickListener { navigateUp() }
-        binding.summaryHeader.setBackButtonVisible(screenMode == MODE_APPROVAL)
+        // Always pushed on top of another screen (Apps, HR, a notification),
+        // so both "My Leaves" and "Leave Approvals" need a way back.
+        binding.summaryHeader.setBackButtonVisible(true)
         BottomActionInsets.applyAboveSystemNavAndTabs(binding.btnApplyLeave)
         binding.btnAdvancedLeaveFilter.setOnClickListener { showAdvancedFilters() }
         parentFragmentManager.setFragmentResultListener(
@@ -343,7 +347,7 @@ class LeavesFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.event.collect { msg ->
-                    Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
+                    toastSafe(msg)
                 }
             }
         }
@@ -907,6 +911,19 @@ class LeavesFragment : Fragment() {
         android.transition.TransitionManager.beginDelayedTransition(binding.contentScroll, android.transition.AutoTransition())
 
         renderState(viewModel.uiState.value)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        val main = activity as? com.manjugroups.m_connect.MainActivity ?: return
+        main.setTabBarVisible(false)
+        // The header draws behind the status bar; don't inherit a white strip
+        // from whichever screen was open before.
+        main.setTopBarAppearance(
+            android.graphics.Color.parseColor("#0B61CA"),
+            darkStatusIcons = false,
+            fullBleed = true,
+        )
     }
 
     override fun onDestroyView() {

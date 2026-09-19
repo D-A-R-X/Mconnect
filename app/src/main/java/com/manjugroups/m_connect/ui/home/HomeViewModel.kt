@@ -262,7 +262,10 @@ class HomeViewModel : ViewModel() {
                     val bootstrap = context?.let {
                         launch {
                             runCatching {
-                                GeoTrackBootstrapSync.sync(it, allowPromptConsent = true, api = geoApi)
+                                // The dashboard reloads right after a punch; asking for
+                                // consent here put the consent screen on top of the
+                                // clock-in. MainActivity asks at app open instead.
+                                GeoTrackBootstrapSync.sync(it, allowPromptConsent = false, api = geoApi)
                             }
                         }
                     }

@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.library.accounts
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.graphics.Color
 import android.os.Bundle
 import android.text.Editable
@@ -362,7 +364,7 @@ class PostSalesVerificationFragment : Fragment() {
     }
 
     private fun toast(message: String) {
-        Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
+        toastSafe(message)
     }
 
     override fun onResume() {

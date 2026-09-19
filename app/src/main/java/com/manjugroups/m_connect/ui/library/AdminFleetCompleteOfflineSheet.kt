@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.library
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.app.AlertDialog
 import android.app.Dialog
 import android.graphics.Rect
@@ -310,7 +312,7 @@ class AdminFleetCompleteOfflineSheet : BottomSheetDialogFragment() {
 
         tvVehicle.setOnClickListener {
             if (vehicleOptions.isEmpty()) {
-                Toast.makeText(requireContext(), "No vehicles available.", Toast.LENGTH_SHORT).show()
+                toastSafe("No vehicles available.")
                 return@setOnClickListener
             }
             com.manjugroups.m_connect.ui.common.SearchableSelectionDialog.show(
@@ -744,7 +746,7 @@ class AdminFleetCompleteOfflineSheet : BottomSheetDialogFragment() {
     private fun requiredNumber(view: View, id: Int, label: String): Double {
         val value = view.findViewById<EditText>(id).text.toString().trim()
         if (value.isBlank()) {
-            Toast.makeText(requireContext(), "$label is required", Toast.LENGTH_SHORT).show()
+            toastSafe("$label is required")
             throw IllegalArgumentException(label)
         }
         return parseNumber(value, label)
@@ -774,7 +776,7 @@ class AdminFleetCompleteOfflineSheet : BottomSheetDialogFragment() {
     private fun parseNumber(value: String, label: String): Double {
         val parsed = value.toDoubleOrNull()
         if (parsed == null || parsed < 0.0) {
-            Toast.makeText(requireContext(), "$label must be zero or positive", Toast.LENGTH_SHORT).show()
+            toastSafe("$label must be zero or positive")
             throw IllegalArgumentException(label)
         }
         return parsed

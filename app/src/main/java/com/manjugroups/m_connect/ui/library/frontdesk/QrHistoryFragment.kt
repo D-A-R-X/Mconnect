@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.library.frontdesk
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.content.Context
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -308,7 +310,7 @@ class QrHistoryFragment : Fragment() {
                 sharedPrefs.edit().remove("qr_history_list").apply()
                 renderHistory()
                 dialog.dismiss()
-                Toast.makeText(requireContext(), "Scan history cleared", Toast.LENGTH_SHORT).show()
+                toastSafe("Scan history cleared")
             }
             .setNegativeButton("Cancel") { dialog, _ ->
                 dialog.dismiss()

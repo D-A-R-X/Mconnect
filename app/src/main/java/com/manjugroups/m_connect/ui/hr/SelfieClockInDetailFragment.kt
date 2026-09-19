@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.hr
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.graphics.Color
 import android.graphics.BitmapFactory
 import android.os.Build
@@ -231,7 +233,7 @@ class SelfieClockInDetailFragment : Fragment() {
                                 binding.btnClockInAction.isEnabled = true
                                 binding.btnClockInAction.text =
                                     if (mode == PunchMode.PUNCH_IN) "Clock In" else "Clock Out"
-                                Toast.makeText(requireContext(), event.message, Toast.LENGTH_SHORT).show()
+                                toastSafe(event.message)
                             }
                         }
 
@@ -243,7 +245,7 @@ class SelfieClockInDetailFragment : Fragment() {
                                 binding.btnClockInAction.isEnabled = true
                                 binding.btnClockInAction.text =
                                     if (mode == PunchMode.PUNCH_IN) "Clock In" else "Clock Out"
-                                Toast.makeText(requireContext(), event.message, Toast.LENGTH_LONG).show()
+                                toastSafe(event.message, Toast.LENGTH_LONG)
                                 // Server says there's no open session — the UI
                                 // got into this screen because of a stale
                                 // clocked-in flag. Send the user back to the

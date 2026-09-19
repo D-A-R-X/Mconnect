@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.chat
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -4107,7 +4109,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
 
     private fun toast(message: String) {
         if (!isAdded) return
-        Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
+        toastSafe(message)
     }
 
     private fun dpToPx(dp: Int): Int = (dp * resources.displayMetrics.density).toInt()

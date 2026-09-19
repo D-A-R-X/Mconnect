@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.chat
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.res.ColorStateList
@@ -432,7 +434,7 @@ class ChatMediaFragment : Fragment() {
     private fun openUrl(url: String) {
         val uri = url.takeIf { it.isNotBlank() }?.let { Uri.parse(it) }
         if (uri == null) {
-            Toast.makeText(requireContext(), "URL unavailable", Toast.LENGTH_SHORT).show()
+            toastSafe("URL unavailable")
             return
         }
         try {

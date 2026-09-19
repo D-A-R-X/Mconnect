@@ -22,17 +22,10 @@
         android:paddingStart="8dp"
         android:paddingEnd="16dp">
 
-        <ImageView
+        <com.manjugroups.m_connect.ui.common.BackButton
             android:id="@+id/btnSecurityBack"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:clickable="true"
-            android:contentDescription="Back"
-            android:focusable="true"
-            android:padding="8dp"
-            android:src="@drawable/ic_arrow_left"
-            app:tint="#0B61CA" />
+            android:layout_width="32dp"
+            android:layout_height="32dp" />
 
         <TextView
             android:layout_width="0dp"

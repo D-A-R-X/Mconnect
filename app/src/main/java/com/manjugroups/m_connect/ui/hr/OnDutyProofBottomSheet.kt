@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.hr
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.Manifest
 import android.app.Activity
 import android.app.Dialog
@@ -89,7 +91,7 @@ class OnDutyProofBottomSheet : BottomSheetDialogFragment() {
         if (granted) {
             launchCamera()
         } else {
-            Toast.makeText(requireContext(), "Camera permission is required", Toast.LENGTH_SHORT).show()
+            toastSafe("Camera permission is required")
         }
     }
 
@@ -183,14 +185,14 @@ class OnDutyProofBottomSheet : BottomSheetDialogFragment() {
         try {
             cameraLauncher.launch(intent)
         } catch (e: ActivityNotFoundException) {
-            Toast.makeText(requireContext(), "No camera application found", Toast.LENGTH_SHORT).show()
+            toastSafe("No camera application found")
         }
     }
 
     private fun performSubmit() {
         if (isSubmitting) return
         if (proofFiles.isEmpty()) {
-            Toast.makeText(requireContext(), "Please attach at least one travel proof.", Toast.LENGTH_SHORT).show()
+            toastSafe("Please attach at least one travel proof.")
             return
         }
         isSubmitting = true

@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.chat
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -51,7 +53,7 @@ class MapViewerFragment : Fragment(), OnMapReadyCallback {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        view.findViewById<ImageView>(R.id.btnMapViewerBack).setOnClickListener {
+        view.findViewById<android.view.View>(R.id.btnMapViewerBack).setOnClickListener {
             navigateUp()
         }
 
@@ -70,7 +72,7 @@ class MapViewerFragment : Fragment(), OnMapReadyCallback {
             try {
                 startActivity(intent)
             } catch (e: Exception) {
-                Toast.makeText(requireContext(), "No map application found", Toast.LENGTH_SHORT).show()
+                toastSafe("No map application found")
             }
         }
 

@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.library.land
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.graphics.Color
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -378,13 +380,11 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
     private fun submitInspection(root: View) {
         val pid = propertyId
         if (pid == null) {
-            android.widget.Toast.makeText(requireContext(),
-                "Missing property id", android.widget.Toast.LENGTH_SHORT).show()
+            toastSafe("Missing property id")
             return
         }
         if (!session.isLoggedIn) {
-            android.widget.Toast.makeText(requireContext(),
-                "Please log in again", android.widget.Toast.LENGTH_SHORT).show()
+            toastSafe("Please log in again")
             return
         }
         if (isSaving) return
@@ -394,18 +394,13 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
             try {
                 val resp = api.saveInspection(session.bearerToken, payload)
                 if (resp.success) {
-                    android.widget.Toast.makeText(requireContext(),
-                        "Inspection saved", android.widget.Toast.LENGTH_SHORT).show()
+                    toastSafe("Inspection saved")
                     dismissAllowingStateLoss()
                 } else {
-                    android.widget.Toast.makeText(requireContext(),
-                        resp.error ?: "Save failed",
-                        android.widget.Toast.LENGTH_LONG).show()
+                    toastSafe(resp.error ?: "Save failed", android.widget.Toast.LENGTH_LONG)
                 }
             } catch (err: Exception) {
-                android.widget.Toast.makeText(requireContext(),
-                    err.message ?: "Network error",
-                    android.widget.Toast.LENGTH_LONG).show()
+                toastSafe(err.message ?: "Network error", android.widget.Toast.LENGTH_LONG)
             } finally {
                 isSaving = false
             }

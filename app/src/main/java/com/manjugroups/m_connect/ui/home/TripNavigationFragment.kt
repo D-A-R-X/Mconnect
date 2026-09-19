@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.home
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
@@ -275,7 +277,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             cpNoPathPhotoCapture = false
             isGiftDistributionPostOtpPhotoCapture = false
             swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
-            Toast.makeText(requireContext(), "Photo capture cancelled", Toast.LENGTH_SHORT).show()
+            toastSafe("Photo capture cancelled")
             return@registerForActivityResult
         }
         // Photo captured — branch by flow:
@@ -549,7 +551,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 } else {
                     "Site visit cancelled"
                 }
-                Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
+                toastSafe(message)
                 navigateUp()
             } else if (isJointCpWorkflow() && jointWorkflow?.actorRole == "outcome_owner") {
                 submitJointCpForReview()
@@ -673,7 +675,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         setFragmentResultListener(DriverEndTripBottomSheet.RESULT_KEY) { _, bundle ->
             val success = bundle.getBoolean("success")
             if (success) {
-                Toast.makeText(requireContext(), "Trip completed successfully", Toast.LENGTH_SHORT).show()
+                toastSafe("Trip completed successfully")
                 navigateUp()
             }
         }
@@ -869,7 +871,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     response.visit?.joint ?: jointSummary,
                 )
                 clearVisitLocallyStarted()
-                Toast.makeText(requireContext(), "Outcome sent for review", Toast.LENGTH_SHORT).show()
+                toastSafe("Outcome sent for review")
             } catch (e: Exception) {
                 val readback = runCatching {
                     geoApi.getJointCpWorkflow(session.bearerToken, cpId)
@@ -1042,7 +1044,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 val reviewedBy = response.workflow.reviewedByTemplateName
                     ?: response.workflow.reviewedByName
                     ?: "reviewer"
-                Toast.makeText(requireContext(), "Outcome reviewed by $reviewedBy", Toast.LENGTH_LONG).show()
+                toastSafe("Outcome reviewed by $reviewedBy", Toast.LENGTH_LONG)
                 navigateUp()
             } catch (e: Exception) {
                 val readback = runCatching {
@@ -1956,7 +1958,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 geocodeDestinationIfNeeded()
                 renderArrivalPhase(alreadyArrived)
                 if (!alreadyInFlight) {
-                    Toast.makeText(requireContext(), "Trip started", Toast.LENGTH_SHORT).show()
+                    toastSafe("Trip started")
                 }
             } catch (e: Exception) {
                 btnOpenMaps?.isEnabled = true
@@ -1969,7 +1971,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     private fun failAndClose(message: String) {
         if (!isAdded) return
         loadingOverlay?.visibility = View.GONE
-        Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
+        toastSafe(message, Toast.LENGTH_LONG)
         navigateUp()
     }
 
@@ -2191,7 +2193,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             try {
                 startActivity(Intent(Intent.ACTION_VIEW, webUri))
             } catch (_: ActivityNotFoundException) {
-                Toast.makeText(requireContext(), "No maps app available", Toast.LENGTH_SHORT).show()
+                toastSafe("No maps app available")
             }
         }
     }
@@ -2207,7 +2209,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             ?.text?.toString()?.trim()
             ?.takeIf { it.isNotEmpty() && !it.equals("Address not available", ignoreCase = true) }
         if (address == null) {
-            Toast.makeText(requireContext(), "Destination unavailable", Toast.LENGTH_SHORT).show()
+            toastSafe("Destination unavailable")
             return
         }
         val uri = Uri.parse("geo:0,0?q=" + Uri.encode(address))
@@ -2220,7 +2222,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             try {
                 startActivity(Intent(Intent.ACTION_VIEW, webUri))
             } catch (_: ActivityNotFoundException) {
-                Toast.makeText(requireContext(), "No maps app available", Toast.LENGTH_SHORT).show()
+                toastSafe("No maps app available")
             }
         }
     }
@@ -2229,12 +2231,12 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
 
     private fun onArrivalSwipeConfirmed() {
         if (visitId == null) {
-            Toast.makeText(requireContext(), "No active visit", Toast.LENGTH_SHORT).show()
+            toastSafe("No active visit")
             swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
             return
         }
         if (!visitStarted) {
-            Toast.makeText(requireContext(), "Trip is still starting", Toast.LENGTH_SHORT).show()
+            toastSafe("Trip is still starting")
             swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
             return
         }
@@ -2291,7 +2293,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         val id = visitId ?: run {
             arrivalInProgress = false
             swipeArrived?.reset(newLabel = "Swipe if Onsite Reached")
-            Toast.makeText(requireContext(), "No active visit", Toast.LENGTH_SHORT).show()
+            toastSafe("No active visit")
             return
         }
         swipeArrived?.lockAsBusy("Updating on-site…")
@@ -2308,7 +2310,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 session.saveDriverTripArrival(id)
                 applyStatusPill("On Site")
                 renderArrivalPhase(alreadyArrived = true)
-                Toast.makeText(requireContext(), "On Site Reached", Toast.LENGTH_SHORT).show()
+                toastSafe("On Site Reached")
             } catch (e: Exception) {
                 swipeArrived?.reset(newLabel = "Swipe if Onsite Reached")
                 Toast.makeText(
@@ -2330,7 +2332,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
      */
     private fun markDriverPickedFromSite() {
         val id = visitId ?: run {
-            Toast.makeText(requireContext(), "No active visit", Toast.LENGTH_SHORT).show()
+            toastSafe("No active visit")
             return
         }
         btnCompleteCpDetails?.isEnabled = false
@@ -2420,7 +2422,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     val cpId = cpVisitId ?: visitId
                     if (cpId == null) {
                         arrivalInProgress = false
-                        Toast.makeText(requireContext(), "Visit information is missing. Refresh and retry.", Toast.LENGTH_LONG).show()
+                        toastSafe("Visit information is missing. Refresh and retry.", Toast.LENGTH_LONG)
                         return@onComplete
                     }
                     viewLifecycleOwner.lifecycleScope.launch {
@@ -2595,7 +2597,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         if (photoFile == null) {
             arrivalInProgress = false
             swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
-            Toast.makeText(requireContext(), "Unable to create photo file", Toast.LENGTH_SHORT).show()
+            toastSafe("Unable to create photo file")
             return
         }
         pendingArrivalPhoto = photoFile
@@ -2619,7 +2621,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         } catch (_: ActivityNotFoundException) {
             arrivalInProgress = false
             swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
-            Toast.makeText(requireContext(), "No camera app available", Toast.LENGTH_SHORT).show()
+            toastSafe("No camera app available")
         }
     }
 
@@ -3235,7 +3237,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
 
         if (caseId.isBlank() || amount <= 0 || mode.isBlank()) {
             swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
-            Toast.makeText(requireContext(), "Collection details incomplete", Toast.LENGTH_SHORT).show()
+            toastSafe("Collection details incomplete")
             return
         }
 
@@ -3545,7 +3547,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
                 // Show the backend's real {error:"..."} instead of a bare "HTTP 500".
                 val msg = httpErrorMessage(e) ?: e.message ?: "Network error"
-                Toast.makeText(requireContext(), msg, Toast.LENGTH_LONG).show()
+                toastSafe(msg, Toast.LENGTH_LONG)
             }
         }
     }
@@ -3838,7 +3840,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         cpNoPathPhotoCapture = false
         swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
         message?.let {
-            Toast.makeText(requireContext(), it, Toast.LENGTH_LONG).show()
+            toastSafe(it, Toast.LENGTH_LONG)
         }
     }
 
@@ -3912,7 +3914,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     arrivalInProgress = false
                     cpNoPathPhotoCapture = false
                     swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
-                    Toast.makeText(requireContext(), metResp.error ?: "Failed to record client status", Toast.LENGTH_LONG).show()
+                    toastSafe(metResp.error ?: "Failed to record client status", Toast.LENGTH_LONG)
                     return@launch
                 }
                 val outcomeResp = setConfirmedCpOutcome(
@@ -3932,7 +3934,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     arrivalInProgress = false
                     cpNoPathPhotoCapture = false
                     swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
-                    Toast.makeText(requireContext(), outcomeResp.error ?: "Failed to set outcome", Toast.LENGTH_LONG).show()
+                    toastSafe(outcomeResp.error ?: "Failed to set outcome", Toast.LENGTH_LONG)
                     return@launch
                 }
                 pendingCpRevisit = outcomeResp.revisit
@@ -3975,7 +3977,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             android.net.Uri.parse("tel:$phone"),
         )
         runCatching { startActivity(intent) }.onFailure {
-            Toast.makeText(requireContext(), "No dialer app available", Toast.LENGTH_SHORT).show()
+            toastSafe("No dialer app available")
         }
     }
 
@@ -4102,7 +4104,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     } else {
                         "Visit completed"
                     }
-                    Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
+                    toastSafe(message)
                     navigateUp()
                 }
             } catch (e: Exception) {

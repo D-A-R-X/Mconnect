@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.library
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.app.TimePickerDialog
 import android.graphics.Color
 import android.os.Bundle
@@ -226,7 +228,7 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
     private fun addNewDriver(typedName: String) {
         val cb = onAddNewDriver
         if (cb == null) {
-            Toast.makeText(requireContext(), "Add drivers from the Driver tab.", Toast.LENGTH_SHORT).show()
+            toastSafe("Add drivers from the Driver tab.")
             return
         }
         // The host opens the add-driver form; when it returns the new driver we
@@ -429,11 +431,11 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
             ?: EditableTimeFormat.toStorage(binding.etPickupTime.text.toString())
 
         if (vehicle == null) {
-            Toast.makeText(requireContext(), "Select a vehicle", Toast.LENGTH_SHORT).show()
+            toastSafe("Select a vehicle")
             return
         }
         if (driverName.isEmpty() || driverPhone.isEmpty() || pickupTime.isEmpty()) {
-            Toast.makeText(requireContext(), "Please fill all mandatory fields", Toast.LENGTH_SHORT).show()
+            toastSafe("Please fill all mandatory fields")
             return
         }
         onAllocateCallback?.invoke(
@@ -453,7 +455,7 @@ class AllocateVehicleBottomSheet : BottomSheetDialogFragment() {
     private fun submitExternalAllot() {
         val agencyId = selectedAgencyId
         if (agencyId.isNullOrBlank()) {
-            Toast.makeText(requireContext(), "Select a travel agency", Toast.LENGTH_SHORT).show()
+            toastSafe("Select a travel agency")
             return
         }
         onAllocateCallback?.invoke(

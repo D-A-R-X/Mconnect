@@ -107,6 +107,15 @@ class AttendanceFlowViewModel(
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AttendanceFlowState())
+
+    /**
+     * The last punch the server confirmed, and when. For [CONFIRMED_PUNCH_GRACE_MS]
+     * a refresh that has not caught up with it (the backend serves cached
+     * attendance reads) must not flip the button back: on dev that showed
+     * "Clock In" for ~20 s after a successful clock-in.
+     */
+    private var confirmedPunch: Pair<PunchMode, Long>? = null
+    private var catchUpRefreshes = 0
     val uiState: StateFlow<AttendanceFlowState> = _uiState.asStateFlow()
 
     private val _events = MutableSharedFlow<AttendanceFlowEvent>(extraBufferCapacity = 1)
@@ -189,7 +198,18 @@ class AttendanceFlowViewModel(
                 // A punch may still be sitting in the offline queue (not yet
                 // synced) — the server won't know about it, so OR it into the
                 // displayed state or today would wrongly read as not-clocked-in.
-                _uiState.value = appCtx?.let { overlayPendingPunch(it, fresh) } ?: fresh
+                val withPending = appCtx?.let { overlayPendingPunch(it, fresh) } ?: fresh
+                val withConfirmed = overlayConfirmedPunch(withPending)
+                _uiState.value = withConfirmed
+                if (withConfirmed != withPending && catchUpRefreshes < MAX_CATCH_UP_REFRESHES) {
+                    // Server snapshot is behind the punch it already confirmed;
+                    // look again shortly rather than waiting for the next poll.
+                    catchUpRefreshes++
+                    viewModelScope.launch {
+                        kotlinx.coroutines.delay(CATCH_UP_REFRESH_MS)
+                        loadTodayAttendance(token, context)
+                    }
+                }
             } catch (_: Exception) {
                 // Offline / fetch failed: do NOT collapse to the empty default
                 // (which reads as not-clocked-in → "absent"). Keep the cached
@@ -442,8 +462,24 @@ class AttendanceFlowViewModel(
                     return@launch
                 }
 
+                // Confirmed by the server: show it now. The GeoTrack start-up
+                // below used to run BEFORE this, so the staff waited on its
+                // network calls after the punch had already succeeded.
+                confirmedPunch = mode to System.currentTimeMillis()
+                catchUpRefreshes = 0
+                _uiState.update { it.copy(isSubmitting = false) }
+                _events.emit(
+                    AttendanceFlowEvent.Success(
+                        mode,
+                        if (mode == PunchMode.PUNCH_IN) "Punched in successfully." else "Punched out successfully.",
+                    ),
+                )
+
+                // Outlives the screen (and this ViewModel): tracking must
+                // start or stop even when the staff leaves right away.
                 context?.let { ctx ->
                     val appCtx = ctx.applicationContext
+                    kotlinx.coroutines.CoroutineScope(Dispatchers.IO + kotlinx.coroutines.SupervisorJob()).launch {
                     GeoTrackBootstrapSync.onPunchRecorded(
                         context = appCtx,
                         punchedIn = mode == PunchMode.PUNCH_IN,
@@ -479,15 +515,9 @@ class AttendanceFlowViewModel(
                             }
                         }
                     }
+                    }
                 }
 
-                _uiState.update { it.copy(isSubmitting = false) }
-                _events.emit(
-                    AttendanceFlowEvent.Success(
-                        mode,
-                        if (mode == PunchMode.PUNCH_IN) "Punched in successfully." else "Punched out successfully.",
-                    ),
-                )
                 loadTodayAttendance(token, context)
             } catch (e: Exception) {
                 // Distinguish a genuine NETWORK failure (no server response) from
@@ -581,6 +611,39 @@ class AttendanceFlowViewModel(
         }.getOrNull()
     }
 
+    /**
+     * Keeps a punch the server already confirmed on screen while the
+     * server's attendance read catches up (see [confirmedPunch]).
+     */
+    private fun overlayConfirmedPunch(state: AttendanceFlowState): AttendanceFlowState {
+        val (mode, at) = confirmedPunch ?: return state
+        if (System.currentTimeMillis() - at > CONFIRMED_PUNCH_GRACE_MS) {
+            confirmedPunch = null
+            return state
+        }
+        return when (mode) {
+            PunchMode.PUNCH_IN ->
+                if (state.hasClockedInToday && !state.clockedOutOnMobile) {
+                    confirmedPunch = null // server caught up
+                    state
+                } else {
+                    state.copy(
+                        isClockedIn = true,
+                        hasClockedInToday = true,
+                        clockedOutOnMobile = false,
+                        firstPunchInIso = state.firstPunchInIso ?: SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", Locale.US).format(Date(at)),
+                    )
+                }
+            PunchMode.PUNCH_OUT ->
+                if (state.clockedOutOnMobile) {
+                    confirmedPunch = null
+                    state
+                } else {
+                    state.copy(isClockedIn = false, clockedOutOnMobile = true)
+                }
+        }
+    }
+
     private fun rollbackOptimistic(previous: AttendanceFlowState) {
         _uiState.update {
             it.copy(
@@ -661,6 +724,11 @@ class AttendanceFlowViewModel(
     internal data class PendingPunchLite(val isPunchIn: Boolean, val clientPunchTime: String)
 
     companion object {
+        /** See [confirmedPunch]. */
+        private const val CONFIRMED_PUNCH_GRACE_MS = 2 * 60_000L
+        private const val CATCH_UP_REFRESH_MS = 4_000L
+        private const val MAX_CATCH_UP_REFRESHES = 5
+
         /**
          * OR today's queued-but-unsynced punches into [base]. Pure so it can be
          * unit-tested without Room/Context. The server hasn't seen a queued

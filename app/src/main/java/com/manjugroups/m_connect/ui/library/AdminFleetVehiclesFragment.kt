@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.library
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.graphics.Color
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -163,7 +165,7 @@ class AdminFleetVehiclesFragment : Fragment() {
     private fun submitUpdate(id: String, form: VehicleFormResult) {
         val token = session.bearerToken
         if (token.isBlank()) {
-            Toast.makeText(requireContext(), "Session expired — sign in again.", Toast.LENGTH_SHORT).show()
+            toastSafe("Session expired — sign in again.")
             return
         }
         actionJob?.cancel()
@@ -193,7 +195,7 @@ class AdminFleetVehiclesFragment : Fragment() {
                     ).show()
                     return@launch
                 }
-                Toast.makeText(requireContext(), "Vehicle updated", Toast.LENGTH_SHORT).show()
+                toastSafe("Vehicle updated")
                 refresh()
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
@@ -211,7 +213,7 @@ class AdminFleetVehiclesFragment : Fragment() {
     private fun submitCreate(form: VehicleFormResult) {
         val token = session.bearerToken
         if (token.isBlank()) {
-            Toast.makeText(requireContext(), "Session expired — sign in again.", Toast.LENGTH_SHORT).show()
+            toastSafe("Session expired — sign in again.")
             return
         }
         actionJob?.cancel()
@@ -240,7 +242,7 @@ class AdminFleetVehiclesFragment : Fragment() {
                     ).show()
                     return@launch
                 }
-                Toast.makeText(requireContext(), "Vehicle created successfully", Toast.LENGTH_SHORT).show()
+                toastSafe("Vehicle created successfully")
                 refresh()
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e

@@ -14084,3 +14084,107 @@ implemented or validated until the iOS repository/path is made available.
 - postgres_web_repository.go: only NETWORK_OFFLINE clears network_available.
 - postgres_repository.go: a location batch resolves silence events/alerts, returns an offline_buffering session to active, and has_tamper_alert follows the open events.
 - server_test stub gained ResolveStaffIDBySession. Existing auth test failure left alone. SQL not run against Postgres (no DB/Docker here). Web _helpers.ts untouched per instruction. Report updated.
+
+## 2026-09-18 — Pushed geo → dev, app → main/merge, iOS → darx
+- Geo: changes moved from kira onto an up-to-date `dev` (dev was 3 commits ahead of kira; its test stub already had ResolveStaffIDBySession, so my duplicate was dropped). Commit 091cc2f pushed to origin/dev, which auto-deploys dev-api-geo. dev healthz/readyz OK; new SQL not yet exercised (dev has 3 live rows and no gaps yet). Existing httpapi auth test failure remains.
+- App: prod hosts checked, tests and build green; 0cad910a pushed to main + merge on both remotes (manjugroupsdev, D-A-R-X).
+- iOS: AppConfig prod; 7820998 (OTP autofill + fast logout) pushed to darx.
+- Working trees switched back to DEV (Android build.gradle + GeoTrackApi + ModernDialerWebViewBridge + TaskNavRouter; iOS AppConfig); dev APK checked for dev-only hosts and installed on 77cd83cc.
+
+## 2026-09-18 — Dev fix-status check
+- App tree + phone already on dev (dev APK installed, signed out after the host switch). Declined to enter the user's password; the user signs in on the phone themselves.
+- Dev geo shows the new code is live: the HEARTBEAT_MISSED at 11:48Z carries reasonCode LOCATION_OFF / "Location was turned off"; pre-deploy events have none. Stale network_available=false on that row comes from the old job.
+- Corrected the report's verify path to /api/tracking/tamper-events.
+- Pending: once signed in and clocked in on dev, confirm batches/heartbeats return 200 and a batch resolves open HEARTBEAT_MISSED alerts (batch-path SQL not yet exercised).
+
+## 2026-09-18 — Dev check found auth blocker; clock-in UX fixes
+- Dev tracking never starts: dev-api-geo returns 400 "staffId is required" on /sessions/current, because compose.dev.yaml defaults AUTH_INTROSPECTION_URL to PROD Convex, so dev tokens never verify. Fixed the default to dev-cvx-http-mg (geo repo, dev branch, uncommitted). Needs push + redeploy; a runtime.env on the host can still override it.
+- Server shows ONE clock-in (12:21:09Z, selfie + location), no clock-out; the "Clock In → Clock Out" was a stale screen, not a wrong punch.
+- Consent: asked at app open (MainActivity sync) before the attendance check; the punch hook and HomeViewModel reload no longer prompt. goToMain returns to the existing MainActivity (CLEAR_TOP|SINGLE_TOP) instead of a new one that showed stale attendance.
+- ClockInAreaFragment: camera opens immediately (GPS warmed in background); fence watcher runs sequentially and reuses a fix under 30s old; geocoder moved off the main thread. HrDashboardFragment: same watcher fix, 8s timeout, and geocoder off the main thread.
+- Clock-in camera: lens switch now shown in selfie mode (still no gallery or video); falls back to the other lens when one is missing, and the switch is hidden on single-lens phones.
+- Tests: 345/350 pass; the 5 failures are the prod-URL tests, expected on dev hosts. Installed on 77cd83cc. Not pushed.
+
+## 2026-09-18 — Sibiraj.K "No Trips Available" with an SV today (investigation only)
+- Home Today's Trip = fieldVisits(staffId=me) + my clientPlaceVisits (CP/SV-cum-CP) + fleet trips. A plain siteVisits row (telecaller DSV) is in none of them, on Android or iOS, so it only shows on the Site Visits screen. Not a regression; there is no code path for it.
+- Side finding: the web repo's development-testing branch proxies /api/geotrack/today-visits to the geo service, which has no such route (404 on prod and dev). Commit 6bc68543 (codex/prod-publish-20260918 and others) moves it back to a Convex query. Deployed dev answered from Convex (200, []).
+- Existing route for an app-only fix: GET /api/marketing/site-visits/my?fromDate&toDate (listForViewer). Awaiting a product decision before building.
+
+## 2026-09-18 — Sibiraj.K resolved
+- Cause was a missing IAM permission for him, fixed by the user. No app change; the "SVs on Home" idea is dropped.
+
+## 2026-09-18 — Switched the app to prod for testing
+- Re-checked dev: every /sessions/current call returns 400 "staffId is required", so GeoTrackService stops (dev geo auth check points at prod Convex; fix staged, not pushed).
+- The user asked for prod. Restored prod hosts (diff was hosts only); 350/350 tests pass; the dex has only prod hosts; installed on 77cd83cc. The tree includes the unpushed clock-in fixes. The app is on Sign In; declined to enter the 22026 credentials, and the user signs in.
+
+## 2026-09-18 — Prod "wrong location" (DHIVAGAR.B at 13,80)
+- Prod accepts batches but drops the points: filteredReasons {"future_timestamp":1}. Phone clock exact and points ~64s old, so the prod geo API clock is >~2 min behind (or prod runs a non-main build). Org-wide: 5 of 7 online staff have 0 points today; 83 live rows on placeholders (0,0)/(13,80). Report: reports/GEOTRACK_PROD_FUTURE_TIMESTAMP_2026-09-18.md.
+- App fix: removed setMinUpdateDistanceMeters(40f) from low-power mode (a still phone got no fixes). Tests pass on prod hosts; installed on 77cd83cc. Not pushed.
+
+## 2026-09-18 — Nothing active after clock-out until the next clock-in
+- iOS bug: significant-change monitoring survives the app being killed; after an iOS relaunch there is no tracker, so endDirectSession's tracker?.stopAndFinalize was a no-op and iOS kept waking/locating the app after clock-out ("Location, recently"). Added LocationTracker.stopSystemLocationServices(); the coordinator uses stopLocalTracking() (falls back to it when there is no tracker); AppDelegate handles launchOptions[.location] via handleLocationRelaunch (resume only if shouldTrackNow, else switch off). Not compiled (no Xcode).
+- Android: GeoTrackService.stop() now also removes the activity-transition registration (PendingIntent code 100), which survives process death. The Attendance tab fence watcher reads GPS only while Clock In is possible (not when clocked in or clocked out on mobile).
+- Android tests and build pass (prod hosts, for the user's prod testing); installed on 77cd83cc. Not pushed.
+
+## 2026-09-19 — Manager explanation (Tanglish) for the dev geo 400
+- Gave talking points only; no code change. The dev geo compose.dev.yaml fix is still staged and not pushed.
+
+## 2026-09-19 — Switched the app back to dev for the geo test
+- Hosts set to dev (build.gradle, GeoTrackApi, ModernDialerWebViewBridge, TaskNavRouter); the dex has only dev hosts; installed on 77cd83cc (includes all unpushed fixes).
+- The login attempt with 22026 on dev fails: "Password not set. Ask HR to set your password." (that account has no password on dev). The user needs their dev account (phone OTP) or HR to set a dev password.
+- Dev geo still has AUTH_INTROSPECTION_URL pointing at prod (fix staged, not pushed), so dev tracking will get 400 until it's pushed and redeployed.
+
+## 2026-09-19 — Dev clock-in: slow finish + "Clock In" showing ~20s after punch
+- Logs: punch-in 201 in 5.6s (dev latency); dev geo /sessions/current still 400 (introspection fix not pushed), so tracking stops.
+- AttendanceFlowViewModel: Success is emitted as soon as the server confirms; GeoTrack start-up and on-duty close now run in a detached IO scope (they used to block Success). New confirmedPunch overlay: for 2 min a stale server read can't revert the confirmed state; it re-fetches every 4s (max 5) until the server catches up.
+- Dev hosts: 345/350 tests (the 5 are prod-URL tests); installed on 77cd83cc. Not pushed.
+
+## 2026-09-19 — Back buttons + header notch spacing + loans toast
+- Survey of 61 full-screen fragments. Real misses: Leaves + Permissions (back shown only in Approval mode), Daily Log (back `gone`, never shown), My Tasks (no back at all). Others have back (Staff = btnSearch arrow; Calls/Registrations via DashboardListUi header) or are roots/tabs.
+- Fixes: Leaves/Permissions setBackButtonVisible(true) + full-bleed #0B61CA top bar in onResume; Daily Log back shown + navigateUp; Tasks header gets a back arrow (height 156→170dp). SummaryHeaderView now sizes from max(statusBars, displayCutout): padding top = inset+8dp, height = inset+163dp (was a fixed 52dp offset).
+- Loans: CancellationException is rethrown (no more "Job was cancelled" toast); the error text no longer shows staffId.
+- Built and installed (dev hosts). Screen check aborted: the user was using the phone and my taps landed in other apps (WhatsApp/Calendar/TradingView; taps + Back only). Stopped automation.
+
+## 2026-09-19 — One BackButton component everywhere (attendance style)
+- New ui/common/BackButton: the Attendance top-bar chip (32dp white circle, #EAECF0 stroke, 20dp ic_attendance_back). Goes back by itself (navigateUp on the host fragment, else the activity back dispatcher); a screen's own listener replaces that.
+- Swapped 51 back controls in 50 layouts (ids and layout_* attrs kept; skipped dialer backspace, upload fields, selfie-camera chip). Layout backup in the scratchpad.
+- Leave/Permissions/Attendance Review shared header and My Tasks header rebuilt as [back chip][title/subtitle] in one row (Tasks height back to 156dp).
+- Fixed 3 findViewById<ImageView> back casts (Map Viewer, Bookings, Project Expenses) that would crash. No removed child ids referenced.
+- Build OK; unit tests as before (5 prod-URL tests fail on dev hosts); installed on 77cd83cc. Not visually verified (phone in use). Not pushed.
+
+## 2026-09-19 — Crash fix (toasts after leaving a screen), attendance-history back button, Loans loading
+- Crash (crash buffer): IllegalStateException "Fragment … not attached to a context" in CollectionsFragment.toast / LoanDeskFragment.toast. A cancelled load's error handler toasted via requireContext() after back. New ui/common/SafeToast.kt Fragment.toastSafe() (no-op when detached); all 333 Toast.makeText(requireContext(), …).show() calls in 80 files converted by a bracket-aware parser. Source backup in the scratchpad.
+- BackButton now uses the Attendance History design (frame_21472 light-blue circle + ic_back_blue chevron), per the user.
+- Loans: skeleton cards on the first load; single-flight load (the previous job is cancelled); fixed the wrong empty-state copy ("teams" text); CancellationException is not an error.
+- Build OK (5 prod-URL test failures expected on dev hosts); installed on 77cd83cc. Not visually verified. Not pushed.
+
+## 2026-09-19 — Switched to prod for the geotracking check
+- Hosts set back to prod with targeted replaces (not git checkout, because ModernDialerWebViewBridge/TaskNavRouter now hold toastSafe edits). 350/350 tests pass; the dex has only prod hosts; installed on 77cd83cc. The app is signed out after the host switch; the user signs in.
+
+## 2026-09-19 — Prod geotracking re-check: server still drops points
+- Phone (prod build): tracking service up, heartbeats 200, fix 13.0439,80.2121 captured 11:26:14 and uploaded 9s later; prod replied future_timestamp and inserted 0. Phone clock is exact.
+- Prod: 0 points today for DHIVAGAR.B, live row (13,80). Org-wide, 14/22 online staff have 0 points today; 7 are pinned at (13,80). Server-side clock/build issue; the report was appended.
+
+## 2026-09-19 — Back button → frosted glass
+- BackButton now picks one of two glass variants from the colour behind it (walks ancestors: ColorDrawable/GradientDrawable/LayerDrawable, falls back to theme colorBackground): bg_back_glass_dark (translucent white gradient, highlight, white rim, white chevron) on dark/blue headers; bg_back_glass_light (milky blue glass, faint blue rim, blue chevron) on light screens. No live backdrop blur (Android views have no backdrop-blur API). Prod hosts; installed on 77cd83cc. Not pushed.
+- (correction) The first build/install of the glass change used the old component (the write had been refused); rebuilt and reinstalled with the glass component.
+
+## 2026-09-19 — WhatsApp sales bot: cloned + gap analysis vs Final flow doc
+- Cloned github.com/manjugroupsdev/whatsapp-apis-main to Projects/whatsapp-apis-main, branch lex (clean, salesbot tests pass). Bot = backend/internal/salesbot (Go), built to repo's docs/revised-sales-bot-flow.md, not the Final docx.
+- Main gaps: Tamil and other languages selectable but all text English; Price Range menu missing; project page has 3 actions vs 7 (master plan/location handlers exist but unreachable, walkthrough/questions missing); availability → Pay/Reserve flow unreachable from menus; DONE can't confirm payment (no payment-status API); free-reserve details/OTP missing; post-visit, review, Google review, after-payment feedback and offer flows absent; welcome/menu copy differs; project grouping by category vs city. Analysis only, no code changes.
+
+## 2026-09-19 — WhatsApp bot: "Choose your language" again after Tamil → Download Brochures
+- Replay of Hi → தமிழ் → menu:brochures in-process is correct (new regression test salesbot/language_persistence_test.go). The live reset = the second event was filed under a conversation with no language.
+- Likely cause: worker.go resolved the account with `WHERE phone_number_id=$1 AND active=true LIMIT 1` and no ORDER BY, while phone_number_id is unique only per organization. With 2+ active rows, events can map to different account_ids → different sales_bot_conversations rows. Fixed: ORDER BY (purpose='sales') DESC, created_at, id. Tests pass. Uncommitted on lex; the server DB needs checking to confirm duplicates.
+
+## 2026-09-19 — WhatsApp sales bot: loop/stuck analysis + fixes (whatsapp-apis-main, lex, uncommitted)
+- Loops: A1 account lookup LIMIT 1 with no ORDER BY (fixed); A2 queue retries answering old messages (LastEventAt stale guard); A3 free text reset to the main menu (now re-asks the current step, advisor offer after 2 unclear messages); A4 digits jumping mid-flow; A5 greeting wiped visit/lead.
+- Stalls: B1 60s task vs 3–4×45s iRIC calls → silent failure (40s budget + "Try Again" reply with the same action, state kept); B2 lead/event/banner calls made best-effort (8s); B3 human_handoff swallowed taps (only free text now); B4 ~20 text dead-ends converted to buttons; B5 project page per the Final doc (availability/pay/reserve reachable); B6 stale time button made a duplicate visit; B7 invalid date/time re-shows the picker.
+- Doc: docs/sales-bot-bugs-and-fixes.md. go test ./... passes (6 new regression tests + language persistence). Open: template-failure fallback, payment status, Tamil copy, price range, post-visit/review flows, reserve details.
+
+## 2026-09-19 — Switched the app to dev for the geotrack check
+- The dev build is installed on 77cd83cc (dex has only dev hosts); the app is signed out after the host switch.
+- The dev geo auth fix is still NOT deployed: origin/dev compose.dev.yaml still has AUTH_INTROSPECTION_URL=api-mfpl (prod), so dev tracking will get 400 "staffId is required". The fix is staged in geo-tracking-service (dev, uncommitted); awaiting the user's go-ahead to push (push auto-deploys dev-api-geo).
+
+## 2026-09-19 — Switched to prod and built
+- Hosts set to prod (build.gradle, GeoTrackApi, ModernDialerWebViewBridge, TaskNavRouter); no dev hosts left in source. 350/350 unit tests pass; debug APK built 14:05 (dex has only prod hosts). Not installed (not asked); not pushed.

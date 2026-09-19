@@ -31,18 +31,11 @@
         android:minHeight="56dp"
         android:paddingHorizontal="4dp">
 
-        <ImageView
+        <com.manjugroups.m_connect.ui.common.BackButton
             android:id="@+id/btnBookingsBack"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:layout_gravity="start|center_vertical"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:clickable="true"
-            android:contentDescription="Back"
-            android:focusable="true"
-            android:padding="10dp"
-            android:src="@drawable/ic_arrow_left"
-            app:tint="#0B61CA" />
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_gravity="start|center_vertical" />
 
         <TextView
             android:id="@+id/tvBookingsTitle"

@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.library
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.graphics.Color
 import android.os.Bundle
 import android.text.Editable
@@ -177,7 +179,7 @@ class AdminFleetDriversFragment : Fragment() {
     private fun submitCreate(name: String, phone: String, address: String, category: String) {
         val token = session.bearerToken
         if (token.isBlank()) {
-            Toast.makeText(requireContext(), "Session expired — sign in again.", Toast.LENGTH_SHORT).show()
+            toastSafe("Session expired — sign in again.")
             return
         }
         actionJob?.cancel()
@@ -193,16 +195,16 @@ class AdminFleetDriversFragment : Fragment() {
                     else api.createDriver(token, request)
                 if (_binding == null) return@launch
                 if (!resp.success) {
-                    Toast.makeText(requireContext(), resp.error ?: "Couldn't create driver.", Toast.LENGTH_LONG).show()
+                    toastSafe(resp.error ?: "Couldn't create driver.", Toast.LENGTH_LONG)
                     return@launch
                 }
-                Toast.makeText(requireContext(), "Driver created successfully", Toast.LENGTH_SHORT).show()
+                toastSafe("Driver created successfully")
                 refresh()
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
                 if (_binding == null) return@launch
-                Toast.makeText(requireContext(), "Couldn't create driver: ${loadErrorMessage(e)}", Toast.LENGTH_LONG).show()
+                toastSafe("Couldn't create driver: ${loadErrorMessage(e)}", Toast.LENGTH_LONG)
             }
         }
     }
@@ -216,7 +218,7 @@ class AdminFleetDriversFragment : Fragment() {
     ) {
         val token = session.bearerToken
         if (token.isBlank()) {
-            Toast.makeText(requireContext(), "Session expired — sign in again.", Toast.LENGTH_SHORT).show()
+            toastSafe("Session expired — sign in again.")
             return
         }
         actionJob?.cancel()
@@ -233,16 +235,16 @@ class AdminFleetDriversFragment : Fragment() {
                     else api.updateDriver(token, request)
                 if (_binding == null) return@launch
                 if (!resp.success) {
-                    Toast.makeText(requireContext(), resp.error ?: "Couldn't update driver.", Toast.LENGTH_LONG).show()
+                    toastSafe(resp.error ?: "Couldn't update driver.", Toast.LENGTH_LONG)
                     return@launch
                 }
-                Toast.makeText(requireContext(), "Driver updated successfully", Toast.LENGTH_SHORT).show()
+                toastSafe("Driver updated successfully")
                 refresh()
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
                 if (_binding == null) return@launch
-                Toast.makeText(requireContext(), "Couldn't update driver: ${loadErrorMessage(e)}", Toast.LENGTH_LONG).show()
+                toastSafe("Couldn't update driver: ${loadErrorMessage(e)}", Toast.LENGTH_LONG)
             }
         }
     }
@@ -250,7 +252,7 @@ class AdminFleetDriversFragment : Fragment() {
     private fun submitSetStatus(id: String, status: String) {
         val token = session.bearerToken
         if (token.isBlank()) {
-            Toast.makeText(requireContext(), "Session expired — sign in again.", Toast.LENGTH_SHORT).show()
+            toastSafe("Session expired — sign in again.")
             return
         }
         actionJob?.cancel()
@@ -261,17 +263,17 @@ class AdminFleetDriversFragment : Fragment() {
                     else api.setDriverStatus(token, req)
                 if (_binding == null) return@launch
                 if (!resp.success) {
-                    Toast.makeText(requireContext(), resp.error ?: "Couldn't change status.", Toast.LENGTH_LONG).show()
+                    toastSafe(resp.error ?: "Couldn't change status.", Toast.LENGTH_LONG)
                     return@launch
                 }
                 val msg = if (status.equals("active", ignoreCase = true)) "Driver activated" else "Driver deactivated"
-                Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
+                toastSafe(msg)
                 refresh()
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
                 if (_binding == null) return@launch
-                Toast.makeText(requireContext(), "Couldn't change status: ${loadErrorMessage(e)}", Toast.LENGTH_LONG).show()
+                toastSafe("Couldn't change status: ${loadErrorMessage(e)}", Toast.LENGTH_LONG)
             }
         }
     }

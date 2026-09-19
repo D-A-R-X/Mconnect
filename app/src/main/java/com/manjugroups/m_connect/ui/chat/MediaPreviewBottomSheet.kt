@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.chat
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.app.Dialog
 import android.content.DialogInterface
 import android.graphics.Color
@@ -497,7 +499,7 @@ class MediaPreviewBottomSheet : BottomSheetDialogFragment() {
             if (meta != null) {
                 val maxSize = 15L * 1024L * 1024L
                 if (meta.fileSize > maxSize) {
-                    Toast.makeText(requireContext(), "${meta.fileName} is larger than 15 MB", Toast.LENGTH_SHORT).show()
+                    toastSafe("${meta.fileName} is larger than 15 MB")
                     return
                 }
                 selectedAttachments.add(meta)

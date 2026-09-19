@@ -38,6 +38,20 @@ object GeoTrackBootstrapSync {
             return false
         }
 
+        // Consent is asked when the app opens (the only caller that passes
+        // allowPromptConsent = true is MainActivity's foreground sync) and
+        // BEFORE the attendance check. It used to sit after it, so it could
+        // only ever appear once the staff member had clocked in — landing on
+        // top of the clock-in they had just made, every first login.
+        GeoTrackConsentStore.reconcile(appContext, session)
+        if (!session.geoConsentGiven && !session.geoConsentDeclined &&
+            allowPromptConsent && !GeoTrackConsentActivity.isActive
+        ) {
+            context.startActivity(Intent(context, GeoTrackConsentActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            })
+        }
+
         val attendanceOpen = attendanceOpenOverride
             ?: AttendanceTrackingGate.hasOpenSessionNow(session.bearerToken)
         if (attendanceOpen == false) {
@@ -52,15 +66,9 @@ object GeoTrackBootstrapSync {
             return session.shouldTrackNow
         }
 
-        GeoTrackConsentStore.reconcile(appContext, session)
         if (!session.geoConsentGiven) {
             session.shouldTrackNow = false
             GeoTrackService.stop(appContext)
-            if (!session.geoConsentDeclined && allowPromptConsent && !GeoTrackConsentActivity.isActive) {
-                context.startActivity(Intent(context, GeoTrackConsentActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                })
-            }
             return false
         }
 
@@ -138,7 +146,9 @@ object GeoTrackBootstrapSync {
         return if (punchedIn) {
             sync(
                 context = appContext,
-                allowPromptConsent = true,
+                // Never open the consent screen from the punch itself; it
+                // interrupted the clock-in. MainActivity asks at app open.
+                allowPromptConsent = false,
                 api = api,
                 attendanceOpenOverride = true,
                 contextId = contextId,

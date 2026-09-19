@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.hr
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.app.Dialog
 import android.graphics.Color
 import android.os.Bundle
@@ -599,7 +601,7 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
             putBoolean(KEY_STARTED, true)
         }
         setFragmentResult(RESULT_KEY, resultBundle)
-        Toast.makeText(requireContext(), "On Duty started.", Toast.LENGTH_SHORT).show()
+        toastSafe("On Duty started.")
         dismissAllowingStateLoss()
 
         // Backend sync — fire after dismissing so the bottom sheet UX

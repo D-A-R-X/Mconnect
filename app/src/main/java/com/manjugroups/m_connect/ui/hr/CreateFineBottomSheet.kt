@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.hr
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.Manifest
 import android.app.Dialog
 import android.content.pm.PackageManager
@@ -101,7 +103,7 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
                 binding.tvUploadTitle.text = "Photo Captured"
             }
         } else {
-            Toast.makeText(requireContext(), "Camera capture cancelled", Toast.LENGTH_SHORT).show()
+            toastSafe("Camera capture cancelled")
         }
     }
 
@@ -111,7 +113,7 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
         if (granted) {
             openCamera()
         } else {
-            Toast.makeText(requireContext(), "Camera permission is required to capture photos", Toast.LENGTH_SHORT).show()
+            toastSafe("Camera permission is required to capture photos")
         }
     }
 
@@ -305,7 +307,7 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
             )
             capturePhotoLauncher.launch(uri)
         } catch (e: Exception) {
-            Toast.makeText(requireContext(), "Failed to open camera: ${e.message}", Toast.LENGTH_SHORT).show()
+            toastSafe("Failed to open camera: ${e.message}")
         }
     }
 
@@ -333,10 +335,10 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
             if (resp.success && resp.storageId != null) {
                 storageId = resp.storageId
             } else {
-                Toast.makeText(requireContext(), "Upload failed: ${resp.error ?: "Unknown error"}", Toast.LENGTH_SHORT).show()
+                toastSafe("Upload failed: ${resp.error ?: "Unknown error"}")
             }
         }.onFailure { err ->
-            Toast.makeText(requireContext(), "Upload failed: ${err.message}", Toast.LENGTH_SHORT).show()
+            toastSafe("Upload failed: ${err.message}")
         }
         return storageId
     }
@@ -344,7 +346,7 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
     private fun submitFine() {
         val staff = selectedStaff
         if (staff == null || staff.employeeId.isNullOrBlank()) {
-            Toast.makeText(requireContext(), "Please select an employee", Toast.LENGTH_SHORT).show()
+            toastSafe("Please select an employee")
             return
         }
         val staffName = staff.name ?: ""
@@ -352,19 +354,19 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
 
         val fineType = binding.etFineType.text.toString().trim()
         if (fineType.isEmpty()) {
-            Toast.makeText(requireContext(), "Please enter fine type", Toast.LENGTH_SHORT).show()
+            toastSafe("Please enter fine type")
             return
         }
 
         val amountStr = binding.etFineAmount.text.toString().trim()
         if (amountStr.isEmpty()) {
-            Toast.makeText(requireContext(), "Please enter amount", Toast.LENGTH_SHORT).show()
+            toastSafe("Please enter amount")
             return
         }
 
         val amount = amountStr.toDoubleOrNull()
         if (amount == null || amount <= 0) {
-            Toast.makeText(requireContext(), "Please enter a valid amount", Toast.LENGTH_SHORT).show()
+            toastSafe("Please enter a valid amount")
             return
         }
 
@@ -397,7 +399,7 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
                         ),
                     )
                     if (resp.success) {
-                        Toast.makeText(requireContext(), "Fine created", Toast.LENGTH_SHORT).show()
+                        toastSafe("Fine created")
                         listener?.onFineCreated(
                             name = staffName,
                             department = department,
@@ -450,7 +452,7 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
                     } catch (_: Exception) {}
 
                     if (bytes == null) {
-                        Toast.makeText(requireContext(), "Failed to read photo", Toast.LENGTH_SHORT).show()
+                        toastSafe("Failed to read photo")
                         resetSubmitButton()
                         return@launch
                     }
@@ -461,7 +463,7 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
                         resetSubmitButton()
                     }
                 } catch (e: Exception) {
-                    Toast.makeText(requireContext(), "Submission failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                    toastSafe("Submission failed: ${e.message}")
                     resetSubmitButton()
                 }
             }
@@ -491,7 +493,7 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
                     } catch (_: Exception) {}
 
                     if (bytes == null) {
-                        Toast.makeText(requireContext(), "Failed to read photo", Toast.LENGTH_SHORT).show()
+                        toastSafe("Failed to read photo")
                         resetSubmitButton()
                         return@launch
                     }
@@ -502,7 +504,7 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
                         resetSubmitButton()
                     }
                 } catch (e: Exception) {
-                    Toast.makeText(requireContext(), "Submission failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                    toastSafe("Submission failed: ${e.message}")
                     resetSubmitButton()
                 }
             }

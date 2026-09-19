@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.marketing
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.app.Dialog
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -56,7 +58,7 @@ class CancelSiteVisitBottomSheet : BottomSheetDialogFragment() {
                         throw IllegalStateException(response.error ?: "Unable to cancel site visit")
                     }
                     setFragmentResult(RESULT_KEY, bundleOf(KEY_CANCELLED to true))
-                    Toast.makeText(requireContext(), "Site visit cancelled", Toast.LENGTH_LONG).show()
+                    toastSafe("Site visit cancelled", Toast.LENGTH_LONG)
                     dismiss()
                 } catch (exception: Exception) {
                     error.text = exception.message ?: "Unable to cancel site visit"

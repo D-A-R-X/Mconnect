@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.issues
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.graphics.Color
 import android.media.MediaPlayer
 import android.os.Bundle
@@ -223,10 +225,10 @@ class IssuesFragment : Fragment() {
                 )
                 if (_binding == null) return@launch
                 if (resp.success) {
-                    Toast.makeText(requireContext(), "Issue submitted", Toast.LENGTH_SHORT).show()
+                    toastSafe("Issue submitted")
                     loadIssues()
                 } else {
-                    Toast.makeText(requireContext(), resp.error ?: "Couldn't submit issue", Toast.LENGTH_LONG).show()
+                    toastSafe(resp.error ?: "Couldn't submit issue", Toast.LENGTH_LONG)
                 }
             } catch (e: Exception) {
                 if (_binding == null) return@launch
@@ -445,7 +447,7 @@ class IssuesFragment : Fragment() {
                 onReady(player)
             }
         }.onFailure {
-            Toast.makeText(requireContext(), "Failed to play audio note", Toast.LENGTH_SHORT).show()
+            toastSafe("Failed to play audio note")
             stopActivePlayback()
         }
     }

@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.home
 
+import com.manjugroups.m_connect.ui.common.toastSafe
+
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -828,7 +830,7 @@ class HomeFragment : Fragment() {
                     // Success is already confirmed by the "Clockout/Clock-in
                     // Successful" sheet — only surface errors as a toast.
                     if (event is PunchEvent.Error) {
-                        Toast.makeText(requireContext(), event.message, Toast.LENGTH_SHORT).show()
+                        toastSafe(event.message)
                     }
                 }
             }
