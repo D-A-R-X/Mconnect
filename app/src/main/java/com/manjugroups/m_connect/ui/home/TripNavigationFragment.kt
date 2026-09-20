@@ -229,7 +229,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     private var tvTripStartTime: TextView? = null
     private var tvStartTripLabel: TextView? = null
     private var tripStatusPill: LinearLayout? = null
-    private var btnBack: ImageView? = null
+    private var btnBack: View? = null
     private var btnOpenMaps: LinearLayout? = null
     private var swipeArrived: SwipeToConfirmButton? = null
     private var btnCompleteCpDetails: Button? = null
