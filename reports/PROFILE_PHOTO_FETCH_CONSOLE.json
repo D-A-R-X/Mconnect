@@ -1,0 +1,204 @@
+{
+  "title": "Mconnect Android profile photo fetch console trace",
+  "capturedAt": "2026-09-08T17:47:57+05:30",
+  "environment": {
+    "mmsBaseUrl": "https://api-mfpl.theairix.com/",
+    "storageBaseUrl": "https://mg.theairix.com/"
+  },
+  "mobileCodePath": {
+    "headerSource": "app/src/main/java/com/manjugroups/m_connect/ui/custom/HomeHeaderView.kt",
+    "resolverSource": "app/src/main/java/com/manjugroups/m_connect/ui/common/ProfilePhotos.kt",
+    "steps": [
+      "Render SessionManager.userPhotoUrl when cached",
+      "Call getStaffDetail using session.staffId and the bearer token",
+      "Read response.staff.photo",
+      "Load an absolute photo URL unchanged or resolve a bare storage ID through api/storage/serve"
+    ],
+    "unusedForHomeHeader": "GET /api/hr/staff/profile"
+  },
+  "staffMetadataRequest": {
+    "method": "GET",
+    "urlTemplate": "https://api-mfpl.theairix.com/api/hr/staff/get?id={session.staffId}",
+    "headers": {
+      "Authorization": "Bearer {SessionManager bearer token}",
+      "Accept": "application/json"
+    },
+    "body": null
+  },
+  "staffMetadataResponseSchema": {
+    "type": "object",
+    "required": [
+      "success",
+      "staff"
+    ],
+    "properties": {
+      "success": {
+        "type": "boolean"
+      },
+      "staff": {
+        "oneOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "_id": { "type": ["string", "null"] },
+              "id": { "type": ["string", "null"] },
+              "name": { "type": ["string", "null"] },
+              "phone": { "type": ["string", "null"] },
+              "email": { "type": ["string", "null"] },
+              "role": { "type": ["string", "null"] },
+              "designation": { "type": ["string", "null"] },
+              "department": { "type": ["string", "null"] },
+              "status": { "type": ["string", "null"] },
+              "employeeId": { "type": ["string", "null"] },
+              "company": { "type": ["string", "null"] },
+              "branch": { "type": ["string", "null"] },
+              "dateOfBirth": { "type": ["string", "null"] },
+              "joiningDate": { "type": ["string", "null"] },
+              "bloodGroup": { "type": ["string", "null"] },
+              "address": { "type": ["string", "null"] },
+              "city": { "type": ["string", "null"] },
+              "state": { "type": ["string", "null"] },
+              "pincode": { "type": ["string", "null"] },
+              "aadhaarNumber": { "type": ["string", "null"] },
+              "panNumber": { "type": ["string", "null"] },
+              "bankName": { "type": ["string", "null"] },
+              "accountNumber": { "type": ["string", "null"] },
+              "branchName": { "type": ["string", "null"] },
+              "ifscCode": { "type": ["string", "null"] },
+              "emergencyContact": {
+                "oneOf": [
+                  { "type": "null" },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "name": { "type": ["string", "null"] },
+                      "phone": { "type": ["string", "null"] },
+                      "relation": { "type": ["string", "null"] }
+                    }
+                  }
+                ]
+              },
+              "gender": { "type": ["string", "null"] },
+              "maritalStatus": { "type": ["string", "null"] },
+              "fatherName": { "type": ["string", "null"] },
+              "motherName": { "type": ["string", "null"] },
+              "religion": { "type": ["string", "null"] },
+              "nationality": { "type": ["string", "null"] },
+              "qualification": { "type": ["string", "null"] },
+              "experienceYears": { "type": ["number", "null"] },
+              "reportingTo": { "type": ["string", "null"] },
+              "reportingToName": { "type": ["string", "null"] },
+              "roleLevel": { "type": ["number", "null"] },
+              "documents": { "type": ["array", "null"] },
+              "photo": { "type": ["string", "null"] }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "liveStaffMetadataProbe": {
+    "request": {
+      "timestamp": "2026-09-08T12:17:26Z",
+      "method": "GET",
+      "url": "https://api-mfpl.theairix.com/api/hr/staff/get?id=profile-photo-contract-probe",
+      "headers": {
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "response": {
+      "status": 401,
+      "contentType": "application/json",
+      "contentLength": 78,
+      "body": {
+        "success": false,
+        "error": "Authorization header with Bearer token is required"
+      }
+    }
+  },
+  "photoRequestResolution": {
+    "absolutePhotoValue": {
+      "method": "GET",
+      "urlTemplate": "{staff.photo}",
+      "body": null
+    },
+    "bareStorageIdValue": {
+      "method": "GET",
+      "urlTemplate": "https://api-mfpl.theairix.com/api/storage/serve?storageId={staff.photo}",
+      "body": null
+    }
+  },
+  "livePhotoProbe": {
+    "storageId": "64ceeb75-bfb4-4ed7-aabb-ae5f4297190a",
+    "request": {
+      "timestamp": "2026-09-08T12:17:26Z",
+      "method": "GET",
+      "url": "https://api-mfpl.theairix.com/api/storage/serve?storageId=64ceeb75-bfb4-4ed7-aabb-ae5f4297190a",
+      "headers": {
+        "Accept": "image/*,application/json"
+      },
+      "body": null
+    },
+    "response": {
+      "status": 200,
+      "contentType": "application/vnd.airix.external-storage-marker+json",
+      "contentLength": 164,
+      "body": {
+        "kind": "external-storage-marker",
+        "version": 1,
+        "fileName": "upload",
+        "contentType": "image/jpeg",
+        "sizeBytes": 79864,
+        "purpose": "mobile.generic",
+        "createdAt": 1788789626377
+      }
+    },
+    "imageRenderingResult": "failed",
+    "reason": "The response contains storage-marker JSON instead of image bytes."
+  },
+  "newStorageResolverProbe": {
+    "request": {
+      "timestamp": "2026-09-08T12:17:57Z",
+      "method": "GET",
+      "url": "https://mg.theairix.com/api/storage/files/64ceeb75-bfb4-4ed7-aabb-ae5f4297190a",
+      "headers": {
+        "Accept": "application/json,image/*"
+      },
+      "body": null
+    },
+    "response": {
+      "status": 307,
+      "headers": {
+        "Location": "https://api-mfpl.theairix.com/api/storage/serve?storageId=64ceeb75-bfb4-4ed7-aabb-ae5f4297190a",
+        "Cache-Control": "private, max-age=60"
+      },
+      "body": null
+    },
+    "followedRedirectResult": "Returns the external-storage-marker JSON recorded in livePhotoProbe rather than image bytes."
+  },
+  "requiredSuccessfulPhotoResponse": {
+    "allowedResponses": [
+      {
+        "status": 307,
+        "location": "A short-lived real external object URL",
+        "body": null
+      },
+      {
+        "status": 200,
+        "contentType": "image/jpeg, image/png, or image/webp",
+        "body": "Binary image bytes"
+      }
+    ],
+    "disallowedContentType": "application/vnd.airix.external-storage-marker+json"
+  },
+  "safety": {
+    "authenticatedProfileFetched": false,
+    "productionLoginCreated": false,
+    "productionDataMutated": false,
+    "reason": "No existing authenticated test bearer token was available in the workspace."
+  }
+}

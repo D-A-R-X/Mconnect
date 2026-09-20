@@ -1,0 +1,258 @@
+MANJU GROUPS – WHATSAPP FLOW (MASTER FINAL VERSION)
+ENTRY
+Hi 👋 Welcome to Manju Groups
+
+Premium real estate developments across Tamil Nadu 📍
+
+✔ DTCP approved layouts 📑
+✔ High appreciation potential 📈
+✔ Trusted developer 🤝
+
+Choose your language:
+
+1. English 🌐
+2. தமிழ் 🏡
+MAIN MENU (ENGLISH)
+Welcome 👋
+
+Buy premium estate plots, villas, beach & farm lands in a single click 🏡
+
+Choose an option:
+
+1. View Projects 🏡
+2. Check Price Range 💰
+3. Download Brochures 📄
+4. Book Free Site Visit 🚗
+5. Help / FAQs ❓
+6. Visit Website 🌐
+7. Talk to Advisor ☎️
+PROJECT LIST
+Select a project 📍
+
+Chennai Projects 🏙
+1. Thirumazhisai 4.0 🚀
+2. Bluespot, ECR 🌊
+3. Tiruvallur 📍
+
+Coimbatore Projects 🌿
+4. Mettupalayam 🌱
+5. Bali 2.0 🌴 (Nr. Anaikatty)
+6. Kovai South IT Corridor 🏢
+
+Hill Projects ⛰
+7. Yercaud 🍃
+
+8. Back 🔙
+PROJECT PAGE
+[Project Name]
+
+Clear documents 📑
+Location advantages 📍
+Excellent connectivity 🛣
+
+Price starts from ₹XX Lakhs 💰
+
+What do you want?
+
+1. View Master Plan 🗺
+2. Download Brochure 📄
+3. Check Location 📍
+4. Walkthrough / Details 🎥
+5. Have questions / Need assistance 🤝
+6. Book Site Visit 🚗
+7. Back 🔙
+MASTER PLAN / PROJECT PHOTOS
+Master plan & key plan shared 🗺📸
+Project photos also shared 📸
+
+What next?
+
+1. Check Price & Availability 🟢
+2. Book Site Visit 🚗
+3. Back 🔙
+BROCHURE
+Download brochure 📄
+
+👉 [Brochure Link]
+
+What next?
+
+1. Check Availability 🟢
+2. Book Site Visit 🚗
+3. Back 🔙
+LOCATION
+View location 📍
+
+👉 [Google Maps Link]
+
+Nearby landmarks 🛣
+
+• Airport ✈️ – XX mins
+• School 🏫 – XX mins
+• Hospital 🏥 – XX mins
+• IT Park 🏢 – XX mins
+
+What next?
+
+1. Check Available Plots 🟢
+2. Book Site Visit 🚗
+3. Back 🔙
+AVAILABILITY
+Available plots 🟢
+
+900 sq.ft – ₹XX Lakhs
+1200 sq.ft – ₹XX Lakhs
+1500 sq.ft – ₹XX Lakhs
+
+Limited availability ⚠️
+
+What would you like?
+
+1. Book Plot 💳
+2. Reserve Free 🆓
+3. Book Site Visit 🚗
+4. Back 🔙
+BOOKING OPTIONS
+Choose how you want to proceed:
+
+1. Pay Token ₹10,000 💳
+2. Reserve Free (24 hrs) 🆓
+3. Talk to Advisor ☎️
+4. Back 🔙
+PAYMENT
+Secure your plot 💳
+
+👉 Pay here:
+[Payment Link]
+
+✔ Safe payment 🔒
+✔ Instant confirmation ✅
+✔ Instant refund available 💸
+✔ Instant receipt provided 📄
+
+After payment, type DONE ✅
+PAYMENT CONFIRMATION
+Payment received ✅
+
+Your plot is temporarily blocked 🎉
+
+Our team will contact you shortly ☎️
+FREE RESERVE
+We will hold your plot for 24 hours ⏳
+
+Send details 📌
+
+• Name
+• Phone Number
+• Preferred Project
+• Plot Size
+
+(OTP verification may be required)
+
+Preferred property is subject to availability.
+
+We will confirm shortly 👍
+SITE VISIT
+Free doorstep site visit available 🚗
+
+✔ Exclusive pickup & drop
+✔ Friendly discussion
+✔ Project walkthrough assistance 🏡
+
+Choose time:
+
+1. Tomorrow Morning 🌅
+2. Tomorrow Evening 🌆
+3. Weekend 📅
+SITE VISIT CONFIRMATION
+Your site visit is confirmed ✅
+
+Our team will assist you during the visit 🤝
+AFTER SITE VISIT
+Hi 👋
+
+Hope you had a good experience with Manju Groups 😊
+
+Would you like to:
+
+1. Check Available Plots 🟢
+2. Book / Reserve 💳
+3. Share your feedback ⭐
+REVIEW TRIGGER
+Hi 👋
+
+Thank you for visiting Manju Groups 🙏
+
+We hope you had a good experience 😊
+
+Your feedback helps others make the right decision ⭐
+
+Would you like to share a review?
+
+1. Yes ⭐
+2. Later
+GOOGLE REVIEW
+Thank you 🙌
+
+Please share your review here ⭐
+
+👉 [Google Review Link]
+
+We really appreciate your support 🤝
+REVIEW FOLLOW-UP
+Hi 👋 Just a quick reminder 😊
+
+It would mean a lot if you could share your feedback ⭐
+
+👉 [Google Review Link]
+AFTER PAYMENT REVIEW
+Hi 👋
+
+Thank you for choosing Manju Groups 🙏
+
+We’d love to hear your experience 😊
+
+1. Share feedback ⭐
+2. Later
+HELP MENU
+Choose an option:
+
+1. Refund Policy 💸
+2. Payment Safety 🔒
+3. Talk to Advisor ☎️
+4. Back 🔙
+REFUND POLICY
+✔ Transparent process
+✔ No hidden charges
+
+Token is refundable 💸
+(Conditions apply)
+
+1. Talk to Support ☎️
+2. Back 🔙
+PAYMENT SAFETY
+✔ Secure payment 🔒
+✔ Instant receipt provided 📄
+✔ Safe booking 👍
+PRICE RANGE
+Choose your budget 💰
+
+1. Below 25 Lakhs
+2. 25–50 Lakhs
+3. 50+ Lakhs
+WEBSITE
+Visit website 🌐
+
+👉 https://manjugroups.in
+ADVISOR
+We will connect you with our advisor shortly ☎️
+
+Or you can type your query here 💬
+OPTIONAL OFFER / COUPON FLOW
+🎁 Exclusive Offer
+
+Book a site visit today and unlock special benefits ✨
+
+✔ Spot booking benefits
+✔ Limited-time offers
+✔ Exclusive support from our team 🤝

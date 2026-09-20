@@ -269,6 +269,38 @@ When making changes in this repo:
   change must run `SessionInvalidationPolicyTest` and the full unit suite. Add a
   regression case before changing the invalidation boundary.
 
+## Multi-Repository Boundaries And Git Rules
+
+These rules apply across the projects currently handled in this workspace.
+They supersede older notes, cloned-repository remotes, and agent memories.
+
+- `C:\Users\surya\Projects\Mconnect` is the Mconnect Android app. Treat its
+  current checked-out branch as its target; push only when the user explicitly
+  asks to push.
+- `C:\Users\surya\Projects\FoundationChat` is the iOS companion app. Keep
+  its work and Git history separate from Android work.
+- `C:\Users\surya\Projects\whatsapp-apis-main` is the WhatsApp platform.
+  Sales-bot work belongs exclusively on its `lex` branch. It must affect only
+  the Manju sales WhatsApp account and its sales-bot queue, conversation, and
+  outbound paths. Never modify, route, disable, or deploy changes for OTP,
+  utility, or other WhatsApp bots as part of sales-bot work. Never promote
+  `lex` to `main`, deploy it, or change production configuration unless the
+  operator explicitly confirms that action.
+- `C:\Users\surya\Projects\Mconnect-Aivida` is a distinct app repository.
+  Its canonical remote is `https://github.com/manjugroupsdev/Mconnect-Aivida.git`
+  and its required integration branch is `lex`. Pull from and push to that
+  repository's `lex` branch only when the user explicitly names Aivida. Its
+  `lex` is completely separate from the WhatsApp bot's `lex`.
+- Aivida work is a two-repository project only: `Mconnect-Aivida` (the Android
+  app, editable) and `AividaAirix-web` (the backend/web contract, read-only).
+  Do not make web changes, do not push web changes, and do not create or touch
+  an iOS app for Aivida unless the user explicitly changes this scope.
+- `C:\Users\surya\Projects\manjusitedevelopment` is web/backend work.
+  Do not start web work unless the user explicitly asks for it. Never push web
+  or backend changes to that repository without explicit operator confirmation.
+- Never infer that a request concerning one repository authorizes changes,
+  pulls, pushes, merges, deployments, or configuration changes in another.
+
 ## Known Sharp Edges
 
 - `README.md` is partly stale and should not be treated as source of truth for all runtime details.

@@ -15,10 +15,10 @@
       </SelectionState>
       <SelectionState runConfigName="androidTest">
         <option name="selectionMode" value="DROPDOWN" />
-        <DropdownSelection timestamp="2026-08-26T04:36:39.284001100Z">
+        <DropdownSelection timestamp="2026-09-19T04:26:29.910409900Z">
           <Target type="DEFAULT_BOOT">
             <handle>
-              <DeviceId pluginId="Wireless" identifier="serviceName=adb-7ceb9213-bk5cd8" />
+              <DeviceId pluginId="LocalEmulator" identifier="path=C:\Users\surya\.android\avd\Pixel_7a.avd" />
             </handle>
           </Target>
         </DropdownSelection>
@@ -26,12 +26,7 @@
           <targets>
             <Target type="DEFAULT_BOOT">
               <handle>
-                <DeviceId pluginId="PhysicalDevice" identifier="serial=7ceb9213" />
-              </handle>
-            </Target>
-            <Target type="DEFAULT_BOOT">
-              <handle>
-                <DeviceId pluginId="LocalEmulator" identifier="path=C:\Users\surya\.android\avd\Pixel_7a.avd" />
+                <DeviceId pluginId="PhysicalDevice" identifier="serial=77cd83cc" />
               </handle>
             </Target>
           </targets>
