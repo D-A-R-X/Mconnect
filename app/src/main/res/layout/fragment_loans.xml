@@ -28,8 +28,7 @@
             <com.manjugroups.m_connect.ui.common.BackButton
                 android:id="@+id/btnLoansEmptyBack"
                 android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:visibility="gone" />
+                android:layout_height="32dp" />
 
             <TextView
                 android:layout_width="0dp"
@@ -103,8 +102,7 @@
                         android:layout_width="32dp"
                         android:layout_height="32dp"
                         android:layout_marginStart="16dp"
-                        android:layout_marginTop="16dp"
-                        android:visibility="gone" />
+                        android:layout_marginTop="16dp" />
 
                     <TextView
                         android:id="@+id/tvLoansTitle"

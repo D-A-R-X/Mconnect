@@ -488,7 +488,7 @@ class AttendanceHistoryFragment : Fragment() {
                             filterToDate,
                             status = filterAttendanceStatus,
                             staffId = filterStaffId,
-                            pageSize = 200,
+                            pageSize = 100,
                         )
                     }.getOrNull()
                 }
@@ -501,7 +501,7 @@ class AttendanceHistoryFragment : Fragment() {
                             filterToDate,
                             status = filterAttendanceStatus,
                             staffId = filterStaffId,
-                            pageSize = 200,
+                            pageSize = 100,
                         )
                     }.getOrNull()
                 }
@@ -518,7 +518,7 @@ class AttendanceHistoryFragment : Fragment() {
                             toDate = filterToDate,
                             status = filterAttendanceStatus,
                             staffId = filterStaffId,
-                            pageSize = 200,
+                            pageSize = 100,
                         )
                     }.getOrNull()
                 }
@@ -537,7 +537,7 @@ class AttendanceHistoryFragment : Fragment() {
                             toDate = filterToDate,
                             status = filterAttendanceStatus,
                             staffId = filterStaffId,
-                            pageSize = 200,
+                            pageSize = 100,
                         )
                     }.getOrNull()
                 }

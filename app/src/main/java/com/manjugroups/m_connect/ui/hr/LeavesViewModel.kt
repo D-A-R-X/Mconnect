@@ -63,7 +63,7 @@ class LeavesViewModel : ViewModel() {
                             status = status,
                             leaveType = leaveType,
                             staffId = staffId,
-                            pageSize = 200,
+                            pageSize = 100,
                         )
                     }.getOrNull()
                 }
@@ -78,7 +78,7 @@ class LeavesViewModel : ViewModel() {
                                 status = status,
                                 leaveType = leaveType,
                                 staffId = staffId,
-                                pageSize = 200,
+                                pageSize = 100,
                             )
                         }.getOrNull()
                     } else null
@@ -99,7 +99,7 @@ class LeavesViewModel : ViewModel() {
                                 status = status,
                                 leaveType = leaveType,
                                 staffId = staffId,
-                                pageSize = 200,
+                                pageSize = 100,
                             )
                         }.getOrNull()
                     } else null

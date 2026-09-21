@@ -14227,3 +14227,397 @@ implemented or validated until the iOS repository/path is made available.
   pull origin main; "sync from mconnect"->upstream. Aivida moves ONLY when named; bare push/pull
   stays Mconnect. Aivida still on Mconnect backend until its own backend/branding is built.
 - This chat pivots to work on Aivida going forward.
+
+## 2026-09-19 — Pushed app b0499690 (main + merge, both remotes)
+- Mandatory full-screen update page + read-only SV outcome + no Call Driver for own vehicle (10 files). Prod hosts, 348/348 tests, pre-push passed. Tree switched back to DEV and the dev APK built.
+
+## 2026-09-19 — Sales bot: missing-brochure dead end (whatsapp-apis-main, lex, uncommitted)
+- Screenshot: Download Brochures → Greenspot, Thiruvallur 3.0 ended in "A public brochure is not available… Send ADVISOR or MENU" (text only). The live server runs the old build; iRIC has no brochureUrl for that project.
+- brochureFallbackView: shares the master plan, walkthrough, map link and up to 4 highlights if present, with Talk to Advisor / Check Availability / Main Menu buttons. New brochure_fallback_test.go; go test ./... passes. Doc row B8 added. Data fix: upload the brochure in MMS.
+
+## 2026-09-19 — Switched to prod
+- Hosts set to prod (identical to pushed b0499690; no source diff in app/). Debug APK has only prod hosts; installed on 77cd83cc (the app signs out on the host switch).
+
+## 2026-09-19 — Sales bot: which projects lack a brochure (read-only prod check)
+- Queried prod MMS public Convex queries (projects:list, projectMarketingDocuments:listByProject), read-only. 34 ongoing projects; only Greenspot - Yercaud yields a brochureUrl.
+- 7 projects HAVE a brochure PDF but iRIC misses it: files spell "Broucher" and mimeType is empty, so classifyMarketingDocument returns nothing. Fix without deploy: add "Brochure" to the label in MMS. Permanent fix is a Convex change (.pdf extension + broucher spelling), handed to the web team, not edited.
+- 25 have no document; test projects are visible to customers; no master plans anywhere. Written to whatsapp-apis-main/docs/sales-bot-missing-brochures.md.
+
+## 2026-09-19 — Sales bot: website link → mg.theairix.com (whatsapp-apis-main, lex, uncommitted)
+- "Visit Website" reply and menu description used manjugroups.in; now websiteURL/websiteHost constants in views.go = https://mg.theairix.com (sales bot only). Added TestWebsiteLinkPointsToManjuSite; go test ./... passes. The live bot needs the lex deploy.
+
+## 2026-09-19 — Pushed sales bot to whatsapp-apis-main lex (7bc2183)
+- Commit 7bc2183 on lex (3edf42a..7bc2183): account lock, loop/dead-end fixes, brochure fallback, mg.theairix.com website link, docs. Build and all Go tests pass. Not deployed: prod env needs SALES_BOT_ACCOUNT_ID before the server deploy.
+
+## 2026-09-19 — WhatsApp auto-deploy branch check (read-only)
+- .github/workflows/deploy-prod.yml (added to main in 8e6c723 today) auto-deploys on push to **main** (plus manual dispatch) on self-hosted runner [self-hosted, mg179, whatsapp, prod]. It checks out the SHA in /opt/whatsapp-platform/app and runs build.sh + up-and-verify.sh; .env is untouched. Our push to lex did NOT deploy (lex is not in main; lex lacks 8e6c723).
+- The server deploy uses build.sh, not deploy.sh, so the SALES_BOT_ACCOUNT_ID check is bypassed. The server .env needs the key before lex is merged to main, or the bot starts disabled. Pending branch ci/frontend-redirect-check fixes the frontend health check (the / → sign-in 307 fails the curl).
+
+## 2026-09-19 — Sales bot silent after prod auto-deploy
+- main = lex (PR #2) + deploy workflow (PR #3); first auto-deploy at 13:32 UTC. The worker logged "sales bot disabled… SALES_BOT_ACCOUNT_ID must be the sales account's UUID": the server .env lacks the key, so the bot is off (fail-closed) and the chat stopped responding. Utility/OTP unaffected.
+- Local commit on lex (not pushed): if the key is empty, the worker locks to the single active purpose='sales' account; with 0 or 2+ it stays off. Tests pass.
+- Also seen in the deploy log: DNS lookup of api-mfpl.theairix.com failed inside the worker at startup (docker DNS "server misbehaving"); the job is marked failed only because the frontend check expects 200 but gets a 307 (fix is on ci/frontend-redirect-check).
+
+## 2026-09-19 — Pushed 0989f4a to whatsapp-apis-main lex
+- Missing-key fallback pushed to lex. Not in main, so not deployed; it needs a lex→main PR merge (which triggers the prod auto-deploy), or the server .env fix.
+
+## 2026-09-20 — Claude handoff reconstructed; multi-repository rules reset
+- Read Claude's own session transcripts under `C:\Users\surya\.claude\projects\C--Users-surya-Projects-Mconnect`, rather than relying on this log. Claude's final Aivida session stopped immediately after the user requested a sync plan from the Aivida web branch; it made no Aivida code, Git, or deployment change.
+- WhatsApp sales-bot handoff: `whatsapp-apis-main` `lex` is at `0989f4a`. It contains the fail-closed single-active-sales-account discovery fallback. `main` remains the production auto-deploy branch, so `lex` has not deployed this fallback. The prior live silence was caused by the production worker not receiving `SALES_BOT_ACCOUNT_ID`; utility and OTP bots were deliberately unaffected.
+- Verified the supplied WhatsApp flow DOCX was extracted locally to `reports/whatsapp_flow_doc_extract.txt` for future comparison. Ran `go test ./...` in `whatsapp-apis-main/backend` with its declared dependencies: all packages passed, including API, auth, salesbot, and worker. No live customer message, production configuration, or deployment was attempted.
+- Operational risk recorded: the local `docker-compose.yml` passes `SALES_BOT_ENABLED` but does not pass `SALES_BOT_ACCOUNT_ID`, while `deploy.sh` validates the key but the production automation runs `build.sh`. The fallback protects a one-sales-account deployment, but an explicit correctly wired production setting is still preferred. Do not change production until operator confirmation.
+- Updated `AGENTS.md` with the active-repository boundaries: Mconnect Android; FoundationChat iOS; WhatsApp Manju sales bot on `lex` only; Mconnect-Aivida canonical `https://github.com/manjugroupsdev/Mconnect-Aivida.git` on `lex` only; and `manjusitedevelopment` web/backend is strictly no-work/no-push without explicit user request and operator confirmation. WhatsApp `lex` and Aivida `lex` are separate branches in separate repositories.
+- No source, server, remote, deployment, or push changes were made this turn. Remaining follow-up: change the existing local Aivida clone remote/branch only when the user asks to operate on Aivida; it still reflects Claude's older remote configuration.
+
+## 2026-09-20 — WhatsApp sales bot does not answer an existing phone conversation (diagnosis in progress)
+- Connected Oppo `77cd83cc` through authorized USB debugging and inspected the already-sent WhatsApp Bot conversation without sending a new customer message. The bot welcome was present, but the customer's later `Hi` and existing language replies had no bot response.
+- Verified `origin/main` still has the pre-`0989f4a` configuration guard: an empty `SALES_BOT_ACCOUNT_ID` disables the sales bot. Production Compose also does not forward that variable to API/worker. This matches the prior worker log and explains why inbound customer messages are received by WhatsApp but not answered; OTP and utility paths remain independent.
+- The scoped repair is present on `whatsapp-apis-main` `lex` at `0989f4a`: when there is exactly one active purpose=`sales` account, the worker locks only to it; ambiguous/absent sales accounts remain fail-closed. Next: add explicit Compose forwarding, validate the deployment configuration and tests, then wait for explicit production merge/push approval.
+
+## 2026-09-20 — WhatsApp sales bot inbound-reply repair prepared (not pushed)
+- Added `SALES_BOT_ACCOUNT_ID: ${SALES_BOT_ACCOUNT_ID:-}` to `whatsapp-apis-main/docker-compose.yml` on `lex`, forwarding the setting only to the existing API and worker containers. It does not alter the shared webhook, OTP, or utility-message routes.
+- Verified the exact `origin/main` delta: its old config requires the account ID and consequently disables the bot; `lex` adds the bounded one-active-purpose=`sales` discovery in `0989f4a`. It never selects a utility account, and zero/multiple sales accounts stay disabled.
+- `go test ./...` passed after the Compose change: API, auth, config, encryption, Meta, salesbot, and worker packages all passed. Docker is not installed on this desktop, so local `docker compose config` validation could not run. No merge, push, deployment, server configuration, or customer message was performed.
+- To make the already-verified fix live, the operator must explicitly authorize promoting `lex` to `main`; that push triggers the configured production deployment. The existing production `.env` should still be set with the sales account ID afterward for explicit deterministic configuration, but the deployed fallback will safely operate only when exactly one active sales account exists.
+- The Compose-only follow-up is staged locally on `lex`, but its commit is blocked because `whatsapp-apis-main` has no configured Git author name/email. No identity was invented, no push occurred, and no deployment was triggered.
+
+## 2026-09-20 — Mconnect CP-opening crash investigation started
+- Per the updated scope, this task is restricted to `Mconnect`; no Aivida files or repository actions were taken.
+- Attempted to capture the connected Oppo (`77cd83cc`) crash trace while opening CP. The device disconnected and ADB reported `waiting for device` before a `FATAL EXCEPTION` could be retrieved. The emulator has Mconnect installed but is signed out, so it cannot reproduce the authenticated CP flow without test credentials.
+- Read the CP list and create-sheet entry code and checked all immediate form/list resource IDs against their layouts. No stale/missing layout ID was found. No source changes were made; follow-up requires a fresh Oppo logcat capture after USB debugging reconnects.
+
+## 2026-09-20 — Aivida project separated from Mconnect work
+- User established Aivida as a two-repository project only: `Mconnect-Aivida` Android app (editable) and `AividaAirix-web` backend/web reference (read-only). No Aivida web changes, pushes, deployments, or iOS work are authorized.
+- Updated this repository's multi-repository rules to preserve that boundary. In `Mconnect-Aivida`, added `AIVIDA_AGENT_LOG.md` as the dedicated local-only Aivida handoff log and updated its inherited `AGENTS.md` with the scope, read-only web rule, separate `lex` branches, and required target remote/branch.
+- Inspected the supplied Aivida mobile guide and existing clone state. The clone is still on `main` with Claude's older `D-A-R-X` origin and Mconnect upstream; no remote/branch mutation was made. Aivida planning is next, using the web repository and guide only as read-only contracts.
+- Created a local read-only checkout of `AividaAirix-web` `main` for contract review, then created `Mconnect-Aivida/docs/AIVIDA_ANDROID_CONVERSION_PLAN_2026-09-20.md`. The plan records active healthcare modules, excluded legacy modules, an API/environment gate before endpoint changes, and phased Android-only conversion. No Aivida web/iOS/source/remote changes were made.
+- Confirmed the local AividaAirix-web reference checkout is clean on `main`; it remains read-only.
+
+## 2026-09-20 — Aivida runtime and Play package set
+- In `Mconnect-Aivida`, configured the supplied Aivida Convex `.site` and `.cloud` hosts, removed inherited Manju defaults for primary API/app-link/storage, and set Google Play Android application ID `com.manjugroups.aividaairix` with matching debug broadcast actions. GeoTrack/dialer hosts remain unchanged pending Aivida-specific contracts.
+- `:app:assembleDebug` passed with generated BuildConfig/APK metadata verified. Firebase configuration is currently blank, so Aivida Firebase credentials for the new package remain required before release. No web/iOS/remote/push/deployment action occurred.
+
+## 2026-09-20 — Aivida canonical `lex` push underway
+- The operator explicitly authorized pushing the completed Aivida Android
+  configuration to `https://github.com/manjugroupsdev/Mconnect-Aivida` on
+  `lex`. The target branch was fetched and has unrelated history, so the
+  changes are being reapplied as a normal commit on that branch without a
+  force-push. The Aivida web reference and all iOS/web work remain untouched.
+
+## 2026-09-20 — Aivida canonical `lex` push completed
+- Pushed Aivida Android commit `8f6ee532659e3ad5f032c72b3f98133a7664ab15`
+  (`chore: configure Aivida mobile identity`) to
+  `https://github.com/manjugroupsdev/Mconnect-Aivida.git` branch `lex`.
+- The push includes only Aivida Android identity/Convex configuration, the
+  Android debug broadcast identifier, repository-boundary rules, and the
+  conversion plan. Local-only Aivida logs and generated IDE state were
+  excluded. No Aivida web reference, iOS, Mconnect, or WhatsApp files changed.
+
+## 2026-09-20 — Aivida mobile module scope clarified
+- Reviewed the Aivida Android conversion plan against the read-only Aivida web
+  reference for the operator's module-scope question. No source or remote
+  changes were made. The web source still contains broad inherited/legacy
+  areas, but the approved Android scope is only healthcare operations:
+  Home, Field, Calling, Profile, plus IAM-gated Accounts, Tasks, Chat, Lens,
+  Reports, Broadcast, and Audit. Real-estate CRM, projects/plots, land,
+  fleets, frontdesk, and post-sales are excluded from Android unless the
+  operator explicitly changes scope.
+- Remaining blocker before feature implementation: Aivida must publish the
+  authenticated mobile endpoint contract for auth, staff/profile, attendance,
+  field visits, calling, storage, GeoTrack, and chat.
+
+## 2026-09-20 — Aivida contract-independent conversion resumed
+- The operator confirmed that backend-dependent items will be handled after
+  the admin creates the Aivida project, and asked to continue other tasks.
+  In `Mconnect-Aivida` only, started the safe branding pass: Airix for AIVIDA
+  app/login/notification identity and local chat-media names. No Aivida web,
+  iOS, backend, or unrelated repository work was performed.
+
+## 2026-09-20 — Aivida branding validated
+- `Mconnect-Aivida` passed `:app:assembleDebug --no-daemon
+  -Dkotlin.incremental=false`. A temporary Kotlin incremental-cache lock was
+  resolved by stopping Gradle daemons and using a non-incremental compile;
+  existing unrelated warnings remain.
+- Reviewed the inherited navigation: it is still wired to Mconnect HR/chat
+  and legacy real-estate/fleet destinations. No route was changed because the
+  Aivida IAM and mobile endpoint matrix required to make Home/Field/Calling/
+  Profile functional has not been supplied. No web, backend, iOS, or Git push
+  action was performed.
+
+## 2026-09-20 — Aivida login report diagnosed
+- The emulator screen reporting invalid Employee ID/password was verified as
+  the old Mconnect package `com.manjugroups.mconnect`, not Aivida. Its actual
+  request went to `api-mfpl.theairix.com` and received the displayed 401.
+  Aivida's new package is `com.manjugroups.aividaairix`, so that screen cannot
+  validate an Aivida account. The Aivida APK is being installed side-by-side
+  for an accurate test; no credential or server data was changed.
+
+## 2026-09-20 — Aivida test build installed
+- Installed the Aivida debug package `com.manjugroups.aividaairix` beside the
+  old Mconnect app on `emulator-5554` and launched it successfully to its
+  welcome screen. The Mconnect package was not replaced. No supplied
+  credentials were submitted and no account/device-binding data changed.
+
+## 2026-09-20 — Aivida emulator onboarding correction
+- The Aivida emulator test exposed remaining Manju/project-sales welcome copy.
+  Updated only the Aivida Android onboarding text to healthcare outreach and
+  field-work language. Authentication and network behavior remain unchanged;
+  build/reinstall validation is pending.
+
+## 2026-09-20 — Mconnect CP-opening crash fixed and verified
+- Inspected the connected Oppo (`77cd83cc`) crash buffer and exit history for
+  `com.manjugroups.mconnect`. Opening a CP consistently crashed in
+  `TripNavigationFragment.onViewCreated` with `ClassCastException` because
+  `btnTripBack` was declared as `ImageView` while the layout supplies the
+  custom `BackButton` view.
+- Changed only `TripNavigationFragment.kt` so `btnBack` is a `View`, matching
+  the layout and its click-only use. Searched the other back-button bindings;
+  this was the relevant CP trip-screen mismatch.
+- Validation: `:app:assembleDebug` completed successfully using Android
+  Studio's bundled JDK after the terminal's missing `JAVA_HOME` was supplied
+  for the build. The debug APK was built but not installed over the Oppo's
+  Play internal-testing build. Remaining validation: install a signed test
+  build or publish the fix, then open a CP on the Oppo to confirm the runtime
+  crash is gone.
+
+## 2026-09-20 — CP crash commit check
+- Inspected commit `b04996903ee19c0fff04797bf3a8392e0b35b0b7` against the
+  connected Oppo's CP-opening crash signature. It contains the same defect:
+  `TripNavigationFragment` declares `btnBack` as `ImageView` while
+  `fragment_trip_navigation.xml` declares `btnTripBack` as the custom
+  `BackButton`. It would therefore reproduce the same `ClassCastException`
+  when opening a CP. No Git action was performed.
+
+## 2026-09-20 — CP crash hotfix prepared for publish
+- At the operator's explicit request, committed only the CP back-button crash
+  fix as `6fb0367b` (`fix: prevent CP trip screen back button crash`) on the
+  current Android `merge` branch. `AGENT_LOG.md`, IDE state, reports, and
+  other unrelated workspace changes remain local and uncommitted.
+- The repository has two configured `origin` push URLs. The hotfix will be
+  pushed explicitly to `https://github.com/manjugroupsdev/Mconnect.git` on
+  `merge`, preventing an unintended push to the separate D-A-R-X mirror.
+- Push completed successfully: `6fb0367b` advanced the Manju Groups `merge`
+  branch from `b0499690` to `6fb0367b`. No mirror, web/backend, iOS, Aivida,
+  or unrelated files were pushed.
+
+## 2026-09-20 — CP crash hotfix approved for Android main
+- The operator corrected the target branch to the Manju Groups Android app
+  repository's `main`. Fetched that remote branch and confirmed it is still
+  `b0499690`, a direct ancestor of hotfix `6fb0367b`; the intended update is
+  a clean fast-forward and does not overwrite newer main-branch work.
+- Push completed successfully: Manju Groups Android `main` now advances from
+  `b0499690` to `6fb0367b`. Only the CP crash hotfix was delivered.
+
+## 2026-09-20 — Android main push contents verified
+- Verified remote Manju Groups Android `main` resolves to `6fb0367b`. That
+  commit changes only `TripNavigationFragment.kt` (the one-line CP
+  back-button type correction). Local IDE files, `AGENTS.md`, the local-only
+  `AGENT_LOG.md`, Kotlin cache, and all reports remain uncommitted and were
+  not pushed.
+
+## 2026-09-20 — Requested local artifact push audited
+- The operator requested that remaining local changes be pushed. Reviewed the
+  working tree: there is no additional uncommitted Android app source.
+  Candidate content is `AGENTS.md`, IDE metadata, and 82 QA/report artifacts
+  (about 17.9 MB).
+- Per the mandatory local-only protocol, `AGENT_LOG.md` will remain excluded.
+  The transient `.kotlin/` build cache will also remain local. Credential
+  pattern scanning identified nine captured log/UI XML artifacts requiring
+  exclusion from Git; the remaining requested shareable configuration and QA
+  artifacts are being prepared for the explicit Android `main` push.
+- Committed the screened requested batch as `83327513` (`docs: add mobile QA
+  evidence and workspace guidance`): 76 files containing the repository
+  guidance, selected IDE metadata, and non-sensitive QA evidence. The
+  excluded local-only, cache, and credential-pattern artifacts remain
+  uncommitted.
+- Verified remote `main` was an ancestor and pushed successfully. Manju
+  Groups Android `main` now advances from `6fb0367b` to `83327513`.
+
+## 2026-09-20 — iOS CP crash parity check
+- At the operator's request, inspected the separate `FoundationChat` iOS
+  repository for the Android CP-opening crash equivalent. iOS uses the
+  SwiftUI `TripNavigationView` and has no XML `BackButton`/`ImageView` cast,
+  so the Android `ClassCastException` cannot occur there and no iOS source
+  change is needed for this defect.
+- The existing uncommitted iOS files are unrelated GeoTrack lifecycle and
+  development-host endpoint edits; they were not modified, committed, or
+  pushed. `xcodebuild` is unavailable on this Windows machine, so iOS build
+  validation must run on its Mac/Xcode environment.
+
+## 2026-09-20 — All-approval loading compatibility fix
+- Investigated the reported Android approval badges showing up to 100 while
+  the corresponding page rendered empty. The active Mconnect package on the
+  available Oppo is logged out, so no authenticated live replay was possible.
+  Source review found Attendance, Leave, and Permission approval reads all
+  requested `pageSize=200`, although the documented server maximum is 100;
+  failures were swallowed with `runCatching(...).getOrNull()`, producing an
+  empty list without a usable error.
+- Updated all affected approval/list reads in `AttendanceHistoryFragment`,
+  `LeavesViewModel`, and `PermissionsViewModel` to the supported maximum
+  `pageSize=100`. `:app:assembleDebug` completed successfully. No Git commit
+  or push was performed. Remaining validation: authenticate an approver on a
+  test device, open Attendance/Leave/Permission All scopes, and confirm rows
+  match their badges.
+
+## 2026-09-20 — Aivida emulator login ready
+- Rebuilt and reinstalled the Aivida APK, verified its installed hash matches
+  the local output, and reached its Employee ID screen on `emulator-5554`.
+  No credential was entered or submitted; explicit confirmation is required
+  before sending the screenshot's credentials to the Aivida service.
+
+## 2026-09-20 — Aivida module scope
+- In `Mconnect-Aivida` only: added Aivida-only navigation policy that hides and
+  blocks inherited real-estate/operations modules: CP/SV, bookings/inventory,
+  project, land, fleet, post-sales/collections, accounts verification, and
+  front-desk. HR, attendance, tasks, chat, profile, dialer, and leads remain.
+- Disabled fleet dispatch loading and driver/fleet Home presentation for the
+  Aivida package. Debug build passed and installed on `emulator-5554`; no
+  Aivida credential was submitted, so authenticated-library visual testing is
+  still pending authorized test credentials.
+
+## 2026-09-20 — Aivida storage contract
+- In `Mconnect-Aivida` only: enforced the documented storage-service
+  create/PUT/complete path and removed legacy raw-byte proxy fallback from the
+  shared uploader. The completed `storageId` remains the sole value attached
+  to business APIs; no storage credentials were added to mobile.
+- Routed the remaining chat reply thumbnail through the storage resolver and
+  updated Aivida storage contract/resolver tests. Targeted tests and debug APK
+  assembly passed. Live upload/download awaits an authorized Aivida session
+  and disposable test content; Aivida web was read-only throughout.
+- Follow-up: removed the obsolete `ApiService` raw-byte storage endpoint and
+  its timeout override in Aivida; a fresh debug APK assembly succeeded.
+
+## 2026-09-20 — Aivida OPPO installation
+- Installed the current `com.manjugroups.aividaairix` debug APK on requested
+  USB device `7ceb9213` (OPPO CPH2363, API 34). It launched to Aivida's
+  `WelcomeActivity` without a runtime crash. The separate Mconnect package on
+  that phone remains installed and unchanged; no credentials were entered.
+
+## 2026-09-20 — Aivida web-chat image renderer
+- Fixed Aivida Android chat attachment rendering: primary bubbles now resolve
+  either the web URL or bare storage ID via `/api/storage/files/{storageId}`
+  instead of trying an empty attachment URL. Debug APK build passed and was
+  installed/launched on OPPO CPH2363. Specific-message visual verification
+  needs the Aivida chat account to be signed in on the device.
+
+## 2026-09-20 — Aivida chat attachment follow-up
+- In the separate `Mconnect-Aivida` repository only, found that the chat API
+  returns an inherited `mg.theairix.com` storage resolver that now leads to an
+  unavailable response. The Android image loader now resolves known storage
+  URLs through the Aivida host and adds the bearer token only to that trusted
+  Aivida `/api/storage/files/` request; it never forwards the token to an
+  external host or redirect.
+- Passed focused Aivida storage resolver tests, the Joint CP mocked API
+  journey, and the debug assembly. The requested OPPO disconnected before the
+  final APK could be installed and visually read back. No web or iOS files
+  were changed, and nothing was pushed.
+
+## 2026-09-20 — Aivida push request review
+- Confirmed `Mconnect-Aivida` is on `lex`. Its repository rules prohibit a
+  `main` push, so no commit or push was made pending a branch-correct request.
+
+## 2026-09-20 — Aivida lex push authorized
+- The operator authorized a source-only push of `Mconnect-Aivida` to its
+  required `lex` branch. Local logs and IDE metadata remain excluded.
+- The source-only Aivida commit `445a616b` (`feat: configure Aivida mobile
+  storage and module scope`) was pushed successfully to `origin/lex`. The
+  chat attachment physical-device check remains pending because the OPPO USB
+  connection had dropped; no web or iOS repository was changed.
+
+## 2026-09-20 — Aivida chat image verified on OPPO
+- The OPPO reconnected; the exact Aivida `lex` debug build was installed and
+  the Abuthar chat attachment that previously showed as a grey placeholder
+  loaded successfully. No web or iOS source was changed in this verification
+  turn.
+
+## 2026-09-20 — Aivida outgoing attachment outbox (separate repository)
+- In `Mconnect-Aivida` only, reproduced outgoing images vanishing after close:
+  attachments were optimistic UI-only while text used a persistent outbox.
+  Added schema-v8 attachment queueing with app-private file copies, hydration
+  on chat re-entry, and local-URI image preview support.
+- OPPO CPH2363 test: force-stop/reopen retained and rendered the queued JPEG.
+  Delivery is blocked by the Aivida storage create endpoint returning the
+  app's 404/503 unavailable class, so it remains safely queued for retry.
+- Aivida resolver tests (6/6) and debug build passed. No Mconnect/web/iOS
+  source was changed, and no push was requested.
+
+## 2026-09-20 — Aivida queued image preview follow-up
+- In Aivida only, the OPPO displayed a durable queued image as a blank tile
+  after re-entry even though direct authenticated storage reads returned HTTP
+  200. Added direct local-URI rendering for queued media, bypassing the Coil
+  network/cache path. Rebuilt and installed; the device locked before the
+  final visual recheck.
+- Upload creation remains unavailable on the Aivida backend, so the client
+  correctly retains and retries the source file. No Mconnect/web/iOS change or
+  push occurred.
+
+## 2026-09-21 — Loans back button
+- `fragment_loans.xml`: both `BackButton`s (blue header `btnLoansBack`, empty-state `btnLoansEmptyBack`) were in the layout but `visibility="gone"`, so the screen had no way back except the system gesture. Removed the gone flag; the click listeners in `LoansFragment` were already wired to `navigateUp()`.
+- Verified on 77cd83cc (prod build): Apps → Loans shows the glass back chip on the blue header and tapping it returns to App Library.
+
+## 2026-09-21 — Attendance approval panel anomaly (HARIKRISHNAN. M, 20 Sept)
+- Diagnosed, no code changed. Root event: clocked in 09:24, never clocked out. The midnight finalizer closes such a session at its own punch-in instant (`convex/staffAttendance.ts:8024`, `autoClosedAtDayEnd`), so in==out and the day is Absent by design; the web summary tile renders that synthetic punch-out as real while the punch-log dialog already strips it.
+- The 0 m / 0 trips / 0 points view of the same row is most likely a failed geo fetch: `useStaffDayGeo` empties the arrays and sets `error`, and the approvals panel never renders that error, so a failure looks like "no movement".
+- Open mobile decision: with no clock-out, tracking + trip starts stay live until IST midnight (`AttendanceTrackingGate` / `scheduleAttendanceDayBoundaryStop`), which is why a 07:58 pm trip exists on an absent day.
+- Written up in `reports/ATTENDANCE_APPROVAL_PANEL_2026-09-21.md` (web/Convex items are handoff only, per the no-edits rule).
+
+## 2026-09-21 — Root cause found: geo panel shows the REVIEWER's own route
+- Corrects the earlier entry today. Every per-staff geo read returns the CALLER's data: `requestStaffIdentifier` (geo `internal/httpapi/server.go:860`) overrides the requested `?staffId=` with the authenticated caller's id. Right for writes, wrong for the six admin read endpoints that share it. Introduced 2026-09-07 in geo commit `36f58a5`. `isWebReadPath` (security.go:219) already lists exactly those paths but is dead code.
+- So the Vadapalani route/7:58 pm trip was Anand sir's, and the 0/0/0 view was the other reviewer's empty data — not a failed fetch as I first wrote. No cross-staff leak (a caller only ever sees themselves), but RO/HR decisions are made against the wrong person's map.
+- Fix needs a viewer scope the geo service does not have (introspection returns only `{success, staffId}`). Two options written up; awaiting the user's choice before editing geo. No code changed.
+- `reports/ATTENDANCE_APPROVAL_PANEL_2026-09-21.md` rewritten.
+
+## 2026-09-21 — Geo fix pushed: per-staff reads no longer return the caller's rows
+- geo-tracking-service `09c9710` on `dev` (auto-deploys dev-api-geo). `requestStaffIdentifier` now honours the requested `staffId` for a caller whose token carries viewer scope `all`, but only on the GET paths `isWebReadPath` lists (that function was dead code and is now wired). Writes stay pinned to the caller unconditionally.
+- Scope comes from the token: introspection `scope: "all"` or `canViewAll: true`, or the same claims on a JWKS-verified JWT. Missing = `self` = today's behaviour, so the deploy is a no-op until Convex ships the field. Redis allow entries carry the scope; legacy `allow:<id>` entries read as `self`, no flush needed.
+- 5 new tests; `go vet` clean; full suite green except `TestAuthDisabledRejectsInvalidBearerInsteadOfFallingBackToBodyStaffID`, which I verified fails on HEAD without my change (pre-existing, untouched).
+- Convex handoff: `geo-tracking-service/docs/VIEWER_SCOPE_CONTRACT.md` — one field on `/api/auth/geotrack-access`.
+- NOT pushed: `compose.dev.yaml` (the dev AUTH_INTROSPECTION_URL change) is still uncommitted and awaiting a separate decision.
+
+## 2026-09-21 — Play Store blank map: root cause captured from the device
+- Reproduced on 77cd83cc (Play build, versionCode 86 installed from com.android.vending): CP Visits → trip card → Trip Details renders the MapView with no tiles.
+- Pulled the installed base.apk and read its manifest: the shipped `com.google.android.geo.API_KEY` is `AIzaSyD-Ip...`, which is NOT the key in this machine's `secrets.properties` (`AIzaSyB6R_...`). The release AAB was built elsewhere with a different secrets.properties.
+- `apksigner --print-certs` on the installed APK: signer DN `CN=Android, O=Google Inc.` (Play App Signing), SHA-1 `F4:78:18:31:7E:38:1D:CC:E9:58:4B:70:E0:11:A8:81:AD:96:79:3D`. Local debug SHA-1 is `2C:33:6D:15:6E:66:76:80:96:1B:D9:E2:37:44:7A:0C:8F:65:6E:60`.
+- So the Play build ships a different key AND is signed by a cert neither key is likely restricted to. Fix: put `com.manjugroups.mconnect` + the Play app-signing SHA-1 on whichever key ships, and standardise the release machine on one key.
+- No Maps auth line reached logcat; the app process logged `ProxyAndroidLoggerBackend: Too many Flogger logs received before configuration. Dropping old logs.`, which is how the SDK's own error got dropped. Absence of the error is not evidence the key is fine.
+- Nothing on the phone was modified (no Enroute / Swipe to Complete tapped); pulled APK deleted from the scratchpad.
+
+## 2026-09-21 — New Maps key wired in, not yet verifiable locally
+- `secrets.properties` now holds the teammate's key `AIzaSyDZpaKBVQaF...` (old `AIzaSyB6R_orJ6...` backed up in the scratchpad; file is gitignored so nothing is committed).
+- Built debug and confirmed via aapt2 that the new key is in the APK manifest. BUT the APK is debug-signed (`2c:33:6d:...:6e:60`) and the key is authorized only for the Play app-signing SHA-1 `F4:78:...:79:3D`, so a local run cannot validate it — the map would be blank either way.
+- Could not test on 77cd83cc: replacing the Play build (versionCode 86, Google-signed) with the local debug build (83) needs a full uninstall, which would wipe the login. Not done. Second phone 7ceb9213 took the install but is signed out, and I do not handle logins.
+- To validate before publishing: add debug SHA-1 `2C:33:6D:15:6E:66:76:80:96:1B:D9:E2:37:44:7A:0C:8F:65:6E:60` to the same key, or upload to Play internal testing (that artifact is signed with the exact SHA-1 the key already allows).
+- Publishing blocker: versionCode is still 83 locally vs 86 live; must go to 87+.
+
+## 2026-09-21 — New key: repo checks pass, awaiting sign-in to verify
+- Teammate authorised BOTH SHA-1s on `AIzaSyDZpaKBVQaF...` (debug `2C:33:6D:...` + Play `F4:78:...`), which makes local verification possible.
+- Ran their checklist: no hardcoded key in tracked source, manifest uses the `${MAPS_API_KEY}` placeholder, no legacy `com.google.android.maps.v2.API_KEY`, nothing in `local.properties`. `clean` + `assembleDebug` done; fresh APK carries the new key.
+- Clean build installed on 7ceb9213; user is signing in there so I can open CP Visits → Trip Details and confirm the map. OPPO left untouched (still on Play v86).
+- Old key `AIzaSyD-IpBP4i...` lives in Google Cloud project `621471596046` (per teammate); authorising the Play SHA-1 there would fix current users with no release.
+- Publish still needs versionCode 83 → 87.
+
+## 2026-09-21 — New Maps key VERIFIED working
+- Installed the clean debug build (new key `AIzaSyDZpaKBVQaF...`) on 7ceb9213; user signed in; CP Visits → Trip Details renders tiles, route polyline, destination pin and the location dot. The key config is correct — proven on a debug-signed build now that the debug SHA-1 is authorised.
+- Bumped versionCode 83 → 87 in `app/build.gradle.kts` (86 is live on Play). Not committed/pushed.
+- Tree confirmed on prod hosts (api-mfpl / api-geo / mg), no dev hosts — correct for a release build.
+- Remaining for release: the BUILD MACHINE needs `MAPS_API_KEY=AIzaSyDZpaKBVQaFeK7iNUt47YqpgVAdLeko04E` in its own `secrets.properties` (gitignored, never travels with the repo), then a signed AAB from Android Studio.
+- Still worth doing in parallel: authorise the Play SHA-1 on the OLD key in Google Cloud project `621471596046` — repairs the map for everyone already on v86 with no release.
+
+## 2026-09-21 — Work order from the key owner: status
+- Path A (edit old key `AIzaSyD-IpBP4i...` in GCP project `621471596046`) — cannot be done from here, no Cloud Console access. This is the only path that fixes v86 users without a release.
+- Path B — done except the signing/publish steps: new key in this machine's gitignored `secrets.properties`; manifest confirmed (`com.google.android.geo.API_KEY` + `${MAPS_API_KEY}`, no legacy `maps.v2` key, nothing in local.properties); versionCode 87; map verified rendering on 7ceb9213 (screenshot sent). Signed AAB + Play upload need the upload keystore and Play access.
+- Upload-key SHA-1 requested: could NOT be obtained. `.codex_tmp/app-release-play-login-test.apk` is named release but is debug-signed (`CN=Android Debug`, 2c:33:6d:...), so it is not a source. Keystore exists at `C:\Users\surya\Downloads\mconnect-play-upload-key.jks` but reading it needs the password, which I do not handle — get it from Play Console → App signing → Upload key certificate, or run keytool locally.
+
+## 2026-09-21 — Path A blocked on Cloud project access
+- Key owner confirmed our account (project `aivida-daa0c` / `332268543587`) is DENIED access to project `621471596046`, which owns the old key `AIzaSyD-IpBP4i...` embedded in Play v86. So the no-release fix cannot be applied by us.
+- Corrected my earlier claim: "fixed for every user in 5 minutes" was an expectation, not verified. Propagation must be confirmed by opening the real Play build.
+- Lead for finding the owner: whoever uploaded versionCode 86 (Play Console → Releases overview / activity log) supplied that key from their local secrets.properties.
+- Drafted an access-request message for that person. Recommendation: time-box the hunt to today, otherwise ship v87 with the new key (already prepared and verified here).
+- Also requested: add upload SHA-1 `39:98:60:F2:34:E9:F1:37:4E:8E:D4:27:85:69:71:69:A6:FB:7B:AF` to the new key, so locally-signed release APKs are testable.
+
+## 2026-09-21 — Release build verified (unsigned)
+- `google-services.json` supplied by the user (project `aivida-daa0c` / 332268543587, package `com.manjugroups.mconnect`) copied to `app/`; gitignored, not committed.
+- `:app:assembleRelease` BUILD SUCCESSFUL (18m, R8 + resource shrinking). Both release gates passed, so the Firebase config and Maps key are complete.
+- Verified inside `app-release-unsigned.apk`: Maps key `AIzaSyDZpaKBVQaF...`, versionCode 87, package com.manjugroups.mconnect.
+- Only the signing step remains (keystore password -> Android Studio Generate Signed App Bundle), then Play internal testing.
+- UNRESOLVED RISK: could not confirm the live app uses Firebase project `aivida-daa0c`. Convex CLI here points at dev `next-spaniel-814`, not prod, so `GOOGLE_FIREBASE_PROJECT_ID` is unread. If prod sends from a different project, push notifications break for anyone who updates to 87. Must be checked in the Convex prod dashboard, and a real notification tested on internal testing before promoting.

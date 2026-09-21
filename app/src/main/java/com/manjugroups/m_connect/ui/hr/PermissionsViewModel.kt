@@ -56,7 +56,7 @@ class PermissionsViewModel : ViewModel() {
                             fromDate = fromDate,
                             toDate = toDate,
                             status = status,
-                            pageSize = 200,
+                            pageSize = 100,
                         )
                     }.getOrNull()
                 }
@@ -70,7 +70,7 @@ class PermissionsViewModel : ViewModel() {
                                 toDate = toDate,
                                 status = status,
                                 staffId = staffId,
-                                pageSize = 200,
+                                pageSize = 100,
                             )
                         }.getOrNull()
                     } else null
@@ -88,7 +88,7 @@ class PermissionsViewModel : ViewModel() {
                                 toDate = toDate,
                                 status = status,
                                 staffId = staffId,
-                                pageSize = 200,
+                                pageSize = 100,
                             )
                         }.getOrNull()
                     } else null
