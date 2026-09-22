@@ -14621,3 +14621,33 @@ implemented or validated until the iOS repository/path is made available.
 - Verified inside `app-release-unsigned.apk`: Maps key `AIzaSyDZpaKBVQaF...`, versionCode 87, package com.manjugroups.mconnect.
 - Only the signing step remains (keystore password -> Android Studio Generate Signed App Bundle), then Play internal testing.
 - UNRESOLVED RISK: could not confirm the live app uses Firebase project `aivida-daa0c`. Convex CLI here points at dev `next-spaniel-814`, not prod, so `GOOGLE_FIREBASE_PROJECT_ID` is unread. If prod sends from a different project, push notifications break for anyone who updates to 87. Must be checked in the Convex prod dashboard, and a real notification tested on internal testing before promoting.
+
+## 2026-09-21 — Pushed app + iOS
+- App `52b6c707` → origin main + merge (both orgs): loans back button, versionCode 83→87, HR pageSize 200→100, attendance-panel report. Prod hosts verified (0 dev hosts), `:app:testDebugUnitTest` green before commit.
+- iOS `005bef7` → darx. Only the three geotrack/location files; `AppConfig.swift` had DEV hosts in the working tree and was restored to prod before committing, per the standing rule.
+- iOS needed a rebase onto `03793e2` (teammate: "request consent before clock-in"), which MOVED the consent gate earlier in `sync()`. Conflict resolved by dropping my edit at the old site and re-applying `stopLocalTracking()` at the gate new location (lines 88/94). Not compiled — no Xcode here.
+- iOS uses MapKit, not the Google Maps SDK, so the Maps key problem does not affect it. No iOS key change needed.
+- DELIBERATELY NOT switched back to dev: the next action is generating the signed production AAB from this tree. Switching now would risk shipping dev hosts to the Play Store. Switch both back to dev AFTER the AAB is built and uploaded.
+
+## 2026-09-22 — Pulled android + iOS
+- Android: `git pull darx merge` → already up to date; darx/merge now sits on my `52b6c707`, nothing new from the teammate.
+- iOS: `git pull origin darx` → fast-forward `005bef7..562607e` ("fix: inherit latest Android update and HR behavior"), 6 files: FoundationChatApp, AppUpdateCoordinator, attendance/leaves/permissions lists, SiteVisitsListView. My relaunch fix `005bef7` is underneath it, intact.
+- Verified after the pull: `AppConfig.swift` still on prod hosts, no dev hosts anywhere in FoundationChat. Both trees remain on PROD, still held for the signed AAB.
+
+## 2026-09-22 — Map fix confirmed by user; captured for future reference
+- User reports the map now works in the app. Could not independently confirm the Play rollout from here: only 7ceb9213 is connected and it holds my sideloaded debug v87 (`installer=null`), not a store install.
+- Wrote memory `maps-key-and-play-signing.md`: the per-developer `secrets.properties` trap, the canonical key, all three SHA-1s, the `aapt2` + `apksigner` technique for reading key and signer out of an installed APK, and the Flogger caveat that hides the SDK error from logcat.
+
+## 2026-09-22 — iOS dark mode fixed in Tasks / CP / Notifications
+- Cause: those views were ported from the Android XML palette and hardcoded light hex (`0xF1F3F8`, `0x101828`, `0x667085`...) plus `Color.white` surfaces. A semantic palette ALREADY existed in `Views/Library/AppModuleFormatters.swift` (`appScreenBackground`, `appSurface`, `appElevatedSurface`, `appFieldBackground`, `appSeparator`, `appPrimaryText/Secondary/Tertiary`) — these modules were simply never migrated.
+- Migrated 108 hex tokens + 23 white SURFACES across CpVisitsView, TaskDetailView, TaskUpdateSheet, TasksListView. Left alone on purpose: brand blue `0x0B61CA`, status colours, tinted status pills, and `.foregroundStyle(.white)` / `.tint(.white)` (white on a coloured button is correct in both appearances).
+- NotificationsListView: the high-priority row tint was a literal peach `Color(red:1,green:0.93,blue:0.83)` that stayed bright in dark mode under white primary-label text. Now `Color.orange.opacity(0.18/0.09)`, which adapts.
+- NOT COMPILED — no Xcode on this machine.
+- Booking crash: not found by reading. Checked the obvious candidate `flexiPaymentRows[count-1]` (BookingCreateView:1572) — it is guarded by `guard let final = ...last`, so not it. Needs the crash log.
+- SV approval: ambiguous which surface is meant; iOS has CpApprovalQueueView reachable from CpVisitsView:204. Needs clarification before changing anything.
+
+## 2026-09-22 — iOS dark mode swept repo-wide + SV badge on the approval queue
+- Dark mode: extended the migration from 3 modules to the whole app. 43 files, 655 hex tokens + 211 white SURFACES moved to the existing semantic palette. White FOREGROUNDS (205 sites) left alone — white on a brand-coloured button is right in both appearances. `SignatureCaptureView` deliberately skipped: the pad is signed on white and exported as an image.
+- SV differentiation: added a kind badge to the approval card (`SV + CP` / `Site Visit` / `CP Visit`, indigo vs brand blue) via new `ApprovalFormatting.isSiteVisit/kindLabel/kindTint`. Previously the kind sat only in a small "CP type" fact among six others.
+- BACKEND FINDING (handoff, no convex edits): `/api/marketing/cp-visits/pending-approvals` → `listPendingCpCompletionApprovals` queries ONLY the `clientPlaceVisits` table for `status = pending_gm_approval`. SV-cum-CP rows live there so they DO come through; a pure site visit lives in `siteVisits` and can never appear. If real SV approvals are wanted, the backend needs a second source — mobile cannot fix that.
+- STILL NOT COMPILED (no Xcode). Booking crash still needs a crash log.
