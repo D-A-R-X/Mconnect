@@ -232,6 +232,22 @@ object GeoTrackBootstrapSync {
     }
 
     private suspend fun queuePermissionHealth(context: Context) {
+        // Tell the STAFF MEMBER, not just the server.
+        //
+        // The red permission alert was only reconciled when MainActivity came
+        // to the foreground. Someone who clocks in and pockets the phone never
+        // sees it, so a device that cannot produce a single fix looks, to the
+        // person carrying it, exactly like one that is tracking normally —
+        // which is how sessions end up open all day having uploaded nothing.
+        // Same shared key set the gate and the service already use, so the
+        // three never disagree about what is missing.
+        runCatching {
+            com.manjugroups.m_connect.notifications.PermissionAlertNotification.update(
+                context,
+                BackgroundPermissionsGateDialog.missingPermissionKeys(context),
+            )
+        }
+
         val notificationPermission = PushTokenManager.hasNotificationPermission(context)
         val fineLocationPermission = hasPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
         val backgroundLocationPermission = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
