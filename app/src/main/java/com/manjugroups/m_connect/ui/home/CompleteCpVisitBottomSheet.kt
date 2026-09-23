@@ -271,6 +271,21 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     // linked SV's confirmationStatus stayed "pending" and the row never
     // left the Fixed tab on the web's /marketing/site-visits page.
     private var lockedCpVisit: CpVisitDetail? = null
+
+    /**
+     * Jointness as reported by the loaded visit, which is authoritative.
+     *
+     * The `cpType` argument alone was not enough: a Joint CP created through
+     * a category path (booking / SV-cum-CP / new client) can carry that
+     * category in `cpType` while its joint nature lives in `joint` and
+     * `jointCpCategory`. When that happened the sheet treated the visit as an
+     * ordinary CP, skipped the Joint CP carve-out in
+     * [cpOutcomeConfirmationError], and demanded a terminal parent status the
+     * parent is not supposed to reach yet - surfacing "The outcome was
+     * received, but the CP status was not finalized" on a save that had in
+     * fact succeeded.
+     */
+    private var detailSaysJointCp: Boolean = false
     // CP-assigned staff (the on-site person) from the loaded CP visit. An SV
     // fixed from this CP defaults its Site Incharge to this staffer — so the
     // QR scan shows the on-site incharge, NOT the telecaller who fixed it.
@@ -317,11 +332,9 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private val cpType: String?
         get() = arguments?.getString(ARG_CP_TYPE)
     private val isJointCp: Boolean
-        get() = jointCtaMode != null || cpType
-            ?.trim()
-            ?.lowercase(java.util.Locale.US)
-            ?.replace('-', '_')
-            ?.replace(' ', '_') == "joint_cp"
+        get() = jointCtaMode != null ||
+            detailSaysJointCp ||
+            isJointCpTypeValue(cpType)
     private val jointCtaMode: String?
         get() = arguments?.getString(ARG_JOINT_CTA_MODE)
     private val jointOutcomeSummary: String?
@@ -6871,6 +6884,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 // Remember the CP-assigned staff so an SV fixed from this CP
                 // defaults its Site Incharge to the on-site person.
                 cpAssignedStaff = visit.assignedStaff
+                if (visit.isJointCpVisit()) detailSaysJointCp = true
                 // Diagnostic dump of every signal we use to detect
                 // "this CP came from a telecaller-fixed SV". If the
                 // locked UI still doesn't activate on a known SV-fixed

@@ -22,7 +22,21 @@ private val TERMINAL_OUTCOME_STATUSES = setOf(
 )
 
 private fun String?.contractValue(): String =
-    this?.trim()?.lowercase(Locale.US)?.replace('-', '_').orEmpty()
+    this?.trim()?.lowercase(Locale.US)?.replace('-', '_')?.replace(' ', '_').orEmpty()
+
+/** True for every spelling of the Joint CP type the API has used. */
+internal fun isJointCpTypeValue(cpType: String?): Boolean =
+    cpType.contractValue() == "joint_cp"
+
+/**
+ * Jointness straight from the visit. `cpType` can legitimately hold the
+ * category (booking_cp, sv_cum_cp, new_client_cp) on a Joint CP, so the
+ * participants and the category field are the reliable markers.
+ */
+internal fun CpVisitDetail.isJointCpVisit(): Boolean =
+    joint != null ||
+        !jointCpCategory.isNullOrBlank() ||
+        isJointCpTypeValue(cpType)
 
 internal fun cpOutcomeConfirmationError(
     expectedOutcome: String,

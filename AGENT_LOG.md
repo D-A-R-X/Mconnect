@@ -14651,3 +14651,16 @@ implemented or validated until the iOS repository/path is made available.
 - SV differentiation: added a kind badge to the approval card (`SV + CP` / `Site Visit` / `CP Visit`, indigo vs brand blue) via new `ApprovalFormatting.isSiteVisit/kindLabel/kindTint`. Previously the kind sat only in a small "CP type" fact among six others.
 - BACKEND FINDING (handoff, no convex edits): `/api/marketing/cp-visits/pending-approvals` → `listPendingCpCompletionApprovals` queries ONLY the `clientPlaceVisits` table for `status = pending_gm_approval`. SV-cum-CP rows live there so they DO come through; a pure site visit lives in `siteVisits` and can never appear. If real SV approvals are wanted, the backend needs a second source — mobile cannot fix that.
 - STILL NOT COMPILED (no Xcode). Booking crash still needs a crash log.
+
+## 2026-09-22 — Pushed both apps
+- Android `2da529af` → main + merge on both remotes (AGENT_LOG only; prod hosts verified).
+- iOS `e87f21f` → darx. 43 view files: dark-mode migration (655 tokens + 211 white surfaces) and the approval-queue kind badge. AppConfig confirmed on prod. No rebase needed (behind=0).
+- Checked before pushing that `GlassBackButton`/`GlassSearchField` were not flattened — their "glass" is translucent white, so making it adaptive is correct, not over-application.
+- The iOS commit is UNCOMPILED and says so in its message, so whoever builds it knows.
+- Both trees still on PROD hosts.
+
+## 2026-09-23 — Joint CP "status was not finalized" fixed
+- Symptom: saving a Not Interested outcome on a Joint CP showed "The outcome was received, but the CP status was not finalized." The save had actually succeeded.
+- Root cause: `cpOutcomeConfirmationError` already skips the terminal-status check for a joint CP (the parent deliberately stays open until the reviewer completes it), but `isJointCp` was deciding jointness from the `cpType` argument alone. A Joint CP created through a category path carries that category (`booking_cp`, `sv_cum_cp`, `new_client_cp`) in `cpType`, with the jointness in `joint` / `jointCpCategory` — so the sheet treated it as an ordinary CP and demanded a terminal status the parent must not reach yet.
+- Fix: new `CpVisitDetail.isJointCpVisit()` (participants OR jointCpCategory OR normalised cpType) in `CpOutcomeContract.kt`; the sheet records it when the detail loads (`detailSaysJointCp`) and ORs it into `isJointCp`. `contractValue()` now also normalises spaces. `TripNavigationFragment.isJointCpWorkflow()` had a weaker unnormalised check and now shares `isJointCpTypeValue`.
+- `:app:compileDebugKotlin` clean, `:app:testDebugUnitTest` BUILD SUCCESSFUL. Not yet exercised against a real joint CP on a device.

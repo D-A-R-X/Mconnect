@@ -683,8 +683,11 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
 
     // ---------- Joint CP ----------
 
+    // Same rule as the completion sheet: the argument may carry the Joint CP
+    // category rather than "joint_cp", and it arrives unnormalised, so match
+    // on the normalised value and accept a loaded workflow as proof.
     private fun isJointCpWorkflow(): Boolean =
-        cpType?.equals("joint_cp", ignoreCase = true) == true || jointWorkflow != null
+        isJointCpTypeValue(cpType) || jointWorkflow != null
 
     private suspend fun setConfirmedCpOutcome(
         request: com.manjugroups.m_connect.network.SetOutcomeRequest,

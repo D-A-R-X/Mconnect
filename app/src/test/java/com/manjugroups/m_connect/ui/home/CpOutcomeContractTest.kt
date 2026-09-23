@@ -1,10 +1,69 @@
 package com.manjugroups.m_connect.ui.home
 
+import com.manjugroups.m_connect.network.CpVisitDetail
+import com.manjugroups.m_connect.network.JointCpSummary
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CpOutcomeContractTest {
+
+    // A Joint CP created through a category path carries that category in
+    // cpType, not "joint_cp". Deciding jointness from cpType alone made the
+    // sheet demand a terminal parent status the parent must not reach yet, and
+    // a save that had in fact succeeded reported "status was not finalized".
+    @Test
+    fun `joint visit is recognised from participants even when cpType is a category`() {
+        val bookingJoint = CpVisitDetail(
+            id = "cp1",
+            cpType = "booking_cp",
+            jointCpCategory = "booking_cp",
+        )
+        assertTrue(bookingJoint.isJointCpVisit())
+
+        val svCumCpJoint = CpVisitDetail(
+            id = "cp2",
+            cpType = "sv_cum_cp",
+            joint = JointCpSummary(totalCount = 2),
+        )
+        assertTrue(svCumCpJoint.isJointCpVisit())
+    }
+
+    @Test
+    fun `plain cp visit is not treated as joint`() {
+        val plain = CpVisitDetail(id = "cp3", cpType = "collection_cp")
+        assertFalse(plain.isJointCpVisit())
+    }
+
+    @Test
+    fun `joint cp type value tolerates hyphens spaces and case`() {
+        assertTrue(isJointCpTypeValue("joint_cp"))
+        assertTrue(isJointCpTypeValue("joint-cp"))
+        assertTrue(isJointCpTypeValue("Joint CP"))
+        assertTrue(isJointCpTypeValue("  JOINT_CP  "))
+        assertFalse(isJointCpTypeValue("booking_cp"))
+        assertFalse(isJointCpTypeValue(null))
+    }
+
+    // The end of the flow the user hit: a joint visit whose parent is still
+    // open must save cleanly.
+    @Test
+    fun `joint not-interested save is accepted while the parent stays open`() {
+        val visit = CpVisitDetail(
+            id = "cp4",
+            cpType = "booking_cp",
+            jointCpCategory = "booking_cp",
+        )
+        assertNull(
+            cpOutcomeConfirmationError(
+                "not_interested",
+                "scheduled",
+                "not_interested",
+                visit.isJointCpVisit(),
+            ),
+        )
+    }
 
     @Test
     fun `ordinary outcome requires matching value and terminal parent status`() {
