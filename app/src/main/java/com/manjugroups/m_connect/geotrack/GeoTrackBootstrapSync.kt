@@ -246,7 +246,10 @@ object GeoTrackBootstrapSync {
         if (!backgroundLocationPermission) missing.add("background_location")
         if (!activityRecognitionPermission) missing.add("activity_recognition")
         if (batteryOptimizationIgnored == false) missing.add("battery_optimization")
-        if (missing.isEmpty()) return
+        if (missing.isEmpty()) {
+            queuePermissionCleared(context)
+            return
+        }
 
         GeoTrackEventQueue.enqueueDistinct(
             context,
@@ -262,6 +265,42 @@ object GeoTrackBootstrapSync {
                 "model" to Build.MODEL,
             ),
             signature = "permission_missing_${missing.sorted().joinToString("_")}",
+        )
+    }
+
+    /**
+     * Tells the backend the permissions are healthy again, so an open
+     * PERMISSION_MISSING alert stops following the staff member around.
+     *
+     * The backend only clears PERMISSION_MISSING (and GPS_DISABLED /
+     * LOCATION_DISABLED) when a heartbeat arrives carrying
+     * `locationEnabled = true`. Heartbeats are otherwise sent only by the
+     * tracking service, which runs only between clock-in and clock-out - so a
+     * staff member who granted the permission outside that window kept the
+     * alert until their NEXT clock-in, and the live board showed a problem
+     * that had already been fixed.
+     *
+     * Deliberately conservative, because this runs on every sync:
+     *  - nothing is sent unless every permission is granted AND the device
+     *    location switch is really on, so the flag is never a lie;
+     *  - `sessionId` and `trackingActive` are omitted, so a tick sent while a
+     *    shift is running cannot disturb that session - the queue fills the
+     *    session in from the active one, and the server leaves an absent
+     *    `trackingActive` alone;
+     *  - deduplicated to at most one every 30 minutes.
+     */
+    private suspend fun queuePermissionCleared(context: Context) {
+        if (!BackgroundPermissionsGateDialog.isDeviceLocationEnabled(context)) return
+        GeoTrackEventQueue.enqueueDistinct(
+            context,
+            GeoTrackEventQueue.HEARTBEAT_EVENT_TYPE,
+            buildMap {
+                put("locationEnabled", true)
+                put("appVersion", com.manjugroups.m_connect.BuildConfig.VERSION_NAME)
+                batteryPct(context)?.let { put("batteryPct", it) }
+            },
+            signature = "permission_cleared",
+            minIntervalMs = 30 * 60 * 1000L,
         )
     }
 
