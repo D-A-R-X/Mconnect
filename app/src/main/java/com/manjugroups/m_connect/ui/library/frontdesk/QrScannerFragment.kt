@@ -232,6 +232,15 @@ class QrScannerFragment : Fragment() {
             }
         })
 
+        // Scanned outside the app (Google Lens, the camera app): the code is
+        // already read, so go straight to the same confirmation the in-app
+        // scan reaches and never open the camera.
+        val presetSiteVisitId = arguments?.getString(ARG_SITE_VISIT_ID)?.takeIf { it.isNotBlank() }
+        if (presetSiteVisitId != null) {
+            confirmSiteVisitConsulting(presetSiteVisitId)
+            return
+        }
+
         startLaserAnimation()
         checkCameraPermissionAndStart()
     }
@@ -1163,8 +1172,18 @@ class QrScannerFragment : Fragment() {
         _binding = null
     }
 
-    private companion object {
-        const val SV_SCAN_TIMEOUT_MS = 10_000L
-        const val SV_SCAN_RETRY_DELAY_MS = 400L
+    companion object {
+        private const val SV_SCAN_TIMEOUT_MS = 10_000L
+        private const val SV_SCAN_RETRY_DELAY_MS = 400L
+        private const val ARG_SITE_VISIT_ID = "arg_site_visit_id"
+
+        /**
+         * Opens straight on a site visit whose QR was read elsewhere, instead
+         * of asking the staff member to scan the same code a second time.
+         */
+        fun forSiteVisit(siteVisitId: String): QrScannerFragment =
+            QrScannerFragment().apply {
+                arguments = Bundle().apply { putString(ARG_SITE_VISIT_ID, siteVisitId) }
+            }
     }
 }

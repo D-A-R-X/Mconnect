@@ -590,6 +590,7 @@ class MainActivity : AppCompatActivity() {
             selectTab(TAB_HOME)
             handleWorkflowNotificationIntent(intent)
             handleTasksNotificationIntent(intent)
+            openPendingSiteVisitDeepLink()
             handleTrackingNotificationIntent(intent)
         } else {
             updateTabUi(currentTab)
@@ -2198,6 +2199,26 @@ class MainActivity : AppCompatActivity() {
         handleWorkflowNotificationIntent(intent)
         handleTasksNotificationIntent(intent)
         handleTrackingNotificationIntent(intent)
+        // The link may arrive straight here when the shell is already up.
+        com.manjugroups.m_connect.deeplink.SiteVisitDeepLink.capture(this, intent)
+        openPendingSiteVisitDeepLink()
+    }
+
+    /**
+     * Opens a site visit that was scanned from outside the app.
+     *
+     * Reuses the scanner screen with the id already resolved, so the
+     * counselling flow, its permission rules and its error handling are
+     * exactly the ones an in-app scan goes through - this only skips the
+     * camera step that a Lens scan has already done.
+     */
+    private fun openPendingSiteVisitDeepLink() {
+        val siteVisitId = com.manjugroups.m_connect.deeplink.SiteVisitDeepLink
+            .consumePending(this) ?: return
+        supportFragmentManager.pushDetail(
+            com.manjugroups.m_connect.ui.library.frontdesk.QrScannerFragment
+                .forSiteVisit(siteVisitId)
+        )
     }
 
     /**

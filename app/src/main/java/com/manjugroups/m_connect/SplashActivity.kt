@@ -81,6 +81,11 @@ class SplashActivity : AppCompatActivity() {
         navigated = true
         handler.removeCallbacksAndMessages(null)
 
+        // Held until the shell is ready for it: a staff member who scans while
+        // signed out goes through login first, and that can restart the
+        // process.
+        com.manjugroups.m_connect.deeplink.SiteVisitDeepLink.capture(this, intent)
+
         val session = SessionManager(this)
         val onboarded = OnboardingPrefs(this).onboardingCompleted
         val next = when {

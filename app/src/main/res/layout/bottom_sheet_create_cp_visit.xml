@@ -503,6 +503,48 @@
                     android:textSize="14sp" />
             </LinearLayout>
 
+            <!-- Pincode comes FIRST of the three: it is what the India
+                 Post lookup keys on, and it fills District and State
+                 below it. While it sat last, staff filling the form top to
+                 bottom reached District with nothing in it yet and
+                 reported it as "not loading". -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="Pincode *"
+                android:textColor="#344054"
+                android:textSize="13sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="50dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_cp_creation_input_box"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="14dp">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_cp_pincode" />
+
+                <EditText
+                    android:id="@+id/etPincode"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="10dp"
+                    android:background="@null"
+                    android:fontFamily="@font/inter_medium"
+                    android:hint="6 digits"
+                    android:inputType="number"
+                    android:maxLength="6"
+                    android:textColor="#101828"
+                    android:textColorHint="#9CA3AF"
+                    android:textSize="14sp" />
+            </LinearLayout>
             <!-- District (matches the Booking form; pincode/paste-parser fills
                  the India Post District value here). -->
             <TextView
@@ -566,58 +608,30 @@
                     android:layout_height="20dp"
                     android:src="@drawable/ic_cp_state" />
 
+                <!-- Chosen from the 36 states/UTs, not typed: the same place
+                     used to arrive as "TN", "Tamilnadu" and "tamil nadu",
+                     splitting every report that groups by state. focusable
+                     false so a tap opens the picker instead of the keyboard,
+                     while the row keeps the look of its neighbours. -->
                 <EditText
                     android:id="@+id/etState"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:layout_marginStart="10dp"
                     android:background="@null"
+                    android:clickable="true"
+                    android:cursorVisible="false"
+                    android:focusable="false"
+                    android:focusableInTouchMode="false"
                     android:fontFamily="@font/inter_medium"
-                    android:hint="e.g. Tamil Nadu"
-                    android:inputType="text"
+                    android:hint="Select state"
+                    android:inputType="none"
+                    android:longClickable="false"
                     android:textColor="#101828"
                     android:textColorHint="#9CA3AF"
                     android:textSize="14sp" />
             </LinearLayout>
 
-            <!-- Pincode -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:fontFamily="@font/inter_medium"
-                android:text="Pincode *"
-                android:textColor="#344054"
-                android:textSize="13sp" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="50dp"
-                android:layout_marginTop="6dp"
-                android:background="@drawable/bg_cp_creation_input_box"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingHorizontal="14dp">
-
-                <ImageView
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:src="@drawable/ic_cp_pincode" />
-
-                <EditText
-                    android:id="@+id/etPincode"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:layout_marginStart="10dp"
-                    android:background="@null"
-                    android:fontFamily="@font/inter_medium"
-                    android:hint="6 digits"
-                    android:inputType="number"
-                    android:maxLength="6"
-                    android:textColor="#101828"
-                    android:textColorHint="#9CA3AF"
-                    android:textSize="14sp" />
-            </LinearLayout>
 
             <!-- Drop pin on map (address search + draggable location). -->
             <Button

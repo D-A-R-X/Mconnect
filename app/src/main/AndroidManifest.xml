@@ -53,6 +53,22 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!--
+                The site-visit QR encodes
+                https://mg.theairix.com/site-visit/consulting/<id>. Any scanner
+                could already read it, but nothing claimed the address, so every
+                scan from Google Lens or the camera app opened the website and
+                the staff member had to scan again from inside the app.
+            -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:host="mg.theairix.com" />
+                <data android:pathPrefix="/site-visit/consulting/" />
+            </intent-filter>
         </activity>
 
         <activity

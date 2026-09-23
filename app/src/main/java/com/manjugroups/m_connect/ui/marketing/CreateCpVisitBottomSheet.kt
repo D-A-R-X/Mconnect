@@ -228,6 +228,16 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         val etAddressLine2 = view.findViewById<EditText>(R.id.etAddressLine2)
         val etCity = view.findViewById<EditText>(R.id.etCity)
         val etState = view.findViewById<EditText>(R.id.etState)
+        etState.setOnClickListener {
+            com.manjugroups.m_connect.ui.common.SearchableSelectionDialog.show(
+                context = requireContext(),
+                title = "Select state",
+                options = com.manjugroups.m_connect.ui.common.IndianStates.ALL.map {
+                    com.manjugroups.m_connect.ui.common.SearchableOption(it, it)
+                },
+                emptyMessage = "No matching state",
+            ) { picked -> etState.setText(picked) }
+        }
         val etPincode = view.findViewById<EditText>(R.id.etPincode)
         val tvAddressParseStatus = view.findViewById<android.widget.TextView>(R.id.tvAddressParseStatus)
         val btnDropPin = view.findViewById<View>(R.id.btnDropPin)
@@ -330,7 +340,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                         }
                         fillIfBlank(etAddressLine2, f.addressLine2)
                         fillIfBlank(etCity, f.city)
-                        fillIfBlank(etState, f.state)
+                        fillIfBlank(etState, com.manjugroups.m_connect.ui.common.IndianStates.canonical(f.state))
                         fillIfBlank(etPincode, f.pincode)
                         tvAddressParseStatus.text = "Address auto-filled"
                     } catch (_: Exception) {
@@ -368,7 +378,10 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                         if (et.text?.toString()?.isBlank() != false) et.setText(value)
                     }
                     fillIfBlank(etCity, enriched.district)
-                    fillIfBlank(etState, enriched.state)
+                    fillIfBlank(
+                        etState,
+                        com.manjugroups.m_connect.ui.common.IndianStates.canonical(enriched.state),
+                    )
                     fillIfBlank(etAddressLine2, enriched.locality)
                 }
             }
@@ -794,7 +807,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         fillIfBlank(R.id.etAddressLine1, c.addressLine1 ?: c.homeAddress ?: c.formattedAddress)
         fillIfBlank(R.id.etAddressLine2, c.addressLine2 ?: c.landmark)
         fillIfBlank(R.id.etCity, c.district)
-        fillIfBlank(R.id.etState, c.state)
+        fillIfBlank(R.id.etState, com.manjugroups.m_connect.ui.common.IndianStates.canonical(c.state))
         fillIfBlank(R.id.etPincode, c.pincode)
         if (pinLat == null && c.lat != null) pinLat = c.lat
         if (pinLng == null && c.lng != null) pinLng = c.lng
@@ -851,7 +864,10 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         fillIfBlank(R.id.etAddressLine1, addressLine1)
         fillIfBlank(R.id.etAddressLine2, addressLine2)
         fillIfBlank(R.id.etCity, city)
-        fillIfBlank(R.id.etState, state)
+        fillIfBlank(
+            R.id.etState,
+            com.manjugroups.m_connect.ui.common.IndianStates.canonical(state).orEmpty(),
+        )
         fillIfBlank(R.id.etPincode, pincode)
 
         // Visit lat/lng + Google Maps link — stash in the pin-drop
