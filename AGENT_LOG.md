@@ -14664,3 +14664,15 @@ implemented or validated until the iOS repository/path is made available.
 - Root cause: `cpOutcomeConfirmationError` already skips the terminal-status check for a joint CP (the parent deliberately stays open until the reviewer completes it), but `isJointCp` was deciding jointness from the `cpType` argument alone. A Joint CP created through a category path carries that category (`booking_cp`, `sv_cum_cp`, `new_client_cp`) in `cpType`, with the jointness in `joint` / `jointCpCategory` — so the sheet treated it as an ordinary CP and demanded a terminal status the parent must not reach yet.
 - Fix: new `CpVisitDetail.isJointCpVisit()` (participants OR jointCpCategory OR normalised cpType) in `CpOutcomeContract.kt`; the sheet records it when the detail loads (`detailSaysJointCp`) and ORs it into `isJointCp`. `contractValue()` now also normalises spaces. `TripNavigationFragment.isJointCpWorkflow()` had a weaker unnormalised check and now shares `isJointCpTypeValue`.
 - `:app:compileDebugKotlin` clean, `:app:testDebugUnitTest` BUILD SUCCESSFUL. Not yet exercised against a real joint CP on a device.
+
+## 2026-09-23 — Joint CP fix verified and pushed
+- Flow verified at logic level: 9/9 CpOutcomeContractTest cases pass (0 failures), including 4 new ones — category-cpType joint detection via participants/jointCpCategory, plain CP not treated as joint, hyphen/space/case tolerance, and the end-to-end "joint not-interested save accepted while the parent stays open". JointCpApiJourneyTest still green.
+- iOS checked: `setCpVisitOutcome` in MarketingConvexAPIService trusts `wrapper.success` and never re-checks parent status, so it cannot produce this error. No iOS change needed; only the SV path there has a finalization check.
+- Android `27a3c2e7` → main + merge on both remotes. iOS tree clean at `e87f21f`, nothing to push.
+- Not yet exercised against a live joint CP on a device.
+
+## 2026-09-23 — SV list card now shows the client name and phone
+- Same root cause as the 19 Sep report: `enrichSiteVisitForMobile` resolves the client through lead → CP.client → CP.clientPlace and never reads the SV own `clientId`, so a BDO-created SV arrives with leadName/leadPhone both null. The detail endpoint DOES resolve it. Backend fix still undeployed, so both clients now fill the gap themselves.
+- Android `SiteVisitsFragment`: `backfillClientIdentity()` fetches `getCpVisitDetail` once per visit that is missing the data, caches it for the life of the screen, de-dupes in-flight requests, and patches the two TextViews. Rows are built individually (not recycled) and the update is guarded by isAdded/isAttachedToWindow.
+- iOS `SiteVisitsListView`: NO extra requests — `hydrateBdoNames` already fetches each visit detail in batches of 6 with a LocalCache and was discarding everything but the BDO name. It now also harvests client name/phone into `clientNamesByVisitId`/`clientPhonesByVisitId`, passed to `SiteVisitRow` as optional params (defaulted, single call site).
+- Android: testDebugUnitTest + assembleDebug BUILD SUCCESSFUL, prod hosts clean. iOS still uncompiled.

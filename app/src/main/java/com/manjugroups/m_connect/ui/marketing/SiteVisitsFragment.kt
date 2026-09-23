@@ -14,6 +14,8 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
+import com.manjugroups.m_connect.ui.common.preferredCpClientName
+import com.manjugroups.m_connect.ui.common.preferredCpClientPhone
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
@@ -804,6 +806,45 @@ class SiteVisitsFragment : Fragment() {
 
     // ---------- Row ----------
 
+    /** Resolved client name/phone per visit id, so a row is fetched once. */
+    private val clientBackfill = mutableMapOf<String, Pair<String?, String?>>()
+
+    /** Visit ids with a fetch in flight, so a re-render does not refetch. */
+    private val clientBackfillInFlight = mutableSetOf<String>()
+
+    /**
+     * Fills in a card's client name and phone from the visit detail when the
+     * list response had neither.
+     *
+     * One request per visit, only for rows that are actually missing the
+     * data, and the result is cached for the life of the screen. Rows here are
+     * built individually rather than recycled, so the two views captured
+     * below always belong to the visit they were created for.
+     */
+    private fun backfillClientIdentity(visitId: String, name: TextView, phone: TextView) {
+        if (visitId.isBlank()) return
+        if (clientBackfill.containsKey(visitId)) return
+        if (!clientBackfillInFlight.add(visitId)) return
+        viewLifecycleOwner.lifecycleScope.launch {
+            val resolved = runCatching {
+                val resp = geoApi.getCpVisitDetail(session.bearerToken, visitId)
+                resp.visit?.let { detail ->
+                    detail.preferredCpClientName(includePlaceFallback = false)
+                        ?.takeIf { it.isNotBlank() } to
+                        detail.preferredCpClientPhone()?.takeIf { it.isNotBlank() }
+                }
+            }.getOrNull()
+            clientBackfillInFlight.remove(visitId)
+            if (resolved == null) return@launch
+            clientBackfill[visitId] = resolved
+            // The screen may have gone away, or been re-rendered, while the
+            // request was in flight.
+            if (!isAdded || view == null) return@launch
+            resolved.first?.let { if (name.isAttachedToWindow) name.text = it }
+            resolved.second?.let { if (phone.isAttachedToWindow) phone.text = it }
+        }
+    }
+
     private fun createRow(visit: TodayVisit, parent: ViewGroup): View {
         val itemView = layoutInflater.inflate(R.layout.item_site_visit, parent, false)
         val name = itemView.findViewById<TextView>(R.id.tvVisitItemStaffName)
@@ -837,17 +878,21 @@ class SiteVisitsFragment : Fragment() {
             lmoRow.visibility = View.GONE
         }
 
-        // Customer Name — backend now falls back through
-        // lead → CP.client → CP.clientPlace, so a real name almost
-        // always lands here. Render the em-dash placeholder only when
-        // the backend genuinely has nothing.
-        val displayName = visit.leadName?.takeIf { it.isNotBlank() } ?: "—"
-        name.text = displayName
-
-        // Phone — show em-dash when missing instead of a fake
-        // hardcoded number (the previous "916379556429" looked like
-        // real data and confused users into thinking every SV had it).
-        phone.text = visit.leadPhone?.takeIf { it.isNotBlank() } ?: "—"
+        // Customer Name / Phone. The list endpoint resolves the client
+        // through lead → CP.client → CP.clientPlace only; it never reads the
+        // SV's own clientId, so a visit a BDO created directly arrives with
+        // both fields null and the card showed "—" while its own detail sheet
+        // showed the client. Until the backend list mapper is fixed (see
+        // reports/SV_LIST_CLIENT_NAME_MISSING_2026-09-19.md) fill the gap from
+        // the detail endpoint, which does resolve it.
+        val cached = clientBackfill[visit.id]
+        val resolvedName = visit.leadName?.takeIf { it.isNotBlank() } ?: cached?.first
+        val resolvedPhone = visit.leadPhone?.takeIf { it.isNotBlank() } ?: cached?.second
+        name.text = resolvedName ?: "—"
+        phone.text = resolvedPhone ?: "—"
+        if (resolvedName == null || resolvedPhone == null) {
+            backfillClientIdentity(visit.id, name, phone)
+        }
 
         // Date — leave the date chip blank when scheduledDate is
         // unparseable. The fake "THU 07 MAY" fallback masked malformed
