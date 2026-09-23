@@ -14744,3 +14744,29 @@ implemented or validated until the iOS repository/path is made available.
 - Reordered the CP address block so Pincode comes FIRST (it is what the India Post lookup keys on and what fills the other two). Android `bottom_sheet_create_cp_visit.xml` now Pincode 535 → District/City 574 → State 617; iOS `CpVisitsView` now Pincode 2395 → City 2396 → State 2403. XML validated well-formed; testDebugUnitTest + assembleDebug green.
 - Android `198d8bca` → main + merge (deep link + state picker + reorder + the SV_QR_DEEPLINK report). iOS `9dbd1f3` → darx, rebased onto one new teammate commit (OTP focus fix + login card fix + state picker + reorder). Prod hosts verified on both.
 - ON-DEVICE CHECK INCOMPLETE: installed on 77cd83cc and confirmed no crash, but blind coordinate taps kept drifting (landed in Task Manager, then opened a chat keyboard) so I never reached the CP create form. Backed out, keyboard dismissed, app left foregrounded and clean, 0 FATAL. The visual order + picker still need a human eyeball.
+
+## 2026-09-23 — Low online count: measured against PROD, not inferred
+- Queried prod `api-geo` live-status from the user logged-in browser session (395 rows). Results:
+  - webOnline 6, isOnlineTrue 6 → `is_online` is the binding constraint, NOT `trackingActive`.
+  - last_seen ages: <5m 18, 5-15m 7, 15-60m 21, 1-24h 150, >24h 199. Only 25 of 395 phones reported in the last 15 minutes.
+  - trackingActive true 162 / false 233 / null 0. Of the 162 OPEN sessions: <15m 9, 15-60m 10, 1-24h 59, **>24h 84**.
+  - has_tamper_alert on 363/395 (92
+## 2026-09-23 — Low online count: measured against PROD, not inferred
+- Queried prod `api-geo` live-status from the user's logged-in browser session (395 rows):
+  - webOnline 6, isOnlineTrue 6 -> `is_online` is the binding constraint, NOT `trackingActive`.
+  - last_seen ages: <5m 18, 5-15m 7, 15-60m 21, 1-24h 150, >24h 199. Only 25 of 395 phones reported in the last 15 minutes.
+  - trackingActive true 162 / false 233 / null 0. Of the 162 OPEN sessions: <15m 9, 15-60m 10, 1-24h 59, >24h 84.
+  - has_tamper_alert on 363/395 (92%).
+  - fresh-but-offline (last_seen <15m): 19 -> 16 are trackingActive=false (clocked out, last_seen is their final point, correct), 3 are isOnline=false trackingActive=true (genuinely anomalous).
+- Exact cause: not a display bug, not mass permission failure. Phones are not reporting while their server-side session stays open. 84 sessions have been tracking_active=true for over a day with a silent phone, so the missed-heartbeat job correctly flips is_online=false and the board shows 6.
+- BLOCKED from attributing WHY each phone went silent: /api/tracking/tamper-events returned 0 because that endpoint still pins to the CALLER (viewer-scope fix is deployed in geo but inert until Convex sends `scope`). The reasonCode attribution built for exactly this question is unreadable from the admin side.
+
+## 2026-09-23 — Staff profile "No tracking data" while the live board shows the same staff: split data source
+- ARUN.G (21601): profile Live Location card says "No tracking data" and the Geo Track Live roster shows 61% / 10m ago for the same person, at the same time.
+- Cause, confirmed in code: the two screens read DIFFERENT backends.
+  - Staff profile `features/hr/staff-detail/page.tsx:234` -> `useQuery(api.geotrack.location.liveStatus)` = the OLD CONVEX `geoLiveStatus` table.
+  - Geo Track Live `app/geotrack/live/page.tsx` -> `_use-postgres-geo` against the Postgres geo service (api-geo.theairix.com).
+- The mobile app only writes to the geo service: `GeoTrackApi.DIRECT_BASE_URL = https://api-geo.theairix.com`, and there is NO Convex geotrack ingest left in the app (grep for geotrack/heartbeat|location|ingest in the network layer returns nothing; convex/http.ts has no geoLiveStatus reference). So the Convex table is no longer fed and the profile card can only ever say "No tracking data".
+- The wording also misleads: `liveLoc?.isOnline ? "Online now" : liveLoc ? "Offline" : "No tracking data"` — "No tracking data" means the ROW WAS NOT FOUND, not that the staffer is untracked. It reads as a device problem when it is a wiring problem.
+- Web-side fix (handoff, no convex edits): point the profile card at the same Postgres source the live page uses.
+- Documented in `reports/STAFF_PROFILE_NO_TRACKING_DATA_2026-09-23.md`: cause, the exact `useStaffDayGeo` replacement, the three-state label fix, the scope audit (only 1 of 3 `api.geotrack.*` call sites is affected — `fieldIntelligence` reads clientPlaces/clientPlaceVisits and is correctly Convex-backed), and the dependency that the viewer-scope Convex field must ship first or the replacement returns the caller's own empty row.
