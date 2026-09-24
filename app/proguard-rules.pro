@@ -59,3 +59,19 @@
 -keepclassmembers class * {
     @android.webkit.JavascriptInterface <methods>;
 }
+
+# ── Component registrars: keep their no-arg constructors ─────────────────────
+# ML Kit (and Firebase) instantiate these BY REFLECTION from the class names in
+# <meta-data android:name="com.google.firebase.components:…"> in the manifest.
+# R8 full mode — the default on AGP 9 — does not treat a manifest meta-data
+# string as a use of the constructor and strips <init>(), so instantiation
+# fails, the registrar is silently skipped, and its components are never
+# provided. For ML Kit that left SharedPrefManager null: the Front Desk QR
+# scanner crashed on its first camera frame (NPE in InputImage.fromMediaImage)
+# on every Play build since R8 was enabled on 5 Sep, while debug builds, which
+# are not shrunk, worked. Verified in the release dex on 2026-09-24:
+# CommonComponentRegistrar, VisionCommonRegistrar and BarcodeRegistrar had 0
+# constructors in release and 1 in debug.
+-keep class * implements com.google.firebase.components.ComponentRegistrar {
+    <init>();
+}
