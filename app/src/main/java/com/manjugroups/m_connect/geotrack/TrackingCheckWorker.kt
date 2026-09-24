@@ -73,9 +73,28 @@ class TrackingCheckWorker(
                 }
             }
 
-            // Nothing started, and no service is running: the phone is
-            // clocked in and producing nothing. Say so on the device.
-            if (!started) runCatching { reconcilePermissionAlert(session) }
+            // Ask the SERVICE whether it is running. Do not trust `started`.
+            //
+            // sync() returns session.shouldTrackNow, and applyDirectSession
+            // sets that purely from "the server has a session for me" — it
+            // starts the service only if permissions allow, but returns true
+            // either way. So a phone with a live session and no usable location
+            // permission reports started = true while capturing nothing, and
+            // the alert this worker exists to raise never fires on exactly the
+            // phones that need it.
+            //
+            // That is the majority case, not an edge case. Measured on prod
+            // 2026-09-24: of 220 phones with tracking_active, 152 had their
+            // live_status row refreshed inside 15 minutes (so the app is awake
+            // and talking to the server) while last_seen was a median 3.2 hours
+            // stale (so no heartbeat or fix was arriving).
+            //
+            // Safe to run unconditionally: update() CLEARS the alert when
+            // nothing is missing, so a healthy phone that is simply mid-start
+            // just gets a no-op.
+            if (!GeoTrackService.isRunning) {
+                runCatching { reconcilePermissionAlert(session) }
+            }
 
             Result.success()
         } catch (e: Exception) {

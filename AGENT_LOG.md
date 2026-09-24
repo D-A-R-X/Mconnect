@@ -14883,3 +14883,16 @@ implemented or validated until the iOS repository/path is made available.
 - So my ORIGINAL claim stands after all: the endpoint calls `resolveStaffID(...)` — the **pinned** single-staff resolver — so it returns the CALLER's own events until Convex returns `scope: "all"`. The `scope` deploy is what unblocks reading the fleet's reason codes, exactly as first stated.
 - **Could not run the query or the endpoint.** No `psql` on this machine; the only DATABASE_URL with a value is `.env.example` (`localhost:5432`, placeholder password) — prod compose takes it from host env I have no access to; and the Chrome extension disconnected, so there is no authenticated session to call the API with. `list_connected_browsers` returns empty.
 - Blocked on exactly two things, both outside this machine: (1) reconnect Chrome so I have a session, (2) `npx convex deploy` so the endpoint stops pinning. With both, reading the reason codes is a single call.
+
+## 2026-09-24 — MEASURED the real cause, and it exposed a hole in my own fix
+- Chrome reconnected; user supplied the prod Convex cloud URL (`https://convex-mfpl.theairix.com`), so public Convex queries are callable via `/api/query`.
+- **Convex `tamperEvents` is a month stale** — newest row 2026-08-24, 3000 rows / 173 staff. Tamper now goes to the geo service (Postgres), so the Convex copy is dead data exactly like `geoLiveStatus` was. Historical shape from that August window is still informative: GPS_DISABLED 484, LOCATION_DISABLED 322, PERMISSION_MISSING 177 vs DEVICE_REBOOT 34 / DEVICE_SHUTDOWN 5 / APP_UPDATED 9 — i.e. permission/GPS problems dominated, NOT OEM process kills.
+- **The decisive measurement** (12:30 IST, 220 phones with `tracking_active`): split by `updated_at` vs `last_seen` —
+  - `bothFresh` (genuinely online): **27**
+  - **`rowFreshSeenStale`: 152** — row written inside 15 min, `last_seen` stale
+  - `bothStale`: 41
+  - median `last_seen − updated_at` gap: **193 minutes**
+- So the phones are **not dead**. 152 of them are awake, online, and talking to the server — the row keeps being refreshed — while no heartbeat or location arrives. `SyncSession` bumps `updated_at` and `tracking_active` but never touches `last_seen`; only a heartbeat/fix does. Corroborated by the 11:01→12:28 bucket arithmetic: the 1–4 h bucket stayed ~100 instead of ageing into 4–12 h (which grew by only 10), so it is being continuously refilled, not draining.
+- Net: `TrackingCheckWorker` keeps refreshing the session every 15 min on phones where `GeoTrackService` is not actually capturing. The app is fine; the capture is not. That is the permission/service-start failure, at fleet scale.
+- **This exposed a real hole in `dea4b4c4`, which I pushed this morning.** `sync()` returns `session.shouldTrackNow`, and `applyDirectSession` sets that purely from "a server session exists" — it starts the service only if permissions allow, but returns true either way. So `if (!started) reconcilePermissionAlert(...)` never fired on precisely the 152-phone majority. Corrected to `if (!GeoTrackService.isRunning)`. Safe unconditionally because `update()` clears the alert when nothing is missing.
+- compileDebugKotlin + testDebugUnitTest green; prod hosts only; versionCode stays 90 (unreleased).
