@@ -1454,11 +1454,12 @@ class GeoTrackService : Service() {
     }
 
     private suspend fun queuePermissionHealthEvents(hasFine: Boolean, hasBackground: Boolean) {
-        val missing = mutableListOf<String>()
-        if (!hasFine) missing.add("fine_location")
-        if (!hasBackground) missing.add("background_location")
-        if (!hasActivityRecognitionPermission()) missing.add("activity_recognition")
-        if (!isIgnoringBatteryOptimizations()) missing.add("battery_optimization")
+        // One list, computed in one place. This used to be a third hand-written
+        // copy of the same conditions; the copies drifted and that is what let a
+        // phone sit all day being told nothing. Parameters are kept because the
+        // caller already has them and the signature is part of the call site.
+        val missing = com.manjugroups.m_connect.geotrack.BackgroundPermissionsGateDialog
+            .missingPermissionKeys(this)
 
         // Immediate, offline-capable heads-up to the staff so they can fix it
         // and resume normal signal transfer. Posts the ongoing red alert for
@@ -1485,16 +1486,9 @@ class GeoTrackService : Service() {
      * grants the last missing permission mid-shift.
      */
     private fun refreshPermissionNotification() {
-        val missing = mutableListOf<String>()
-        val hasFine = checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) ==
-            PackageManager.PERMISSION_GRANTED
-        // Strictly FINE — coarse-only ("Precise location" off) yields ~2km
-        // fixes that fail the capture gate, so it must flag as missing here
-        // exactly like the in-app gate does (shared key contract).
-        if (!hasFine) missing.add("fine_location")
-        if (!hasBackgroundLocationPermission()) missing.add("background_location")
-        if (!hasActivityRecognitionPermission()) missing.add("activity_recognition")
-        if (!isIgnoringBatteryOptimizations()) missing.add("battery_optimization")
+        // Same single source as the gate and the bootstrap sync.
+        val missing = com.manjugroups.m_connect.geotrack.BackgroundPermissionsGateDialog
+            .missingPermissionKeys(this)
         com.manjugroups.m_connect.notifications.PermissionAlertNotification.update(this, missing)
     }
 

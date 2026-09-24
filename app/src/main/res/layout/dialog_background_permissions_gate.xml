@@ -319,6 +319,71 @@
             android:focusableInTouchMode="false" />
     </LinearLayout>
 
+    <!-- Row: Notifications -->
+    <!-- Without this the red "tracking cannot work" alert cannot be posted at
+         all, so a phone with everything else wrong has no way to say so. It is
+         the one permission whose absence hides all the others. -->
+    <LinearLayout
+        android:id="@+id/rowNotifications"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingVertical="8dp">
+
+        <FrameLayout
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/bg_circle_orange">
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_gravity="center"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_bell" />
+        </FrameLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Notifications"
+                android:textColor="#101828"
+                android:textSize="16sp" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:fontFamily="@font/inter_regular"
+                android:text="So the app can tell you the moment tracking stops working"
+                android:textColor="#475467"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/switchNotifications"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:track="@drawable/bg_switch_track"
+            android:thumb="@drawable/bg_switch_thumb"
+            android:splitTrack="false"
+            app:switchMinWidth="44dp"
+            android:clickable="false"
+            android:focusable="false"
+            android:focusableInTouchMode="false" />
+    </LinearLayout>
+
     <!-- ── Row 4: Auto Start ───────────────────────────────────── -->
     <LinearLayout
         android:id="@+id/rowAutostart"

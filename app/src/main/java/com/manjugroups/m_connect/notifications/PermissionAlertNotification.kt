@@ -33,6 +33,8 @@ object PermissionAlertNotification {
     private const val NOTIF_ID = 776_002
 
     private val LABELS = mapOf(
+        "location_services" to "Turn on Location (GPS)",
+        "notification" to "Allow notifications",
         "fine_location" to "Precise location",
         "background_location" to "Allow location all the time",
         "activity_recognition" to "Physical activity",

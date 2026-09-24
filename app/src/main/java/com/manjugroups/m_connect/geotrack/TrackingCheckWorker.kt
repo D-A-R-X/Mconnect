@@ -94,6 +94,16 @@ class TrackingCheckWorker(
             // just gets a no-op.
             if (!GeoTrackService.isRunning) {
                 runCatching { reconcilePermissionAlert(session) }
+
+                // If the phone HAS the permissions and still is not running,
+                // the thing stopping it is Android refusing a foreground
+                // service start from the background, not the staff member.
+                // That one the app can route around itself.
+                if (session.shouldTrackNow &&
+                    GeoTrackService.hasRequiredLocationPermissions(applicationContext)
+                ) {
+                    runCatching { TrackingRevivalWorker.enqueue(applicationContext) }
+                }
             }
 
             Result.success()

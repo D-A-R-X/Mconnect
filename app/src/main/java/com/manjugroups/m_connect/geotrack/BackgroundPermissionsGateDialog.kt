@@ -19,6 +19,7 @@ import android.view.WindowManager
 import android.widget.Toast
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.ContextCompat
+import com.manjugroups.m_connect.notifications.PushTokenManager
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
@@ -36,6 +37,7 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
     companion object {
         private const val TAG = "BackgroundPermissionsGateDialog"
         private const val REQUEST_BG_LOCATION = 1001
+        private const val REQUEST_NOTIFICATIONS = 1008
         private const val REQUEST_FG_LOCATION = 1002
         private const val REQUEST_ACTIVITY_RECOGNITION = 1003
 
@@ -95,12 +97,15 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
         // that alert re-checks allGranted, finds it true and declines to show
         // the gate — an unfixable notification on a phone that, per the note on
         // hasPreciseLocation, was saving no GPS at all.
-        fun allGranted(ctx: Context): Boolean =
-            isDeviceLocationEnabled(ctx) &&
-                hasPreciseLocation(ctx) &&
-                hasBackgroundLocation(ctx) &&
-                hasActivityRecognition(ctx) &&
-                hasBatteryOptIgnored(ctx)
+        /**
+         * Defined AS "nothing is missing", not as a second hand-written list.
+         *
+         * These were two parallel lists and they drifted: allGranted accepted a
+         * coarse-only grant while missingPermissionKeys demanded precise, so the
+         * gate refused to open on a phone the alert was complaining about. Deriving
+         * one from the other makes that class of bug impossible rather than fixed.
+         */
+        fun allGranted(ctx: Context): Boolean = missingPermissionKeys(ctx).isEmpty()
 
         /**
          * The tracking permissions that are missing right now, as the same
@@ -120,10 +125,16 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
             // saved all day. Re-requesting FINE over a coarse-only grant
             // shows the OS precise-upgrade prompt, so the existing request
             // flow heals it.
+            if (!isDeviceLocationEnabled(ctx)) missing.add("location_services")
             if (!hasPreciseLocation(ctx)) missing.add("fine_location")
             if (!hasBackgroundLocation(ctx)) missing.add("background_location")
             if (!hasActivityRecognition(ctx)) missing.add("activity_recognition")
             if (!hasBatteryOptIgnored(ctx)) missing.add("battery_optimization")
+            // Last, because it is the one whose absence hides the rest: with
+            // notifications off the ongoing alert cannot be posted at all, so a
+            // phone with everything else wrong has no way to say so. The gate is
+            // then the only channel left, which is why it belongs in this set.
+            if (!PushTokenManager.hasNotificationPermission(ctx)) missing.add("notification")
             return missing
         }
 
@@ -258,6 +269,19 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
                 openActivityRecognitionSettings()
             } else {
                 showRevokeToast()
+            }
+        }
+
+        view.findViewById<View>(R.id.rowNotifications).setOnClickListener {
+            val ctx = requireContext()
+            if (PushTokenManager.hasNotificationPermission(ctx)) {
+                showRevokeToast()
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                @Suppress("DEPRECATION")
+                requestPermissions(
+                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                    REQUEST_NOTIFICATIONS,
+                )
             }
         }
 
@@ -454,6 +478,8 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
         root.findViewById<SwitchCompat>(R.id.switchBgLocation).isChecked = bgOk
         root.findViewById<SwitchCompat>(R.id.switchActivityRecognition).isChecked = activityOk
         root.findViewById<SwitchCompat>(R.id.switchBatteryOpt).isChecked = batOk
+        root.findViewById<SwitchCompat>(R.id.switchNotifications).isChecked =
+            PushTokenManager.hasNotificationPermission(ctx)
         
         val autoRow = root.findViewById<View>(R.id.rowAutostart)
         if (isAutostartManaged()) {

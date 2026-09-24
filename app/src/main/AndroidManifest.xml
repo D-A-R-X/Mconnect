@@ -120,6 +120,19 @@
             android:foregroundServiceType="location"
             android:exported="false" />
 
+        <!-- TrackingRevivalWorker hands WorkManager a location-typed
+             ForegroundInfo so it can take a foreground slot on our behalf and
+             legally start GeoTrackService from the background. WorkManager
+             declares this service with NO foregroundServiceType, and on
+             Android 14+ that combination throws
+             MissingForegroundServiceTypeException. Merging the attribute in is
+             the documented way to allow it; it changes nothing for any other
+             worker, which simply never asks for a type. -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="location"
+            tools:node="merge" />
+
         <service
             android:name=".notifications.MconnectFirebaseMessagingService"
             android:exported="false">
