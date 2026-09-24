@@ -55,6 +55,15 @@ class TrackingPermissionSetup(
     private val activity: () -> Activity?,
     private val onProgress: () -> Unit = {},
     private val onFinished: () -> Unit = {},
+    /**
+     * False for staff who are not geo-tracked. They are walked through only
+     * what the app uses for them — precise location while it is open (punch-in)
+     * and notifications — and never asked for background location, physical
+     * activity, battery exemption, unused-app or autostart, which exist only to
+     * keep tracking alive. Asking an untracked user for background location is
+     * also what Play's background-location policy forbids.
+     */
+    private val tracked: () -> Boolean = { true },
 ) {
     private enum class Step { RUNTIME, DEVICE_LOCATION, BACKGROUND, BATTERY, UNUSED_APP, AUTOSTART, DONE }
 
@@ -89,6 +98,7 @@ class TrackingPermissionSetup(
         if (!isRunning) return
         onProgress()
         step = Step.entries[step.ordinal + 1]
+        if (!tracked() && step.ordinal > Step.DEVICE_LOCATION.ordinal) step = Step.DONE
         run()
     }
 
@@ -127,7 +137,8 @@ class TrackingPermissionSetup(
                 add(Manifest.permission.ACCESS_FINE_LOCATION)
                 add(Manifest.permission.ACCESS_COARSE_LOCATION)
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+            if (tracked() &&
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
                 !granted(host, Manifest.permission.ACTIVITY_RECOGNITION)
             ) {
                 add(Manifest.permission.ACTIVITY_RECOGNITION)

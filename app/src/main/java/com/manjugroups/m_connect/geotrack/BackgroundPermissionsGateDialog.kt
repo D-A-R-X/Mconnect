@@ -14,6 +14,7 @@ import android.os.Looper
 import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
+import android.widget.TextView
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.Toast
@@ -36,6 +37,12 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
 
     companion object {
         private const val TAG = "BackgroundPermissionsGateDialog"
+        private const val ARG_TRACKED = "tracked"
+
+        /** A gate for a geo-tracked staffer ([tracked] = true) or anyone else. */
+        fun newInstance(tracked: Boolean) = BackgroundPermissionsGateDialog().apply {
+            arguments = Bundle().apply { putBoolean(ARG_TRACKED, tracked) }
+        }
         private const val REQUEST_BG_LOCATION = 1001
         private const val REQUEST_NOTIFICATIONS = 1008
         private const val REQUEST_FG_LOCATION = 1002
@@ -105,7 +112,8 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
          * gate refused to open on a phone the alert was complaining about. Deriving
          * one from the other makes that class of bug impossible rather than fixed.
          */
-        fun allGranted(ctx: Context): Boolean = missingPermissionKeys(ctx).isEmpty()
+        fun allGranted(ctx: Context, tracked: Boolean = true): Boolean =
+            missingPermissionKeys(ctx, tracked).isEmpty()
 
         /**
          * The tracking permissions that are missing right now, as the same
@@ -116,7 +124,7 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
          * gates the sheet but is surfaced separately as a GPS_DISABLED signal,
          * so it is intentionally not a key here.)
          */
-        fun missingPermissionKeys(ctx: Context): List<String> {
+        fun missingPermissionKeys(ctx: Context, tracked: Boolean = true): List<String> {
             val missing = mutableListOf<String>()
             // STRICTLY precise (FINE) — an approximate-only grant ("Precise
             // location" toggled off) used to pass this check silently while
@@ -127,9 +135,14 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
             // flow heals it.
             if (!isDeviceLocationEnabled(ctx)) missing.add("location_services")
             if (!hasPreciseLocation(ctx)) missing.add("fine_location")
-            if (!hasBackgroundLocation(ctx)) missing.add("background_location")
-            if (!hasActivityRecognition(ctx)) missing.add("activity_recognition")
-            if (!hasBatteryOptIgnored(ctx)) missing.add("battery_optimization")
+            // The next three exist only to keep background tracking alive, so
+            // only a geo-tracked staffer is asked for them. Everyone still needs
+            // location on and precise (punch-in) and notifications.
+            if (tracked) {
+                if (!hasBackgroundLocation(ctx)) missing.add("background_location")
+                if (!hasActivityRecognition(ctx)) missing.add("activity_recognition")
+                if (!hasBatteryOptIgnored(ctx)) missing.add("battery_optimization")
+            }
             // Last, because it is the one whose absence hides the rest: with
             // notifications off the ongoing alert cannot be posted at all, so a
             // phone with everything else wrong has no way to say so. The gate is
@@ -138,12 +151,21 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
             return missing
         }
 
-        fun showIfNeeded(fm: FragmentManager, ctx: Context) {
-            if (fm.findFragmentByTag(TAG) != null) return
-            if (!allGranted(ctx)) {
-                BackgroundPermissionsGateDialog().show(fm, TAG)
+        fun showIfNeeded(fm: FragmentManager, ctx: Context, tracked: Boolean = true) {
+            val existing = fm.findFragmentByTag(TAG) as? BackgroundPermissionsGateDialog
+            if (existing != null) {
+                // Already asking for at least as much. The one case to replace:
+                // a staffer whose tracking was just switched on is still looking
+                // at the shorter untracked sheet.
+                if (existing.tracked || !tracked) return
+                existing.dismissAllowingStateLoss()
+            }
+            if (!allGranted(ctx, tracked)) {
+                newInstance(tracked).show(fm, TAG)
                 return
             }
+            // "Manage app if unused" only protects background tracking.
+            if (!tracked) return
             // All runtime permissions are on, but "Manage app if unused" is now
             // required too. Resolve it async and still show the gate when the OS
             // would hibernate/revoke the app, so it can't be silently skipped.
@@ -162,7 +184,7 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
                         UnusedAppRestrictions.settingsIntent(ctx) != null &&
                         fm.findFragmentByTag(TAG) == null
                     ) {
-                        runCatching { BackgroundPermissionsGateDialog().show(fm, TAG) }
+                        runCatching { newInstance(tracked = true).show(fm, TAG) }
                     }
                 },
                 ContextCompat.getMainExecutor(ctx),
@@ -176,11 +198,16 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
     // they do not have can never lock them out of the app.
     private var unusedAppSatisfied = false
 
+    /** Defaults to the full tracked set, so an existing caller is unchanged. */
+    internal val tracked: Boolean
+        get() = arguments?.getBoolean(ARG_TRACKED, true) ?: true
+
     private val permissionSetup = TrackingPermissionSetup(
         caller = this,
         activity = { activity },
         onProgress = { view?.let(::refreshStatus) },
         onFinished = { onAllowAllFinished() },
+        tracked = { tracked },
     )
 
     // ── Lifecycle ──────────────────────────────────────────────────
@@ -339,6 +366,12 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
         val ctx = context ?: return
         val row = root.findViewById<View>(R.id.rowManageAppUnused)
         val sw = root.findViewById<SwitchCompat>(R.id.switchManageAppUnused)
+        if (!tracked) {
+            row.visibility = View.GONE
+            unusedAppSatisfied = true
+            if (allGranted(ctx, tracked = false)) dismissAllowingStateLoss()
+            return
+        }
         val settingsIntent = UnusedAppRestrictions.settingsIntent(ctx)
         if (settingsIntent == null) {
             row.visibility = View.GONE
@@ -430,7 +463,7 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
     private fun onAllowAllFinished() {
         val ctx = context ?: return
         recheckAndMaybeDismiss()
-        if (isAdded && !(allGranted(ctx) && unusedAppSatisfied)) {
+        if (isAdded && !(allGranted(ctx, tracked) && unusedAppSatisfied)) {
             Toast.makeText(
                 ctx,
                 "Some settings need to be turned on by hand. Tap each row that is still off.",
@@ -443,15 +476,20 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
         if (!isAdded || isDetached) return
         val ctx = context ?: return
         val root = view ?: return
-        if (allGranted(ctx) && unusedAppSatisfied) {
+        if (allGranted(ctx, tracked) && unusedAppSatisfied) {
             // Everything's on now — take the ongoing red alert down with the
             // sheet so the two never disagree.
             com.manjugroups.m_connect.notifications.PermissionAlertNotification.clear(ctx)
             dismissAllowingStateLoss()
         } else {
-            // Keep the out-of-app alert in step with what's still missing.
-            com.manjugroups.m_connect.notifications.PermissionAlertNotification
-                .update(ctx, missingPermissionKeys(ctx))
+            // Keep the out-of-app alert in step with what's still missing. It
+            // says "tracking can't work", so an untracked staffer never gets it.
+            if (tracked) {
+                com.manjugroups.m_connect.notifications.PermissionAlertNotification
+                    .update(ctx, missingPermissionKeys(ctx))
+            } else {
+                com.manjugroups.m_connect.notifications.PermissionAlertNotification.clear(ctx)
+            }
             refreshStatus(root)
         }
     }
@@ -481,8 +519,17 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
         root.findViewById<SwitchCompat>(R.id.switchNotifications).isChecked =
             PushTokenManager.hasNotificationPermission(ctx)
         
+        // Untracked staff see only what they are asked for.
+        val trackingOnly = if (tracked) View.VISIBLE else View.GONE
+        root.findViewById<View>(R.id.rowBgLocation).visibility = trackingOnly
+        root.findViewById<View>(R.id.rowActivityRecognition).visibility = trackingOnly
+        root.findViewById<View>(R.id.rowBatteryOpt).visibility = trackingOnly
+        root.findViewById<TextView>(R.id.txtNotificationsDesc).text =
+            if (tracked) "So the app can tell you the moment tracking stops working"
+            else "So you get approvals, tasks and alerts on time"
+
         val autoRow = root.findViewById<View>(R.id.rowAutostart)
-        if (isAutostartManaged()) {
+        if (tracked && isAutostartManaged()) {
             autoRow.visibility = View.VISIBLE
         } else {
             autoRow.visibility = View.GONE

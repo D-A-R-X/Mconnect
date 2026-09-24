@@ -1402,7 +1402,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun maybeShowBackgroundPermissionsGate() {
-        if (!session.geoTrackingEnabled) return
+        // Every staffer is held on the gate until what the app needs from
+        // them is granted. Untracked staff are asked only for location while
+        // in use (punch-in) and notifications; tracked staff get the full set.
+        if (!session.geoTrackingEnabled) {
+            // The red alert says tracking cannot work. Never leave one on an
+            // untracked staffer (e.g. tracking was switched off after it fired).
+            com.manjugroups.m_connect.notifications.PermissionAlertNotification.clear(this)
+            com.manjugroups.m_connect.geotrack.BackgroundPermissionsGateDialog
+                .showIfNeeded(supportFragmentManager, this, tracked = false)
+            return
+        }
         // Foregrounding is the most reliable moment to reconcile the ongoing
         // red permission alert with reality: clear it the instant every
         // tracking permission is present, (re)post it while any is missing —
