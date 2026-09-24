@@ -14834,3 +14834,16 @@ implemented or validated until the iOS repository/path is made available.
 - versionCode 87 -> 88 (needed to publish).
 - Reverted as unrelated: `.idea/deploymentTargetSelector.xml` (IDE state). Nothing else was pending — FoundationChat, geo-tracking-service and manjusitedevelopment all clean and in sync.
 - compileDebugKotlin + testDebugUnitTest + assembleDebug green; 0 dev hosts.
+
+## 2026-09-24 — "Not tracking after the new Play build": measured on the device
+- Complaint: staff clocked in at 09:23 but the live board shows them Offline, and it got WORSE after last night's Play release.
+- Device evidence (Oppo CPH2729, adb): installed build is **versionCode 89 from Play**, `firstInstallTime == lastUpdateTime == 2026-09-24 00:07:38` — a **fresh install, not an update**, which resets every runtime permission and wipes app-local state (consent included).
+- Right now on that phone: `ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION`, `ACCESS_BACKGROUND_LOCATION`, `ACTIVITY_RECOGNITION` all `granted=false` (appops `ignore`); `POST_NOTIFICATIONS` granted; device Location Services ON (`location_mode 3`); not battery-whitelisted. `dumpsys activity services` → no GeoTrackService; every foreground logs `>>> Stopping GeoTrack service`.
+- Server row for that phone (geo live-status): one report at 09:23 IST, `trackingActive:false`, `hasTamperAlert:true`, offline since. One fix at punch-in then nothing = the signature of a **one-time / foreground-only location grant** that lapsed when the phone went back in the pocket. So the web board is correct, not broken.
+- **The red permission alert has never fired on this device**: the `geotrack_permission_alert` notification channel does not exist, although the pulled `base.apk` does contain the alert code. Every trigger is behind state a reinstall destroys — `sync()` returns early on the stored `geoTrackingEnabled` flag, on attendance, and on consent; `MainActivity.maybeShowBackgroundPermissionsGate()` is behind the same flag. Yesterday's v88 change put the alert inside `queuePermissionHealth`, which sits below all three returns, so it is inert in exactly the state it was written for. That one is mine.
+- Fixes (versionCode 90):
+  - `GeoTrackBootstrapSync.sync()` — `queuePermissionHealth()` moved ABOVE the `!geoConsentGiven` early return, so a reinstall that wiped consent still warns.
+  - `TrackingCheckWorker` — new `reconcilePermissionAlert()`: when the 15-minute watchdog finds nothing started and no service running, it force-refreshes the flag from the server and, if the server says this person is tracked AND attendance is open, posts/clears the alert. Server truth, so a stale local `false` can no longer silence it; untracked office staff are still never nagged; `null` attendance (outage) stays quiet.
+- Note for the record: **versionCode 89 exists in no branch of this repo** — the published build was cut from a tree that is not in git. Repo was at 88; bumped to 90 so the next release supersedes Play.
+- `compileDebugKotlin` + `testDebugUnitTest` green; prod hosts only (0 dev hosts).
+- Could not grant the permissions over adb to prove it live — ColorOS refuses `pm grant` (`SecurityException: GRANT_RUNTIME_PERMISSIONS`). Nothing on the device was changed.

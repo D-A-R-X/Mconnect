@@ -66,13 +66,17 @@ object GeoTrackBootstrapSync {
             return session.shouldTrackNow
         }
 
+        // Permission health is reconciled BEFORE the consent check, not after.
+        // A reinstall wipes consent along with every runtime grant, so the
+        // device that can do least is exactly the one that used to fall out of
+        // this function before anything warned the person carrying it.
+        queuePermissionHealth(appContext)
+
         if (!session.geoConsentGiven) {
             session.shouldTrackNow = false
             GeoTrackService.stop(appContext)
             return false
         }
-
-        queuePermissionHealth(appContext)
         runCatching { GeoTrackEventQueue.flush(appContext, api, session) }
 
         val currentResponse = runCatching {

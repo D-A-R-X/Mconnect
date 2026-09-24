@@ -73,11 +73,45 @@ class TrackingCheckWorker(
                 }
             }
 
+            // Nothing started, and no service is running: the phone is
+            // clocked in and producing nothing. Say so on the device.
+            if (!started) runCatching { reconcilePermissionAlert(session) }
+
             Result.success()
         } catch (e: Exception) {
             Log.w(TAG, "TrackingCheckWorker failed: ${e.message}")
             Result.retry()
         }
+    }
+
+    /**
+     * Raise (or clear) the ongoing red permission alert for a staff member who
+     * is clocked in but whose phone is not tracking.
+     *
+     * This lives in the worker rather than in the sync or the UI because every
+     * other trigger is behind state a reinstall destroys. `sync()` returns
+     * early when the stored geoTrackingEnabled flag is false, and
+     * MainActivity's gate is behind the same flag — so a fresh install whose
+     * login response left the flag false warns nobody, ever, however long the
+     * person stays clocked in. That is a silent failure: the staffer sees a
+     * normal clocked-in screen while the live board shows them offline all day.
+     *
+     * Server truth decides, so a stale local false cannot suppress the alert,
+     * and genuinely untracked office staff are still never nagged.
+     */
+    private suspend fun reconcilePermissionAlert(session: SessionManager) {
+        runCatching { GeoTrackingFlagRefresher.refresh(applicationContext, force = true) }
+        if (!session.geoTrackingEnabled) return
+        // Only inside the shift. `null` means the attendance call failed —
+        // not proof of anything, so stay quiet rather than guess.
+        if (AttendanceTrackingGate.hasOpenSessionNow(session.bearerToken) != true) return
+
+        val missing = BackgroundPermissionsGateDialog.missingPermissionKeys(applicationContext)
+        // update() clears the alert when the list is empty, so this also takes
+        // the notification down once the staffer has granted everything.
+        com.manjugroups.m_connect.notifications.PermissionAlertNotification
+            .update(applicationContext, missing)
+        if (missing.isNotEmpty()) Log.i(TAG, "Clocked in but not tracking; missing $missing")
     }
 
     companion object {
