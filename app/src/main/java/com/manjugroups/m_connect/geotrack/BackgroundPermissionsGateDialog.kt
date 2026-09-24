@@ -87,9 +87,17 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
             }
         }
 
+        // Precise, not fine-or-coarse. This has to agree with
+        // missingPermissionKeys() or the two contradict each other: a
+        // coarse-only phone passed allGranted() (so the gate never opened and
+        // never asked to upgrade) while missingPermissionKeys() reported
+        // fine_location missing (so the ongoing red alert was posted). Tapping
+        // that alert re-checks allGranted, finds it true and declines to show
+        // the gate — an unfixable notification on a phone that, per the note on
+        // hasPreciseLocation, was saving no GPS at all.
         fun allGranted(ctx: Context): Boolean =
             isDeviceLocationEnabled(ctx) &&
-                hasForegroundLocation(ctx) &&
+                hasPreciseLocation(ctx) &&
                 hasBackgroundLocation(ctx) &&
                 hasActivityRecognition(ctx) &&
                 hasBatteryOptIgnored(ctx)
@@ -227,8 +235,8 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
         view.findViewById<View>(R.id.rowLocation).setOnClickListener {
             val ctx = requireContext()
             val deviceLocationOk = isDeviceLocationEnabled(ctx)
-            val fgOk = hasForegroundLocation(ctx)
-            if (!deviceLocationOk || !fgOk) {
+            val preciseOk = hasPreciseLocation(ctx)
+            if (!deviceLocationOk || !preciseOk) {
                 openDeviceLocationSettings()
             } else {
                 showRevokeToast()
@@ -435,14 +443,14 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
     private fun refreshStatus(root: View) {
         val ctx = requireContext()
         val deviceLocationOk = isDeviceLocationEnabled(ctx)
-        val fgOk = hasForegroundLocation(ctx)
+        val preciseOk = hasPreciseLocation(ctx)
         val bgOk = hasBackgroundLocation(ctx)
         val activityOk = hasActivityRecognition(ctx)
         val batOk = hasBatteryOptIgnored(ctx)
         val autostartOk = isAutostartEnabled(ctx)
         root.findViewById<View>(R.id.btnGateAllowAll).isEnabled = !permissionSetup.isRunning
 
-        root.findViewById<SwitchCompat>(R.id.switchLocation).isChecked = deviceLocationOk && fgOk
+        root.findViewById<SwitchCompat>(R.id.switchLocation).isChecked = deviceLocationOk && preciseOk
         root.findViewById<SwitchCompat>(R.id.switchBgLocation).isChecked = bgOk
         root.findViewById<SwitchCompat>(R.id.switchActivityRecognition).isChecked = activityOk
         root.findViewById<SwitchCompat>(R.id.switchBatteryOpt).isChecked = batOk
@@ -462,7 +470,7 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
 
     private fun openDeviceLocationSettings() {
         val ctx = context ?: return
-        if (!hasForegroundLocation(ctx)) {
+        if (!hasPreciseLocation(ctx)) {
             @Suppress("DEPRECATION")
             requestPermissions(
                 arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
