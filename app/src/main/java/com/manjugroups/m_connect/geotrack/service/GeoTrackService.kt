@@ -119,7 +119,32 @@ class GeoTrackService : Service() {
                     context.startService(intent)
                 }
             }.onFailure { e ->
-                Log.e(TAG, "Unable to start GeoTrack service: ${e.message}", e)
+                Log.e(TAG, "Unable to start GeoTrack service: ${e.javaClass.simpleName}: ${e.message}", e)
+                // Android 12+ refuses startForegroundService() from the
+                // background unless the app is exempt from battery
+                // optimisation. The 15-minute watchdog runs in the background,
+                // so on a non-exempt phone this throws EVERY time: the session
+                // sync that ran just before it still succeeded, the server
+                // marks the staff member tracking_active, and the phone then
+                // captures nothing at all.
+                //
+                // Measured on production 2026-09-24: of 220 phones with
+                // tracking_active, 152 had their live_status row refreshed
+                // inside 15 minutes while last_seen was a median 3.2 hours
+                // stale — awake, online, reaching the server, capturing
+                // nothing. Swallowing this exception is what made that
+                // invisible on the device.
+                //
+                // The alert names battery_optimization, which is the setting
+                // that actually lifts the restriction. update() clears itself
+                // once nothing is missing, so this cannot get stuck.
+                runCatching {
+                    com.manjugroups.m_connect.notifications.PermissionAlertNotification.update(
+                        context,
+                        com.manjugroups.m_connect.geotrack.BackgroundPermissionsGateDialog
+                            .missingPermissionKeys(context),
+                    )
+                }
             }
         }
 
