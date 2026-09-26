@@ -44,8 +44,16 @@ object GeoTrackBootstrapSync {
         // only ever appear once the staff member had clocked in — landing on
         // top of the clock-in they had just made, every first login.
         GeoTrackConsentStore.reconcile(appContext, session)
-        if (!session.geoConsentGiven && !session.geoConsentDeclined &&
-            allowPromptConsent && !GeoTrackConsentActivity.isActive
+        // A "Decline" is honoured for the moment, never for good. It used to
+        // silence this prompt until the next login — for a tracked staffer
+        // that is weeks with tracking off while they clock in every day (the
+        // server shows exactly that cohort: punched in on the app, not one
+        // call to the tracking service since). They are asked again on the
+        // next app open; a short in-memory grace after the decline keeps the
+        // screen from re-opening the instant they leave it.
+        if (!session.geoConsentGiven &&
+            allowPromptConsent && !GeoTrackConsentActivity.isActive &&
+            !GeoTrackConsentActivity.declineGraceActive()
         ) {
             context.startActivity(Intent(context, GeoTrackConsentActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)

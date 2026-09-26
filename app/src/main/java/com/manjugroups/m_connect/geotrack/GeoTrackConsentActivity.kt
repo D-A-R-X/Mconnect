@@ -53,6 +53,20 @@ class GeoTrackConsentActivity : AppCompatActivity() {
         var isActive = false
 
         /**
+         * When this process last saw a "Decline". A decline is no longer
+         * permanent — the next app open asks again — but reopening the screen
+         * the moment they leave it would trap them in a loop, so the ask waits
+         * out [DECLINE_GRACE_MS]. In memory on purpose: a cold start asks at
+         * once.
+         */
+        @Volatile
+        var lastDeclinedAtMs = 0L
+        const val DECLINE_GRACE_MS = 2 * 60 * 1000L
+
+        fun declineGraceActive(now: Long = System.currentTimeMillis()): Boolean =
+            now - lastDeclinedAtMs < DECLINE_GRACE_MS
+
+        /**
          * Long enough for the sync to finish on a normal connection, short
          * enough that a stalled backend does not hold the user on a consent
          * screen. Whatever does not complete here is retried on Home.
@@ -80,6 +94,7 @@ class GeoTrackConsentActivity : AppCompatActivity() {
         binding.btnDecline.setOnClickListener {
             session.geoConsentGiven = false
             session.geoConsentDeclined = true
+            lastDeclinedAtMs = System.currentTimeMillis()
             session.shouldTrackNow = false
             goToMain()
         }
