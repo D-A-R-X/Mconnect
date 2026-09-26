@@ -207,7 +207,14 @@ class TaskManagerFragment : Fragment() {
         val me = session.staffId
         val scoped = if (isSuper) resp.tasks
             else resp.tasks.filter { me != null && (it.assignedTo == me || it.assignedTo in tIds) }
-        allTasks = scoped.sortedByDescending { it.creationTime ?: 0.0 }
+        // Open SV approvals waiting on THIS person (out-of-station / same-day
+        // site visits the GM must approve) always sit at the top, in every
+        // tab; everything else keeps newest-first. A GM's list is long and
+        // these block a client's visit, so they must not scroll out of view.
+        allTasks = scoped.sortedWith(
+            compareByDescending<DailyTaskData> { isPendingSvApprovalFor(it, me) }
+                .thenByDescending { it.creationTime ?: 0.0 },
+        )
         teamIds = tIds
         scope = resp.scope
         // Rebuild the module cache once per load.
@@ -322,6 +329,13 @@ class TaskManagerFragment : Fragment() {
             defaultSelection = moduleTabsList.indexOf(moduleFilter).coerceAtLeast(0),
         )
     }
+
+    /** An open site-visit approval (GM handoff) assigned to [me]. */
+    private fun isPendingSvApprovalFor(t: DailyTaskData, me: String?): Boolean =
+        me != null &&
+            t.assignedTo == me &&
+            t.sourceReferenceType == "out_of_station_handoff" &&
+            (t.status == "pending" || t.status == "in-progress")
 
     private fun visibleTasks(): List<DailyTaskData> =
         allTasks.filter { matchesStatus(it, status) }
