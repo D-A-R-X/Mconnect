@@ -130,8 +130,17 @@ class RejectReasonBottomSheet : BottomSheetDialogFragment() {
                     finishWithError(outcomeResp.error ?: "Failed to record rejection")
                     return@launch
                 }
-                if (outcomeResp.status != OUTCOME_REJECTED || outcomeResp.followUpTaskId.isNullOrBlank()) {
-                    finishWithError("Rejection was not confirmed with a follow-up task. Please retry.")
+                // setCpVisitOutcomeConfirmed has already re-read the CP and
+                // proved outcome = rejected with a final status. This used to
+                // also demand status == "rejected" and a follow-up task id:
+                // the backend never stores that status (it is "completed", or
+                // "pending_gm_approval" beyond the geofence), so every
+                // successful rejection was reported as failed. The LMO
+                // follow-up is created only for an SV cum CP that completes
+                // on the spot, and the backend refuses the whole rejection if
+                // it cannot assign one — so success already covers it.
+                if (outcomeResp.outcome != null && outcomeResp.outcome != OUTCOME_REJECTED) {
+                    finishWithError("Rejection was not confirmed. Please refresh the visit and retry.")
                     return@launch
                 }
                 // Single result keyed by THIS sheet — the parent sheet
