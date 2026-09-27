@@ -2634,22 +2634,13 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
             return
         }
-        swipeArrived?.lockAsBusy("Optimizing and uploading photo…")
-        viewLifecycleOwner.lifecycleScope.launch {
-            val upload = uploadArrivalPhoto(photoFile)
-            val storageId = upload.storageId
-            if (storageId == null) {
+        uploadProofPhotoWithRetry(
+            photoFile = photoFile,
+            onGiveUp = {
                 arrivalInProgress = false
                 swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
-                context?.let { ctx ->
-                    Toast.makeText(
-                        ctx,
-                        upload.errorMessage ?: "Photo upload failed. Try again.",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
-                return@launch
-            }
+            },
+        ) { storageId ->
             pendingArrivalStorageId = storageId
             discardUploadedArrivalPhoto(photoFile)
 
@@ -2663,7 +2654,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     "Arrival location expired. Swipe again.",
                     Toast.LENGTH_LONG
                 ).show()
-                return@launch
+                return@uploadProofPhotoWithRetry
             }
             swipeArrived?.lockAsBusy("Enter OTP to confirm")
             ArrivalOtpBottomSheet.newInstance(
@@ -2683,6 +2674,44 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         }
     }
 
+    /**
+     * Uploads a CP proof photo (arrival, gift handover, client-not-met).
+     *
+     * On a failed upload the photo is KEPT and the staffer is asked to retry
+     * just the upload. Every failure used to reset the whole arrival to
+     * "Swipe to Complete Trip" — new GPS fix, new photo, new upload — so on a
+     * weak signal staff looped through the flow from the start. [onGiveUp]
+     * runs only if they choose Cancel.
+     */
+    private fun uploadProofPhotoWithRetry(
+        photoFile: File,
+        onGiveUp: () -> Unit,
+        onUploaded: (storageId: String) -> Unit,
+    ) {
+        swipeArrived?.lockAsBusy("Optimizing and uploading photo…")
+        viewLifecycleOwner.lifecycleScope.launch {
+            val upload = uploadArrivalPhoto(photoFile)
+            val storageId = upload.storageId
+            if (storageId != null) {
+                onUploaded(storageId)
+                return@launch
+            }
+            val ctx = context ?: return@launch
+            if (!isAdded) return@launch
+            swipeArrived?.lockAsBusy("Photo not uploaded yet")
+            com.manjugroups.m_connect.ui.common.AppBottomSheets.showRetry(
+                ctx = ctx,
+                title = "Photo didn't upload",
+                message = (upload.errorMessage ?: "The connection dropped.") +
+                    " Your photo is saved on this phone, so you don't need to take it again.",
+                retryLabel = "Retry upload",
+                onRetry = { uploadProofPhotoWithRetry(photoFile, onGiveUp, onUploaded) },
+                secondaryLabel = "Cancel",
+                onSecondary = onGiveUp,
+            )
+        }
+    }
+
     private suspend fun uploadArrivalPhoto(file: File): StorageUploader.Result =
         StorageUploader.upload(
             api = api,
@@ -2690,10 +2719,12 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             file = file,
             attempts = 2,
             contentType = "image/jpeg",
-            // Arrival proof is viewed on a phone/web card, not printed. This
-            // keeps text/faces clear while materially reducing weak-uplink time.
-            imageMaxEdge = 1280,
-            imageQuality = 74,
+            // Arrival proof is viewed on a phone/web card, not printed. 1024 px
+            // keeps faces and text readable and is roughly a third smaller than
+            // the previous 1280 px / q74, which matters on the weak uplinks
+            // where this upload was timing out.
+            imageMaxEdge = 1024,
+            imageQuality = 70,
             imageSkipBelowBytes = 250_000L,
         )
 
@@ -3479,22 +3510,15 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             finalizeCompleteVisit()
             return
         }
-        swipeArrived?.lockAsBusy("Optimizing and uploading photo…")
+        uploadProofPhotoWithRetry(
+            photoFile = photoFile,
+            onGiveUp = {
+                isGiftDistributionPostOtpPhotoCapture = false
+                swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+            },
+        ) { storageId ->
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val upload = uploadArrivalPhoto(photoFile)
-                val storageId = upload.storageId
-                if (storageId == null) {
-                    isGiftDistributionPostOtpPhotoCapture = false
-                    swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
-                    Toast.makeText(
-                        requireContext(),
-                        upload.errorMessage
-                            ?: "Photo upload failed. Tap Confirm Gift Distribution to retry.",
-                        Toast.LENGTH_LONG,
-                    ).show()
-                    return@launch
-                }
                 pendingArrivalStorageId = storageId
                 discardUploadedArrivalPhoto(photoFile)
 
@@ -3552,6 +3576,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 val msg = httpErrorMessage(e) ?: e.message ?: "Network error"
                 toastSafe(msg, Toast.LENGTH_LONG)
             }
+        }
         }
     }
 
@@ -3851,21 +3876,14 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         photoFile: File,
         optionalRemark: String?,
     ) {
-        swipeArrived?.lockAsBusy("Optimizing and uploading photo…")
-        viewLifecycleOwner.lifecycleScope.launch {
-            val upload = uploadArrivalPhoto(photoFile)
-            val storageId = upload.storageId
-            if (storageId == null) {
+        uploadProofPhotoWithRetry(
+            photoFile = photoFile,
+            onGiveUp = {
                 arrivalInProgress = false
                 cpNoPathPhotoCapture = false
                 swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
-                Toast.makeText(
-                    requireContext(),
-                    upload.errorMessage ?: "Photo upload failed. Try again.",
-                    Toast.LENGTH_LONG
-                ).show()
-                return@launch
-            }
+            },
+        ) { storageId ->
             pendingArrivalStorageId = storageId
             discardUploadedArrivalPhoto(photoFile)
             completeCpVisitWithoutClient(optionalRemark)

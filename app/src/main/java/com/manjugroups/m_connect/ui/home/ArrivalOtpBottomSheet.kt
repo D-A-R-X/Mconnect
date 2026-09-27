@@ -259,23 +259,26 @@ class ArrivalOtpBottomSheet : BottomSheetDialogFragment() {
         val cpId = cpVisitId?.takeIf { it.isNotBlank() } ?: return
         val ctx = context ?: return
 
-        val input = android.widget.EditText(ctx).apply {
-            hint = "Remark (optional) — e.g. client refused to share the code"
-            setPadding(48, 32, 48, 32)
-            maxLines = 3
-        }
-        android.app.AlertDialog.Builder(ctx)
-            .setTitle("Request GM for OTP")
-            .setMessage(
-                "Your GM will get a chat message with the client, your location, " +
-                    "the distance from the client's place and the OTP.",
-            )
-            .setView(input)
-            .setPositiveButton("Send request") { _, _ ->
-                sendGmRequest(cpId, input.text?.toString()?.trim().orEmpty())
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
+        // App-styled sheet (was a stock AlertDialog with purple platform
+        // buttons and an unstyled text field).
+        com.manjugroups.m_connect.ui.common.AppBottomSheets.showRequestWithRemark(
+            ctx = ctx,
+            title = "Ask your GM for the OTP",
+            message = "Use this when the client can't or won't share the code. " +
+                "Your GM gets a chat message and can read the OTP back to you.",
+            points = listOf(
+                "The client's name and the CP location",
+                "Where you are, and your distance from the client's place",
+                "The OTP sent to the client, plus your remark",
+            ),
+            remarkHint = "Add a remark (optional)",
+            quickRemarks = listOf(
+                "Client refused to share",
+                "Client didn't get the SMS",
+                "Client's phone is off",
+            ),
+            confirmLabel = "Send to GM",
+        ) { remark -> sendGmRequest(cpId, remark) }
     }
 
     private fun sendGmRequest(cpVisitId: String, remark: String) {

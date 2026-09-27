@@ -182,6 +182,175 @@ object AppBottomSheets {
         dialog.show()
     }
 
+    /**
+     * A blocking choice after something failed mid-flow (e.g. a photo upload).
+     * Not dismissible by an outside tap or Back: that would leave the caller
+     * stuck in its busy state with neither callback run.
+     */
+    fun showRetry(
+        ctx: Context,
+        title: String,
+        message: String,
+        retryLabel: String,
+        onRetry: () -> Unit,
+        secondaryLabel: String,
+        onSecondary: () -> Unit,
+    ) {
+        val (dialog, root) = sheetRoot(ctx, title)
+        dialog.setCancelable(false)
+        dialog.setCanceledOnTouchOutside(false)
+        root.addView(TextView(ctx).apply {
+            text = message
+            textSize = 14f
+            setTextColor(Color.parseColor("#475467"))
+            typeface = font(ctx, R.font.inter_medium, Typeface.DEFAULT)
+            setPadding(0, 0, 0, dp(ctx, 18))
+        })
+        root.addView(actionButton(ctx, retryLabel, "#0B61CA") {
+            dialog.dismiss()
+            onRetry()
+        })
+        root.addView(cancelButton(ctx) {
+            dialog.dismiss()
+            onSecondary()
+        }.apply { text = secondaryLabel })
+        dialog.show()
+    }
+
+    /**
+     * Send a request to someone, with an optional remark. [points] say what
+     * the recipient will get; [quickRemarks] are one-tap chips that fill the
+     * remark (tapping the selected chip again clears it).
+     */
+    fun showRequestWithRemark(
+        ctx: Context,
+        title: String,
+        message: String,
+        points: List<String>,
+        remarkHint: String,
+        quickRemarks: List<String>,
+        confirmLabel: String,
+        onConfirm: (String) -> Unit,
+    ) {
+        val (dialog, root) = sheetRoot(ctx, title)
+        root.addView(TextView(ctx).apply {
+            text = message
+            textSize = 14f
+            setTextColor(Color.parseColor("#475467"))
+            typeface = font(ctx, R.font.inter_medium, Typeface.DEFAULT)
+            setPadding(0, 0, 0, dp(ctx, 12))
+        })
+        if (points.isNotEmpty()) {
+            val card = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                background = GradientDrawable().apply {
+                    setColor(Color.parseColor("#F5F8FF"))
+                    cornerRadius = dp(ctx, 12).toFloat()
+                    setStroke(dp(ctx, 1), Color.parseColor("#D1E0FF"))
+                }
+                setPadding(dp(ctx, 14), dp(ctx, 10), dp(ctx, 14), dp(ctx, 10))
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ).apply { bottomMargin = dp(ctx, 14) }
+            }
+            points.forEach { point ->
+                card.addView(LinearLayout(ctx).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(0, dp(ctx, 4), 0, dp(ctx, 4))
+                    addView(View(ctx).apply {
+                        background = GradientDrawable().apply {
+                            shape = GradientDrawable.OVAL
+                            setColor(Color.parseColor("#0B61CA"))
+                        }
+                        layoutParams = LinearLayout.LayoutParams(dp(ctx, 6), dp(ctx, 6)).apply {
+                            marginEnd = dp(ctx, 10)
+                        }
+                    })
+                    addView(TextView(ctx).apply {
+                        text = point
+                        textSize = 13.5f
+                        setTextColor(Color.parseColor("#1D2939"))
+                        typeface = font(ctx, R.font.inter_medium, Typeface.DEFAULT)
+                    })
+                })
+            }
+            root.addView(card)
+        }
+
+        val input = EditText(ctx).apply {
+            hint = remarkHint
+            textSize = 15f
+            setTextColor(Color.parseColor("#101828"))
+            setHintTextColor(Color.parseColor("#98A2B3"))
+            typeface = font(ctx, R.font.inter_medium, Typeface.DEFAULT)
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#F8F9FB"))
+                cornerRadius = dp(ctx, 12).toFloat()
+                setStroke(dp(ctx, 1), Color.parseColor("#E4E7EC"))
+            }
+            setPadding(dp(ctx, 14), dp(ctx, 12), dp(ctx, 14), dp(ctx, 12))
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or
+                InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            minLines = 2
+            maxLines = 4
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { bottomMargin = dp(ctx, 12) }
+        }
+
+        if (quickRemarks.isNotEmpty()) {
+            val chips = com.google.android.material.chip.ChipGroup(ctx).apply {
+                chipSpacingHorizontal = dp(ctx, 8)
+                chipSpacingVertical = dp(ctx, 4)
+                isSingleSelection = true
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ).apply { bottomMargin = dp(ctx, 10) }
+            }
+            val idle = android.content.res.ColorStateList(
+                arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+                intArrayOf(Color.parseColor("#E0EAFF"), Color.parseColor("#F2F4F7")),
+            )
+            val ink = android.content.res.ColorStateList(
+                arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+                intArrayOf(Color.parseColor("#0B61CA"), Color.parseColor("#344054")),
+            )
+            quickRemarks.forEach { remark ->
+                chips.addView(com.google.android.material.chip.Chip(ctx).apply {
+                    text = remark
+                    isCheckable = true
+                    isCheckedIconVisible = false
+                    chipBackgroundColor = idle
+                    setTextColor(ink)
+                    chipStrokeWidth = 0f
+                    textSize = 13f
+                    typeface = font(ctx, R.font.inter_medium, Typeface.DEFAULT)
+                    setOnCheckedChangeListener { _, checked ->
+                        if (checked) {
+                            input.setText(remark)
+                            input.setSelection(input.text.length)
+                        } else if (input.text.toString() == remark) {
+                            input.setText("")
+                        }
+                    }
+                })
+            }
+            root.addView(chips)
+        }
+        root.addView(input)
+
+        root.addView(actionButton(ctx, confirmLabel, "#0B61CA") {
+            dialog.dismiss()
+            onConfirm(input.text.toString().trim())
+        })
+        root.addView(cancelButton(ctx) { dialog.dismiss() })
+        dialog.show()
+    }
+
     private fun actionButton(ctx: Context, label: String, colorHex: String, onTap: () -> Unit) =
         TextView(ctx).apply {
             text = label
