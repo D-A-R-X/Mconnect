@@ -70,6 +70,10 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var selectedProject: MarketingProject? = null
     // LMO / Channel Partner / BDO owner — required, mirrors the web CP form.
     private var selectedLmo: StaffData? = null
+    // True while the LMO holds a default the app chose (the lead's owner or
+    // the logged-in staff), so a later, better default may replace it. A pick
+    // made by the user clears it and is never overwritten.
+    private var lmoAutofilled = false
     private var selectedDate: String = ""
     private var selectedTime: String = ""
     // CP Type is selected before submit and converted into the canonical API
@@ -1061,6 +1065,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                 val response = api.getStaff(session.bearerToken, status = "active")
                 if (!isAdded || !response.success) return@launch
                 staffCache = JointCpTemplateGuard.pickerStaff(response.staff)
+                prefillLmoFromSelf(loggedInId)
                 val serverStaff = JointCpTemplateGuard.loggedInStaff(staffCache, loggedInId)
                     ?: return@launch
                 // Do not overwrite a choice made while the request was running.
@@ -1094,18 +1099,17 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
      * empty so the required check still fires.
      */
     private fun prefillLmoFromLead(view: View, assignedToStaffId: String?) {
-        if (selectedLmo != null) return
+        if (selectedLmo != null && !lmoAutofilled) return
         val staffId = assignedToStaffId?.trim().orEmpty()
         if (staffId.isEmpty()) return
         val label = view.findViewById<EditText>(R.id.etLmo) ?: return
 
         fun apply(from: List<StaffData>) {
-            if (selectedLmo != null) return
+            if (selectedLmo != null && !lmoAutofilled) return
             val match = from.firstOrNull { it.id == staffId && isEligibleLmo(it) } ?: return
             selectedLmo = match
-            if (label.text?.toString()?.isBlank() != false) {
-                label.setText(match.name ?: "Selected")
-            }
+            lmoAutofilled = true
+            label.setText(match.name ?: "Selected")
         }
 
         if (staffCache.isNotEmpty()) {
@@ -1163,24 +1167,48 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             emptyMessage = "No eligible active staff found",
         ) { staff ->
             selectedLmo = staff
+            lmoAutofilled = false
             label.setText(staff.name ?: "Selected")
         }
     }
 
-    /** Mirrors convex/marketing/lib/cpVisitLmo.ts: an active Telesales LMO,
-     *  Channel Partner, or Sales & Marketing BDO. */
+    /**
+     * With no lead owner to use, default the LMO to the logged-in staff member
+     * when they are an eligible LMO / Channel Partner / Sales & Marketing staff
+     * — what the web CP form does. A BDO creating their own CP used to see a
+     * blank LMO here while the web showed their name.
+     */
+    private fun prefillLmoFromSelf(loggedInId: String) {
+        if (selectedLmo != null) return
+        val label = view?.findViewById<EditText>(R.id.etLmo) ?: return
+        val me = staffCache.firstOrNull { it.id?.trim() == loggedInId && isEligibleLmo(it) } ?: return
+        selectedLmo = me
+        lmoAutofilled = true
+        label.setText(me.name ?: "Selected")
+    }
+
+    /**
+     * Exactly convex/marketing/lib/cpVisitLmo.ts (what the web form and the
+     * create endpoint use): an active Telesales LMO, any Channel Partner, or
+     * ANY Sales & Marketing staff member. This used to accept only BDO
+     * designations in Sales & Marketing, so eligible staff were missing from
+     * the picker and never prefilled. Text is normalised the same way.
+     */
     private fun isEligibleLmo(s: StaffData): Boolean {
-        if (!"active".equals(s.status, ignoreCase = true)) return false
-        val dept = s.department?.lowercase(java.util.Locale.ROOT).orEmpty()
-        val desig = s.designation?.lowercase(java.util.Locale.ROOT).orEmpty()
+        if (!(s.status ?: "active").equals("active", ignoreCase = true)) return false
+        fun norm(v: String?) = (v ?: "").trim().lowercase(java.util.Locale.ROOT)
+            .replace("&", " and ")
+            .replace(Regex("[^a-z0-9]+"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+        val dept = norm(s.department)
+        val desig = norm(s.designation)
         val telesalesLmo = dept.contains("telesales") &&
             (desig == "lmo" || desig.contains("lead management executive") ||
                 desig.contains("telecaller"))
         val channelPartner = dept.contains("channel partner")
-        val salesMarketingBdo = dept.contains("sales") && dept.contains("marketing") &&
-            (desig == "bdo" || desig.contains("business development officer") ||
-                desig.contains("business development executive"))
-        return telesalesLmo || channelPartner || salesMarketingBdo
+        val salesMarketing = dept.contains("sales") && dept.contains("marketing")
+        return telesalesLmo || channelPartner || salesMarketing
     }
 
     private fun pickProject(label: EditText) {
