@@ -1233,6 +1233,16 @@ class MainActivity : AppCompatActivity() {
         // toggled the missing one ON. Scoped to staff who actually need
         // background tracking — office staff aren't force-prompted.
         maybeShowBackgroundPermissionsGate()
+        if (!locationToggleRegistered) {
+            locationToggleRegistered = runCatching {
+                androidx.core.content.ContextCompat.registerReceiver(
+                    this,
+                    locationToggleReceiver,
+                    android.content.IntentFilter(android.location.LocationManager.PROVIDERS_CHANGED_ACTION),
+                    androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED,
+                )
+            }.isSuccess
+        }
         // Kick a periodic IAM poll while the app is in the foreground.
         // Forces a refresh every IAM_POLL_INTERVAL_MS (currently 20s)
         // regardless of throttle, so a permission change on the web
@@ -1289,7 +1299,25 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Location switched off from quick settings while the app is open never
+     * pauses MainActivity, so the onResume re-check missed it until the next
+     * app switch. Re-assert the gate the moment it happens.
+     */
+    private val locationToggleReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+            if (!session.isLoggedIn || session.isExternalFleetPrincipal) return
+            if (isFinishing || isDestroyed || supportFragmentManager.isStateSaved) return
+            maybeShowBackgroundPermissionsGate()
+        }
+    }
+    private var locationToggleRegistered = false
+
     override fun onPause() {
+        if (locationToggleRegistered) {
+            runCatching { unregisterReceiver(locationToggleReceiver) }
+            locationToggleRegistered = false
+        }
         super.onPause()
         // Stop polling while the app isn't visible — no point burning
         // network + battery for UI nobody can see. onResume restarts.

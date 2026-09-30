@@ -2,8 +2,10 @@ package com.manjugroups.m_connect.geotrack
 
 import android.Manifest
 import android.app.Dialog
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.location.LocationManager
 import android.net.Uri
@@ -242,14 +244,6 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
         return dialog
     }
 
-    override fun onStart() {
-        super.onStart()
-        dialog?.window?.setLayout(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT
-        )
-    }
-
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -405,6 +399,37 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
         )
     }
 
+    // Location turned off from quick settings never pauses this screen, so
+    // onResume alone missed it: the row kept reading ON.
+    private val locationToggleReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            recheckAndMaybeDismiss()
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        dialog?.window?.setLayout(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+        context?.let {
+            runCatching {
+                ContextCompat.registerReceiver(
+                    it,
+                    locationToggleReceiver,
+                    IntentFilter(LocationManager.PROVIDERS_CHANGED_ACTION),
+                    ContextCompat.RECEIVER_NOT_EXPORTED,
+                )
+            }
+        }
+    }
+
+    override fun onStop() {
+        context?.let { runCatching { it.unregisterReceiver(locationToggleReceiver) } }
+        super.onStop()
+    }
+
     override fun onResume() {
         super.onResume()
         recheckAndMaybeDismiss()
@@ -510,7 +535,11 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
         val activityOk = hasActivityRecognition(ctx)
         val batOk = hasBatteryOptIgnored(ctx)
         val autostartOk = isAutostartEnabled(ctx)
-        root.findViewById<View>(R.id.btnGateAllowAll).isEnabled = !permissionSetup.isRunning
+        // Always tappable. It used to be disabled while the chain ran, and a
+        // step whose Settings screen never reported back (seen on OEM pages)
+        // left it disabled for good: a grey label on the solid accent that read
+        // as a blank button nobody could press. A tap now restarts the chain.
+        root.findViewById<View>(R.id.btnGateAllowAll).isEnabled = true
 
         root.findViewById<SwitchCompat>(R.id.switchLocation).isChecked = deviceLocationOk && preciseOk
         root.findViewById<SwitchCompat>(R.id.switchBgLocation).isChecked = bgOk

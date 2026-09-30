@@ -88,7 +88,10 @@ class TrackingPermissionSetup(
     ) { advance() }
 
     fun start() {
-        if (isRunning) return
+        // A tap while a chain is still "running" means its last step never
+        // reported back (an OEM Settings page that returns no result). Start
+        // over instead of ignoring the tap: every step skips what is already
+        // granted, so a restart only asks for what is still missing.
         isRunning = true
         step = Step.RUNTIME
         run()

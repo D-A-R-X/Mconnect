@@ -523,6 +523,7 @@
         android:fontFamily="@font/inter_semibold"
         android:text="Allow all"
         android:textAllCaps="false"
+        android:textColor="?attr/colorForegroundInverse"
         android:textSize="16sp"
         app:backgroundTint="?attr/colorAccentPrimary"
         app:cornerRadius="12dp" />
