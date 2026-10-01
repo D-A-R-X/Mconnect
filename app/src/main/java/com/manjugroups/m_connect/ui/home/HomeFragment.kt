@@ -1200,6 +1200,8 @@ class HomeFragment : Fragment() {
         value(R.id.cardBookings, d?.bookingCount?.toString() ?: "–")
         value(R.id.cardCollection, d?.collectionAmount?.let { inrCompact(it) } ?: "–")
         value(R.id.cardBookingValue, d?.bookingValue?.let { inrCompact(it) } ?: "–")
+        bindFunnel()
+        bindConversionKpis()
     }
 
     /**
@@ -2285,21 +2287,17 @@ class HomeFragment : Fragment() {
         bindMarketingCard(root.findViewById(R.id.cardBookingValue), "Booking Value", "–", null, true, R.drawable.ic_3d_value, "#3B82F6", false)
         bindOverviewCards()
 
-        // Populate Funnel
-        fun setupFunnelRow(id: Int, label: String, value: String, percent: String, colorHex: String) {
-            val row = root.findViewById<View>(id) ?: return
-            row.findViewById<TextView>(R.id.tvFunnelLabel)?.text = label
-            row.findViewById<TextView>(R.id.tvFunnelValue)?.text = value
-            row.findViewById<TextView>(R.id.tvFunnelPercent)?.text = percent
-            row.findViewById<View>(R.id.vFunnelDot)?.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor(colorHex))
+        // Funnel. This card shipped with the same hardcoded demo figures as
+        // the tiles above it (984 → 541 → 239 → 37 → 15 → 2), so on a day
+        // with 0 calls it still drew a busy funnel. It is now bound to the
+        // dashboard response in bindFunnel(), stage for stage the same as the
+        // iOS Home funnel ("Interested" = warm + hot leads).
+        FUNNEL_STAGES.forEachIndexed { i, stage ->
+            val row = root.findViewById<View>(FUNNEL_ROW_IDS[i]) ?: return@forEachIndexed
+            row.findViewById<TextView>(R.id.tvFunnelLabel)?.text = stage.label
+            row.findViewById<View>(R.id.vFunnelDot)?.backgroundTintList =
+                android.content.res.ColorStateList.valueOf(Color.parseColor(stage.colorHex))
         }
-
-        setupFunnelRow(R.id.rowFunnel1, "Total Calls", "984", "100%", "#3B82F6")
-        setupFunnelRow(R.id.rowFunnel2, "Interested", "541", "55.0%", "#06B6D4")
-        setupFunnelRow(R.id.rowFunnel3, "Warm Leads", "239", "24.3%", "#F59E0B")
-        setupFunnelRow(R.id.rowFunnel4, "Hot Leads", "37", "3.8%", "#EF4444")
-        setupFunnelRow(R.id.rowFunnel5, "Site Visits", "15", "1.5%", "#8B5CF6")
-        setupFunnelRow(R.id.rowFunnel6, "Bookings", "2", "0.2%", "#10B981")
 
         // Helper to create 3D clay morphism drawable
         fun createClayDrawable(colorHex: String): android.graphics.drawable.Drawable {
@@ -2332,21 +2330,15 @@ class HomeFragment : Fragment() {
         // Animate funnel blocks assembling and apply clay background
         val funnelChart = root.findViewById<android.view.ViewGroup>(R.id.funnelChart)
         if (funnelChart != null) {
-            val colors = listOf("#3B82F6", "#06B6D4", "#F59E0B", "#EF4444", "#8B5CF6", "#10B981")
-            val values = listOf("984", "541", "239", "37", "15", "2")
-            
             // Set up LayoutAnimationController for staggered assembly animation
             val jumpAnim = android.view.animation.AnimationUtils.loadAnimation(requireContext(), R.anim.anim_jump_in)
             val controller = android.view.animation.LayoutAnimationController(jumpAnim, 0.2f)
             funnelChart.layoutAnimation = controller
 
-            for (i in 0 until funnelChart.childCount) {
-                val block = funnelChart.getChildAt(i) as? TextView
-                if (block != null && i < colors.size) {
-                    block.background = createClayDrawable(colors[i])
-                    block.text = values[i]
-                }
+            FUNNEL_STAGES.forEachIndexed { i, stage ->
+                (funnelChart.getChildAt(i) as? TextView)?.background = createClayDrawable(stage.colorHex)
             }
+            bindFunnel()
             funnelChart.startLayoutAnimation()
             
             // Add click interaction
@@ -2387,48 +2379,95 @@ class HomeFragment : Fragment() {
             )
         }
 
-        // Populate Conversion KPIs
-        fun setupKpi(id: Int, title: String, value: String, trend: String, iconRes: Int, colorHex: String, index: Int) {
+        // Conversion KPIs. Same story as the funnel: "55.0% ↑3.2%" was a
+        // constant. The four ratios are computed in bindConversionKpis(), as
+        // on iOS. The trend pill / sparkline had no data behind them and are
+        // hidden rather than decorated.
+        fun setupKpi(id: Int, title: String, iconRes: Int, colorHex: String) {
             val card = root.findViewById<View>(id) ?: return
-            
-            val tintColor = Color.parseColor(colorHex)
-            
-            val tvTitle = card.findViewById<TextView>(R.id.tvConversionTitle)
-            tvTitle?.text = title
-            // DO NOT tint title, leave default color
-            
-            val tvValue = card.findViewById<TextView>(R.id.tvConversionValue)
-            tvValue?.text = value
-            tvValue?.setTextColor(tintColor)
-            
-            val tvTrend = card.findViewById<TextView>(R.id.tvConversionTrendValue)
-            tvTrend?.text = trend
-            // DO NOT tint trend, keep it green
-            
-            val arrowGraph = card.findViewById<ImageView>(R.id.ivConversionChart)
-            arrowGraph?.setColorFilter(tintColor)
-            
+            card.findViewById<TextView>(R.id.tvConversionTitle)?.text = title
+            card.findViewById<TextView>(R.id.tvConversionValue)?.setTextColor(Color.parseColor(colorHex))
+            card.findViewById<View>(R.id.llConversionTrend)?.visibility = View.GONE
+            card.findViewById<View>(R.id.ivConversionChart)?.visibility = View.GONE
             card.findViewById<ImageView>(R.id.ivConversionBadge)?.setImageResource(iconRes)
-            
-            // Animate graph arrow from start to end
-            if (arrowGraph != null) {
-                arrowGraph.post {
-                    arrowGraph.pivotX = 0f
-                    arrowGraph.scaleX = 0f
-                    
-                    val scaleAnim = android.animation.ObjectAnimator.ofFloat(arrowGraph, "scaleX", 0f, 1f)
-                    scaleAnim.duration = 800
-                    scaleAnim.interpolator = android.view.animation.DecelerateInterpolator()
-                    scaleAnim.startDelay = (200 + index * 100).toLong()
-                    scaleAnim.start()
-                }
-            }
         }
+        setupKpi(R.id.kpiInterest, "Interest\nRate", R.drawable.ic_3d_interest, "#3B82F6")
+        setupKpi(R.id.kpiWarmHot, "Warm to\nHot", R.drawable.ic_3d_warm_hot, "#EF4444")
+        setupKpi(R.id.kpiHotSite, "Hot to\nSite Visit", R.drawable.ic_3d_hot_site, "#F59E0B")
+        setupKpi(R.id.kpiSiteBooking, "Site Visit to\nBooking", R.drawable.ic_3d_site_booking, "#10B981")
+        bindConversionKpis()
+    }
 
-        setupKpi(R.id.kpiInterest, "Interest\nRate", "55.0%", "3.2%", R.drawable.ic_3d_interest, "#3B82F6", 0)
-        setupKpi(R.id.kpiWarmHot, "Warm to\nHot", "15.5%", "1.8%", R.drawable.ic_3d_warm_hot, "#EF4444", 1)
-        setupKpi(R.id.kpiHotSite, "Hot to\nSite Visit", "40.5%", "5.6%", R.drawable.ic_3d_hot_site, "#F59E0B", 2)
-        setupKpi(R.id.kpiSiteBooking, "Site Visit to\nBooking", "13.3%", "6.2%", R.drawable.ic_3d_site_booking, "#10B981", 3)
+    private class FunnelStage(
+        val label: String,
+        val colorHex: String,
+        val count: (com.manjugroups.m_connect.network.MobileDashboardResponse) -> Int?,
+    )
+
+    /** Top-to-bottom stages of the day's funnel, each read off the dashboard
+     *  response (the web executive dashboard slices the same fields). Bookings
+     *  is nullable there — permission-gated / not yet deployed — so it can be
+     *  "–" while the rest are numbers. */
+    private val FUNNEL_STAGES = listOf(
+        FunnelStage("Total Calls", "#3B82F6") { it.totalCalls },
+        FunnelStage("Interested", "#06B6D4") { it.warm + it.hot },
+        FunnelStage("Warm Leads", "#F59E0B") { it.warm },
+        FunnelStage("Hot Leads", "#EF4444") { it.hot },
+        FunnelStage("Site Visits", "#8B5CF6") { it.svVisitsFixed },
+        FunnelStage("Bookings", "#10B981") { it.bookingCount },
+    )
+    private val FUNNEL_ROW_IDS = listOf(R.id.rowFunnel1, R.id.rowFunnel2, R.id.rowFunnel3, R.id.rowFunnel4, R.id.rowFunnel5, R.id.rowFunnel6)
+    private val FUNNEL_BAR_IDS = listOf(R.id.funnelBar1, R.id.funnelBar2, R.id.funnelBar3, R.id.funnelBar4, R.id.funnelBar5, R.id.funnelBar6)
+
+    /**
+     * Writes the selected day's counts into the funnel card. Bar widths are
+     * proportional to the stage's share of the widest stage (floor 32dp so a
+     * zero still has a readable block), so the shape reflects the numbers
+     * instead of a fixed taper that looked identical on every day. Before
+     * data lands every stage shows "–".
+     */
+    private fun bindFunnel() {
+        val root = _binding?.root ?: return
+        val d = vpDashboardData
+        val counts = FUNNEL_STAGES.map { stage -> d?.let(stage.count) }
+        val top = counts.firstOrNull() ?: 0
+        val widest = counts.filterNotNull().maxOrNull() ?: 0
+        val density = resources.displayMetrics.density
+        val maxW = (120 * density).roundToInt()
+        val minW = (32 * density).roundToInt()
+        counts.forEachIndexed { i, n ->
+            val row = root.findViewById<View>(FUNNEL_ROW_IDS[i])
+            row?.findViewById<TextView>(R.id.tvFunnelValue)?.text = n?.toString() ?: "–"
+            row?.findViewById<TextView>(R.id.tvFunnelPercent)?.text = when {
+                n == null || top == 0 -> "–"
+                i == 0 -> "100%"
+                else -> "%.1f%%".format(n * 100.0 / top)
+            }
+            val bar = root.findViewById<TextView>(FUNNEL_BAR_IDS[i]) ?: return@forEachIndexed
+            bar.text = n?.toString() ?: "–"
+            val w = if (n == null || widest == 0) minW else maxOf(minW, (maxW * n.toDouble() / widest).roundToInt())
+            bar.layoutParams = bar.layoutParams.apply { width = w }
+        }
+    }
+
+    /**
+     * Ratios for the selected day, from the same counts as the funnel (iOS
+     * parity): interested ÷ calls, hot ÷ warm, site visits ÷ hot, bookings ÷
+     * site visits. A zero
+     * denominator (or a missing bookings figure) is "–", never 0%.
+     */
+    private fun bindConversionKpis() {
+        val root = _binding?.root ?: return
+        val d = vpDashboardData
+        fun ratio(num: Int?, den: Int?): String =
+            if (num == null || den == null || den == 0) "–" else "%.1f%%".format(num * 100.0 / den)
+        fun set(id: Int, text: String) {
+            root.findViewById<View>(id)?.findViewById<TextView>(R.id.tvConversionValue)?.text = text
+        }
+        set(R.id.kpiInterest, ratio(d?.let { it.warm + it.hot }, d?.totalCalls))
+        set(R.id.kpiWarmHot, ratio(d?.hot, d?.warm))
+        set(R.id.kpiHotSite, ratio(d?.svVisitsFixed, d?.hot))
+        set(R.id.kpiSiteBooking, ratio(d?.bookingCount, d?.svVisitsFixed))
     }
 
     /**
