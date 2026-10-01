@@ -321,47 +321,69 @@ class CpApprovalQueueFragment : Fragment() {
             item.staffRemark?.takeIf { it.isNotBlank() }
                 ?.let { "Staff reason" to it },
         )
-        if (evidence.isNotEmpty()) {
+        // Proof photo on the left, the location / outcome / reason box on the
+        // right, side by side; either one alone takes the full width.
+        val photoUrl = item.photoUrl?.takeIf { it.isNotBlank() }
+        val photoSize = dp(112)
+        if (evidence.isNotEmpty() || photoUrl != null) {
             card.addView(LinearLayout(requireContext()).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(dp(12), dp(8), dp(12), dp(8))
-                background = roundedBg("#F8FAFC", "#EAECF0", 10)
-                evidence.forEach { (label, value) ->
-                    addView(TextView(requireContext()).apply {
-                        text = label
-                        textSize = 11f
-                        setTextColor(Color.parseColor("#667085"))
-                        includeFontPadding = false
-                        typeface = font(R.font.inter_medium) ?: typeface
-                        setPadding(0, dp(3), 0, 0)
-                    })
-                    addView(TextView(requireContext()).apply {
-                        text = value
-                        textSize = 12f
-                        setTextColor(
-                            Color.parseColor(if (label == "Location") "#B54708" else "#101828"),
-                        )
-                        includeFontPadding = false
-                        typeface = font(R.font.inter_regular) ?: typeface
-                        setPadding(0, dp(2), 0, dp(3))
-                    })
-                }
+                orientation = LinearLayout.HORIZONTAL
                 layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT,
                 ).apply { topMargin = dp(10) }
-            })
-        }
 
-        item.photoUrl?.takeIf { it.isNotBlank() }?.let { url ->
-            card.addView(ImageView(requireContext()).apply {
-                layoutParams = LinearLayout.LayoutParams(dp(120), dp(120)).apply {
-                    topMargin = dp(10)
+                photoUrl?.let { url ->
+                    addView(ImageView(requireContext()).apply {
+                        layoutParams = LinearLayout.LayoutParams(photoSize, photoSize).apply {
+                            if (evidence.isNotEmpty()) rightMargin = dp(10)
+                        }
+                        scaleType = ImageView.ScaleType.CENTER_CROP
+                        background = roundedBg("#F2F4F7", "#E4E7EC", 10)
+                        clipToOutline = true
+                        contentDescription = "Visit photo"
+                        load(url)
+                    })
                 }
-                scaleType = ImageView.ScaleType.CENTER_CROP
-                background = roundedBg("#F2F4F7", "#E4E7EC", 8)
-                clipToOutline = true
-                load(url)
+
+                if (evidence.isNotEmpty()) {
+                    addView(LinearLayout(requireContext()).apply {
+                        orientation = LinearLayout.VERTICAL
+                        gravity = Gravity.CENTER_VERTICAL
+                        setPadding(dp(12), dp(8), dp(12), dp(8))
+                        background = roundedBg("#F8FAFC", "#EAECF0", 10)
+                        // Same height as the photo beside it, so the pair
+                        // reads as one block.
+                        if (photoUrl != null) minimumHeight = photoSize
+                        evidence.forEach { (label, value) ->
+                            addView(TextView(requireContext()).apply {
+                                text = label
+                                textSize = 11f
+                                setTextColor(Color.parseColor("#667085"))
+                                includeFontPadding = false
+                                typeface = font(R.font.inter_medium) ?: typeface
+                                setPadding(0, dp(3), 0, 0)
+                            })
+                            addView(TextView(requireContext()).apply {
+                                text = value
+                                textSize = 12f
+                                setTextColor(
+                                    Color.parseColor(if (label == "Location") "#B54708" else "#101828"),
+                                )
+                                includeFontPadding = false
+                                typeface = font(R.font.inter_regular) ?: typeface
+                                maxLines = 3
+                                ellipsize = android.text.TextUtils.TruncateAt.END
+                                setPadding(0, dp(2), 0, dp(3))
+                            })
+                        }
+                        layoutParams = LinearLayout.LayoutParams(
+                            0,
+                            ViewGroup.LayoutParams.WRAP_CONTENT,
+                            1f,
+                        )
+                    })
+                }
             })
         }
 
