@@ -1890,6 +1890,18 @@ class AttendanceHistoryFragment : Fragment() {
     /** Colour + label the status pill from the record's approved bucket
      *  (falls back to Present when time was logged, else Pending). */
     private fun applyAttendanceStatus(tv: TextView, record: AttendanceApprovalRecord) {
+        // Web order: hold, system penalty, "still with an approver", verdict.
+        val pending = when {
+            isOnHold(record.holdStatus) -> "On Hold"
+            record.hasAbsentPenalty() -> null
+            else -> awaitingApprovalLabel(record.approvalStage)
+        }
+        if (pending != null) {
+            tv.text = pending
+            tv.setBackgroundResource(R.drawable.bg_pill_yellow_light)
+            tv.setTextColor(Color.parseColor("#B54708"))
+            return
+        }
         val bucket = record.approvedAttendance?.lowercase(Locale.US)
             ?: if ((record.totalMinutes ?: 0) > 0) "present" else null
         when (bucket) {

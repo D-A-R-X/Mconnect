@@ -4,6 +4,22 @@ import com.manjugroups.m_connect.network.AttendanceApprovalRecord
 import com.manjugroups.m_connect.network.AttendanceRecord
 import java.util.Locale
 
+/**
+ * Web parity: while a day is still with an approver its verdict is only
+ * proposed, so the web shows "Awaiting for HR/RO" rather than Present or
+ * Absent. The apps showed the proposed verdict as final - a day HR had not
+ * decided yet read "Absent".
+ */
+internal fun awaitingApprovalLabel(approvalStage: String?): String? =
+    when (approvalStage?.trim()?.lowercase(Locale.US)) {
+        "pending-hr", "hr_review" -> "Awaiting HR"
+        "pending-manager", "manager_review" -> "Awaiting RO"
+        else -> null
+    }
+
+internal fun isOnHold(holdStatus: String?): Boolean =
+    holdStatus?.trim()?.equals("on-hold", ignoreCase = true) == true
+
 /** Shared web-parity rules for system-enforced absent attendance rows. */
 internal fun AttendanceRecord.hasAbsentPenalty(): Boolean =
     approvedAttendance.isAbsentValue() &&

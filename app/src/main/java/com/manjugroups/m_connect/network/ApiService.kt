@@ -1819,6 +1819,11 @@ data class AttendanceRecord(
     val penaltyReason: String? = null,
     val penaltyTaskId: String? = null,
     val penaltyTaskUrl: String? = null,
+    // Where the day's approval stands. While it is "pending-hr" / "hr_review"
+    // (or "pending-manager" / "manager_review") approvedAttendance is only a
+    // PROPOSED verdict, and the web shows "Awaiting for HR/RO" instead of it.
+    val approvalStage: String? = null,
+    val holdStatus: String? = null,
     // Fines / Late info.
     // lateFineDeduction is the server-computed fine (₹) returned by
     // /api/hr/attendance/my (staffAttendance.getMyAttendance). fineAmount
@@ -2106,6 +2111,11 @@ data class AttendanceApprovalRecord(
     val lateMinutes: Int? = null,
     val penaltyKind: String? = null,
     val penaltyReason: String? = null,
+    // Where the day's approval stands. While it is "pending-hr" / "hr_review"
+    // (or "pending-manager" / "manager_review") approvedAttendance is only a
+    // PROPOSED verdict, and the web shows "Awaiting for HR/RO" instead of it.
+    val approvalStage: String? = null,
+    val holdStatus: String? = null,
     val penaltyTaskId: String? = null,
     val penaltyTaskUrl: String? = null,
 )

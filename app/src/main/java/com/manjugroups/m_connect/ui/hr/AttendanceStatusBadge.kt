@@ -53,6 +53,18 @@ object AttendanceStatusBadge {
             return
         }
 
+        // ── Web order: hold, then a system penalty, then "still with an
+        // approver", and only then the verdict itself ──
+        if (isOnHold(record.holdStatus)) {
+            return set(pill, "On Hold", FG_PENDING, R.drawable.bg_pill_yellow_light)
+        }
+        if (record.hasAbsentPenalty()) {
+            return set(pill, "Absent · Penalty", FG_ABSENT, R.drawable.bg_pill_red_light)
+        }
+        awaitingApprovalLabel(record.approvalStage)?.let { awaiting ->
+            return set(pill, awaiting, FG_PENDING, R.drawable.bg_pill_yellow_light)
+        }
+
         // ── HR verdict wins regardless of workflow status ──
         // approvedAttendance is the HR-finalized field; trusting it
         // alone fixes the case where biometric/auto-approved rows
