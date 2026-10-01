@@ -116,7 +116,9 @@ class CpApprovalQueueFragment : Fragment() {
         // remarks here, which a half-height sheet made cramped.
         val page = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.WHITE)
+            // Grey page, white cards (as on CP Visits): with both white the
+            // cards ran into the page.
+            setBackgroundColor(themeColor(R.attr.colorSurfaceSecondary))
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -142,7 +144,7 @@ class CpApprovalQueueFragment : Fragment() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(8), dp(8), dp(16), dp(8))
-            setBackgroundColor(Color.WHITE)
+            setBackgroundColor(themeColor(R.attr.colorSurfacePrimary))
         }
         bar.addView(ImageView(requireContext()).apply {
             setImageResource(R.drawable.ic_arrow_left)
@@ -227,7 +229,11 @@ class CpApprovalQueueFragment : Fragment() {
         val card = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(14))
-            background = roundedBg("#FFFFFF", "#E4E7EC")
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = dp(12).toFloat()
+                setColor(themeColor(R.attr.colorSurfacePrimary))
+                setStroke(dp(1), themeColor(R.attr.colorBorder))
+            }
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -604,6 +610,16 @@ class CpApprovalQueueFragment : Fragment() {
         // did on dismiss, so the CP list and the library count refresh.
         notifyChanged()
         super.onDestroyView()
+    }
+
+    private fun themeColor(attr: Int): Int {
+        val value = android.util.TypedValue()
+        requireContext().theme.resolveAttribute(attr, value, true)
+        return if (value.resourceId != 0) {
+            androidx.core.content.ContextCompat.getColor(requireContext(), value.resourceId)
+        } else {
+            value.data
+        }
     }
 
     private fun roundedBg(fill: String, stroke: String, radiusDp: Int = 12) =
