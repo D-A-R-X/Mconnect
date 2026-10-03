@@ -383,6 +383,9 @@ class AdminFleetTripsFragment : Fragment() {
             onAllocateClick = { trip -> openAllocateSheet(trip) },
             onManageClick = { trip -> openManageSheet(trip) },
             onCompleteClick = { trip -> openCompleteOfflineSheet(trip) },
+            onPendingOptions = if (!useMmsFleet) {
+                { trip -> openPendingTripOptions(trip) }
+            } else null,
         ).also {
             it.canCompleteOffline = if (session.isExternalFleetAgencyOperator) {
                 session.canBillExternalFleet
@@ -451,6 +454,26 @@ class AdminFleetTripsFragment : Fragment() {
                 if (response?.success == true) Toast.LENGTH_SHORT else Toast.LENGTH_LONG,
             ).show()
         }
+    }
+
+    /**
+     * Pending (not-yet-allocated) external trips open a small chooser on tap:
+     * allocate a vehicle, or call the trip off. Cancelling reuses the external
+     * status-update flow (reason = cancelled) that cancels the Site Visit, so a
+     * trip can be cancelled straight from Pending without first allocating.
+     */
+    private fun openPendingTripOptions(trip: AdminTrip) {
+        val labels = arrayOf("Allocate vehicle", "Cancel visit")
+        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setTitle("Site visit")
+            .setItems(labels) { _, which ->
+                when (which) {
+                    0 -> openAllocateSheet(trip)
+                    1 -> promptStatusReason(trip, "cancelled", "Cancel visit")
+                }
+            }
+            .setNegativeButton("Close", null)
+            .show()
     }
 
     private fun openTripStatusDialog(trip: AdminTrip) {
@@ -1347,6 +1370,9 @@ class AdminFleetTripsFragment : Fragment() {
         private val onAllocateClick: (AdminTrip) -> Unit,
         private val onManageClick: (AdminTrip) -> Unit,
         private val onCompleteClick: (AdminTrip) -> Unit,
+        // External-fleet only: a pending (not-yet-allocated) trip can be called
+        // off before any vehicle is assigned. Null in MMS mode.
+        private val onPendingOptions: ((AdminTrip) -> Unit)? = null,
     ) : RecyclerView.Adapter<AdminTripsAdapter.ViewHolder>() {
 
         private var items: List<AdminTrip> = emptyList()
@@ -1493,6 +1519,7 @@ class AdminFleetTripsFragment : Fragment() {
                 // + reassign / remove driver). Pending cards keep Allocate only.
                 binding.root.setOnClickListener {
                     if (allocated) onManageClick(item)
+                    else onPendingOptions?.invoke(item)
                 }
             }
 

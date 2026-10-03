@@ -12,6 +12,7 @@ import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.setFragmentResultListener
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.bottomsheet.BottomSheetBehavior
@@ -92,6 +93,9 @@ class ApplyPermissionBottomSheet : BottomSheetDialogFragment() {
         fieldPermissionDate.setOnClickListener { showDatePicker() }
         fieldPermissionDuration.setOnClickListener { showDurationPicker() }
         btnSubmit.setOnClickListener { submitPermission() }
+        view.findViewById<EditText>(R.id.etReason).doAfterTextChanged {
+            updateSubmitButtonState()
+        }
 
         setFragmentResultListener(PermDurationPickerBottomSheet.RESULT_KEY_DURATION) { _, bundle ->
             selectedFromTime = bundle.getString(PermDurationPickerBottomSheet.KEY_FROM_TIME)
@@ -108,7 +112,12 @@ class ApplyPermissionBottomSheet : BottomSheetDialogFragment() {
     private fun updateSubmitButtonState() {
         val view = view ?: return
         val btnSubmit = view.findViewById<View>(R.id.btnSubmit)
-        val isEnabled = selectedDate != null && selectedFromTime != null && selectedToTime != null
+        val hasReason = view.findViewById<EditText>(R.id.etReason)
+            .text
+            ?.toString()
+            ?.trim()
+            ?.isNotEmpty() == true
+        val isEnabled = selectedDate != null && selectedFromTime != null && selectedToTime != null && hasReason
         if (isEnabled) {
             btnSubmit.setBackgroundResource(R.drawable.bg_apply_leave_btn_enabled)
             btnSubmit.isEnabled = true
@@ -189,9 +198,9 @@ class ApplyPermissionBottomSheet : BottomSheetDialogFragment() {
         val from = selectedFromTime
         val to = selectedToTime
         val etReason = view?.findViewById<EditText>(R.id.etReason)
-        val reason = etReason?.text?.toString()?.trim().orEmpty() // Optional
+        val reason = etReason?.text?.toString()?.trim().orEmpty()
 
-        if (date.isNullOrBlank() || from.isNullOrBlank() || to.isNullOrBlank()) {
+        if (date.isNullOrBlank() || from.isNullOrBlank() || to.isNullOrBlank() || reason.isBlank()) {
             toastSafe("Fill all required fields")
             return
         }
@@ -214,8 +223,6 @@ class ApplyPermissionBottomSheet : BottomSheetDialogFragment() {
                         fromTime = from,
                         toTime = to,
                         reason = reason,
-                        reportingToId = session.reportingToId,
-                        reportingToName = session.reportingToName,
                     )
                 )
                 if (resp.success) {
@@ -247,7 +254,16 @@ class ApplyPermissionBottomSheet : BottomSheetDialogFragment() {
                 }
             }
         }
-        return error.message ?: "Network error"
+        return when (error) {
+            is HttpException -> when (error.code()) {
+                400 -> "Please check the permission details and try again."
+                401 -> "Your session expired. Please sign in again."
+                403 -> "You are not allowed to apply this permission."
+                500 -> "Permission service is temporarily unavailable. Please try again shortly."
+                else -> "Could not submit the permission. Please try again."
+            }
+            else -> error.message ?: "Network error"
+        }
     }
 
     companion object {
