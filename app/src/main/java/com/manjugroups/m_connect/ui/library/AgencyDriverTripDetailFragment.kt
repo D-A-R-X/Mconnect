@@ -195,8 +195,10 @@ class AgencyDriverTripDetailFragment : Fragment(), OnMapReadyCallback {
 
         when {
             currentPhase == "completed" -> disable("Completed")
-            // The backend only allows trip actions on the scheduled date.
-            !canOperateToday -> disable("Not scheduled for today")
+            // Agency-driver closing proof has no expiry. The server accepts a
+            // late odometer upload/billing completion, so do not strand an
+            // external driver behind an old scheduled-date response.
+            internal && !canOperateToday -> disable("Not scheduled for today")
             // Not started yet → capture OTP + odometer photo + start km.
             currentPhase != "in_progress" && currentPhase != "on_site" &&
                 currentPhase != "picked_from_site" ->

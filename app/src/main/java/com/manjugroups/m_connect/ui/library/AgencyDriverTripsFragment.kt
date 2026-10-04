@@ -37,7 +37,7 @@ class AgencyDriverTripsFragment : Fragment() {
     private lateinit var session: SessionManager
     private val api by lazy { TravelDeskApi.create() }
 
-    private enum class Tab { ASSIGNED, COMPLETED, EXPIRED }
+    private enum class Tab { ASSIGNED, COMPLETED }
     private var selectedTab = Tab.ASSIGNED
     private var allTrips: List<TravelDeskDriverTrip> = emptyList()
 
@@ -80,7 +80,6 @@ class AgencyDriverTripsFragment : Fragment() {
 
         binding.tabAssigned.setOnClickListener { selectTab(Tab.ASSIGNED) }
         binding.tabCompleted.setOnClickListener { selectTab(Tab.COMPLETED) }
-        binding.tabExpired.setOnClickListener { selectTab(Tab.EXPIRED) }
         applyTabStyles()
 
         binding.swipeDriverTrips.setOnRefreshListener { loadTrips() }
@@ -105,7 +104,6 @@ class AgencyDriverTripsFragment : Fragment() {
         val segments = listOf(
             binding.tabAssigned to Tab.ASSIGNED,
             binding.tabCompleted to Tab.COMPLETED,
-            binding.tabExpired to Tab.EXPIRED,
         )
         for ((view, tab) in segments) {
             val isActive = selectedTab == tab
@@ -152,22 +150,13 @@ class AgencyDriverTripsFragment : Fragment() {
         (trip.phase ?: "").equals("completed", ignoreCase = true) ||
             trip.travelDeskEndedAt != null
 
-    /** Not finished, but its scheduled slot is already in the past. */
-    private fun isExpired(trip: TravelDeskDriverTrip) =
-        com.manjugroups.m_connect.util.VisitExpiry.isExpired(
-            scheduledDate = trip.scheduledDate,
-            scheduledTime = trip.pickupTime ?: trip.scheduledTime,
-            isDone = isCompleted(trip),
-            createdAtMillis = trip.createdAt,
-        )
-
     private fun render() {
         if (_binding == null) return
         val rows = when (selectedTab) {
             Tab.COMPLETED -> allTrips.filter { isCompleted(it) }
-            Tab.EXPIRED -> allTrips.filter { !isCompleted(it) && isExpired(it) }
-            // Assigned = live work: not finished, not past its day.
-            Tab.ASSIGNED -> allTrips.filter { !isCompleted(it) && !isExpired(it) }
+            // A late driver can still upload the closing odometer proof and
+            // finish billing, so every unfinished external trip remains active.
+            Tab.ASSIGNED -> allTrips.filter { !isCompleted(it) }
         }
         val container = binding.driverTripsContent
         container.removeAllViews()
@@ -175,7 +164,6 @@ class AgencyDriverTripsFragment : Fragment() {
             if (rows.isEmpty()) View.VISIBLE else View.GONE
         binding.tvDriverTripsEmpty.text = when (selectedTab) {
             Tab.COMPLETED -> "No completed trips yet."
-            Tab.EXPIRED -> "No expired trips."
             Tab.ASSIGNED -> "No trips assigned to you yet."
         }
         for (trip in rows) {
@@ -200,10 +188,8 @@ class AgencyDriverTripsFragment : Fragment() {
                 ?.let { "Vehicle: $it" } ?: "No vehicle"
 
         val completed = isCompleted(trip)
-        val expired = !completed && isExpired(trip)
         card.findViewById<TextView>(R.id.tvTripPhase).text = when {
             completed -> "Completed"
-            expired -> "Expired"
             else -> phaseLabel(phase)
         }
 
@@ -211,9 +197,9 @@ class AgencyDriverTripsFragment : Fragment() {
         val actionBtn = card.findViewById<View>(R.id.btnTripAction)
         // The card and its button both open the CP-style detail screen, which
         // shows the client location on a map and drives the Start/End capture
-        // flow. Completed and expired trips open the same screen read-only.
+        // flow. Completed trips open the same screen read-only.
         actionLabel.text = when {
-            completed || expired -> "View trip"
+            completed -> "View trip"
             phase == "in_progress" || phase == "on_site" || phase == "picked_from_site" -> "End trip"
             else -> "Start trip"
         }
