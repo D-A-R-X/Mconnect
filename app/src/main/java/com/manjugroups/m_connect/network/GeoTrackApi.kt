@@ -209,6 +209,17 @@ interface GeoTrackApi {
         @Body body: MarkClientMetRequest
     ): GeoTrackResponse
 
+    /**
+     * SV cum CP for a client who is out of station: no CP is created, a pending
+     * handoff goes to the GM to confirm on mobile (same as the telecaller Fix
+     * Site Visit on web).
+     */
+    @POST("api/marketing/outOfStationHandoffs/request")
+    suspend fun requestOutOfStationHandoff(
+        @Header("Authorization") token: String,
+        @Body body: OutOfStationHandoffRequest
+    ): OutOfStationHandoffResponse
+
     @POST("api/marketing/clientPlaceVisits/create")
     suspend fun createCpVisit(
         @Header("Authorization") token: String,
@@ -1212,6 +1223,29 @@ data class CreateCpVisitRequest(
     // Joint CP only: the SECOND participant. Ignored server-side for every
     // other cpType.
     val jointStaffIds: List<String>? = null,
+)
+
+data class OutOfStationHandoffRequest(
+    val clientName: String,
+    val mobileNumber: String,
+    val projectId: String,
+    val scheduledDate: String,
+    val scheduledTime: String? = null,
+    // Owner of the visit, as on a CP.
+    val lmoStaffId: String? = null,
+    // Proposed site incharge; the GM can change it before confirming.
+    val assignedStaffId: String? = null,
+    val visitAddress: String? = null,
+    val visitLat: Double? = null,
+    val visitLng: Double? = null,
+    val googleMapsLink: String? = null,
+    val notes: String? = null,
+)
+
+data class OutOfStationHandoffResponse(
+    val success: Boolean,
+    val handoffId: String? = null,
+    val error: String? = null,
 )
 
 data class CreateCpVisitResponse(

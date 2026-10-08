@@ -83,6 +83,8 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
     // Joint CP is an independent visit mode. The normal CP type remains the
     // visit purpose while this flag controls whether a second staff is added.
     private var isJointCp = false
+    // SV cum CP for a client who is out of station: routed to the GM.
+    private var isOutOfStation = false
     private var selectedJointPartner: StaffData? = null
     private var selectedReferralSource: ReferralSourceOption? = null
     private var selectedReferringClient: ReferralClientCandidate? = null
@@ -269,6 +271,11 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             isJointCp = checked
             applyCpConditionalVisibility()
         }
+        view.findViewById<android.widget.CompoundButton>(R.id.cbOutOfStation)
+            ?.setOnCheckedChangeListener { _, checked ->
+                isOutOfStation = checked
+                applyCpConditionalVisibility()
+            }
         etReferralSource.setOnClickListener { pickReferralSource(etReferralSource) }
         etReferringClient.setOnClickListener {
             pickReferringClient(etReferringClient, etPhone.text?.toString().orEmpty())
@@ -453,8 +460,9 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                 return@setOnClickListener
             }
 
+            val outOfStationHandoff = isOutOfStationHandoff()
             val staff = selectedStaff
-            if (staff == null || staff.id.isNullOrBlank()) {
+            if (!outOfStationHandoff && (staff == null || staff.id.isNullOrBlank())) {
                 toast("Select field staff")
                 return@setOnClickListener
             }
@@ -490,7 +498,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
 
             // A Joint CP is meaningless with one person on it.
             var jointCompanionIds: List<String>? = null
-            if (isJointCp) {
+            if (isJointCp && staff != null) {
                 JointCpTemplateGuard.rejection(staff, selectedJointPartner)?.let {
                     toast(it)
                     return@setOnClickListener
@@ -515,6 +523,19 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
 
             if (selectedDate.isBlank() || selectedTime.isBlank()) {
                 toast("Select Date & Time")
+                return@setOnClickListener
+            }
+
+            if (outOfStationHandoff) {
+                submitOutOfStationHandoff(
+                    btnSubmit = btnSubmit,
+                    clientName = clientNameInput,
+                    phone = phone,
+                    projectId = project.id!!,
+                    lmoStaffId = lmo.id,
+                    fieldStaffId = staff?.id?.takeIf { it.isNotBlank() },
+                    view = view,
+                )
                 return@setOnClickListener
             }
 
@@ -652,7 +673,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                             // Selection order carries no authority. The server resolves
                             // effective IAM templates, snapshots both roles, and rewrites
                             // this compatibility owner when creating a Joint CP.
-                            assignedStaffId = staff.id,
+                            assignedStaffId = staff!!.id!!,
                             lmoStaffId = lmo.id,
                             scheduledDate = selectedDate,
                             scheduledTime = selectedTime,
@@ -1286,9 +1307,82 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
+    private fun isOutOfStationHandoff(): Boolean =
+        isOutOfStation && !isJointCp && selectedCpType?.id == "sv_cum_cp"
+
+    /**
+     * Out-of-station SV cum CP: no CP is created. A pending handoff goes to the
+     * GM, who confirms it on mobile and that creates the site visit. The
+     * address and pin are passed on when given but not required, since the
+     * client is not at home.
+     */
+    private fun submitOutOfStationHandoff(
+        btnSubmit: View,
+        clientName: String,
+        phone: String,
+        projectId: String,
+        lmoStaffId: String?,
+        fieldStaffId: String?,
+        view: View,
+    ) {
+        val addressParts = listOf(
+            R.id.etDoorNo, R.id.etStreet, R.id.etAddressLine1, R.id.etAddressLine2,
+            R.id.etCity, R.id.etState, R.id.etPincode,
+        ).mapNotNull { id ->
+            view.findViewById<EditText>(id)?.text?.toString()?.trim()?.takeIf { it.isNotBlank() }
+        }
+        val notes = view.findViewById<EditText>(R.id.etNotes)?.text?.toString()?.trim()
+        val request = com.manjugroups.m_connect.network.OutOfStationHandoffRequest(
+            clientName = clientName,
+            mobileNumber = phone,
+            projectId = projectId,
+            scheduledDate = selectedDate,
+            scheduledTime = selectedTime.takeIf { it.isNotBlank() },
+            lmoStaffId = lmoStaffId,
+            assignedStaffId = fieldStaffId,
+            visitAddress = addressParts.joinToString(", ").takeIf { it.isNotBlank() },
+            visitLat = pinLat,
+            visitLng = pinLng,
+            googleMapsLink = pinMapsLink.takeIf { it.isNotBlank() },
+            notes = notes?.takeIf { it.isNotBlank() },
+        )
+        btnSubmit.isEnabled = false
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = geoApi.requestOutOfStationHandoff(session.bearerToken, request)
+                if (!resp.success) {
+                    toast(cleanServerErrorMessage(resp.error ?: "Failed to send to the GM"))
+                    return@launch
+                }
+                toast("Client is out of station: sent to the GM to confirm")
+                dismissAllowingStateLoss()
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (e: Exception) {
+                toast(serverErrorMessage(e) ?: e.message ?: "Failed to send to the GM")
+            } finally {
+                btnSubmit.isEnabled = true
+            }
+        }
+    }
+
     /** Shows the partner field only while Joint CP mode is enabled. */
     private fun applyCpConditionalVisibility() {
         val root = view ?: return
+        val canBeOutOfStation = !isJointCp && selectedCpType?.id == "sv_cum_cp"
+        root.findViewById<View>(R.id.blockOutOfStation)?.visibility =
+            if (canBeOutOfStation) View.VISIBLE else View.GONE
+        root.findViewById<View>(R.id.tvOutOfStationHint)?.visibility =
+            if (canBeOutOfStation && isOutOfStation) View.VISIBLE else View.GONE
+        root.findViewById<View>(R.id.btnSubmit)?.let { btn ->
+            if (btn is android.widget.TextView) {
+                btn.text = if (canBeOutOfStation && isOutOfStation) {
+                    getString(R.string.cp_send_to_gm)
+                } else {
+                    getString(R.string.cp_create_visit)
+                }
+            }
+        }
         val isJoint = isJointCp
         root.findViewById<View>(R.id.blockJointPartner)?.visibility =
             if (isJoint) View.VISIBLE else View.GONE

@@ -135,6 +135,36 @@
                 app:tint="#667085" />
         </LinearLayout>
 
+        <!-- SV cum CP only: an out-of-station client goes to the GM to confirm
+             instead of becoming a CP, as on the telecaller Fix Site Visit. -->
+        <LinearLayout
+            android:id="@+id/blockOutOfStation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <com.google.android.material.checkbox.MaterialCheckBox
+                android:id="@+id/cbOutOfStation"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_medium"
+                android:text="@string/cp_client_out_of_station"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/tvOutOfStationHint"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_regular"
+                android:text="@string/cp_client_out_of_station_hint"
+                android:textColor="?attr/colorForegroundSecondary"
+                android:textSize="11sp"
+                android:visibility="gone" />
+        </LinearLayout>
+
         <LinearLayout
             android:id="@+id/blockNewClientReferralSource"
             android:layout_width="match_parent"

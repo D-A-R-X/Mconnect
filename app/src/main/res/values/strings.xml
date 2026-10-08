@@ -40,5 +40,9 @@
     <string name="employee_id_coming_soon">Employee ID sign in will be available soon.</string>
     <string name="joint_cp">Joint CP</string>
     <string name="joint_cp_toggle_summary">Add a second staff to this visit</string>
+    <string name="cp_client_out_of_station">Client is out of station</string>
+    <string name="cp_client_out_of_station_hint">No CP is created. The GM confirms on mobile and that creates the site visit.</string>
+    <string name="cp_send_to_gm">Send to GM</string>
+    <string name="cp_create_visit">Create visit</string>
     <string name="back_button_description">Back</string>
 </resources>
