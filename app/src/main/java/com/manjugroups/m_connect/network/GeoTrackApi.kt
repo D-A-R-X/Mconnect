@@ -1298,7 +1298,19 @@ data class SetOutcomeRequest(
 // ── Out-of-geofence CP completion GM approval ──
 data class CpApprovalActionRequest(val id: String)
 data class CpApprovalRejectRequest(val id: String, val remark: String)
-data class CpGeofenceRemarkRequest(val id: String, val remark: String)
+/**
+ * The out-of-geofence reason, plus where the phone was when it was given so the
+ * web CP flow shows "More than 300 m: YES" and the reason immediately. The
+ * position fields are optional (Gson drops nulls) and an older backend simply
+ * ignores them.
+ */
+data class CpGeofenceRemarkRequest(
+    val id: String,
+    val remark: String,
+    val lat: Double? = null,
+    val lng: Double? = null,
+    val distanceMeters: Double? = null,
+)
 
 data class CpApprovalsResponse(
     val success: Boolean = false,

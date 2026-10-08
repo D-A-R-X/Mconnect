@@ -564,6 +564,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         setFragmentResultListener(CpClientSeenBottomSheet.RESULT_KEY) { _, bundle ->
             val clientSeen = bundle.getBoolean(CpClientSeenBottomSheet.KEY_CLIENT_SEEN)
             if (clientSeen) {
+                recordClientMetEarly()
                 startCpYesPath()
             } else {
                 startCpNoPath()
@@ -2432,7 +2433,13 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                         try {
                             val response = geoApi.setCpGeofenceRemark(
                                 session.bearerToken,
-                                com.manjugroups.m_connect.network.CpGeofenceRemarkRequest(cpId, reason),
+                                com.manjugroups.m_connect.network.CpGeofenceRemarkRequest(
+                                    id = cpId,
+                                    remark = reason,
+                                    lat = effLat,
+                                    lng = effLng,
+                                    distanceMeters = distance.toDouble(),
+                                ),
                             )
                             check(response.success) {
                                 response.error ?: "Could not save the completion reason"
@@ -3825,6 +3832,32 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     // OTP before showing the outcome form. Reuse the non-CP arrival pipeline:
     // requestArrivalOtp → camera → upload → OTP sheet → onArrivalOtpVerified
     // (which already routes CP visits to the outcome bottom sheet).
+    /**
+     * Tells the server the moment the staff says they met the client, so the
+     * web CP flow shows "Did you see the client?: YES" before the OTP. Best
+     * effort and non-blocking: the outcome save records it again, and a failure
+     * here never stops the photo + OTP flow.
+     *
+     * Single-staff CPs only. For a Joint CP the same call also starts that
+     * person's leg and saves an outcome draft, which must stay with the
+     * existing Joint CP workflow.
+     */
+    private fun recordClientMetEarly() {
+        if (isJointCpWorkflow()) return
+        val cpId = cpVisitId?.takeIf { it.isNotBlank() } ?: return
+        val token = session.bearerToken
+        viewLifecycleOwner.lifecycleScope.launch {
+            runCatching {
+                geoApi.markClientMet(
+                    token,
+                    com.manjugroups.m_connect.network.MarkClientMetRequest(id = cpId, clientMet = true),
+                )
+            }.onFailure {
+                android.util.Log.d("TripNav", "Early client-met update failed", it)
+            }
+        }
+    }
+
     private fun startCpYesPath() {
         cpNoPathPhotoCapture = false
         if (ContextCompat.checkSelfPermission(
