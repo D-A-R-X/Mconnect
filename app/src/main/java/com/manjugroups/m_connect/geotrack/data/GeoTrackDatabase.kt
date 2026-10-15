@@ -14,7 +14,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         PendingChatMessageEntity::class,
         PendingPunchEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class GeoTrackDatabase : RoomDatabase() {
@@ -97,6 +97,15 @@ abstract class GeoTrackDatabase : RoomDatabase() {
             }
         }
 
+        // V8 preserves the optional staff note submitted with the selfie
+        // attendance flow, so a locally accepted punch has the same payload
+        // when it is replayed after connectivity returns.
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE pending_punches ADD COLUMN remarks TEXT")
+            }
+        }
+
         private val MIGRATION_4_5 = object : Migration(4, 5) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
@@ -129,7 +138,7 @@ abstract class GeoTrackDatabase : RoomDatabase() {
                 )
                     .addMigrations(
                         MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4,
-                        MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
+                        MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8,
                     )
                     // A DOWNGRADE must never brick the app. Room has no reverse
                     // migrations, so a phone that ran a newer build and then went

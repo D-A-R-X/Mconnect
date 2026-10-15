@@ -25,6 +25,8 @@ data class PendingPunchEntity(
     val latitude: Double? = null,
     val longitude: Double? = null,
     val address: String? = null,
+    /** Optional staff note captured with the attendance punch. */
+    val remarks: String? = null,
     /** Absolute path to the proof photo file (uploaded on flush), if any. */
     val photoPath: String? = null,
     /**

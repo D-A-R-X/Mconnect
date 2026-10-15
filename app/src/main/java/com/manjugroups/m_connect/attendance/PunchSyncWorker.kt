@@ -87,6 +87,7 @@ class PunchSyncWorker(
                     latitude = p.latitude,
                     longitude = p.longitude,
                     address = p.address,
+                    remarks = p.remarks,
                     photo = storageId,
                     deviceId = p.deviceId,
                     source = p.source,
@@ -101,8 +102,8 @@ class PunchSyncWorker(
                 // location, etc.) both clear the row — retrying a rejection would
                 // loop forever, and a duplicate-rejection means it already landed.
                 dao.deleteById(p.id)
+                deletePhoto(p.photoPath)
                 if (resp.success) {
-                    deletePhoto(p.photoPath)
                     GeoTrackBootstrapSync.onPunchRecorded(
                         context = applicationContext,
                         punchedIn = p.isPunchIn,

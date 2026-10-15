@@ -40,6 +40,7 @@ object OfflinePunchQueue {
         longitude: Double?,
         photoFile: File?,
         address: String? = null,
+        remarks: String? = null,
     ): Boolean = try {
         val persistedPhoto = photoFile
             ?.takeIf { it.exists() }
@@ -69,6 +70,7 @@ object OfflinePunchQueue {
                 latitude = latitude,
                 longitude = longitude,
                 address = address,
+                remarks = remarks?.takeIf { it.isNotBlank() },
                 photoPath = persistedPhoto,
                 // Bind the punch to whoever took it - see PendingPunchEntity.
                 staffId = SessionManager(context).staffId,

@@ -401,6 +401,21 @@ class AttendanceFlowViewModel(
         viewModelScope.launch {
             _events.emit(AttendanceFlowEvent.Loading(mode))
 
+            // Attendance is write-ahead: preserve the full submission before
+            // touching the network. A slow uplink must never hold the staff at
+            // the punch screen or lose their captured proof.
+            if (context != null && queueOfflinePunch(
+                    mode = mode,
+                    punchIso = punchIso,
+                    latitude = latitude,
+                    longitude = longitude,
+                    selfieFile = selfieFile,
+                    address = address,
+                    context = context,
+                    remarks = remarks,
+                )
+            ) return@launch
+
             try {
                 val compressed = withContext(Dispatchers.IO) {
                     runCatching { compressSelfie(selfieFile) }.getOrDefault(selfieFile)
@@ -566,6 +581,7 @@ class AttendanceFlowViewModel(
         selfieFile: File?,
         address: String?,
         context: Context,
+        remarks: String? = null,
     ): Boolean {
         val queued = OfflinePunchQueue.enqueue(
             context = context,
@@ -575,6 +591,7 @@ class AttendanceFlowViewModel(
             longitude = longitude,
             photoFile = selfieFile,
             address = address,
+            remarks = remarks,
         )
         if (!queued) return false
         PunchSyncWorker.enqueue(context)
@@ -583,9 +600,9 @@ class AttendanceFlowViewModel(
             AttendanceFlowEvent.Success(
                 mode,
                 if (mode == PunchMode.PUNCH_IN)
-                    "Punched in offline — will sync when online"
+                    "Clock-in saved on this device — syncing when online"
                 else
-                    "Punched out offline — will sync when online",
+                    "Clock-out saved on this device — syncing when online",
             ),
         )
         return true

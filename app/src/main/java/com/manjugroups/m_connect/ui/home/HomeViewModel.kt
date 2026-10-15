@@ -291,6 +291,30 @@ class HomeViewModel : ViewModel() {
             // this device time means the punch is recorded at the moment the
             // staff tapped, not when the server finally receives it.
             val punchIso = isoNow()
+            // Attendance is durable-first. Save the tap, photo, and coordinates
+            // locally before attempting any network work so poor coverage cannot
+            // leave the staff waiting at the punch screen.
+            val queued = enqueueOfflinePunch(
+                context = context,
+                isPunchIn = isPunchIn,
+                punchIso = punchIso,
+                lat = lat,
+                lng = lng,
+                photoFile = photoFile,
+            )
+            if (queued) {
+                _uiState.value = current.copy(isPunching = false)
+                PunchSyncWorker.enqueue(context)
+                _punchEvent.emit(
+                    PunchEvent.Success(
+                        if (isPunchIn)
+                            "Clock-in saved on this device — syncing when online"
+                        else
+                            "Clock-out saved on this device — syncing when online",
+                    )
+                )
+                return@launch
+            }
             // Resolved BEFORE the try so the offline branch can carry it too.
             // Geocoding is on-device and does not need the network, and a
             // queued punch that reaches the web without an address reads as a
