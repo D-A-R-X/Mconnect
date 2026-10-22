@@ -1150,12 +1150,20 @@ class HrDashboardFragment : Fragment() {
                 val todayInIso = liveInIso?.takeIf { it.isNotBlank() } ?: recordInIso
                 val todayInLabel = todayInIso?.takeIf { it.isNotBlank() }
                     ?.let(::formatIsoTime) ?: "--"
-                rangeView.text = "$todayInLabel - --"
+                // Clock-out shows once the day is ended, from the phone if the
+                // server doesn't have it yet.
+                val todayOutLabel = liveState.lastPunchOutIso
+                    ?.takeIf { !liveState.isClockedIn && it.isNotBlank() }
+                    ?.let(::formatIsoTime) ?: "--"
+                rangeView.text = "$todayInLabel - $todayOutLabel"
                 hoursView.text =
                     if (liveState.isClockedIn && liveInMs != null) {
                         val mins = ((System.currentTimeMillis() - liveInMs)
                             .coerceAtLeast(0) / 60_000L).toInt()
                         formatMinutesAsPeriod(mins)
+                    } else if (liveState.pendingSyncCount > 0 && liveState.todayMinutes > 0) {
+                        // Clocked out on the phone, not synced yet: in -> out.
+                        formatMinutesAsPeriod(liveState.todayMinutes)
                     } else {
                         liveState.latestTotalHours
                             .ifBlank { formatMinutesAsPeriod(record.totalMinutes ?: 0) }
