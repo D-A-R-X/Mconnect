@@ -15,7 +15,12 @@ import com.manjugroups.m_connect.network.PunchRequest
 import com.manjugroups.m_connect.network.PunchResponse
 import com.manjugroups.m_connect.network.StorageUploader
 import com.manjugroups.m_connect.notifications.PushTokenManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.sync.withLock
 import java.io.File
 import java.text.SimpleDateFormat
@@ -48,14 +53,45 @@ object PunchReplayer {
 
     private val lock = Mutex()
 
+    /** Outlives the screen, so a send the screen stopped waiting for still finishes. */
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /**
+     * Punches a screen is waiting on, with their outcome once known. While a
+     * row is here the screen reports its result and runs its own follow-up, so
+     * the flush neither notifies nor starts GeoTrack for it.
+     */
+    private val claimed = HashMap<Long, Outcome?>()
+
+    /**
+     * Send the punch the screen just saved, waiting at most [timeoutMs]. Returns
+     * its outcome, or null when there was no answer in time; then the send keeps
+     * going in the background and the flush does the follow-up itself, so a
+     * punch that lands late still starts or stops tracking.
+     */
+    suspend fun sendNow(context: Context, id: Long, timeoutMs: Long): Outcome? {
+        synchronized(claimed) { claimed[id] = null }
+        val appContext = context.applicationContext
+        val send = scope.async { flush(appContext) }
+        val answered = withTimeoutOrNull(timeoutMs) { send.await() }?.get(id)
+        // Whatever the flush recorded for it before we let go.
+        val recorded = synchronized(claimed) { claimed.remove(id) }
+        return answered ?: recorded
+    }
+
+    /** True while a screen is waiting on [id]; stores [outcome] for it. */
+    private fun keepForScreen(id: Long, outcome: Outcome): Boolean = synchronized(claimed) {
+        if (!claimed.containsKey(id)) return@synchronized false
+        claimed[id] = outcome
+        true
+    }
+
     /**
      * Flush the signed-in staff's queued punches. Returns each attempted row's
-     * outcome. [quietId] is the punch the calling screen is waiting on: the
-     * screen reports its result and runs its own follow-up, so it is neither
-     * notified nor handed to GeoTrack here. Every other row's rejection is
-     * shown as a notification, because nobody is looking at a screen for it.
+     * outcome. A rejection nobody is waiting on is shown as a notification,
+     * since no screen is open for it.
      */
-    suspend fun flush(context: Context, quietId: Long? = null): Map<Long, Outcome> = lock.withLock {
+    suspend fun flush(context: Context): Map<Long, Outcome> = lock.withLock {
         val appContext = context.applicationContext
         val session = SessionManager(appContext)
         val token = session.bearerToken
@@ -79,12 +115,12 @@ object PunchReplayer {
                 is Outcome.Rejected -> {
                     dao.deleteById(p.id)
                     deletePhoto(p.photoPath)
-                    if (p.id != quietId) notifyRejected(appContext, p, outcome.error)
+                    if (!keepForScreen(p.id, outcome)) notifyRejected(appContext, p, outcome.error)
                 }
                 is Outcome.Recorded -> {
                     dao.deleteById(p.id)
                     deletePhoto(p.photoPath)
-                    if (p.id != quietId) {
+                    if (!keepForScreen(p.id, outcome)) {
                         GeoTrackBootstrapSync.onPunchRecorded(
                             context = appContext,
                             punchedIn = p.isPunchIn,
@@ -99,14 +135,6 @@ object PunchReplayer {
             }
         }
         outcomes
-    }
-
-    /** True when any of the signed-in staff's punches are still waiting. */
-    suspend fun hasPending(context: Context): Boolean {
-        val session = SessionManager(context.applicationContext)
-        return GeoTrackDatabase.getInstance(context.applicationContext).pendingPunchDao()
-            .listAll()
-            .any { it.staffId.isNullOrBlank() || it.staffId == session.staffId }
     }
 
     private suspend fun replayOne(

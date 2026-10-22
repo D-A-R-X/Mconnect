@@ -420,9 +420,7 @@ class AttendanceFlowViewModel(
                 )
             }
             if (context != null && savedId != null) {
-                val outcome = withTimeoutOrNull(OfflinePunchQueue.INLINE_SYNC_TIMEOUT_MS) {
-                    PunchReplayer.flush(context, quietId = savedId)[savedId]
-                }
+                val outcome = PunchReplayer.sendNow(context, savedId, OfflinePunchQueue.INLINE_SYNC_TIMEOUT_MS)
                 when (outcome) {
                     is PunchReplayer.Outcome.Recorded ->
                         onPunchConfirmed(mode, outcome.response, token, punchIso, latitude, longitude, context)
