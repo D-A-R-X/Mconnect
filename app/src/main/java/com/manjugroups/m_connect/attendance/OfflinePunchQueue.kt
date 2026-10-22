@@ -41,7 +41,19 @@ object OfflinePunchQueue {
         photoFile: File?,
         address: String? = null,
         remarks: String? = null,
-    ): Boolean = try {
+    ): Boolean = save(context, isPunchIn, punchIso, latitude, longitude, photoFile, address, remarks) != null
+
+    /** Same as [enqueue], returning the saved row's id (null if it couldn't be saved). */
+    suspend fun save(
+        context: Context,
+        isPunchIn: Boolean,
+        punchIso: String,
+        latitude: Double?,
+        longitude: Double?,
+        photoFile: File?,
+        address: String? = null,
+        remarks: String? = null,
+    ): Long? = try {
         val persistedPhoto = photoFile
             ?.takeIf { it.exists() }
             ?.let { src ->
@@ -79,8 +91,10 @@ object OfflinePunchQueue {
                 createdAt = System.currentTimeMillis(),
             )
         )
-        true
     } catch (_: Exception) {
-        false
+        null
     }
+
+    /** How long a clock-in screen waits for the server before saying "saved on this device". */
+    const val INLINE_SYNC_TIMEOUT_MS = 15_000L
 }

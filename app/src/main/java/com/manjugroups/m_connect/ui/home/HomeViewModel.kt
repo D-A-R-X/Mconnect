@@ -15,6 +15,8 @@ import com.manjugroups.m_connect.network.MmsFleetDriverTrip
 import com.manjugroups.m_connect.network.PunchRequest
 import com.manjugroups.m_connect.network.StorageUploader
 import com.manjugroups.m_connect.attendance.OfflinePunchQueue
+import com.manjugroups.m_connect.attendance.PunchReplayer
+import kotlinx.coroutines.withTimeoutOrNull
 import com.manjugroups.m_connect.attendance.PunchSyncWorker
 import com.manjugroups.m_connect.geotrack.data.GeoTrackDatabase
 import com.manjugroups.m_connect.geotrack.data.PendingPunchEntity
@@ -291,35 +293,63 @@ class HomeViewModel : ViewModel() {
             // this device time means the punch is recorded at the moment the
             // staff tapped, not when the server finally receives it.
             val punchIso = isoNow()
-            // Attendance is durable-first. Save the tap, photo, and coordinates
-            // locally before attempting any network work so poor coverage cannot
-            // leave the staff waiting at the punch screen.
-            val queued = enqueueOfflinePunch(
+            // Resolved BEFORE the punch is saved so the saved punch carries it:
+            // a punch that reaches the web without an address reads as a punch
+            // from nowhere. Bounded, because the geocoder can stall offline.
+            val address = withTimeoutOrNull(GEOCODE_TIMEOUT_MS) { reverseGeocode(context, lat, lng) }
+            // Attendance is durable-first: save the tap, photo and coordinates
+            // on the device BEFORE any network work, then try to send it now.
+            val savedId = OfflinePunchQueue.save(
                 context = context,
                 isPunchIn = isPunchIn,
                 punchIso = punchIso,
-                lat = lat,
-                lng = lng,
+                latitude = lat,
+                longitude = lng,
                 photoFile = photoFile,
+                address = address,
             )
-            if (queued) {
-                _uiState.value = current.copy(isPunching = false)
-                PunchSyncWorker.enqueue(context)
-                _punchEvent.emit(
-                    PunchEvent.Success(
-                        if (isPunchIn)
-                            "Clock-in saved on this device — syncing when online"
-                        else
-                            "Clock-out saved on this device — syncing when online",
-                    )
-                )
+            if (savedId != null) {
+                val outcome = withTimeoutOrNull(OfflinePunchQueue.INLINE_SYNC_TIMEOUT_MS) {
+                    PunchReplayer.flush(context, quietId = savedId)[savedId]
+                }
+                when (outcome) {
+                    is PunchReplayer.Outcome.Recorded -> {
+                        _punchEvent.emit(PunchEvent.Success(if (isPunchIn) "Punched In!" else "Punched Out!"))
+                        GeoTrackBootstrapSync.onPunchRecorded(
+                            context = context,
+                            punchedIn = isPunchIn,
+                            contextId = outcome.response.attendanceId,
+                            occurredAt = parseMillis(punchIso),
+                            lat = lat,
+                            lng = lng,
+                            api = geoApi,
+                        )
+                        if (isPunchIn) loadTodayVisits(bearerToken)
+                        loadHomeData(bearerToken, context)
+                    }
+                    is PunchReplayer.Outcome.Rejected -> {
+                        // The server's real reason (blocked location, already
+                        // punched…), exactly as before the punch was saved first.
+                        _uiState.value = current.copy(isPunching = false)
+                        _punchEvent.emit(PunchEvent.Error(outcome.error))
+                    }
+                    else -> {
+                        // No answer in time: it stays saved and syncs on its own.
+                        _uiState.value = current.copy(isPunching = false)
+                        PunchSyncWorker.enqueue(context)
+                        _punchEvent.emit(
+                            PunchEvent.Success(
+                                if (isPunchIn)
+                                    "Clock-in saved on this device — syncing when online"
+                                else
+                                    "Clock-out saved on this device — syncing when online",
+                            )
+                        )
+                    }
+                }
                 return@launch
             }
-            // Resolved BEFORE the try so the offline branch can carry it too.
-            // Geocoding is on-device and does not need the network, and a
-            // queued punch that reaches the web without an address reads as a
-            // punch from nowhere.
-            val address = reverseGeocode(context, lat, lng)
+            // The device couldn't save it (e.g. storage full): send it live.
             try {
                 // Step 1: Upload the selfie. A punch is NEVER recorded without
                 // the selfie the staff took: this used to punch with photo=null
@@ -1091,3 +1121,6 @@ class HomeViewModel : ViewModel() {
         } catch (_: Exception) { return 0L }
     }
 }
+
+/** Longest the punch waits for an address; the geocoder can stall offline. */
+private const val GEOCODE_TIMEOUT_MS = 3_000L

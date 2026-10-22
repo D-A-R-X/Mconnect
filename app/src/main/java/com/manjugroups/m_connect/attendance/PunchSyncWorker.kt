@@ -9,15 +9,7 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkerParameters
 import androidx.work.WorkManager
-import com.manjugroups.m_connect.auth.SessionManager
-import com.manjugroups.m_connect.geotrack.GeoTrackBootstrapSync
-import com.manjugroups.m_connect.geotrack.data.GeoTrackDatabase
 import com.manjugroups.m_connect.geotrack.data.PendingPunchEntity
-import com.manjugroups.m_connect.network.ApiService
-import com.manjugroups.m_connect.network.GeoTrackApi
-import com.manjugroups.m_connect.network.PunchRequest
-import com.manjugroups.m_connect.network.StorageUploader
-import java.io.File
 import java.util.concurrent.TimeUnit
 
 /**
@@ -36,107 +28,15 @@ class PunchSyncWorker(
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
-        val session = SessionManager(applicationContext)
-        val token = session.bearerToken
-        val currentStaffId = session.staffId
-        val dao = GeoTrackDatabase.getInstance(applicationContext).pendingPunchDao()
-        val allPending = dao.listAll()
-        if (allPending.isEmpty()) return Result.success()
-        // No session (logged out) — leave the rows; a later enqueue after login
-        // will flush them. Don't spin a retry loop with no way to succeed.
-        if (token.isBlank()) return Result.success()
-
-        // Only replay punches belonging to the signed-in staff. A queued punch
-        // outlives a logout, so flushing indiscriminately would record one
-        // person's clock-in against whoever signed in next on that device.
-        // Rows queued before staffId existed carry null and are still flushed —
-        // dropping them would lose real attendance, and the pre-upgrade app
-        // could not have had a second account on the device anyway.
-        val pending = allPending.filter { p ->
-            p.staffId.isNullOrBlank() || p.staffId == currentStaffId
-        }
-        if (pending.isEmpty()) return Result.success()
-
-        val api = ApiService.create()
-        var networkFailure = false
-
-        for (p in pending) {
-            try {
-                val photo = p.photoPath?.let(::File)?.takeIf { it.exists() }
-                val storageId = photo?.let { f ->
-                    runCatching {
-                        StorageUploader.upload(
-                            api,
-                            token,
-                            f,
-                            purpose = com.manjugroups.m_connect.network.MobileStoragePurpose.ATTENDANCE_PHOTO,
-                        ).storageId
-                    }.getOrNull()?.takeIf { it.isNotBlank() }
-                }
-                // The selfie is part of the punch. Keep the row and retry rather
-                // than recording it without the photo, which is how punches
-                // reached the web with time and GPS but no selfie. After many
-                // failed attempts, record it without the photo so the staff
-                // member's attendance itself is never lost.
-                if (photo != null && storageId == null && p.attemptCount < MAX_SELFIE_UPLOAD_ATTEMPTS) {
-                    networkFailure = true
-                    dao.bumpAttempt(p.id, "Selfie upload failed")
-                    continue
-                }
-                val request = PunchRequest(
-                    latitude = p.latitude,
-                    longitude = p.longitude,
-                    address = p.address,
-                    remarks = p.remarks,
-                    photo = storageId,
-                    deviceId = p.deviceId,
-                    source = p.source,
-                    clientPunchTime = p.clientPunchTime,
-                )
-                val resp = if (p.isPunchIn) {
-                    api.punchIn(token, request)
-                } else {
-                    api.punchOut(token, request)
-                }
-                // Success OR a business rejection (already-punched / blocked
-                // location, etc.) both clear the row — retrying a rejection would
-                // loop forever, and a duplicate-rejection means it already landed.
-                dao.deleteById(p.id)
-                deletePhoto(p.photoPath)
-                if (resp.success) {
-                    GeoTrackBootstrapSync.onPunchRecorded(
-                        context = applicationContext,
-                        punchedIn = p.isPunchIn,
-                        contextId = resp.attendanceId,
-                        occurredAt = runCatching {
-                            java.time.OffsetDateTime.parse(p.clientPunchTime)
-                                .toInstant()
-                                .toEpochMilli()
-                        }.getOrDefault(System.currentTimeMillis()),
-                        lat = p.latitude,
-                        lng = p.longitude,
-                        api = GeoTrackApi.create(),
-                    )
-                }
-            } catch (e: Exception) {
-                // Network / server error — keep the row and let WorkManager retry.
-                networkFailure = true
-                dao.bumpAttempt(p.id, e.message)
-            }
-        }
-        return if (networkFailure) Result.retry() else Result.success()
-    }
-
-    private fun deletePhoto(path: String?) {
-        if (path.isNullOrBlank()) return
-        runCatching { File(path).delete() }
+        // PunchReplayer sends oldest-first, stops at the first punch that
+        // can't go yet, and notifies the staff of any the server refuses.
+        val outcomes = PunchReplayer.flush(applicationContext)
+        return if (outcomes.values.any { it == PunchReplayer.Outcome.Deferred }) Result.retry()
+        else Result.success()
     }
 
     companion object {
         private const val UNIQUE_WORK = "attendance-punch-sync"
-
-        /** Retries (WorkManager backoff) before a punch is recorded without its selfie. */
-        private const val MAX_SELFIE_UPLOAD_ATTEMPTS = 20
 
         /** Schedule a flush; runs as soon as the network is available. Safe to
          *  call repeatedly (KEEP keeps a pending run rather than piling up). */

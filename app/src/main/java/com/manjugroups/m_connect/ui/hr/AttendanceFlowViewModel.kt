@@ -8,6 +8,8 @@ import android.media.ExifInterface
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.manjugroups.m_connect.attendance.OfflinePunchQueue
+import com.manjugroups.m_connect.attendance.PunchReplayer
+import kotlinx.coroutines.withTimeoutOrNull
 import com.manjugroups.m_connect.attendance.PunchSyncWorker
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.geotrack.AttendanceTrackingGate
@@ -18,6 +20,7 @@ import com.manjugroups.m_connect.geotrack.service.GeoTrackService
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.PunchRequest
+import com.manjugroups.m_connect.network.PunchResponse
 import com.manjugroups.m_connect.network.SessionData
 import com.manjugroups.m_connect.network.StorageUploader
 import kotlinx.coroutines.Dispatchers
@@ -401,21 +404,41 @@ class AttendanceFlowViewModel(
         viewModelScope.launch {
             _events.emit(AttendanceFlowEvent.Loading(mode))
 
-            // Attendance is write-ahead: preserve the full submission before
-            // touching the network. A slow uplink must never hold the staff at
-            // the punch screen or lose their captured proof.
-            if (context != null && queueOfflinePunch(
-                    mode = mode,
+            // Attendance is write-ahead: save the full submission on the device
+            // before touching the network, then try to send it now so an online
+            // staff member still gets the server's real answer.
+            val savedId = context?.let {
+                OfflinePunchQueue.save(
+                    context = it,
+                    isPunchIn = mode == PunchMode.PUNCH_IN,
                     punchIso = punchIso,
                     latitude = latitude,
                     longitude = longitude,
-                    selfieFile = selfieFile,
+                    photoFile = selfieFile,
                     address = address,
-                    context = context,
                     remarks = remarks,
                 )
-            ) return@launch
+            }
+            if (context != null && savedId != null) {
+                val outcome = withTimeoutOrNull(OfflinePunchQueue.INLINE_SYNC_TIMEOUT_MS) {
+                    PunchReplayer.flush(context, quietId = savedId)[savedId]
+                }
+                when (outcome) {
+                    is PunchReplayer.Outcome.Recorded ->
+                        onPunchConfirmed(mode, outcome.response, token, punchIso, latitude, longitude, context)
+                    is PunchReplayer.Outcome.Rejected -> {
+                        rollbackOptimistic(previousState)
+                        _events.emit(AttendanceFlowEvent.SubmissionFailed(mode, outcome.error))
+                        if (outcome.error.contains("No active punch-in", ignoreCase = true)) {
+                            loadTodayAttendance(token, context)
+                        }
+                    }
+                    else -> reportSavedOnDevice(mode, context)
+                }
+                return@launch
+            }
 
+            // The device couldn't save it (e.g. storage full): send it live.
             try {
                 val compressed = withContext(Dispatchers.IO) {
                     runCatching { compressSelfie(selfieFile) }.getOrDefault(selfieFile)
@@ -477,63 +500,7 @@ class AttendanceFlowViewModel(
                     return@launch
                 }
 
-                // Confirmed by the server: show it now. The GeoTrack start-up
-                // below used to run BEFORE this, so the staff waited on its
-                // network calls after the punch had already succeeded.
-                confirmedPunch = mode to System.currentTimeMillis()
-                catchUpRefreshes = 0
-                _uiState.update { it.copy(isSubmitting = false) }
-                _events.emit(
-                    AttendanceFlowEvent.Success(
-                        mode,
-                        if (mode == PunchMode.PUNCH_IN) "Punched in successfully." else "Punched out successfully.",
-                    ),
-                )
-
-                // Outlives the screen (and this ViewModel): tracking must
-                // start or stop even when the staff leaves right away.
-                context?.let { ctx ->
-                    val appCtx = ctx.applicationContext
-                    kotlinx.coroutines.CoroutineScope(Dispatchers.IO + kotlinx.coroutines.SupervisorJob()).launch {
-                    GeoTrackBootstrapSync.onPunchRecorded(
-                        context = appCtx,
-                        punchedIn = mode == PunchMode.PUNCH_IN,
-                        contextId = response.attendanceId,
-                        occurredAt = parseMillis(punchIso) ?: System.currentTimeMillis(),
-                        lat = latitude,
-                        lng = longitude,
-                        api = geoApi,
-                    )
-                    if (mode == PunchMode.PUNCH_OUT) {
-                        // Clocking out also ends any active On-Duty trip — a
-                        // forgotten on-duty must not keep accumulating travel
-                        // routes past the shift. Clear it locally (immediate UI)
-                        // and close it server-side. The backend also closes it on
-                        // ANY punch (incl. biometric) as the authoritative bound.
-                        val sm = SessionManager(appCtx)
-                        if (sm.isOnDuty) {
-                            val tripId = sm.onDutyTripId
-                            sm.clearOnDutyDetails()
-                            com.manjugroups.m_connect.geotrack.service.TrackingNotification.refresh(appCtx)
-                            runCatching {
-                                api.completeOnDutyTrip(
-                                    token,
-                                    com.manjugroups.m_connect.network.CompleteOnDutyTripRequest(
-                                        tripId = tripId,
-                                        lat = null,
-                                        lng = null,
-                                        address = null,
-                                        proofPhotoIds = null,
-                                        proofNote = null,
-                                    ),
-                                )
-                            }
-                        }
-                    }
-                    }
-                }
-
-                loadTodayAttendance(token, context)
+                onPunchConfirmed(mode, response, token, punchIso, latitude, longitude, context)
             } catch (e: Exception) {
                 // Distinguish a genuine NETWORK failure (no server response) from
                 // a server REJECTION (5xx with a JSON body). extractHttpErrorMessage
@@ -545,7 +512,7 @@ class AttendanceFlowViewModel(
                 // lost. A server rejection (serverMessage != null) is a real
                 // business error and must NOT be queued.
                 if (serverMessage == null && context != null &&
-                    queueOfflinePunch(mode, punchIso, latitude, longitude, selfieFile, address, context)
+                    queueOfflinePunch(mode, punchIso, latitude, longitude, selfieFile, address, context, remarks)
                 ) {
                     return@launch
                 }
@@ -564,6 +531,78 @@ class AttendanceFlowViewModel(
                 }
             }
         }
+    }
+
+    /**
+     * The server recorded the punch: show it, then start/stop tracking and end
+     * any On-Duty trip. Shared by the saved-then-sent path and the live path.
+     */
+    private suspend fun onPunchConfirmed(
+        mode: PunchMode,
+        response: PunchResponse,
+        token: String,
+        punchIso: String,
+        latitude: Double?,
+        longitude: Double?,
+        context: Context?,
+    ) {
+        // Confirmed by the server: show it now. The GeoTrack start-up
+        // below used to run BEFORE this, so the staff waited on its
+        // network calls after the punch had already succeeded.
+        confirmedPunch = mode to System.currentTimeMillis()
+        catchUpRefreshes = 0
+        _uiState.update { it.copy(isSubmitting = false) }
+        _events.emit(
+            AttendanceFlowEvent.Success(
+                mode,
+                if (mode == PunchMode.PUNCH_IN) "Punched in successfully." else "Punched out successfully.",
+            ),
+        )
+
+        // Outlives the screen (and this ViewModel): tracking must
+        // start or stop even when the staff leaves right away.
+        context?.let { ctx ->
+            val appCtx = ctx.applicationContext
+            kotlinx.coroutines.CoroutineScope(Dispatchers.IO + kotlinx.coroutines.SupervisorJob()).launch {
+            GeoTrackBootstrapSync.onPunchRecorded(
+                context = appCtx,
+                punchedIn = mode == PunchMode.PUNCH_IN,
+                contextId = response.attendanceId,
+                occurredAt = parseMillis(punchIso) ?: System.currentTimeMillis(),
+                lat = latitude,
+                lng = longitude,
+                api = geoApi,
+            )
+            if (mode == PunchMode.PUNCH_OUT) {
+                // Clocking out also ends any active On-Duty trip — a
+                // forgotten on-duty must not keep accumulating travel
+                // routes past the shift. Clear it locally (immediate UI)
+                // and close it server-side. The backend also closes it on
+                // ANY punch (incl. biometric) as the authoritative bound.
+                val sm = SessionManager(appCtx)
+                if (sm.isOnDuty) {
+                    val tripId = sm.onDutyTripId
+                    sm.clearOnDutyDetails()
+                    com.manjugroups.m_connect.geotrack.service.TrackingNotification.refresh(appCtx)
+                    runCatching {
+                        api.completeOnDutyTrip(
+                            token,
+                            com.manjugroups.m_connect.network.CompleteOnDutyTripRequest(
+                                tripId = tripId,
+                                lat = null,
+                                lng = null,
+                                address = null,
+                                proofPhotoIds = null,
+                                proofNote = null,
+                            ),
+                        )
+                    }
+                }
+            }
+            }
+        }
+
+        loadTodayAttendance(token, context)
     }
 
     /**
@@ -594,6 +633,12 @@ class AttendanceFlowViewModel(
             remarks = remarks,
         )
         if (!queued) return false
+        reportSavedOnDevice(mode, context)
+        return true
+    }
+
+    /** The punch is saved on the device and will sync on its own. */
+    private suspend fun reportSavedOnDevice(mode: PunchMode, context: Context) {
         PunchSyncWorker.enqueue(context)
         _uiState.update { it.copy(isSubmitting = false) }
         _events.emit(
@@ -605,7 +650,6 @@ class AttendanceFlowViewModel(
                     "Clock-out saved on this device — syncing when online",
             ),
         )
-        return true
     }
 
     /**
