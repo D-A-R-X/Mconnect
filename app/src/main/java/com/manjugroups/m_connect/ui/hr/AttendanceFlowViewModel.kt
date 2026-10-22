@@ -87,6 +87,10 @@ data class AttendanceFlowState(
     val payPeriodLabel: String = "",
     val payPeriodMinutes: Int = 0,
     val payPeriodHours: String = "00:00 Hrs",
+    /** Punches saved on this phone that the server doesn't have yet. */
+    val pendingSyncCount: Int = 0,
+    /** Set for a few seconds after the last saved punch reached the server. */
+    val justSynced: Boolean = false,
 )
 
 enum class PunchMode {
@@ -119,6 +123,16 @@ class AttendanceFlowViewModel(
      */
     private var confirmedPunch: Pair<PunchMode, Long>? = null
     private var catchUpRefreshes = 0
+
+    /**
+     * The day as the server (or its cache) last described it, before the
+     * phone's saved punches are laid over it. The queue watcher re-overlays
+     * this whenever a punch is saved or synced, so the screen always shows the
+     * phone's view of today, like a file that is saved locally and syncing.
+     */
+    private var serverDay: AttendanceFlowState? = null
+    private var queueWatcher: kotlinx.coroutines.Job? = null
+    private var lastPendingCount = 0
     val uiState: StateFlow<AttendanceFlowState> = _uiState.asStateFlow()
 
     private val _events = MutableSharedFlow<AttendanceFlowEvent>(extraBufferCapacity = 1)
@@ -126,6 +140,7 @@ class AttendanceFlowViewModel(
 
     fun loadTodayAttendance(token: String, context: Context? = null) {
         val appCtx = context?.applicationContext
+        appCtx?.let { watchSavedPunches(it, token) }
         viewModelScope.launch {
             // Cache-first: on the very first load of a cold start, paint the
             // last-known-good status from disk immediately so an OFFLINE launch
@@ -133,6 +148,7 @@ class AttendanceFlowViewModel(
             // default (which read as "not clocked in" and, downstream, "absent").
             if (appCtx != null && !_uiState.value.hasLoaded) {
                 val cached = readCachedTodayState(appCtx)
+                cached?.let { serverDay = it }
                 val seeded = overlayPendingPunch(appCtx, cached ?: _uiState.value)
                 if (cached != null || seeded.hasClockedInToday) {
                     _uiState.value = seeded.copy(isLoading = true)
@@ -198,6 +214,7 @@ class AttendanceFlowViewModel(
                 // the pending overlay) — once the queue flushes the server row
                 // becomes canonical and re-overlaying stays correct.
                 appCtx?.let { writeCachedTodayState(it, fresh) }
+                serverDay = fresh
                 // A punch may still be sitting in the offline queue (not yet
                 // synced) — the server won't know about it, so OR it into the
                 // displayed state or today would wrongly read as not-clocked-in.
@@ -217,7 +234,7 @@ class AttendanceFlowViewModel(
                 // Offline / fetch failed: do NOT collapse to the empty default
                 // (which reads as not-clocked-in → "absent"). Keep the cached
                 // last-known status and overlay any queued offline punch.
-                val base = (appCtx?.let { readCachedTodayState(it) } ?: _uiState.value)
+                val base = (appCtx?.let { readCachedTodayState(it) } ?: serverDay ?: _uiState.value)
                 val withPending = appCtx?.let { overlayPendingPunch(it, base) } ?: base
                 _uiState.value = withPending.copy(isLoading = false)
             }
@@ -264,12 +281,53 @@ class AttendanceFlowViewModel(
                 GeoTrackDatabase.getInstance(appCtx).pendingPunchDao().listAll()
             }.getOrDefault(emptyList())
         }
-        if (pending.isEmpty()) return base
+        return overlayRows(appCtx, base, pending)
+    }
+
+    /** [base] with the signed-in staff's saved punches laid over it. */
+    private fun overlayRows(
+        appCtx: Context,
+        base: AttendanceFlowState,
+        pending: List<com.manjugroups.m_connect.geotrack.data.PendingPunchEntity>,
+    ): AttendanceFlowState {
+        val staffId = SessionManager(appCtx).staffId
+        val mine = pending.filter { it.staffId.isNullOrBlank() || it.staffId == staffId }
         val todayPrefix = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-        val todays = pending
+        val todays = mine
             .filter { it.clientPunchTime.substringBefore('T') == todayPrefix }
             .map { PendingPunchLite(it.isPunchIn, it.clientPunchTime) }
-        return mergePendingPunch(base, todays)
+        return mergePendingPunch(base, todays).copy(pendingSyncCount = mine.size)
+    }
+
+    /**
+     * Follows the saved-punch queue for as long as the screen's ViewModel
+     * lives: every save or sync re-draws today from the phone's punches, and
+     * when the last one reaches the server the day is re-read from it and
+     * "Synced" is shown briefly.
+     */
+    private fun watchSavedPunches(appCtx: Context, token: String) {
+        if (queueWatcher?.isActive == true) return
+        queueWatcher = viewModelScope.launch {
+            GeoTrackDatabase.getInstance(appCtx).pendingPunchDao().observeAll().collect { rows ->
+                val current = _uiState.value
+                val base = (serverDay ?: current).copy(
+                    isLoading = current.isLoading,
+                    isSubmitting = current.isSubmitting,
+                )
+                val overlaid = overlayRows(appCtx, base, rows)
+                val allSynced = lastPendingCount > 0 && overlaid.pendingSyncCount == 0
+                lastPendingCount = overlaid.pendingSyncCount
+                _uiState.value = overlayConfirmedPunch(overlaid)
+                    .copy(justSynced = allSynced || (current.justSynced && overlaid.pendingSyncCount == 0))
+                if (allSynced) {
+                    loadTodayAttendance(token, appCtx)
+                    launch {
+                        kotlinx.coroutines.delay(SYNCED_BADGE_MS)
+                        _uiState.update { it.copy(justSynced = false) }
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -797,6 +855,9 @@ class AttendanceFlowViewModel(
          * knows ([base]'s first-in / last-out); otherwise the server state
          * stands. Any queued punch-in makes the day count as clocked-in.
          */
+        /** How long "Synced" stays up after the last saved punch reached the server. */
+        private const val SYNCED_BADGE_MS = 4_000L
+
         internal fun mergePendingPunch(
             base: AttendanceFlowState,
             todays: List<PendingPunchLite>,
@@ -813,12 +874,34 @@ class AttendanceFlowViewModel(
                 base.lastPunchOutIso?.let { parseMillis(it) } ?: 0L,
             )
             val queuedIsNewer = latestMs >= baseLastMs
+            val firstIn = base.firstPunchInIso?.takeIf { it.isNotBlank() } ?: firstPendingIn
+            val isClockedIn = if (queuedIsNewer) latest.isPunchIn else base.isClockedIn
+            // A clock-out saved on the phone ends the day here and now: show
+            // its time and the day's total straight away, as the server will.
+            val localOut = latest.clientPunchTime.takeIf { queuedIsNewer && !latest.isPunchIn }
+            val lastOut = localOut ?: base.lastPunchOutIso
+            val localMinutes = localOut?.let { out ->
+                val inMs = firstIn?.let { parseMillis(it) }
+                val outMs = parseMillis(out)
+                if (inMs != null && outMs != null && outMs >= inMs) ((outMs - inMs) / 60_000L).toInt() else null
+            }
+            val todayMinutes = localMinutes?.let { maxOf(it, base.todayMinutes) } ?: base.todayMinutes
             return base.copy(
                 hasLoaded = true,
                 hasClockedInToday = base.hasClockedInToday || todays.any { it.isPunchIn },
-                isClockedIn = if (queuedIsNewer) latest.isPunchIn else base.isClockedIn,
+                isClockedIn = isClockedIn,
                 clockedOutOnMobile = if (queuedIsNewer) !latest.isPunchIn else base.clockedOutOnMobile,
-                firstPunchInIso = base.firstPunchInIso?.takeIf { it.isNotBlank() } ?: firstPendingIn,
+                firstPunchInIso = firstIn,
+                lastPunchOutIso = if (isClockedIn && queuedIsNewer) base.lastPunchOutIso else lastOut,
+                todayMinutes = todayMinutes,
+                todayHours = formatMinutesForToday(todayMinutes),
+                closedTodayMinutes = localMinutes?.let { maxOf(it, base.closedTodayMinutes) }
+                    ?: base.closedTodayMinutes,
+                latestRange = buildRangeLabel(
+                    firstIn,
+                    if (isClockedIn) null else lastOut,
+                    isClockedIn,
+                ),
             )
         }
 

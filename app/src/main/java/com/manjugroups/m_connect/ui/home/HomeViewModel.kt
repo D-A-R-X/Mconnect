@@ -257,8 +257,12 @@ class HomeViewModel : ViewModel() {
                     permissionsLeftHrs = permLeft,
                     isPunching = false,
                 )
-                cachedState = loaded
-                _uiState.value = loaded
+                // Punches saved on the phone and not yet synced are newer than
+                // anything the server knows: an offline clock-in must let the
+                // staff start trips straight away.
+                val shown = overlaySavedPunches(context, loaded)
+                cachedState = shown
+                _uiState.value = shown
 
                 coroutineScope {
                     val bootstrap = context?.let {
@@ -437,6 +441,47 @@ class HomeViewModel : ViewModel() {
                     _punchEvent.emit(PunchEvent.Error(e.message ?: "Network error"))
                 }
             }
+        }
+    }
+
+    /**
+     * [state] with today's saved-but-unsynced punches laid over it. The server
+     * hasn't seen them, so the latest one decides whether a session is open
+     * right now; times come from the phone until the server has them.
+     */
+    private suspend fun overlaySavedPunches(
+        context: Context?,
+        state: HomeUiState.Loaded,
+    ): HomeUiState.Loaded {
+        val appCtx = context?.applicationContext ?: return state
+        val staffId = SessionManager(appCtx).staffId
+        val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+        val todays = withContext(Dispatchers.IO) {
+            runCatching { GeoTrackDatabase.getInstance(appCtx).pendingPunchDao().listAll() }
+                .getOrDefault(emptyList())
+        }.filter {
+            (it.staffId.isNullOrBlank() || it.staffId == staffId) &&
+                it.clientPunchTime.substringBefore('T') == today
+        }
+        if (todays.isEmpty()) return state
+        val latest = todays.maxByOrNull { parseMillis(it.clientPunchTime) } ?: return state
+        val latestMs = parseMillis(latest.clientPunchTime)
+        val firstSavedInMs = todays.filter { it.isPunchIn }
+            .minOfOrNull { parseMillis(it.clientPunchTime) } ?: 0L
+        return if (latest.isPunchIn) {
+            state.copy(
+                hasOpenSession = true,
+                hasOpenSessionNow = true,
+                openSessionStartMillis = state.openSessionStartMillis.takeIf { state.hasOpenSessionNow && it > 0 }
+                    ?: latestMs,
+                firstPunchInMillis = state.firstPunchInMillis.takeIf { it > 0 } ?: firstSavedInMs,
+            )
+        } else {
+            state.copy(
+                hasOpenSession = state.hasOpenSession || firstSavedInMs > 0,
+                hasOpenSessionNow = false,
+                firstPunchInMillis = state.firstPunchInMillis.takeIf { it > 0 } ?: firstSavedInMs,
+            )
         }
     }
 

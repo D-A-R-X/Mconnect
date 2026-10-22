@@ -17,6 +17,51 @@ class AttendanceFlowViewModelTest {
         AttendanceFlowViewModel.mergePendingPunch(base, pending.toList())
 
     @Test
+    fun mergePendingPunch_offlineClockInAndOut_showsBothTimesAndTheDaysTotal() {
+        // Clocked in and out with no network: the phone shows the whole day
+        // (both times, total, range) before the server has either punch.
+        val merged = merge(
+            AttendanceFlowState(),
+            PendingPunchLite(isPunchIn = true, "2026-08-19T09:00:00.000+05:30"),
+            PendingPunchLite(isPunchIn = false, "2026-08-19T17:30:00.000+05:30"),
+        )
+
+        assertEquals("2026-08-19T09:00:00.000+05:30", merged.firstPunchInIso)
+        assertEquals("2026-08-19T17:30:00.000+05:30", merged.lastPunchOutIso)
+        assertEquals(510, merged.todayMinutes)
+        assertEquals("08:30 Hrs", merged.todayHours)
+        assertEquals(510, merged.closedTodayMinutes)
+        assertFalse(merged.isClockedIn)
+    }
+
+    @Test
+    fun mergePendingPunch_offlineClockOutAfterServerClockIn_usesTheServersClockInTime() {
+        val merged = merge(
+            AttendanceFlowState(
+                hasLoaded = true,
+                isClockedIn = true,
+                hasClockedInToday = true,
+                firstPunchInIso = "2026-08-19T09:15:00.000+05:30",
+            ),
+            PendingPunchLite(isPunchIn = false, "2026-08-19T18:15:00.000+05:30"),
+        )
+
+        assertEquals("2026-08-19T18:15:00.000+05:30", merged.lastPunchOutIso)
+        assertEquals(540, merged.todayMinutes)
+    }
+
+    @Test
+    fun mergePendingPunch_offlineClockIn_hasNoClockOutTime() {
+        val merged = merge(
+            AttendanceFlowState(),
+            PendingPunchLite(isPunchIn = true, "2026-08-19T09:05:00.000+05:30"),
+        )
+
+        assertEquals(null, merged.lastPunchOutIso)
+        assertTrue(merged.isClockedIn)
+    }
+
+    @Test
     fun mergePendingPunch_noQueue_leavesStateUntouched() {
         val base = AttendanceFlowState(hasLoaded = true, isClockedIn = false)
         assertEquals(base, AttendanceFlowViewModel.mergePendingPunch(base, emptyList()))

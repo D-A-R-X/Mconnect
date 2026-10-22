@@ -495,6 +495,7 @@ class HrDashboardFragment : Fragment() {
                     // "07:46") on each refresh until the ticker's next tick (up to
                     // 1s later) corrected it. Now the emit already matches the tick.
                     binding.tvTodayHours.text = liveTodayHoursText(state)
+                    renderSyncStatus(state)
                     // The old static "Today" card (cardHistory1) is permanently
                     // hidden — today's log is now injected as the FIRST item in
                     // the history list below, in the same card style as past
@@ -699,6 +700,35 @@ class HrDashboardFragment : Fragment() {
             }
         }
         return state.todayHours
+    }
+
+    /**
+     * Today's punches are shown from the phone the moment they're taken; this
+     * line says whether the server has them yet, like a file that is saved
+     * locally and still syncing.
+     */
+    private fun renderSyncStatus(state: AttendanceFlowState) {
+        val view = _binding?.tvAttendanceSyncStatus ?: return
+        when {
+            state.pendingSyncCount > 0 -> {
+                val online = isOnline()
+                view.text = if (online) "⟳ Saved on this phone · syncing…"
+                else "☁ Saved on this phone · will sync when online"
+                view.visibility = View.VISIBLE
+            }
+            state.justSynced -> {
+                view.text = "✓ Synced"
+                view.visibility = View.VISIBLE
+            }
+            else -> view.visibility = View.GONE
+        }
+    }
+
+    private fun isOnline(): Boolean {
+        val cm = context?.getSystemService(android.content.Context.CONNECTIVITY_SERVICE)
+            as? android.net.ConnectivityManager ?: return false
+        val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
+        return caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
 
     private fun startLiveTodayTicker(firstPunchIso: String?) {

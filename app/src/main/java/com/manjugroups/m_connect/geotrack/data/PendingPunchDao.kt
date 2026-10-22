@@ -3,6 +3,7 @@ package com.manjugroups.m_connect.geotrack.data
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface PendingPunchDao {
@@ -21,4 +22,8 @@ interface PendingPunchDao {
 
     @Query("SELECT COUNT(*) FROM pending_punches")
     suspend fun count(): Int
+
+    /** The queue, re-emitted whenever a punch is saved or synced. */
+    @Query("SELECT * FROM pending_punches ORDER BY createdAt ASC")
+    fun observeAll(): Flow<List<PendingPunchEntity>>
 }
