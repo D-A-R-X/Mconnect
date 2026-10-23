@@ -84,6 +84,10 @@ data class AttendanceFlowState(
     val payPeriodLabel: String = "",
     val payPeriodMinutes: Int = 0,
     val payPeriodHours: String = "00:00 Hrs",
+    /** Clocked in at the gate (or by HR) and not yet started in the app. */
+    val needsMobileDayStart: Boolean = false,
+    /** A punch-in today has no punch-out yet (any source). */
+    val hasOpenPunchNow: Boolean = false,
 )
 
 enum class PunchMode {
@@ -189,6 +193,10 @@ class AttendanceFlowViewModel(
                     payPeriodLabel = periodLabel,
                     payPeriodMinutes = periodMinutes,
                     payPeriodHours = formatMinutesForToday(periodMinutes),
+                    needsMobileDayStart = appCtx != null &&
+                        com.manjugroups.m_connect.attendance.MobileDayStart.startedElsewhere(sessions) &&
+                        !com.manjugroups.m_connect.attendance.MobileDayStart.isStarted(appCtx),
+                    hasOpenPunchNow = hasOpenSession,
                 )
                 // Persist the authoritative server snapshot so the next cold
                 // start can paint it while offline. Cache the server truth (not
@@ -217,6 +225,27 @@ class AttendanceFlowViewModel(
                 val base = (appCtx?.let { readCachedTodayState(it) } ?: _uiState.value)
                 val withPending = appCtx?.let { overlayPendingPunch(it, base) } ?: base
                 _uiState.value = withPending.copy(isLoading = false)
+            }
+        }
+    }
+
+    /**
+     * Start the day in the app after a gate punch-in. The server already has
+     * the staff clocked in and refuses a second punch-in, so nothing is sent to
+     * attendance: the phone remembers the start and tracking begins.
+     */
+    fun startMobileDayAfterGatePunch(context: Context) {
+        val appCtx = context.applicationContext
+        com.manjugroups.m_connect.attendance.MobileDayStart.markStarted(appCtx)
+        _uiState.update { it.copy(needsMobileDayStart = false) }
+        kotlinx.coroutines.CoroutineScope(Dispatchers.IO + kotlinx.coroutines.SupervisorJob()).launch {
+            runCatching {
+                GeoTrackBootstrapSync.onPunchRecorded(
+                    context = appCtx,
+                    punchedIn = true,
+                    occurredAt = System.currentTimeMillis(),
+                    api = geoApi,
+                )
             }
         }
     }
@@ -756,6 +785,7 @@ class AttendanceFlowViewModel(
             val queuedIsNewer = latestMs >= baseLastMs
             return base.copy(
                 hasLoaded = true,
+                needsMobileDayStart = false,
                 hasClockedInToday = base.hasClockedInToday || todays.any { it.isPunchIn },
                 isClockedIn = if (queuedIsNewer) latest.isPunchIn else base.isClockedIn,
                 clockedOutOnMobile = if (queuedIsNewer) !latest.isPunchIn else base.clockedOutOnMobile,
