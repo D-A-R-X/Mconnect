@@ -696,6 +696,7 @@ class AttendanceFlowViewModel(
     /** The punch is saved on the device and will sync on its own. */
     private suspend fun reportSavedOnDevice(mode: PunchMode, context: Context) {
         PunchSyncWorker.enqueue(context)
+        com.manjugroups.m_connect.attendance.PunchSyncTrigger.syncNow(context)
         _uiState.update { it.copy(isSubmitting = false) }
         _events.emit(
             AttendanceFlowEvent.Success(

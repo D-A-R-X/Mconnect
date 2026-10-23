@@ -339,6 +339,7 @@ class HomeViewModel : ViewModel() {
                         // No answer in time: it stays saved and syncs on its own.
                         _uiState.value = current.copy(isPunching = false)
                         PunchSyncWorker.enqueue(context)
+                        com.manjugroups.m_connect.attendance.PunchSyncTrigger.syncNow(context)
                         _punchEvent.emit(
                             PunchEvent.Success(
                                 if (isPunchIn)

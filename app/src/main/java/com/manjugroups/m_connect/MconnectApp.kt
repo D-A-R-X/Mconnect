@@ -69,6 +69,8 @@ class MconnectApp : Application(), ImageLoaderFactory {
 
         PushTokenManager.ensureFirebaseInitialized(this)
         createNotificationChannels()
+        // Saved attendance punches go out the moment the network returns.
+        com.manjugroups.m_connect.attendance.PunchSyncTrigger.register(this)
     }
 
     /**
