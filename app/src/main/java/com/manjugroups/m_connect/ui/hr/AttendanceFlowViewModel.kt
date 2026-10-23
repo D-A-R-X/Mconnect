@@ -261,7 +261,15 @@ class AttendanceFlowViewModel(
     private fun readCachedTodayState(appCtx: Context): AttendanceFlowState? {
         val key = todayCacheKey(appCtx) ?: return null
         return LocalCache.get(appCtx, key, AttendanceFlowState::class.java)
-            ?.copy(isLoading = false, isSubmitting = false)
+            ?.let {
+                // A day started in the app since this snapshot stays started.
+                it.copy(
+                    isLoading = false,
+                    isSubmitting = false,
+                    needsMobileDayStart = it.needsMobileDayStart &&
+                        !com.manjugroups.m_connect.attendance.MobileDayStart.isStarted(appCtx),
+                )
+            }
     }
 
     private fun writeCachedTodayState(appCtx: Context, state: AttendanceFlowState) {
