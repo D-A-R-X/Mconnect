@@ -73,6 +73,8 @@ class CabRequestsFragment : Fragment() {
     private var approvals: List<CabRequest> = emptyList()
     private var allRequests: List<CabRequest> = emptyList()
     private var hasLoadedOnce = false
+    /** Why the last load failed, shown instead of "No cab requests yet". */
+    private var loadError: String? = null
     private var skeleton: ObjectAnimator? = null
     private var actionInFlight = false
 
@@ -137,6 +139,21 @@ class CabRequestsFragment : Fragment() {
         load()
     }
 
+    override fun onResume() {
+        super.onResume()
+        // A detail screen with its own white header: draw it below the status
+        // bar (the Library behind it is full-bleed) and hide the tab bar.
+        (activity as? com.manjugroups.m_connect.MainActivity)?.let { main ->
+            main.setTabBarVisible(false)
+            main.setTopBarAppearance(Color.WHITE, darkStatusIcons = true, fullBleed = false)
+        }
+    }
+
+    override fun onPause() {
+        (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(true)
+        super.onPause()
+    }
+
     override fun onDestroyView() {
         skeleton?.cancel()
         skeleton = null
@@ -189,14 +206,21 @@ class CabRequestsFragment : Fragment() {
             binding.skeletonContainer.removeAllViews()
             binding.skeletonContainer.visibility = View.GONE
             binding.swipeRefresh.isRefreshing = false
+            loadError = firstError
             firstError?.let { Toast.makeText(requireContext(), it, Toast.LENGTH_LONG).show() }
             renderTabs()
             render()
         }
     }
 
-    private fun errorOf(result: Result<com.manjugroups.m_connect.network.CabRequestListResponse>): String =
-        result.getOrNull()?.error ?: serverMessage(result.exceptionOrNull()) ?: "Couldn't load cab requests"
+    private fun errorOf(result: Result<com.manjugroups.m_connect.network.CabRequestListResponse>): String {
+        result.getOrNull()?.error?.let { return it }
+        val e = result.exceptionOrNull()
+        serverMessage(e)?.let { return it }
+        // The routes are missing on a server that hasn't been updated yet.
+        if ((e as? retrofit2.HttpException)?.code() == 404) return "Cab requests aren't available on the server yet."
+        return "Couldn't load cab requests"
+    }
 
     private fun rowsForTab(): List<CabRequest> = when (currentTab) {
         Tab.MY -> myRequests
@@ -219,6 +243,11 @@ class CabRequestsFragment : Fragment() {
         adapter.submit(rows, showStaff = currentTab != Tab.MY)
         if (!hasLoadedOnce) return
         when {
+            source.isEmpty() && loadError != null -> {
+                b.emptyState.setTitle("Couldn't load cab requests")
+                b.emptyState.setDescription("$loadError Pull down to try again.")
+                b.emptyState.visibility = View.VISIBLE
+            }
             source.isEmpty() -> {
                 b.emptyState.setTitle("No cab requests yet")
                 b.emptyState.setDescription(
