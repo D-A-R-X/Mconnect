@@ -499,7 +499,8 @@ class StaffSecurityBottomSheet : BottomSheetDialogFragment() {
             )
         }
         fieldRow.addView(input)
-        fieldRow.addView(TextView(ctx).apply {
+        val showToggle = TextView(ctx)
+        fieldRow.addView(showToggle.apply {
             text = "Show"
             textSize = 12f
             setTypeface(typeface, Typeface.BOLD)
@@ -521,19 +522,77 @@ class StaffSecurityBottomSheet : BottomSheetDialogFragment() {
         })
         wrapper.addView(fieldRow)
 
+        // Same as the web dialog: fill a strong password and show it.
         wrapper.addView(TextView(ctx).apply {
-            text = "At least 8 characters, with an upper and lower case letter, " +
-                "a number and a symbol."
+            text = "\u2726 Generate strong password"
+            textSize = 13f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.parseColor("#7C3AED"))
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(10).toFloat()
+                setColor(Color.WHITE)
+                setStroke(dp(1), Color.parseColor("#E4E7EC"))
+            }
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(10) }
+            isClickable = true
+            setOnClickListener {
+                input.inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                    android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+                showToggle.text = "Hide"
+                input.setText(com.manjugroups.m_connect.auth.PasswordPolicy.generate())
+                input.setSelection(input.text?.length ?: 0)
+            }
+        })
+
+        wrapper.addView(TextView(ctx).apply {
+            text = com.manjugroups.m_connect.auth.PasswordPolicy.RULE_TEXT
             textSize = 11f
             setTextColor(Color.parseColor("#667085"))
             setPadding(0, dp(8), 0, dp(2))
         })
-        wrapper.addView(TextView(ctx).apply {
-            text = "They will be asked to change it at their next login."
-            textSize = 11f
-            setTextColor(Color.parseColor("#B54708"))
-            setPadding(0, dp(4), 0, 0)
+
+        // "Force change on next login", on by default like the web dialog.
+        val forceSwitch = com.google.android.material.switchmaterial.SwitchMaterial(ctx).apply {
+            isChecked = true
+        }
+        val forceRow = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(14), dp(10), dp(8), dp(10))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(12).toFloat()
+                setColor(Color.parseColor("#F9FAFB"))
+                setStroke(dp(1), Color.parseColor("#EAECF0"))
+            }
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(12) }
+        }
+        val forceText = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        forceText.addView(TextView(ctx).apply {
+            text = "Force change on next login"
+            textSize = 14f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.parseColor("#101828"))
         })
+        forceText.addView(TextView(ctx).apply {
+            text = "Employee must pick a new password before continuing."
+            textSize = 11f
+            setTextColor(Color.parseColor("#667085"))
+            setPadding(0, dp(2), 0, 0)
+        })
+        forceRow.addView(forceText)
+        forceRow.addView(forceSwitch)
+        forceRow.setOnClickListener { forceSwitch.toggle() }
+        wrapper.addView(forceRow)
 
         val dialog = AlertDialog.Builder(ctx)
             .setTitle("Set a new password")
@@ -552,28 +611,78 @@ class StaffSecurityBottomSheet : BottomSheetDialogFragment() {
                     Toast.makeText(ctx, "Enter a password", Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
                 }
+                com.manjugroups.m_connect.auth.PasswordPolicy.problem(value)?.let {
+                    Toast.makeText(ctx, it, Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
                 dialog.dismiss()
-                savePassword(value)
+                savePassword(value, forceSwitch.isChecked)
             }
         }
         dialog.getButton(AlertDialog.BUTTON_NEGATIVE)
             ?.setTextColor(Color.parseColor("#667085"))
     }
 
-    private fun savePassword(newPassword: String) = runAction {
+    private fun savePassword(newPassword: String, forceChange: Boolean) = runAction {
         val resp = api.setStaffPassword(
             session.bearerToken,
             SetStaffPasswordRequest(
                 staffId = staffId,
                 newPassword = newPassword,
-                mustChangePassword = true,
+                mustChangePassword = forceChange,
             ),
         )
         if (resp.success) {
-            "Password updated — they must change it at next login"
+            showPasswordToShare(newPassword, forceChange)
+            if (forceChange) "Password updated — they must change it at next login"
+            else "Password updated"
         } else {
             resp.error ?: "Couldn't set the password"
         }
+    }
+
+    /**
+     * The saved password, shown once so it can be copied and shared (web
+     * parity). It is not kept anywhere once this closes.
+     */
+    private fun showPasswordToShare(password: String, forceChange: Boolean) {
+        if (!isAdded) return
+        val ctx = requireContext()
+        val body = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(12), dp(22), 0)
+        }
+        body.addView(TextView(ctx).apply {
+            text = password
+            textSize = 18f
+            typeface = Typeface.MONOSPACE
+            setTextIsSelectable(true)
+            setTextColor(Color.parseColor("#101828"))
+            setPadding(dp(14), dp(12), dp(14), dp(12))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(12).toFloat()
+                setColor(Color.parseColor("#F9FAFB"))
+                setStroke(dp(1), Color.parseColor("#D0D5DD"))
+            }
+        })
+        body.addView(TextView(ctx).apply {
+            text = (if (forceChange) "They will be asked to change it at their next login. " else "") +
+                "We won't show it again."
+            textSize = 11f
+            setTextColor(Color.parseColor("#667085"))
+            setPadding(0, dp(8), 0, 0)
+        })
+        AlertDialog.Builder(ctx)
+            .setTitle("Password ready to share")
+            .setView(body)
+            .setPositiveButton("Copy") { _, _ ->
+                val clipboard = ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                    as? android.content.ClipboardManager
+                clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("Password", password))
+                Toast.makeText(ctx, "Password copied", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Done", null)
+            .show()
     }
 
     private fun setExpiryExempt(exempt: Boolean) = runAction {
