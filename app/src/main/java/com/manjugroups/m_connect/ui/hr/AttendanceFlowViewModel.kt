@@ -527,7 +527,12 @@ class AttendanceFlowViewModel(
                             loadTodayAttendance(token, context)
                         }
                     }
-                    else -> reportSavedOnDevice(mode, context)
+                    else -> {
+                        if (mode == PunchMode.PUNCH_OUT) {
+                            stopTrackingForSavedClockOut(context, punchIso, latitude, longitude)
+                        }
+                        reportSavedOnDevice(mode, context)
+                    }
                 }
                 return@launch
             }
@@ -727,6 +732,9 @@ class AttendanceFlowViewModel(
             remarks = remarks,
         )
         if (!queued) return false
+        if (mode == PunchMode.PUNCH_OUT) {
+            stopTrackingForSavedClockOut(context, punchIso, latitude, longitude)
+        }
         reportSavedOnDevice(mode, context)
         return true
     }
@@ -745,6 +753,33 @@ class AttendanceFlowViewModel(
                     "Clock-out saved on this device — syncing when online",
             ),
         )
+    }
+
+    /**
+     * A clock-out saved on the phone ends tracking now, not when it syncs.
+     * With no network until the next day, tracking used to run on from the
+     * clock-out to the midnight cut-off. The stop works offline: tracking
+     * stops here and the server-side end is queued with the tap time.
+     */
+    private fun stopTrackingForSavedClockOut(
+        context: Context,
+        punchIso: String,
+        latitude: Double?,
+        longitude: Double?,
+    ) {
+        val appCtx = context.applicationContext
+        kotlinx.coroutines.CoroutineScope(Dispatchers.IO + kotlinx.coroutines.SupervisorJob()).launch {
+            runCatching {
+                GeoTrackBootstrapSync.onPunchRecorded(
+                    context = appCtx,
+                    punchedIn = false,
+                    occurredAt = parseMillis(punchIso) ?: System.currentTimeMillis(),
+                    lat = latitude,
+                    lng = longitude,
+                    api = geoApi,
+                )
+            }
+        }
     }
 
     /**
