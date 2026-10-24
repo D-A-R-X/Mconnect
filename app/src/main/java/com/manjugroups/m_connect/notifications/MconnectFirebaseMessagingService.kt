@@ -120,8 +120,10 @@ class MconnectFirebaseMessagingService : FirebaseMessagingService() {
             Log.w("MconnectFCM", "onMessageReceived: empty/null body, returning early")
             return
         }
+        val cabRequestType = message.data["type"]?.takeIf { it.startsWith("cab_request_") }
         val inferredTab = when {
             message.data["targetTab"] != null -> message.data["targetTab"]
+            cabRequestType != null -> "cab_requests"
             message.data["channelId"] != null || message.data["conversationId"] != null -> WorkflowNotificationRoute.TAB_CHAT
             else -> WorkflowNotificationRoute.TAB_HR
         }
@@ -133,6 +135,8 @@ class MconnectFirebaseMessagingService : FirebaseMessagingService() {
         }
         val inferredMode = when (inferredTab) {
             WorkflowNotificationRoute.TAB_CHAT -> WorkflowNotificationRoute.MODE_CHAT
+            // A new request goes to the approver; the rest to the requester.
+            "cab_requests" -> if (cabRequestType == "cab_request_pending") "approvals" else "my"
             else -> message.data["targetMode"] ?: WorkflowNotificationRoute.MODE_HISTORY
         }
 

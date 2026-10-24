@@ -736,6 +736,52 @@ interface ApiService {
     ): SimpleResponse
 
     // IAM
+    // ── Cab requests (web Fleet > Cab Requests; same IAM keys) ──
+    @GET("api/cab-requests/mine")
+    suspend fun listMyCabRequests(@Header("Authorization") token: String): CabRequestListResponse
+
+    @GET("api/cab-requests/approvals")
+    suspend fun listCabRequestApprovals(@Header("Authorization") token: String): CabRequestListResponse
+
+    @GET("api/cab-requests/all")
+    suspend fun listAllCabRequests(@Header("Authorization") token: String): CabRequestListResponse
+
+    @POST("api/cab-requests/create")
+    suspend fun createCabRequest(
+        @Header("Authorization") token: String,
+        @Body body: CreateCabRequestBody,
+    ): CabRequestActionResponse
+
+    @POST("api/cab-requests/approve")
+    suspend fun approveCabRequest(
+        @Header("Authorization") token: String,
+        @Body body: CabRequestIdBody,
+    ): CabRequestActionResponse
+
+    @POST("api/cab-requests/reject")
+    suspend fun rejectCabRequest(
+        @Header("Authorization") token: String,
+        @Body body: RejectCabRequestBody,
+    ): CabRequestActionResponse
+
+    @POST("api/cab-requests/cancel")
+    suspend fun cancelCabRequest(
+        @Header("Authorization") token: String,
+        @Body body: CabRequestIdBody,
+    ): CabRequestActionResponse
+
+    @POST("api/cab-requests/assign")
+    suspend fun assignCabRequest(
+        @Header("Authorization") token: String,
+        @Body body: AssignCabRequestBody,
+    ): CabRequestActionResponse
+
+    @POST("api/cab-requests/complete")
+    suspend fun completeCabRequest(
+        @Header("Authorization") token: String,
+        @Body body: CabRequestIdBody,
+    ): CabRequestActionResponse
+
     @GET("api/iam/my-permissions")
     suspend fun getMyIamPermissions(@Header("Authorization") token: String): IamPermissionsResponse
 

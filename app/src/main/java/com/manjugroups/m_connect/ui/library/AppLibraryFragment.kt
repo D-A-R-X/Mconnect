@@ -578,6 +578,19 @@ class AppLibraryFragment : Fragment() {
         ) {
             openScreen(MyTripsFragment())
         }
+        // Cab requests: same gate as the web tab (create, approve or viewAll).
+        bindIamEntry(
+            row = binding.itemFleetCabRequests,
+            allowed = hasAny(
+                listOf(
+                    "marketing.fleet.cabRequest.create",
+                    "marketing.fleet.cabRequest.approve",
+                    "marketing.fleet.cabRequest.viewAll",
+                ),
+            ),
+        ) {
+            openScreen(com.manjugroups.m_connect.ui.fleet.CabRequestsFragment.newInstance())
+        }
         // Agency-only portal: external fleet agencies land on it directly and
         // never see this library (handled in MainActivity). Deliberately NOT
         // surfaced to staff, even fleet administrators — every screen inside
@@ -826,7 +839,7 @@ class AppLibraryFragment : Fragment() {
             ),
             Triple(
                 Filter.FLEET, binding.cardFleet,
-                listOf(R.id.itemFleetMyTrips, R.id.itemFleetAdminFleet),
+                listOf(R.id.itemFleetMyTrips, R.id.itemFleetCabRequests, R.id.itemFleetAdminFleet),
             ),
             Triple(
                 Filter.SALES, binding.cardSales,

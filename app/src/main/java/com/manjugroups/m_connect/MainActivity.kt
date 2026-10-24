@@ -2181,6 +2181,13 @@ class MainActivity : AppCompatActivity() {
                         .newInstance(),
                 )
             }
+            // Cab request pushes (new request / approved / rejected / assigned).
+            "cab_requests" -> {
+                supportFragmentManager.pushDetail(
+                    com.manjugroups.m_connect.ui.fleet.CabRequestsFragment.newInstance(route.targetMode),
+                    allowStateLoss = true,
+                )
+            }
             WorkflowNotificationRoute.TAB_HR -> {
                 selectTab(TAB_HR)
                 val fragment = when (route.targetScreen) {
