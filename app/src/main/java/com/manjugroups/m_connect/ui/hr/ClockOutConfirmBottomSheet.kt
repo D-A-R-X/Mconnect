@@ -19,6 +19,7 @@ class ClockOutConfirmBottomSheet : BottomSheetDialogFragment() {
         const val KEY_CONFIRMED = "confirmed"
         private const val ARG_TODAY_MINUTES = "today_minutes"
         private const val ARG_OVERTIME_MINUTES = "overtime_minutes"
+        private const val ARG_GATE_BADGED_AT = "gate_badged_at"
 
         /**
          * Today minutes is the staff's worked minutes for the calendar day,
@@ -31,10 +32,13 @@ class ClockOutConfirmBottomSheet : BottomSheetDialogFragment() {
         fun newInstance(
             todayMinutes: Int = 0,
             overtimeMinutes: Int = 0,
+            /** Gate punch-in time when the day started at the gate ("" if unknown). */
+            gateBadgedAt: String? = null,
         ): ClockOutConfirmBottomSheet = ClockOutConfirmBottomSheet().apply {
             arguments = bundleOf(
                 ARG_TODAY_MINUTES to todayMinutes,
                 ARG_OVERTIME_MINUTES to overtimeMinutes,
+                ARG_GATE_BADGED_AT to gateBadgedAt,
             )
         }
     }
@@ -86,6 +90,13 @@ class ClockOutConfirmBottomSheet : BottomSheetDialogFragment() {
         val overtimeMinutes = arguments?.getInt(ARG_OVERTIME_MINUTES, 0) ?: 0
         binding.tvTodayHoursValue.text = formatMinutesAsHHMMSS(todayMinutes)
         binding.tvOvertimeHoursValue.text = formatMinutesAsHHMMSS(overtimeMinutes)
+        arguments?.getString(ARG_GATE_BADGED_AT)?.let { badgedAt ->
+            binding.tvDialogSubtitle.text = if (badgedAt.isNotBlank()) {
+                "You badged in at the gate at $badgedAt. Clocking out now ends your day."
+            } else {
+                "You badged in at the gate. Clocking out now ends your day."
+            }
+        }
 
         binding.btnConfirmClockOut.setOnClickListener {
             parentFragmentManager.setFragmentResult(RESULT_KEY, bundleOf(KEY_CONFIRMED to true))

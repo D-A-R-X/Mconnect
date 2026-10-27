@@ -474,13 +474,32 @@ class AttendanceHistoryFragment : Fragment() {
         // just the last few days).
         val allSearch = binding.etSearch.text?.toString()?.trim()?.ifBlank { null }
 
+        // Cache-first: paint the last-known month from disk at once, but still
+        // fetch the fresh copy (a fresh install has no cache and waits).
+        var myPaintedFromDisk = false
+        if (cachedMyRecords.isEmpty()) {
+            val ctx = context?.applicationContext
+            val key = myAttnCacheKey()
+            if (ctx != null && key != null) {
+                val cached: List<AttendanceRecord>? = LocalCache.get(
+                    ctx, key, object : TypeToken<List<AttendanceRecord>>() {}.type,
+                )
+                if (!cached.isNullOrEmpty()) {
+                    cachedMyRecords = cached
+                    myPaintedFromDisk = true
+                    updateBadgeFor(0, cachedMyRecords.size)
+                    showTabIfActive(0)
+                }
+            }
+        }
+
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val token = session.bearerToken
                 if (token.isBlank()) return@launch
 
                 val myDeferred = async {
-                    if (cachedMyRecords.isNotEmpty()) null
+                    if (cachedMyRecords.isNotEmpty() && !myPaintedFromDisk) null
                     else runCatching {
                         api.getMyAttendance(
                             token,
@@ -564,7 +583,8 @@ class AttendanceHistoryFragment : Fragment() {
                     runCatching { api.listFines(token, status = "active") }.getOrNull()
                 }
 
-                myDeferred.await()?.let { if (it.success) cachedMyRecords = it.records }
+                val myResp = myDeferred.await()
+                if (myResp?.success == true) cachedMyRecords = myResp.records
                 // Offline-resilience for the personal "My Attendance" tab: on a
                 // successful non-empty fetch, persist to disk; when the fetch
                 // yielded nothing (offline / failure), hydrate the last-known
@@ -574,9 +594,9 @@ class AttendanceHistoryFragment : Fragment() {
                     val ctx = context?.applicationContext
                     val key = myAttnCacheKey()
                     if (ctx != null && key != null) {
-                        if (cachedMyRecords.isNotEmpty()) {
+                        if (myResp?.success == true && cachedMyRecords.isNotEmpty()) {
                             LocalCache.put(ctx, key, cachedMyRecords, System.currentTimeMillis())
-                        } else {
+                        } else if (cachedMyRecords.isEmpty()) {
                             val cached: List<AttendanceRecord>? = LocalCache.get(
                                 ctx, key, object : TypeToken<List<AttendanceRecord>>() {}.type,
                             )
@@ -585,9 +605,14 @@ class AttendanceHistoryFragment : Fragment() {
                     }
                 }
                 updateBadgeFor(0, cachedMyRecords.size)
+                // Each tab draws as soon as its own data lands. My Attendance
+                // used to wait for the company-wide All / HR Review fetches,
+                // which kept HR users on a spinner for minutes.
+                showTabIfActive(0)
 
                 teamDeferred.await()?.let { if (it.success) cachedTeamAttendance = it.records }
                 updateBadgeFor(1, cachedTeamAttendance.size)
+                showTabIfActive(1)
 
                 approvalsDeferred.await()?.let {
                     if (it.success) {
@@ -633,13 +658,16 @@ class AttendanceHistoryFragment : Fragment() {
                     2,
                     teamApprovalAttendanceRows().size + teamApprovalRequestRows().size,
                 )
+                showTabIfActive(2)
 
                 allApprovalsDeferred.await()?.let { if (it.success) cachedAllApprovals = it.records }
                 updateBadgeFor(3, allApprovalAttendanceRows().size)
+                showTabIfActive(3)
 
                 hrReviewDeferred.await()?.let { if (it.success) cachedHrReview = it.records }
                 updateBadgeFor(4, cachedHrReview.size)
                 updateSubTabStyles()
+                showTabIfActive(4)
 
                 val allResp = allDeferred.await()
                 if (allResp?.success == true) {
@@ -664,6 +692,17 @@ class AttendanceHistoryFragment : Fragment() {
                 }
             }
         }
+    }
+
+    /**
+     * Draws [tab] now if it is the one on screen and its data has arrived,
+     * while the other tabs are still loading.
+     */
+    private fun showTabIfActive(tab: Int) {
+        if (_binding == null || activeTab != tab || activeTabBackingIsEmpty()) return
+        SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
+        binding.attendanceRefresh.isRefreshing = false
+        renderCurrentTab()
     }
 
     /** Cache key for the personal "My Attendance" tab, namespaced by staff and

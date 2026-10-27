@@ -200,15 +200,6 @@ class HrDashboardFragment : Fragment() {
         })
 
         binding.btnClockInNow.setOnClickListener {
-            // Badged in at the gate and the gate session is still open: the
-            // server already has them clocked in, so start the day in the app
-            // instead of sending a second punch (iOS parity).
-            val current = flowViewModel.uiState.value
-            if (current.needsMobileDayStart && current.hasOpenPunchNow) {
-                flowViewModel.startMobileDayAfterGatePunch(requireContext())
-                Toast.makeText(requireContext(), "Your day has started in the app", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
             // Button stays active visually so the user can always reach
             // for it. If they're inside their home fence, refuse the tap
             // and show the "You are at Home!" warning dialog.
@@ -281,9 +272,16 @@ class HrDashboardFragment : Fragment() {
                 state.todayMinutes
             }
             val overtime = (today - 480).coerceAtLeast(0)
+            // Badged in at the gate only: say that clocking out ends that day.
+            val gateBadgedAt = if (state.startedAtGate && state.hasOpenPunchNow) {
+                firstIso?.let(::formatIsoTime) ?: ""
+            } else {
+                null
+            }
             ClockOutConfirmBottomSheet.newInstance(
                 todayMinutes = today,
                 overtimeMinutes = overtime,
+                gateBadgedAt = gateBadgedAt,
             ).showOnce(parentFragmentManager, "clock_out_confirm")
         }
 
@@ -536,26 +534,9 @@ class HrDashboardFragment : Fragment() {
                     //      returns to state 2 — so he can clock out again
                     //      whenever he wants.
                     fenceCheckNeeded = !(state.hasClockedInToday || state.clockedOutOnMobile)
-                    if (state.needsMobileDayStart && !state.clockedOutOnMobile) {
-                        // Badged in at the gate, not started in the app yet:
-                        // Clock In (never Clock Out, which used to end the day
-                        // straight after the gate punch-in). The timer runs from
-                        // the gate punch.
-                        binding.clockInButtonGroup.visibility = View.VISIBLE
-                        binding.clockedInButtonGroup.visibility = View.GONE
-                        binding.btnOnDutyDisabled.isEnabled = !state.isSubmitting
-                        binding.btnClockInNow.setBackgroundResource(R.drawable.bg_attendance_btn_primary)
-                        binding.btnClockInNow.alpha = 1f
-                        binding.tvClockInFenceStatus.visibility = View.GONE
-                        startLiveTodayTicker(state.firstPunchInIso)
-                        updateHeaderTexts(true)
-                        val badgedAt = state.firstPunchInIso?.let(::formatIsoTime)
-                        binding.tvAttendanceHeaderSubtitle.text = if (badgedAt != null) {
-                            "Badged in at $badgedAt · tap Clock In to start your day"
-                        } else {
-                            "Badged in at the gate · tap Clock In to start your day"
-                        }
-                    } else if (state.hasClockedInToday && !state.clockedOutOnMobile) {
+                    // A gate (or HR) punch-in counts as clocked in: Clock Out,
+                    // whose confirmation says it ends the gate-started day.
+                    if (state.hasClockedInToday && !state.clockedOutOnMobile) {
                         binding.clockInButtonGroup.visibility = View.GONE
                         binding.clockedInButtonGroup.visibility = View.VISIBLE
                         binding.btnOnDuty.visibility = View.VISIBLE
@@ -570,6 +551,12 @@ class HrDashboardFragment : Fragment() {
                         updateOnDutyButtonUi()
                         startLiveTodayTicker(state.firstPunchInIso)
                         updateHeaderTexts(true)
+                        if (state.startedAtGate && state.hasOpenPunchNow) {
+                            val badgedAt = state.firstPunchInIso?.let(::formatIsoTime)
+                            binding.tvAttendanceHeaderSubtitle.text =
+                                if (badgedAt != null) "Badged in at the gate at $badgedAt"
+                                else "Badged in at the gate"
+                        }
                     } else if (state.clockedOutOnMobile) {
                         // Clocked out on mobile → dead "Clocked Out" until a
                         // later punch. Only a mobile clock-out lands here (a
