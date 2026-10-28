@@ -112,6 +112,18 @@ interface ApiService {
         @Query("date") date: String? = null,
     ): OverviewDashboardResponse
 
+    // Mandatory alerts sent from web Settings → Mobile → Alert.
+    @GET("api/mobile/alerts/pending")
+    suspend fun getPendingMobileAlerts(
+        @Header("Authorization") token: String,
+    ): MobileAlertsResponse
+
+    @POST("api/mobile/alerts/viewed")
+    suspend fun markMobileAlertViewed(
+        @Header("Authorization") token: String,
+        @Body body: MobileAlertViewedRequest,
+    ): MobileAlertViewedResponse
+
     @GET("api/mobile/dashboard")
     suspend fun getMobileDashboard(
         @Header("Authorization") token: String,
@@ -2542,6 +2554,25 @@ data class MobileAppVersionResponse(
     // keep the notice on (the default).
     val oldAppPromptEnabled: Boolean? = null,
     val oldAppPromptAllowContinue: Boolean? = null,
+    val error: String? = null,
+)
+data class MobileAlertsResponse(
+    val success: Boolean = false,
+    val alerts: List<MobileAlert>? = null,
+    val error: String? = null,
+)
+data class MobileAlert(
+    val deliveryId: String? = null,
+    val sendId: String? = null,
+    val title: String? = null,
+    val bodyHtml: String? = null,
+    val imageUrl: String? = null,
+    val sentAt: Long? = null,
+    val minViewSeconds: Int? = null,
+)
+data class MobileAlertViewedRequest(val deliveryId: String)
+data class MobileAlertViewedResponse(
+    val success: Boolean = false,
     val error: String? = null,
 )
 data class PushRegisterRequest(

@@ -232,6 +232,17 @@ class MainActivity : AppCompatActivity() {
             notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
         }
 
+        // A mandatory alert pushed while the app is open shows at once.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                com.manjugroups.m_connect.notifications.MobileAlerts.pushArrived.collect {
+                    if (session.isLoggedIn) {
+                        com.manjugroups.m_connect.notifications.MobileAlerts.refreshAndShow(this@MainActivity)
+                    }
+                }
+            }
+        }
+
         // Listen for an authenticated 401 from the authoritative MMS API.
         // Public login requests and secondary services cannot revoke this
         // session; their failures stay within their own retry/error paths.
@@ -1220,6 +1231,8 @@ class MainActivity : AppCompatActivity() {
             }
         }
         if (!session.isLoggedIn) return
+        // Mandatory alerts from web Settings → Mobile → Alert not yet viewed.
+        com.manjugroups.m_connect.notifications.MobileAlerts.refreshAndShow(this)
         // Finish a downloaded flexible update / resume a stalled immediate one.
         // Kept for everyone — it's a Play call, not an MMS one.
         inAppUpdateManager?.onResume()

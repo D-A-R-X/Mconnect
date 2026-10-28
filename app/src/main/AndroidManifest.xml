@@ -120,6 +120,13 @@
             android:theme="@style/Theme.Mconnect"
             android:turnScreenOn="true" />
 
+        <!-- Mandatory alert from web Settings → Mobile → Alert. -->
+        <activity
+            android:name=".ui.alerts.MobileAlertActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.Mconnect" />
+
         <activity android:name=".geotrack.GeoTrackConsentActivity"
             android:launchMode="singleTask"
             android:theme="@style/Theme.Mconnect" />

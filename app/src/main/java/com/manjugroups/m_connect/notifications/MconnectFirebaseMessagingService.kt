@@ -88,6 +88,12 @@ class MconnectFirebaseMessagingService : FirebaseMessagingService() {
             return
         }
 
+        // Mandatory alert: pinned until viewed, shown full screen in the app.
+        if (message.data["type"] == "mobile_alert") {
+            MobileAlerts.onPush(applicationContext, message.data)
+            return
+        }
+
         if (message.data["type"] == "geotrack_sync") {
             CoroutineScope(Dispatchers.IO).launch {
                 runCatching {
