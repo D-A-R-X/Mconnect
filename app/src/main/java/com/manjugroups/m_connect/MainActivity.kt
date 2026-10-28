@@ -1208,6 +1208,10 @@ class MainActivity : AppCompatActivity() {
         // stuck on all tabs. This makes the back-stack state the single source
         // of truth again.
         syncChromeToBackStack()
+        // The old sideloaded Mconnect (separate app id) clashes with this one;
+        // hold the staff member on a notice until it is uninstalled.
+        com.manjugroups.m_connect.ui.common.OldAppUninstallGate
+            .showIfNeeded(supportFragmentManager, this)
         if (!session.isLoggedIn) return
         // Finish a downloaded flexible update / resume a stalled immediate one.
         // Kept for everyone — it's a Play call, not an MMS one.
@@ -1430,6 +1434,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun maybeShowBackgroundPermissionsGate() {
+        // One sheet at a time: the old-app notice comes first, and the
+        // permissions gate follows on the resume after it is uninstalled.
+        if (com.manjugroups.m_connect.ui.common.OldAppUninstallGate.isOldAppInstalled(this)) return
         // Every staffer is held on the gate until what the app needs from
         // them is granted. Untracked staff are asked only for location while
         // in use (punch-in) and notifications; tracked staff get the full set.

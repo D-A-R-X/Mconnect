@@ -26,6 +26,15 @@
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
+    <!-- Opens the system "Uninstall this app?" dialog for the old pre-Play
+         Mconnect (OldAppUninstallGate); the user still confirms it. -->
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
+
+    <!-- Package visibility (Android 11+): lets the app see whether the old
+         sideloaded Mconnect, a separate app id, is still installed. -->
+    <queries>
+        <package android:name="com.manjugroups.m_connect" />
+    </queries>
 
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />

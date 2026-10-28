@@ -31,6 +31,13 @@ class LoginActivity : AppCompatActivity() {
     private lateinit var session: SessionManager
     private val viewModel: AuthViewModel by viewModels()
 
+    override fun onResume() {
+        super.onResume()
+        // Ask for the old sideloaded Mconnect to be removed before sign-in too.
+        com.manjugroups.m_connect.ui.common.OldAppUninstallGate
+            .showIfNeeded(supportFragmentManager, this)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityLoginBinding.inflate(layoutInflater)
