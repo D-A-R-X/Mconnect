@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- New Cab Request: same design system as Schedule Site Visit
+     (bottom_sheet_create_site_visit.xml): sections in cards, SvCreate* fields,
+     a pinned Cancel / Submit footer. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_auth_sheet"
+    android:orientation="vertical">
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="20dp"
+            android:paddingTop="16dp"
+            android:paddingBottom="24dp">
+
+            <View
+                android:layout_width="40dp"
+                android:layout_height="4dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginBottom="14dp"
+                android:background="@drawable/bg_chat_sheet_handle" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_bold"
+                android:text="New Cab Request"
+                android:textColor="#101828"
+                android:textSize="20sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:fontFamily="@font/inter_medium"
+                android:text="Your reporting officer will be notified to approve"
+                android:textColor="#667085"
+                android:textSize="13sp" />
+
+            <TextView style="@style/SvCreateSection" android:text="Trip" />
+            <LinearLayout style="@style/SvCreateCard">
+                <TextView style="@style/SvCreateLabel" android:layout_marginTop="0dp" android:text="Purpose *" />
+                <EditText android:id="@+id/etCabPurpose" style="@style/SvCreateInput" android:hint="Site visit, client meeting..." android:inputType="textCapSentences" />
+            </LinearLayout>
+
+            <TextView style="@style/SvCreateSection" android:text="Route" />
+            <LinearLayout style="@style/SvCreateCard">
+                <TextView style="@style/SvCreateLabel" android:layout_marginTop="0dp" android:text="From location (pickup) *" />
+                <EditText android:id="@+id/etCabFrom" style="@style/SvCreateInput" android:gravity="top|start" android:hint="Pickup address" android:inputType="textMultiLine|textCapSentences" android:minHeight="76dp" android:paddingTop="14dp" android:paddingBottom="14dp" android:layout_height="wrap_content" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnCabFromPin"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="46dp"
+                    android:layout_marginTop="10dp"
+                    android:fontFamily="@font/inter_semibold"
+                    android:text="Pick pickup on map"
+                    android:textAllCaps="false"
+                    android:textColor="#0B61CA"
+                    app:cornerRadius="8dp"
+                    app:strokeColor="#0B61CA" />
+
+                <TextView style="@style/SvCreateLabel" android:layout_marginTop="16dp" android:text="To location (drop) *" />
+                <EditText android:id="@+id/etCabTo" style="@style/SvCreateInput" android:gravity="top|start" android:hint="Drop address" android:inputType="textMultiLine|textCapSentences" android:minHeight="76dp" android:paddingTop="14dp" android:paddingBottom="14dp" android:layout_height="wrap_content" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnCabToPin"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="46dp"
+                    android:layout_marginTop="10dp"
+                    android:fontFamily="@font/inter_semibold"
+                    android:text="Pick drop on map"
+                    android:textAllCaps="false"
+                    android:textColor="#0B61CA"
+                    app:cornerRadius="8dp"
+                    app:strokeColor="#0B61CA" />
+            </LinearLayout>
+
+            <TextView style="@style/SvCreateSection" android:text="Schedule" />
+            <LinearLayout style="@style/SvCreateCard">
+                <TextView style="@style/SvCreateLabel" android:layout_marginTop="0dp" android:text="Date *" />
+                <EditText android:id="@+id/etCabDate" style="@style/SvCreatePicker" android:hint="Select date" />
+                <TextView style="@style/SvCreateLabel" android:text="Time" />
+                <EditText android:id="@+id/etCabTime" style="@style/SvCreatePicker" android:hint="Select time (optional)" />
+            </LinearLayout>
+
+            <TextView style="@style/SvCreateSection" android:text="Passengers" />
+            <LinearLayout style="@style/SvCreateCard">
+                <TextView style="@style/SvCreateLabel" android:layout_marginTop="0dp" android:text="Number of passengers" />
+                <EditText android:id="@+id/etCabPassengers" style="@style/SvCreateInput" android:hint="1" android:inputType="number" android:maxLength="2" />
+                <TextView style="@style/SvCreateLabel" android:text="Notes" />
+                <EditText android:id="@+id/etCabNotes" style="@style/SvCreateInput" android:gravity="top|start" android:hint="Any additional info..." android:inputType="textMultiLine|textCapSentences" android:minHeight="76dp" android:paddingTop="14dp" android:paddingBottom="14dp" android:layout_height="wrap_content" />
+            </LinearLayout>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_auth_sheet"
+        android:elevation="12dp"
+        android:orientation="horizontal"
+        android:paddingHorizontal="20dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="16dp">
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnCabCancel"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="54dp"
+            android:layout_marginEnd="8dp"
+            android:layout_weight="1"
+            android:fontFamily="@font/inter_bold"
+            android:text="Cancel"
+            android:textAllCaps="false"
+            app:cornerRadius="27dp"
+            app:strokeColor="#D0D5DD" />
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnCabSubmit"
+            android:layout_width="0dp"
+            android:layout_height="54dp"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:backgroundTint="#1BCA0B"
+            android:fontFamily="@font/inter_bold"
+            android:text="Submit request"
+            android:textAllCaps="false"
+            android:textColor="#FFFFFF"
+            app:cornerRadius="27dp" />
+    </LinearLayout>
+</LinearLayout>
