@@ -135,12 +135,17 @@ object GeoTrackEventQueue {
                 if (AttendanceDayBoundary.dateKey(queuedStartAt) != AttendanceDayBoundary.dateKey()) {
                     true // Never reopen a start command from a finalized attendance day.
                 } else when (AttendanceTrackingGate.hasOpenSessionNow(session.bearerToken)) {
-                    false -> true // Stale offline start from a closed attendance day.
+                    // Stale offline start from a closed attendance day — unless
+                    // the punch-in may not have reached the server's attendance
+                    // read yet (it serves cached reads for 2 minutes, and an
+                    // offline punch syncs separately). Dropping it then left the
+                    // phone tracking into an old session, Offline on the board.
+                    false -> !startMayStillBeConfirmed(context, queuedStartAt)
                     null -> false
                     true -> runCatching {
-                        val response = api.startDirectTracking(
+                        suspend fun start(idempotencyKey: String) = api.startDirectTracking(
                             token = session.bearerToken,
-                            idempotencyKey = requestId,
+                            idempotencyKey = idempotencyKey,
                             body = DirectTrackingStartRequest(
                                 deviceId = deviceId,
                                 contextId = metadata["contextId"] as? String,
@@ -150,6 +155,13 @@ object GeoTrackEventQueue {
                                 batteryPct = (metadata["batteryPct"] as? Number)?.toInt(),
                             ),
                         )
+                        var response = start(requestId)
+                        // One start id per device per day: after the day's first
+                        // session ended, the service returns that ENDED session.
+                        // Attendance is open, so open a fresh one.
+                        if (response.success && response.data?.state.equals("ended", ignoreCase = true)) {
+                            response = start("$requestId-$queuedStartAt")
+                        }
                         val activeId = response.data?.sessionId?.takeIf { it.isNotBlank() }
                         if (response.success && activeId != null) {
                             session.activeTrackingSessionId = activeId
@@ -226,5 +238,20 @@ object GeoTrackEventQueue {
         }
         if (sentIds.isNotEmpty()) dao.deleteByIds(sentIds)
         return sentIds.size
+    }
+
+    /** How long after a punch-in the server's attendance read may still lag it. */
+    private const val START_CONFIRM_WINDOW_MS = 10 * 60 * 1000L
+
+    /**
+     * Whether a queued start that the attendance check called "not clocked in"
+     * may still be confirmed: the punch-in is recent (attendance reads are
+     * cached for 2 minutes) or a punch is still waiting in the offline queue.
+     */
+    private suspend fun startMayStillBeConfirmed(context: Context, startedAt: Long): Boolean {
+        if (System.currentTimeMillis() - startedAt < START_CONFIRM_WINDOW_MS) return true
+        return runCatching {
+            GeoTrackDatabase.getInstance(context.applicationContext).pendingPunchDao().count() > 0
+        }.getOrDefault(false)
     }
 }

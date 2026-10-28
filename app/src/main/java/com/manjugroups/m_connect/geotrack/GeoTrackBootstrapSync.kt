@@ -102,8 +102,7 @@ object GeoTrackBootstrapSync {
         }
         val current = currentResponse.data
         val active = current?.takeIf { it.state.equals("active", ignoreCase = true) }
-        val resolved = active ?: runCatching {
-            val requestId = startRequestId(session.trackingDeviceId, contextId, startedAt)
+        suspend fun startDirect(requestId: String) = runCatching {
             api.startDirectTracking(
                 token = session.bearerToken,
                 idempotencyKey = requestId,
@@ -117,6 +116,21 @@ object GeoTrackBootstrapSync {
                 ),
             ).takeIf { it.success }?.data
         }.getOrNull()
+        val dayRequestId = startRequestId(session.trackingDeviceId, contextId, startedAt)
+        val firstResolved = active ?: startDirect(dayRequestId)
+        // The start request id is one per device per day, so once the day's
+        // first session has ended (clocked out, then in again) the service
+        // hands that ENDED session back. Tracking into it keeps the route
+        // drawing but shows the staffer Offline for the rest of the day. A
+        // punch-in just happened, so open a fresh session for it instead.
+        val resolved = if (
+            attendanceOpenOverride == true &&
+            firstResolved?.state.equals("ended", ignoreCase = true)
+        ) {
+            startDirect("$dayRequestId-$startedAt") ?: firstResolved
+        } else {
+            firstResolved
+        }
 
         if (resolved == null) {
             if (session.activeTrackingSessionId.isNullOrBlank()) {
