@@ -1540,6 +1540,7 @@ interface ApiService {
                 .apply { OfflineHttpCache.cache()?.let { cache(it) } }
                 .addInterceptor(OfflineHttpCache.serveStaleWhenOffline)
                 .addNetworkInterceptor(OfflineHttpCache.storeResponses)
+                .addInterceptor(AppBuildHeaders.interceptor)
                 .addInterceptor(mobileAuthContract)
                 .addInterceptor(storageUploadTimeout)
                 .addInterceptor(authWatchdog)

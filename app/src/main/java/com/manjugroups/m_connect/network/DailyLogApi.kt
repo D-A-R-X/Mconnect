@@ -123,6 +123,7 @@ interface DailyLogApi {
                 .apply { OfflineHttpCache.cache()?.let { cache(it) } }
                 .addInterceptor(OfflineHttpCache.serveStaleWhenOffline)
                 .addNetworkInterceptor(OfflineHttpCache.storeResponses)
+                .addInterceptor(AppBuildHeaders.interceptor)
                 .addInterceptor(authWatchdog)
                 .addInterceptor(logging)
                 .connectTimeout(30, TimeUnit.SECONDS)
