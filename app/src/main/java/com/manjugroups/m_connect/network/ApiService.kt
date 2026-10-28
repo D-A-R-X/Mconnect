@@ -2538,6 +2538,10 @@ data class MobileAppVersionResponse(
     val updateRequired: Boolean? = null,
     val updateUrl: String? = null,
     val publishedAt: String? = null,
+    // Settings → Mobile → Old Mconnect app. Null from a backend without them:
+    // keep the notice on (the default).
+    val oldAppPromptEnabled: Boolean? = null,
+    val oldAppPromptAllowContinue: Boolean? = null,
     val error: String? = null,
 )
 data class PushRegisterRequest(

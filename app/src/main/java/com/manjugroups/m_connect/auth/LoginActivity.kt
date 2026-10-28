@@ -36,6 +36,12 @@ class LoginActivity : AppCompatActivity() {
         // Ask for the old sideloaded Mconnect to be removed before sign-in too.
         com.manjugroups.m_connect.ui.common.OldAppUninstallGate
             .showIfNeeded(supportFragmentManager, this)
+        lifecycleScope.launch {
+            if (com.manjugroups.m_connect.ui.common.OldAppUninstallGate.refreshPolicy(this@LoginActivity)) {
+                com.manjugroups.m_connect.ui.common.OldAppUninstallGate
+                    .showIfNeeded(supportFragmentManager, this@LoginActivity)
+            }
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
