@@ -29,6 +29,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:background="@drawable/bg_mobile_alert_pill"
+                android:layout_gravity="center_horizontal"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
                 android:paddingHorizontal="12dp"
@@ -53,6 +54,8 @@
 
             <TextView
                 android:id="@+id/tvMobileAlertSentAt"
+                android:layout_gravity="center_horizontal"
+                android:gravity="center"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
@@ -62,6 +65,7 @@
 
             <TextView
                 android:id="@+id/tvMobileAlertTitle"
+                android:gravity="center"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
