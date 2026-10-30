@@ -5,6 +5,13 @@
     <!-- Debug builds expose only this call surface so QA can exercise the
          lock-screen activity with adb. The production manifest stays private. -->
     <application>
+        <!-- ADB-only alert preview; release keeps this activity private. -->
+        <activity
+            android:name=".ui.alerts.MobileAlertActivity"
+            android:exported="true"
+            android:permission="android.permission.DUMP"
+            tools:replace="android:exported" />
+
         <activity
             android:name=".notifications.IncomingCallActivity"
             android:exported="true"
