@@ -9,6 +9,8 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
 import com.google.gson.Gson
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
@@ -97,16 +99,25 @@ object MobileAlerts {
     fun refreshAndShow(activity: Activity) {
         val appContext = activity.applicationContext
         scope.launch {
-            refreshLock.withLock {
-                val pending = fetchPending(appContext) ?: return@withLock
+            // Drop duplicate triggers instead of queuing polls behind slow HTTP.
+            if (!refreshLock.tryLock()) return@launch
+            try {
+                val bearer = SessionManager(appContext).bearerToken
+                val pending = fetchPending(appContext) ?: return@launch
+                if (SessionManager(appContext).bearerToken != bearer) return@launch
                 pending.forEach { postNotification(appContext, it) }
-                val first = pending.firstOrNull() ?: return@withLock
+                val first = pending.firstOrNull() ?: return@launch
                 withContext(Dispatchers.Main) {
-                    if (!screenShowing && !activity.isFinishing && !activity.isDestroyed) {
+                    val resumed = (activity as? LifecycleOwner)?.lifecycle?.currentState
+                        ?.isAtLeast(Lifecycle.State.RESUMED) == true
+                    if (resumed && SessionManager(appContext).bearerToken == bearer &&
+                        !screenShowing && !activity.isFinishing && !activity.isDestroyed) {
                         screenShowing = true
                         activity.startActivity(MobileAlertActivity.intent(activity, first))
                     }
                 }
+            } finally {
+                refreshLock.unlock()
             }
         }
     }

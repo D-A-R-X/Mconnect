@@ -243,6 +243,18 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // Push is primary; a missed/delayed push must not require an app restart.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                while (true) {
+                    if (session.isLoggedIn) {
+                        com.manjugroups.m_connect.notifications.MobileAlerts.refreshAndShow(this@MainActivity)
+                    }
+                    kotlinx.coroutines.delay(5_000)
+                }
+            }
+        }
+
         // Listen for an authenticated 401 from the authoritative MMS API.
         // Public login requests and secondary services cannot revoke this
         // session; their failures stay within their own retry/error paths.
