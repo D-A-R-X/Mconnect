@@ -66,4 +66,60 @@ class MobileAppVersionPolicyTest {
             ),
         )
     }
+
+    @Test
+    fun `tester latest 96 does not block supported staff builds from 72`() {
+        val policy = MobileAppVersionResponse(
+            success = true,
+            latestBuildNumber = 96,
+            minimumSupportedBuildNumber = 72,
+            updateRequired = false,
+        )
+
+        for (build in listOf(72, 83, 91, 96)) {
+            assertFalse(requiresMandatoryMobileUpdate(policy, build))
+        }
+    }
+
+    @Test
+    fun `published mandatory threshold covers all older staff builds`() {
+        val policy = MobileAppVersionResponse(
+            success = true,
+            latestBuildNumber = 96,
+            minimumSupportedBuildNumber = 96,
+            updateRequired = false,
+        )
+
+        for (build in 72..95) {
+            assertTrue(requiresMandatoryMobileUpdate(policy, build))
+        }
+        assertFalse(requiresMandatoryMobileUpdate(policy, 96))
+        assertFalse(requiresMandatoryMobileUpdate(policy, 97))
+    }
+
+    @Test
+    fun `stale required flag cannot block a build already at the threshold`() {
+        val policy = MobileAppVersionResponse(
+            success = true,
+            latestBuildNumber = 96,
+            minimumSupportedBuildNumber = 96,
+            updateRequired = true,
+        )
+
+        assertTrue(requiresMandatoryMobileUpdate(policy, 95))
+        assertFalse(requiresMandatoryMobileUpdate(policy, 96))
+        assertFalse(requiresMandatoryMobileUpdate(policy, 97))
+    }
+
+    @Test
+    fun `required latest fallback also stops blocking after installation`() {
+        val policy = MobileAppVersionResponse(
+            success = true,
+            latestBuildNumber = 96,
+            updateRequired = true,
+        )
+
+        assertTrue(requiresMandatoryMobileUpdate(policy, 72))
+        assertFalse(requiresMandatoryMobileUpdate(policy, 96))
+    }
 }

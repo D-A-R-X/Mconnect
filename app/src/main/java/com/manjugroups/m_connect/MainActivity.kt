@@ -1432,8 +1432,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
-        // A downloaded flexible update is completed silently only after the
-        // activity is backgrounded and every safety gate passes again.
+        // Play can finish an approved flexible update without foreground UI.
         inAppUpdateManager?.onAppBackgrounded()
     }
 
