@@ -247,8 +247,6 @@ class MobileAlertActivity : AppCompatActivity() {
           code, pre { background: #F2F4F7; border-radius: 6px; padding: 1px 5px; font-size: 14px; }
           pre { padding: 10px; white-space: pre-wrap; }
           body > :first-child { margin-top: 0; }
-          body, body * { text-align: center !important; }
-          ul, ol { padding-left: 0; list-style-position: inside; }
         </style></head><body>${if (TextUtils.isEmpty(bodyHtml)) "" else bodyHtml}</body></html>
     """.trimIndent()
 }

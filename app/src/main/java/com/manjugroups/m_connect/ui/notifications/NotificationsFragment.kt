@@ -111,12 +111,11 @@ class NotificationsFragment : Fragment() {
         setupFilterChips()
 
         binding.notificationsRefresh.setupPullToRefresh { loadNotifications() }
-
-        loadNotifications()
     }
 
     override fun onResume() {
         super.onResume()
+        loadNotifications()
         (activity as? MainActivity)?.let { main ->
             main.setTabBarVisible(false)
             main.setTopBarAppearance(android.graphics.Color.WHITE, true, fullBleed = false)
