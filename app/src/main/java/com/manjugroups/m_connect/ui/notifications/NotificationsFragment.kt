@@ -303,6 +303,16 @@ class NotificationsFragment : Fragment() {
     }
 
     private fun openNotification(notification: NotificationData) {
+        if (notification.referenceType == "mobileAlert") {
+            val deliveryId = notification.referenceId ?: return
+            startActivity(com.manjugroups.m_connect.ui.alerts.MobileAlertActivity.intent(
+                requireContext(), com.manjugroups.m_connect.network.MobileAlert(deliveryId = deliveryId), reopen = true,
+            ))
+            viewLifecycleOwner.lifecycleScope.launch {
+                notification.id?.let { runCatching { api.markNotificationRead(session.bearerToken, IdRequest(it)) } }
+            }
+            return
+        }
         viewLifecycleOwner.lifecycleScope.launch {
             notification.id?.let { id ->
                 runCatching {

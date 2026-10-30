@@ -12,6 +12,7 @@ import android.webkit.WebViewClient
 import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.widget.NestedScrollView
@@ -22,11 +23,13 @@ import com.google.android.material.card.MaterialCardView
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.MobileAlert
+import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.MobileStorageFiles
 import com.manjugroups.m_connect.notifications.MobileAlerts
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.ensureActive
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -40,10 +43,12 @@ class MobileAlertActivity : AppCompatActivity() {
 
     companion object {
         private const val EXTRA_ALERT = "mobile_alert_json"
+        private const val EXTRA_REOPEN = "mobile_alert_reopen"
 
-        fun intent(context: Context, alert: MobileAlert): Intent =
+        fun intent(context: Context, alert: MobileAlert, reopen: Boolean = false): Intent =
             Intent(context, MobileAlertActivity::class.java)
                 .putExtra(EXTRA_ALERT, MobileAlerts.toJson(alert))
+                .putExtra(EXTRA_REOPEN, reopen)
                 .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
     }
 
@@ -62,6 +67,7 @@ class MobileAlertActivity : AppCompatActivity() {
 
     private var current: MobileAlert? = null
     private var countdown: Job? = null
+    private var openJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -95,17 +101,39 @@ class MobileAlertActivity : AppCompatActivity() {
         if (isFinishing) MobileAlerts.screenShowing = false
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        open(MobileAlerts.fromJson(intent.getStringExtra(EXTRA_ALERT)))
+    }
+
     /** From a notification the alert has no body yet: load it from the server. */
     private fun open(alert: MobileAlert?) {
-        if (alert != null && !alert.bodyHtml.isNullOrBlank()) {
+        openJob?.cancel()
+        countdown?.cancel()
+        current = null
+        if (!SessionManager(this).isLoggedIn) { finish(); return }
+        if (!intent.getBooleanExtra(EXTRA_REOPEN, false) && alert != null && !alert.bodyHtml.isNullOrBlank()) {
             show(alert)
             return
         }
         showLoading()
-        lifecycleScope.launch {
-            val pending = MobileAlerts.fetchPending(this@MobileAlertActivity)
-            val match = pending?.firstOrNull { it.deliveryId == alert?.deliveryId } ?: pending?.firstOrNull()
-            if (match == null) finish() else show(match)
+        val bearer = SessionManager(this).bearerToken
+        openJob = lifecycleScope.launch {
+            val deliveryId = alert?.deliveryId
+            val match = if (!deliveryId.isNullOrBlank()) {
+                runCatching { ApiService.create().getMobileAlertDetail(bearer, deliveryId) }
+                    .getOrNull()?.takeIf { it.success }?.alert
+            } else null
+            coroutineContext.ensureActive()
+            if (SessionManager(this@MobileAlertActivity).bearerToken != bearer) {
+                finish()
+                return@launch
+            }
+            if (match == null) {
+                Toast.makeText(this@MobileAlertActivity, "Couldn't open this alert. It may be deleted or the connection is unavailable.", Toast.LENGTH_LONG).show()
+                finish()
+            } else show(match)
         }
     }
 
@@ -169,6 +197,10 @@ class MobileAlertActivity : AppCompatActivity() {
         val alert = current ?: return
         if (!btnClose.isEnabled) return
         MobileAlerts.markViewed(this, alert)
+        if (intent.getBooleanExtra(EXTRA_REOPEN, false)) {
+            finish()
+            return
+        }
         current = null
         showLoading()
         lifecycleScope.launch {

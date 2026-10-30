@@ -118,6 +118,12 @@ interface ApiService {
         @Header("Authorization") token: String,
     ): MobileAlertsResponse
 
+    @GET("api/mobile/alerts/detail")
+    suspend fun getMobileAlertDetail(
+        @Header("Authorization") token: String,
+        @Query("deliveryId") deliveryId: String,
+    ): MobileAlertDetailResponse
+
     @POST("api/mobile/alerts/viewed")
     suspend fun markMobileAlertViewed(
         @Header("Authorization") token: String,
@@ -2571,6 +2577,11 @@ data class MobileAlert(
     val minViewSeconds: Int? = null,
 )
 data class MobileAlertViewedRequest(val deliveryId: String)
+data class MobileAlertDetailResponse(
+    val success: Boolean = false,
+    val alert: MobileAlert? = null,
+    val error: String? = null,
+)
 data class MobileAlertViewedResponse(
     val success: Boolean = false,
     val error: String? = null,

@@ -46,6 +46,7 @@ object MobileAlerts {
     private val gson = Gson()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val refreshLock = Mutex()
+    private val receiptLock = Mutex()
 
     private val _pushArrived = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     /** A mobile_alert push arrived; a screen in the foreground shows it now. */
@@ -83,7 +84,7 @@ object MobileAlerts {
         withContext(Dispatchers.IO) {
             val session = SessionManager(context.applicationContext)
             if (!session.isLoggedIn) return@withContext emptyList()
-            retryReceipts(context, api, session)
+            scope.launch { retryReceipts(context, api, session) }
             val response = runCatching { api.getPendingMobileAlerts(session.bearerToken) }.getOrNull()
                 ?.takeIf { it.success } ?: return@withContext null
             val viewed = idSet(context, KEY_VIEWED)
@@ -110,23 +111,23 @@ object MobileAlerts {
         }
     }
 
-    /** Records the alert as viewed: never shown again here, notification gone,
+    /** Records the alert as viewed: never automatically shown again,
      *  receipt sent now or on the next refresh. */
     fun markViewed(context: Context, alert: MobileAlert) {
         val deliveryId = alert.deliveryId?.takeIf { it.isNotBlank() } ?: return
         val appContext = context.applicationContext
         saveIdSet(appContext, KEY_VIEWED, idSet(appContext, KEY_VIEWED) + deliveryId)
         saveIdSet(appContext, KEY_UNACKED, idSet(appContext, KEY_UNACKED) + deliveryId)
-        cancelNotification(appContext, deliveryId)
+        postNotification(appContext, alert, viewed = true)
         scope.launch {
             val session = SessionManager(appContext)
             if (session.isLoggedIn) retryReceipts(appContext, ApiService.create(), session)
         }
     }
 
-    private suspend fun retryReceipts(context: Context, api: ApiService, session: SessionManager) {
+    private suspend fun retryReceipts(context: Context, api: ApiService, session: SessionManager) = receiptLock.withLock {
         val unacked = idSet(context, KEY_UNACKED)
-        if (unacked.isEmpty()) return
+        if (unacked.isEmpty()) return@withLock
         val done = mutableSetOf<String>()
         for (deliveryId in unacked) {
             val delivered = try {
@@ -174,11 +175,11 @@ object MobileAlerts {
     private fun notificationId(deliveryId: String) = 0x4D41_0000 or (deliveryId.hashCode() and 0xFFFF)
 
     /** Pinned until viewed: ongoing, not auto-cancelled; tapping opens the alert. */
-    private fun postNotification(context: Context, alert: MobileAlert, previewText: String? = null) {
+    private fun postNotification(context: Context, alert: MobileAlert, previewText: String? = null, viewed: Boolean = false) {
         val deliveryId = alert.deliveryId ?: return
         if (!PushTokenManager.hasNotificationPermission(context)) return
         ensureChannel(context)
-        val intent = MobileAlertActivity.intent(context, alert)
+        val intent = MobileAlertActivity.intent(context, alert, reopen = true)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         val pendingIntent = PendingIntent.getActivity(
             context,
@@ -200,14 +201,11 @@ object MobileAlerts {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setContentIntent(pendingIntent)
-            .setOngoing(true)
+            .setOngoing(!viewed)
             .setAutoCancel(false)
             .setOnlyAlertOnce(true)
             .build()
         runCatching { NotificationManagerCompat.from(context).notify(notificationId(deliveryId), notification) }
     }
 
-    private fun cancelNotification(context: Context, deliveryId: String) {
-        NotificationManagerCompat.from(context).cancel(notificationId(deliveryId))
-    }
 }
