@@ -380,7 +380,7 @@ class CreateSiteVisitBottomSheet : BottomSheetDialogFragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val staff = api.getStaff(session.bearerToken, "active")
-                if (staff.success) staffCache = staff.staff.filter { it.status.isNullOrBlank() || it.status.equals("active", true) }
+                if (staff.success) staffCache = staff.staff.filter { SiteVisitStaffRules.isActive(it.status) }
             } catch (_: Throwable) { }
         }
         viewLifecycleOwner.lifecycleScope.launch {
@@ -503,16 +503,10 @@ class CreateSiteVisitBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun salesMarketing(staff: StaffData): Boolean =
-        staff.status.equals("active", true) && staff.department.orEmpty().lowercase(Locale.ROOT).let { it.contains("sales") && it.contains("marketing") }
+        SiteVisitStaffRules.salesMarketing(staff.status, staff.department)
 
-    private fun eligibleLmo(staff: StaffData): Boolean {
-        if (!staff.status.equals("active", true)) return false
-        val dept = staff.department.orEmpty().lowercase(Locale.ROOT)
-        val designation = staff.designation.orEmpty().lowercase(Locale.ROOT)
-        return (dept.contains("telesales") && (designation == "lmo" || designation.contains("lead management") || designation.contains("telecaller"))) ||
-            dept.contains("channel partner") ||
-            (dept.contains("sales") && dept.contains("marketing") && (designation == "bdo" || designation.contains("business development")))
-    }
+    private fun eligibleLmo(staff: StaffData): Boolean =
+        SiteVisitStaffRules.lmoOrBdo(staff.status, staff.department, staff.designation)
 
     private fun pickChoice(title: String, values: List<Choice>, chosen: (Choice) -> Unit) {
         SearchableSelectionDialog.show(requireContext(), title, values.map { SearchableOption(it, it.label, it.detail, "${it.id} ${it.label}") }) { chosen(it) }
