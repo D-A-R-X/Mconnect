@@ -12,11 +12,11 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 data class HrDashboardState(
-    val casualLeft: Int = 0,
-    val sickLeft: Int = 0,
-    val earnedLeft: Int = 0,
-    val permissionUsedHours: Int = 0,
-    val permissionLimitHours: Int = 0,
+    val casualLeft: Double = 0.0,
+    val sickLeft: Double = 0.0,
+    val earnedLeft: Double = 0.0,
+    val permissionUsedHours: Double = 0.0,
+    val permissionLimitHours: Double = 0.0,
     val daysPresent: Int = 0,
     val policy: PolicyData? = null,
     val iamPermissions: Set<String> = emptySet(),
@@ -56,11 +56,11 @@ class HrDashboardViewModel : ViewModel() {
             val earnedAlloc = policy?.leave?.earnedPerYear ?: 0
 
             _uiState.value = HrDashboardState(
-                casualLeft = if (casualAlloc > 0) (b?.casual ?: 0) - (b?.casualUsed ?: 0) else 0,
-                sickLeft = if (sickAlloc > 0) (b?.sick ?: 0) - (b?.sickUsed ?: 0) else 0,
-                earnedLeft = if (earnedAlloc > 0) (b?.earned ?: 0) - (b?.earnedUsed ?: 0) else 0,
-                permissionUsedHours = permUsage?.usedHours ?: permUsage?.totalHours ?: 0,
-                permissionLimitHours = permUsage?.limitHours ?: policy?.permission?.monthlyLimitHours ?: 0,
+                casualLeft = if (casualAlloc > 0) (b?.casual ?: 0.0) - (b?.casualUsed ?: 0.0) else 0.0,
+                sickLeft = if (sickAlloc > 0) (b?.sick ?: 0.0) - (b?.sickUsed ?: 0.0) else 0.0,
+                earnedLeft = if (earnedAlloc > 0) (b?.earned ?: 0.0) - (b?.earnedUsed ?: 0.0) else 0.0,
+                permissionUsedHours = permUsage?.usedHours ?: permUsage?.totalHours ?: 0.0,
+                permissionLimitHours = permUsage?.limitHours ?: policy?.permission?.monthlyLimitHours ?: 0.0,
                 daysPresent = daysPresent,
                 policy = policy,
                 iamPermissions = perms,

@@ -13,8 +13,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 data class PermissionsState(
-    val usedHours: Int = 0,
-    val limitHours: Int = 0,
+    val usedHours: Double = 0.0,
+    val limitHours: Double = 0.0,
     val count: Int = 0,
     val myPermissions: List<PermissionData> = emptyList(),
     // Team Permission scope — direct-report pending approvals.
@@ -100,10 +100,10 @@ class PermissionsViewModel : ViewModel() {
                 val all = allD.await()
                 val policyResp = policyD.await()
 
-                val limitFromApi = usage?.limitHours ?: policyResp?.policy?.permission?.monthlyLimitHours ?: 0
+                val limitFromApi = usage?.limitHours ?: policyResp?.policy?.permission?.monthlyLimitHours ?: 0.0
 
                 _uiState.value = _uiState.value.copy(
-                    usedHours = usage?.usedHours ?: usage?.totalHours ?: 0,
+                    usedHours = usage?.usedHours ?: usage?.totalHours ?: 0.0,
                     limitHours = limitFromApi,
                     count = usage?.count ?: 0,
                     myPermissions = history?.permissions ?: emptyList(),

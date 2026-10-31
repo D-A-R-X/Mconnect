@@ -2237,12 +2237,12 @@ data class StorageUploadResponse(
 // Leave models
 data class LeaveBalanceResponse(val success: Boolean, val balance: LeaveBalance?)
 data class LeaveBalance(
-    val casual: Int = 0,
-    val casualUsed: Int = 0,
-    val sick: Int = 0,
-    val sickUsed: Int = 0,
-    val earned: Int = 0,
-    val earnedUsed: Int = 0
+    val casual: Double = 0.0,
+    val casualUsed: Double = 0.0,
+    val sick: Double = 0.0,
+    val sickUsed: Double = 0.0,
+    val earned: Double = 0.0,
+    val earnedUsed: Double = 0.0
 )
 
 data class MyLeavesResponse(val success: Boolean, val total: Int?, val leaves: List<LeaveData> = emptyList())
@@ -2325,17 +2325,17 @@ data class LeavePolicy(
     val earnedPerYear: Int? = null,
     val types: List<String> = emptyList()
 )
-data class PermissionPolicy(val monthlyLimitHours: Int = 0)
+data class PermissionPolicy(val monthlyLimitHours: Double = 0.0)
 data class OfficePolicy(val startTime: String?, val endTime: String?, val workingHoursPerDay: Int?)
 
 // Permission models
 data class PermissionUsageResponse(
     val success: Boolean,
-    val totalHours: Int? = null,
-    val usedHours: Int? = null,
-    val limitHours: Int? = null,
-    val remainingHours: Int? = null,
-    val count: Int? = null
+    val totalHours: Double? = null,
+    val usedHours: Double? = null,
+    val limitHours: Double? = null,
+    val remainingHours: Double? = null,
+    @SerializedName("usedRequests", alternate = ["count"]) val count: Int? = null
 )
 data class MyPermissionsResponse(val success: Boolean, val total: Int?, val permissions: List<PermissionData> = emptyList())
 data class PermissionData(

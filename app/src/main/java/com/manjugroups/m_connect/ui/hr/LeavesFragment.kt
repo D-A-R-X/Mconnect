@@ -277,11 +277,11 @@ class LeavesFragment : Fragment() {
 
         if (hasAllocation) {
             val available = state.casualLeft + state.sickLeft + state.earnedLeft
-            val used = (state.casualTotal - state.casualLeft).coerceAtLeast(0) +
-                (state.sickTotal - state.sickLeft).coerceAtLeast(0) +
-                (state.earnedTotal - state.earnedLeft).coerceAtLeast(0)
-            binding.tvLeaveAvailable.text = available.toString()
-            binding.tvLeaveUsed.text = used.toString()
+            val used = (state.casualTotal - state.casualLeft).coerceAtLeast(0.0) +
+                (state.sickTotal - state.sickLeft).coerceAtLeast(0.0) +
+                (state.earnedTotal - state.earnedLeft).coerceAtLeast(0.0)
+            binding.tvLeaveAvailable.text = available.toBigDecimal().stripTrailingZeros().toPlainString()
+            binding.tvLeaveUsed.text = used.toBigDecimal().stripTrailingZeros().toPlainString()
         } else {
             binding.tvLeaveAvailable.text = "0"
             binding.tvLeaveUsed.text = "0"

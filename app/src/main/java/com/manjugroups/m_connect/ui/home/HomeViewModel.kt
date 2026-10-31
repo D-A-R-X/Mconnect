@@ -62,7 +62,7 @@ sealed interface HomeUiState {
         val totalMinutes: Int = 0,
         val sessions: List<SessionItem> = emptyList(),
         val daysPresent: Int = 0,
-        val permissionsLeftHrs: Int = 0,
+        val permissionsLeftHrs: Double = 0.0,
         val isPunching: Boolean = false,
         // Trip selection
         val todayVisits: List<TodayVisit> = emptyList(),
@@ -150,7 +150,7 @@ class HomeViewModel : ViewModel() {
                     r.approvedAttendance == "present" || r.status == "auto-approved" || r.status == "approved"
                 } ?: 0
 
-                val permLeft = permUsage?.remainingHours ?: 0
+                val permLeft = permUsage?.remainingHours ?: 0.0
 
                 val validAttendance = attendance?.takeIf { it.success }
                 val validDaySessions = daySessions?.takeIf { it.success }

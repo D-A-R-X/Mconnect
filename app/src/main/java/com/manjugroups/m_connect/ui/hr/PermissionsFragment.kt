@@ -410,9 +410,9 @@ class PermissionsFragment : Fragment() {
         binding.balanceCard.visibility = if (screenMode == MODE_HISTORY) View.VISIBLE else View.GONE
         binding.btnApplyPermission.visibility = if (screenMode == MODE_HISTORY) View.VISIBLE else View.GONE
 
-        val available = max(state.limitHours - state.usedHours, 0)
-        binding.tvPermAvailable.text = "$available hrs"
-        binding.tvPermUsed.text = "${state.usedHours} hrs"
+        val available = max(state.limitHours - state.usedHours, 0.0)
+        binding.tvPermAvailable.text = formatHours(available)
+        binding.tvPermUsed.text = formatHours(state.usedHours)
 
         configureHistoryCard(displayPermissions.isEmpty() && !isLoading)
 

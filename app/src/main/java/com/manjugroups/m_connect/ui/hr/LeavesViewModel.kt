@@ -13,12 +13,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 data class LeavesState(
-    val casualLeft: Int = 0,
-    val sickLeft: Int = 0,
-    val earnedLeft: Int = 0,
-    val casualTotal: Int = 0,
-    val sickTotal: Int = 0,
-    val earnedTotal: Int = 0,
+    val casualLeft: Double = 0.0,
+    val sickLeft: Double = 0.0,
+    val earnedLeft: Double = 0.0,
+    val casualTotal: Double = 0.0,
+    val sickTotal: Double = 0.0,
+    val earnedTotal: Double = 0.0,
     val myLeaves: List<LeaveData> = emptyList(),
     // pendingApprovals = the full "All Leaves" set for a leaves.viewAll /
     // super-admin caller; the caller's direct reports otherwise.
@@ -130,14 +130,14 @@ class LeavesViewModel : ViewModel() {
                 // balance record only supplies how much has been *used*. Fall
                 // back to the balance's policy-corrected total if the policy
                 // fetch itself failed, so a transient error doesn't zero the card.
-                val casualAlloc = policy?.casualPerYear ?: (b?.casual ?: 0)
-                val sickAlloc = policy?.sickPerYear ?: (b?.sick ?: 0)
-                val earnedAlloc = policy?.earnedPerYear ?: (b?.earned ?: 0)
+                val casualAlloc = policy?.casualPerYear?.toDouble() ?: (b?.casual ?: 0.0)
+                val sickAlloc = policy?.sickPerYear?.toDouble() ?: (b?.sick ?: 0.0)
+                val earnedAlloc = policy?.earnedPerYear?.toDouble() ?: (b?.earned ?: 0.0)
 
                 _uiState.value = _uiState.value.copy(
-                    casualLeft = (casualAlloc - (b?.casualUsed ?: 0)).coerceAtLeast(0),
-                    sickLeft = (sickAlloc - (b?.sickUsed ?: 0)).coerceAtLeast(0),
-                    earnedLeft = (earnedAlloc - (b?.earnedUsed ?: 0)).coerceAtLeast(0),
+                    casualLeft = (casualAlloc - (b?.casualUsed ?: 0.0)).coerceAtLeast(0.0),
+                    sickLeft = (sickAlloc - (b?.sickUsed ?: 0.0)).coerceAtLeast(0.0),
+                    earnedLeft = (earnedAlloc - (b?.earnedUsed ?: 0.0)).coerceAtLeast(0.0),
                     casualTotal = casualAlloc,
                     sickTotal = sickAlloc,
                     earnedTotal = earnedAlloc,

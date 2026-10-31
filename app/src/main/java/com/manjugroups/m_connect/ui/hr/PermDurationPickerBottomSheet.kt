@@ -135,6 +135,12 @@ class PermDurationPickerBottomSheet : BottomSheetDialogFragment() {
         val to = selectedToTime
         if (from == null || to == null) return
 
+        val shiftStart = arguments?.getString(ARG_SHIFT_START)
+        val shiftEnd = arguments?.getString(ARG_SHIFT_END)
+        if (shiftStart != null && shiftEnd != null) {
+            PermissionShiftTiming(shiftStart, shiftEnd).error(from, to)?.let { toastSafe(it); return }
+        }
+
         if (!isValidTimeRange(from, to)) {
             toastSafe("To time must be after from time")
             return
@@ -167,12 +173,16 @@ class PermDurationPickerBottomSheet : BottomSheetDialogFragment() {
 
         private const val ARG_FROM_TIME = "arg_from_time"
         private const val ARG_TO_TIME = "arg_to_time"
+        private const val ARG_SHIFT_START = "arg_shift_start"
+        private const val ARG_SHIFT_END = "arg_shift_end"
 
-        fun newInstance(initialFrom: String? = null, initialTo: String? = null): PermDurationPickerBottomSheet {
+        fun newInstance(initialFrom: String? = null, initialTo: String? = null, shiftStart: String? = null, shiftEnd: String? = null): PermDurationPickerBottomSheet {
             return PermDurationPickerBottomSheet().apply {
                 arguments = Bundle().apply {
                     putString(ARG_FROM_TIME, initialFrom)
                     putString(ARG_TO_TIME, initialTo)
+                    putString(ARG_SHIFT_START, shiftStart)
+                    putString(ARG_SHIFT_END, shiftEnd)
                 }
             }
         }

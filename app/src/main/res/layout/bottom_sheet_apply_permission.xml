@@ -140,6 +140,35 @@
                 app:tint="#667085" />
         </LinearLayout>
 
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/field_gap"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/tvPermissionShift"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textAppearance="@style/TextAppearance.Mconnect.BodySmall"
+                android:textColor="?attr/colorForegroundSecondary"
+                android:accessibilityLiveRegion="polite"
+                android:visibility="gone" />
+
+            <ImageButton
+                android:id="@+id/btnRetryPermissionShift"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Retry shift lookup"
+                android:padding="@dimen/field_gap"
+                android:src="@drawable/ic_retake_refresh"
+                android:visibility="gone"
+                app:tint="?attr/colorAccentPrimary" />
+        </LinearLayout>
+
         <!-- Permission Description -->
         <TextView
             android:layout_width="wrap_content"
@@ -158,7 +187,7 @@
             android:background="@drawable/bg_apply_leave_field"
             android:fontFamily="@font/inter_regular"
             android:gravity="top|start"
-            android:hint="Enter Leave Description"
+            android:hint="Enter Permission Description"
             android:inputType="textMultiLine"
             android:paddingHorizontal="14dp"
             android:paddingVertical="10dp"
