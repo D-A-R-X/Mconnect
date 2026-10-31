@@ -21,7 +21,6 @@ import androidx.lifecycle.lifecycleScope
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
-import com.google.gson.Gson
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
@@ -29,7 +28,7 @@ import com.manjugroups.m_connect.network.ApplyLeaveRequest
 import com.manjugroups.m_connect.ui.common.MonthYearPicker
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import kotlinx.coroutines.launch
-import retrofit2.HttpException
+import kotlinx.coroutines.CancellationException
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -37,15 +36,10 @@ import com.manjugroups.m_connect.ui.common.showOnce
 
 class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
 
-    private data class ApiErrorResponse(
-        val success: Boolean? = null,
-        val error: String? = null,
-        val message: String? = null
-    )
-
     private lateinit var session: SessionManager
     private val api = ApiService.create()
-    private val gson = Gson()
+    private var isSubmitting = false
+    private var applicationSubmitted = false
 
     // Fallback used only when the HR policy can't be fetched; the live list
     // comes from the policy allocations (see loadLeaveTypes) and mirrors the
@@ -188,14 +182,6 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
             if (confirmed) submitLeave()
         }
 
-        setFragmentResultListener(LeaveSubmittedSuccessSheet.RESULT_KEY) { _, bundle ->
-            val ok = bundle.getBoolean(LeaveSubmittedSuccessSheet.KEY_OK, false)
-            if (ok) {
-                parentFragmentManager.setFragmentResult(RESULT_KEY_APPLIED, Bundle().apply { putBoolean("success", true) })
-                dismissAllowingStateLoss()
-            }
-        }
-
         updateDurationLabel()
         loadLeaveTypes()
         applyTypeUi()
@@ -207,10 +193,11 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
         val view = view ?: return
         val btnSubmit = view.findViewById<View>(R.id.btnSubmit)
 
-        val isEnabled = if (selectedLeaveType == "compensatory") {
+        val isEnabled = !isSubmitting && !applicationSubmitted && if (selectedLeaveType == "compensatory") {
             selectedCredit != null && selectedFromMillis != null
         } else {
-            selectedFromMillis != null && selectedToMillis != null
+            selectedFromMillis != null && selectedToMillis != null &&
+                view.findViewById<EditText>(R.id.etReason).text?.toString()?.trim()?.isNotEmpty() == true
         }
 
         if (isEnabled) {
@@ -257,6 +244,7 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
      * submitLeave() runs — keeping them in sync.
      */
     private fun promptSubmitConfirmation() {
+        if (isSubmitting || applicationSubmitted) return
         if (selectedLeaveType == "compensatory") {
             if (selectedCredit == null) {
                 toastSafe("Select a comp-off credit")
@@ -281,6 +269,10 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
         }
         if (toMillis < fromMillis) {
             toastSafe("To date must be on or after from date")
+            return
+        }
+        if (view?.findViewById<EditText>(R.id.etReason)?.text?.toString()?.trim().isNullOrEmpty()) {
+            toastSafe("Enter a reason for the leave")
             return
         }
         SubmitLeaveConfirmSheet
@@ -431,6 +423,7 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun submitLeave() {
+        if (isSubmitting || applicationSubmitted) return
         if (selectedLeaveType == "compensatory") {
             submitCompOff()
             return
@@ -449,6 +442,10 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
             toastSafe("To date must be on or after from date")
             return
         }
+        if (reason.isBlank()) {
+            toastSafe("Enter a reason for the leave")
+            return
+        }
 
         val from = apiDateFormat.format(fromMillis)
         val to = apiDateFormat.format(toMillis)
@@ -457,6 +454,8 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
         val skeletonSubmit = view?.findViewById<View>(R.id.skeletonSubmit)
         val btnSubmit = view?.findViewById<View>(R.id.btnSubmit)
 
+        isSubmitting = true
+        updateSubmitButtonState()
         tvSubmit?.visibility = View.INVISIBLE
         skeletonSubmit?.visibility = View.VISIBLE
         skeletonSubmit?.let { SkeletonUtils.startSkeletonPulse(it) }
@@ -473,30 +472,34 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
                         fromDate = from,
                         toDate = if (isHalfDay) from else to,
                         reason = if (isHalfDay) "[$selectedSession] $reason".trim() else reason,
-                        reportingToId = session.reportingToId,
-                        reportingToName = session.reportingToName,
                         isHalfDay = if (isHalfDay) true else null,
                         halfDaySession = if (isHalfDay) selectedSession.lowercase() else null,
                         halfDayType = if (isHalfDay) selectedSession.lowercase() else null
                     )
                 )
                 if (resp.success) {
-                    LeaveSubmittedSuccessSheet.newInstance().showOnce(parentFragmentManager, "leave_submitted_success")
+                    applicationSucceeded()
                 } else {
                     toastSafe(resp.error ?: "Failed")
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 toastSafe(parseErrorMessage(e))
+            } finally {
+                isSubmitting = false
+                tvSubmit?.visibility = View.VISIBLE
+                skeletonSubmit?.let { SkeletonUtils.stopSkeletonPulse(it) }
+                skeletonSubmit?.visibility = View.GONE
+                btnSubmit?.isClickable = true
+                updateSubmitButtonState()
             }
-            tvSubmit?.visibility = View.VISIBLE
-            skeletonSubmit?.let { SkeletonUtils.stopSkeletonPulse(it) }
-            skeletonSubmit?.visibility = View.GONE
-            btnSubmit?.isClickable = true
         }
     }
 
     /** Spend the selected comp-off credit on the chosen day. */
     private fun submitCompOff() {
+        if (isSubmitting || applicationSubmitted) return
         val credit = selectedCredit
         val dayMillis = selectedFromMillis
         if (credit == null) {
@@ -513,6 +516,8 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
         val skeletonSubmit = view?.findViewById<View>(R.id.skeletonSubmit)
         val btnSubmit = view?.findViewById<View>(R.id.btnSubmit)
 
+        isSubmitting = true
+        updateSubmitButtonState()
         tvSubmit?.visibility = View.INVISIBLE
         skeletonSubmit?.visibility = View.VISIBLE
         skeletonSubmit?.let { SkeletonUtils.startSkeletonPulse(it) }
@@ -530,17 +535,22 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
                     )
                 )
                 if (resp.success) {
-                    LeaveSubmittedSuccessSheet.newInstance().showOnce(parentFragmentManager, "leave_submitted_success")
+                    applicationSucceeded()
                 } else {
                     toastSafe(resp.error ?: "Failed")
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 toastSafe(parseErrorMessage(e))
+            } finally {
+                isSubmitting = false
+                tvSubmit?.visibility = View.VISIBLE
+                skeletonSubmit?.let { SkeletonUtils.stopSkeletonPulse(it) }
+                skeletonSubmit?.visibility = View.GONE
+                btnSubmit?.isClickable = true
+                updateSubmitButtonState()
             }
-            tvSubmit?.visibility = View.VISIBLE
-            skeletonSubmit?.let { SkeletonUtils.stopSkeletonPulse(it) }
-            skeletonSubmit?.visibility = View.GONE
-            btnSubmit?.isClickable = true
         }
     }
 
@@ -861,20 +871,15 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
         return if (base.lowercase().contains("leave")) base else "$base Leave"
     }
 
-    private fun parseErrorMessage(error: Throwable): String {
-        if (error is HttpException) {
-            val body = error.response()?.errorBody()?.string()
-            if (!body.isNullOrBlank()) {
-                runCatching {
-                    gson.fromJson(body, ApiErrorResponse::class.java)
-                }.getOrNull()?.let { parsed ->
-                    parsed.error?.takeIf { it.isNotBlank() }?.let { return it }
-                    parsed.message?.takeIf { it.isNotBlank() }?.let { return it }
-                }
-            }
-        }
-        return error.message ?: "Network error"
+    private fun applicationSucceeded() {
+        applicationSubmitted = true
+        val manager = parentFragmentManager
+        manager.setFragmentResult(RESULT_KEY_APPLIED, Bundle().apply { putBoolean("success", true) })
+        dismissAllowingStateLoss()
+        LeaveSubmittedSuccessSheet.newInstance().showOnce(manager, "leave_submitted_success")
     }
+
+    private fun parseErrorMessage(error: Throwable): String = HrApplicationError.message(error, "Leave")
 
     private fun sameDay(firstMillis: Long, secondMillis: Long): Boolean {
         val first = Calendar.getInstance().apply { timeInMillis = firstMillis }

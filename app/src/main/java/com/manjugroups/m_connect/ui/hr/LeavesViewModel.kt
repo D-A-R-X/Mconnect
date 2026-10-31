@@ -153,6 +153,7 @@ class LeavesViewModel : ViewModel() {
     }
 
     fun applyLeave(bearerToken: String, type: String, from: String, to: String, reason: String) {
+        if (_uiState.value.isApplying) return
         _uiState.value = _uiState.value.copy(isApplying = true)
         viewModelScope.launch {
             try {
@@ -164,9 +165,10 @@ class LeavesViewModel : ViewModel() {
                     _event.emit(resp.error ?: "Failed to apply leave")
                 }
             } catch (e: Exception) {
-                _event.emit(e.message ?: "Network error")
+                _event.emit(HrApplicationError.message(e, "Leave"))
+            } finally {
+                _uiState.value = _uiState.value.copy(isApplying = false)
             }
-            _uiState.value = _uiState.value.copy(isApplying = false)
         }
     }
 

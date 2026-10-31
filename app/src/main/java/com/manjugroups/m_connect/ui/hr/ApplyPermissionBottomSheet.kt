@@ -18,7 +18,6 @@ import androidx.lifecycle.lifecycleScope
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
-import com.google.gson.Gson
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
@@ -26,7 +25,7 @@ import com.manjugroups.m_connect.network.ApplyPermissionRequest
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.util.EditableTimeFormat
 import kotlinx.coroutines.launch
-import retrofit2.HttpException
+import kotlinx.coroutines.CancellationException
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -34,15 +33,10 @@ import com.manjugroups.m_connect.ui.common.showOnce
 
 class ApplyPermissionBottomSheet : BottomSheetDialogFragment() {
 
-    private data class ApiErrorResponse(
-        val success: Boolean? = null,
-        val error: String? = null,
-        val message: String? = null
-    )
-
     private lateinit var session: SessionManager
     private val api = ApiService.create()
-    private val gson = Gson()
+    private var isSubmitting = false
+    private var applicationSubmitted = false
 
     private var selectedDate: String? = null
     private var selectedFromTime: String? = null
@@ -117,7 +111,7 @@ class ApplyPermissionBottomSheet : BottomSheetDialogFragment() {
             ?.toString()
             ?.trim()
             ?.isNotEmpty() == true
-        val isEnabled = selectedDate != null && selectedFromTime != null && selectedToTime != null && hasReason
+        val isEnabled = !isSubmitting && !applicationSubmitted && selectedDate != null && selectedFromTime != null && selectedToTime != null && hasReason
         if (isEnabled) {
             btnSubmit.setBackgroundResource(R.drawable.bg_apply_leave_btn_enabled)
             btnSubmit.isEnabled = true
@@ -194,6 +188,7 @@ class ApplyPermissionBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun submitPermission() {
+        if (isSubmitting || applicationSubmitted) return
         val date = selectedDate
         val from = selectedFromTime
         val to = selectedToTime
@@ -204,11 +199,17 @@ class ApplyPermissionBottomSheet : BottomSheetDialogFragment() {
             toastSafe("Fill all required fields")
             return
         }
+        if (!isValidTimeRange(from, to)) {
+            toastSafe("To time must be after from time")
+            return
+        }
 
         val tvSubmit = view?.findViewById<TextView>(R.id.tvSubmit)
         val skeletonSubmit = view?.findViewById<View>(R.id.skeletonSubmit)
         val btnSubmit = view?.findViewById<View>(R.id.btnSubmit)
 
+        isSubmitting = true
+        updateSubmitButtonState()
         tvSubmit?.visibility = View.INVISIBLE
         skeletonSubmit?.visibility = View.VISIBLE
         skeletonSubmit?.let { SkeletonUtils.startSkeletonPulse(it) }
@@ -226,43 +227,25 @@ class ApplyPermissionBottomSheet : BottomSheetDialogFragment() {
                     )
                 )
                 if (resp.success) {
+                    applicationSubmitted = true
                     toastSafe("Permission applied!")
                     parentFragmentManager.setFragmentResult(RESULT_KEY_APPLIED, Bundle().apply { putBoolean("success", true) })
                     dismissAllowingStateLoss()
                 } else {
                     toastSafe(resp.error ?: "Failed")
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                toastSafe(parseErrorMessage(e))
+                toastSafe(HrApplicationError.message(e, "Permission"))
+            } finally {
+                isSubmitting = false
+                tvSubmit?.visibility = View.VISIBLE
+                skeletonSubmit?.let { SkeletonUtils.stopSkeletonPulse(it) }
+                skeletonSubmit?.visibility = View.GONE
+                btnSubmit?.isClickable = true
+                updateSubmitButtonState()
             }
-            tvSubmit?.visibility = View.VISIBLE
-            skeletonSubmit?.let { SkeletonUtils.stopSkeletonPulse(it) }
-            skeletonSubmit?.visibility = View.GONE
-            btnSubmit?.isClickable = true
-        }
-    }
-
-    private fun parseErrorMessage(error: Throwable): String {
-        if (error is HttpException) {
-            val body = error.response()?.errorBody()?.string()
-            if (!body.isNullOrBlank()) {
-                runCatching {
-                    gson.fromJson(body, ApiErrorResponse::class.java)
-                }.getOrNull()?.let { parsed ->
-                    parsed.error?.takeIf { it.isNotBlank() }?.let { return it }
-                    parsed.message?.takeIf { it.isNotBlank() }?.let { return it }
-                }
-            }
-        }
-        return when (error) {
-            is HttpException -> when (error.code()) {
-                400 -> "Please check the permission details and try again."
-                401 -> "Your session expired. Please sign in again."
-                403 -> "You are not allowed to apply this permission."
-                500 -> "Permission service is temporarily unavailable. Please try again shortly."
-                else -> "Could not submit the permission. Please try again."
-            }
-            else -> error.message ?: "Network error"
         }
     }
 

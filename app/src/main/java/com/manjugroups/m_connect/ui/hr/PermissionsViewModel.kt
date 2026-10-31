@@ -117,6 +117,7 @@ class PermissionsViewModel : ViewModel() {
     }
 
     fun applyPermission(bearerToken: String, date: String, fromTime: String, toTime: String, reason: String) {
+        if (_uiState.value.isApplying) return
         _uiState.value = _uiState.value.copy(isApplying = true)
         viewModelScope.launch {
             try {
@@ -128,9 +129,10 @@ class PermissionsViewModel : ViewModel() {
                     _event.emit(resp.error ?: "Failed to apply")
                 }
             } catch (e: Exception) {
-                _event.emit(e.message ?: "Network error")
+                _event.emit(HrApplicationError.message(e, "Permission"))
+            } finally {
+                _uiState.value = _uiState.value.copy(isApplying = false)
             }
-            _uiState.value = _uiState.value.copy(isApplying = false)
         }
     }
 
