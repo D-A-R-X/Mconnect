@@ -26,6 +26,7 @@ import com.manjugroups.m_connect.ui.common.preferredCpClientPhone
 import com.manjugroups.m_connect.ui.marketing.participantFor
 import com.manjugroups.m_connect.ui.marketing.resolveCpActivityDate
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -104,12 +105,14 @@ class HomeViewModel : ViewModel() {
     val driverTripsError: StateFlow<String?> = _driverTripsError.asStateFlow()
 
     private var cachedState: HomeUiState.Loaded? = null
+    private var homeLoadGeneration = 0
 
     fun loadHomeData(bearerToken: String, context: Context? = null) {
         // Flush any offline-queued punches whenever the home screen loads, so a
         // punch taken with no network syncs as soon as the staff is back online
         // and the app is opened. Cheap: the worker no-ops when the queue's empty.
         context?.let { PunchSyncWorker.enqueue(it) }
+        val generation = ++homeLoadGeneration
         viewModelScope.launch {
             try {
                 val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
@@ -136,21 +139,7 @@ class HomeViewModel : ViewModel() {
                 }
                 val attendance = attendanceRead.await()
                 val daySessions = sessionsRead.await()
-                val myAttendance = monthRead.await()
-                val permUsage = permissionRead.await()
-                // Today's row is provisional — the day still has hours to
-                // run, and once midnight passes it enters the RO Team
-                // Approval → HR Review flow before being final. Counting
-                // today the moment you punch in inflates the tile by a
-                // day that hasn't actually closed yet. The web side
-                // already defers today's verdict to the midnight cron;
-                // this mirrors that on mobile.
-                val daysPresent = myAttendance?.records?.count { r ->
-                    if (r.date == today) return@count false
-                    r.approvedAttendance == "present" || r.status == "auto-approved" || r.status == "approved"
-                } ?: 0
-
-                val permLeft = permUsage?.remainingHours ?: 0.0
+                if (generation != homeLoadGeneration) return@launch
 
                 val validAttendance = attendance?.takeIf { it.success }
                 val validDaySessions = daySessions?.takeIf { it.success }
@@ -251,14 +240,36 @@ class HomeViewModel : ViewModel() {
                     firstPunchInMillis = if (attendanceKnown) firstPunchInMillis else (cachedState?.firstPunchInMillis ?: 0L),
                     totalMinutes = if (attendanceKnown) totalMin else (cachedState?.totalMinutes ?: 0),
                     sessions = if (attendanceKnown) sessions else (cachedState?.sessions ?: sessions),
-                    daysPresent = daysPresent,
-                    permissionsLeftHrs = permLeft,
                     isPunching = false,
                 )
                 cachedState = loaded
                 _uiState.value = loaded
 
                 coroutineScope {
+                    // Monthly tiles must not delay attendance or today's trips.
+                    launch {
+                        val monthly = monthRead.await()
+                        if (generation == homeLoadGeneration && monthly?.success == true) {
+                            // Today's attendance remains provisional until the day closes.
+                            val days = monthly.records.count { r -> r.date != today &&
+                                (r.approvedAttendance == "present" || r.status == "auto-approved" || r.status == "approved") }
+                            (_uiState.value as? HomeUiState.Loaded)?.copy(daysPresent = days)?.let {
+                                cachedState = it
+                                _uiState.value = it
+                            }
+                        }
+                    }
+                    launch {
+                        val usage = permissionRead.await()
+                        if (generation == homeLoadGeneration && usage?.success == true) {
+                            usage.remainingHours?.let { remaining ->
+                                (_uiState.value as? HomeUiState.Loaded)?.copy(permissionsLeftHrs = remaining)?.let {
+                                    cachedState = it
+                                    _uiState.value = it
+                                }
+                            }
+                        }
+                    }
                     val bootstrap = context?.let {
                         launch {
                             runCatching {
@@ -272,8 +283,10 @@ class HomeViewModel : ViewModel() {
                     loadTodayVisitsInternal(bearerToken, context)
                     bootstrap?.join()
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (e: Exception) {
-                _uiState.value = HomeUiState.Error(e.message ?: "Failed to load")
+                if (generation == homeLoadGeneration) _uiState.value = HomeUiState.Error(e.message ?: "Failed to load")
             }
         }
     }

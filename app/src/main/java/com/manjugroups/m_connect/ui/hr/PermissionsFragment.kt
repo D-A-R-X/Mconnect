@@ -57,9 +57,6 @@ class PermissionsFragment : Fragment() {
     private var filterToDate: String? = null
     private var filterStaffId: String? = null
     private var skeletonAnimator: ObjectAnimator? = null
-    // Gates the skeleton to the first load so a refresh doesn't blank the
-    // list back to placeholders.
-    private var hasRenderedPermissionsOnce = false
     // Infinite scroll: render pager.limit rows, extend by a page as the list
     // nears its end. reset() on mode/scope/tab/source change.
     private var permWindowCtx: String? = null
@@ -153,7 +150,7 @@ class PermissionsFragment : Fragment() {
             parentFragmentManager.setFragmentResultListener(ApplyPermissionBottomSheet.RESULT_KEY_APPLIED, viewLifecycleOwner) { _, bundle ->
                 val success = bundle.getBoolean("success", false)
                 if (success) {
-                    viewModel.load(session.bearerToken, session.hasPermission("permissions.approve"))
+                    viewModel.load(session.bearerToken, session.hasPermission("permissions.approve"), force = true)
                 }
             }
             ApplyPermissionBottomSheet.newInstance().showOnce(parentFragmentManager, "apply_permission_sheet")
@@ -389,7 +386,11 @@ class PermissionsFragment : Fragment() {
             permPager.reset()
         }
 
-        val isLoading = state.isLoading
+        val isLoading = when {
+            screenMode == MODE_APPROVAL || scope == Scope.TEAM -> state.isTeamLoading
+            scope == Scope.ALL -> state.isAllLoading
+            else -> state.isLoading
+        }
         if (!isLoading) binding.permissionsRefresh.dismissRefresh()
 
         // Collapsed selector badge tracks the CURRENT scope's pending count so
@@ -411,13 +412,13 @@ class PermissionsFragment : Fragment() {
         binding.btnApplyPermission.visibility = if (screenMode == MODE_HISTORY) View.VISIBLE else View.GONE
 
         val available = max(state.limitHours - state.usedHours, 0.0)
-        binding.tvPermAvailable.text = formatHours(available)
-        binding.tvPermUsed.text = formatHours(state.usedHours)
+        binding.tvPermAvailable.text = if (state.usageLoaded) formatHours(available) else "--"
+        binding.tvPermUsed.text = if (state.usageLoaded) formatHours(state.usedHours) else "--"
 
         configureHistoryCard(displayPermissions.isEmpty() && !isLoading)
 
-        // Only skeleton on the first load; a refresh keeps the list up.
-        val showSkeleton = isLoading && !hasRenderedPermissionsOnce
+        // Keep existing rows visible while this scope refreshes.
+        val showSkeleton = isLoading && displayPermissions.isEmpty()
         binding.skeletonContainer.visibility = if (showSkeleton) View.VISIBLE else View.GONE
         binding.permissionList.visibility = if (showSkeleton) View.GONE else View.VISIBLE
         if (showSkeleton) {
@@ -427,7 +428,6 @@ class PermissionsFragment : Fragment() {
         }
 
         stopSkeletonPulse()
-        if (!isLoading) hasRenderedPermissionsOnce = true
         setEmptyCopy(displayPermissions.isEmpty())
         // Approval mode (notification deep-link) AND History-mode Team/All
         // scope both show Approve/Reject; Team/All scope is only entered

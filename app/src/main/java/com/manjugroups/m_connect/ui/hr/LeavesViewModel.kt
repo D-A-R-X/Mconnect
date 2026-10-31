@@ -3,7 +3,8 @@ package com.manjugroups.m_connect.ui.hr
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.manjugroups.m_connect.network.*
-import kotlinx.coroutines.async
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -27,12 +28,19 @@ data class LeavesState(
     val teamLeaves: List<LeaveData> = emptyList(),
     val leaveTypes: List<String> = listOf("casual", "sick", "earned"),
     val isLoading: Boolean = false,
+    val isTeamLoading: Boolean = false,
+    val isAllLoading: Boolean = false,
+    val balanceLoaded: Boolean = false,
     val isApplying: Boolean = false
 )
 
-class LeavesViewModel : ViewModel() {
+class LeavesViewModel(private val api: ApiService = ApiService.create()) : ViewModel() {
 
-    private val api = ApiService.create()
+    private var loadJob: Job? = null
+    private var loadKey: List<Any?>? = null
+    private var loadGeneration = 0
+    private var cachedBalance: LeaveBalance? = null
+    private var cachedPolicy: LeavePolicy? = null
     private val _uiState = MutableStateFlow(LeavesState())
     val uiState: StateFlow<LeavesState> = _uiState.asStateFlow()
 
@@ -47,109 +55,99 @@ class LeavesViewModel : ViewModel() {
         status: String? = null,
         leaveType: String? = null,
         staffId: String? = null,
+        force: Boolean = false,
     ) {
-        _uiState.value = _uiState.value.copy(isLoading = true)
-        viewModelScope.launch {
-            try {
-                // Independent reads fired in PARALLEL — previously serial, so the
-                // screen blocked on the SUM of four round-trips; now the slowest.
-                val balanceD = async { runCatching { api.getLeaveBalance(bearerToken) }.getOrNull() }
-                val historyD = async {
-                    runCatching {
-                        api.getMyLeaves(
-                            bearerToken,
-                            fromDate = fromDate,
-                            toDate = toDate,
-                            status = status,
-                            leaveType = leaveType,
-                            staffId = staffId,
-                            pageSize = 100,
-                        )
-                    }.getOrNull()
+        val key = listOf(bearerToken, canApprove, fromDate, toDate, status, leaveType, staffId)
+        if (!force && key == loadKey && loadJob?.isActive == true && _uiState.value.isLoading) return
+        val generation = ++loadGeneration
+        loadJob?.cancel()
+        if (loadKey?.firstOrNull() != bearerToken) {
+            _uiState.value = LeavesState()
+            cachedBalance = null
+            cachedPolicy = null
+        }
+        loadKey = key
+        _uiState.value = _uiState.value.copy(isLoading = true, isTeamLoading = canApprove, isAllLoading = canApprove)
+        loadJob = viewModelScope.launch {
+            launch {
+                try {
+                    val history = api.getMyLeaves(bearerToken, fromDate = fromDate, toDate = toDate,
+                        status = status, leaveType = leaveType, staffId = staffId, pageSize = 100)
+                    if (generation == loadGeneration && history.success) {
+                        _uiState.value = _uiState.value.copy(myLeaves = history.leaves)
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    if (generation == loadGeneration) _event.emit(HrApplicationError.message(error, "Leave"))
+                } finally {
+                    if (generation == loadGeneration) _uiState.value = _uiState.value.copy(isLoading = false)
                 }
-                val pendingD = async {
-                    if (canApprove) {
-                        runCatching {
-                            api.getPendingLeaveApprovals(
-                                bearerToken,
-                                scope = "direct",
-                                fromDate = fromDate,
-                                toDate = toDate,
-                                status = status,
-                                leaveType = leaveType,
-                                staffId = staffId,
-                                pageSize = 100,
-                            )
-                        }.getOrNull()
-                    } else null
+            }
+            launch {
+                val response = hrRead { api.getLeaveBalance(bearerToken) }
+                if (generation == loadGeneration && response?.success == true && response.balance != null) {
+                    cachedBalance = response.balance
+                    publishBalance()
                 }
-                // Team Leaves = direct reports only, matching the web's
-                // default My Team scope. For a non-viewAll
-                // approver this equals the full set; for a viewAll/super-admin
-                // it correctly narrows from "all org leaves" to just their team.
-                val teamD = async {
-                    if (canApprove) {
-                        runCatching {
-                            api.getPendingLeaveApprovals(
-                                bearerToken,
-                                teamOnly = true,
-                                scope = "direct",
-                                fromDate = fromDate,
-                                toDate = toDate,
-                                status = status,
-                                leaveType = leaveType,
-                                staffId = staffId,
-                                pageSize = 100,
-                            )
-                        }.getOrNull()
-                    } else null
+            }
+            launch {
+                val response = hrRead { api.getPolicy(bearerToken) }
+                if (generation == loadGeneration && response?.success == true) {
+                    cachedPolicy = response.policy?.leave
+                    publishBalance()
                 }
-                val policyD = async { runCatching { api.getPolicy(bearerToken) }.getOrNull() }
-                val balance = balanceD.await()
-                val history = historyD.await()
-                val pending = pendingD.await()
-                val team = teamD.await()
-                val policyResp = policyD.await()
-
-                val b = balance?.balance
-                val policy = policyResp?.policy?.leave
-
-                // Filter leave types — only show types with >0 allocation
-                val types = mutableListOf<String>()
-                if ((policy?.casualPerYear ?: 1) > 0) types.add("casual")
-                if ((policy?.sickPerYear ?: 1) > 0) types.add("sick")
-                if ((policy?.earnedPerYear ?: 1) > 0) types.add("earned")
-                // Add extra types from policy (unpaid, compensatory, etc)
-                policy?.types?.forEach { t ->
-                    if (t !in listOf("casual", "sick", "earned") && t !in types) types.add(t)
+            }
+            if (canApprove) {
+                launch {
+                    try {
+                        val response = hrRead { api.getPendingLeaveApprovals(bearerToken, scope = "direct",
+                            fromDate = fromDate, toDate = toDate, status = status, leaveType = leaveType,
+                            staffId = staffId, pageSize = 100) }
+                        if (generation == loadGeneration && response?.success == true) {
+                            _uiState.value = _uiState.value.copy(pendingApprovals = response.leaves)
+                        }
+                    } finally {
+                        if (generation == loadGeneration) _uiState.value = _uiState.value.copy(isAllLoading = false)
+                    }
                 }
-
-                // Allocation (total) comes straight from HR policy — the source
-                // of truth — so changing casual/sick/earned per-year in HR
-                // settings updates the Available card on the next load. The
-                // balance record only supplies how much has been *used*. Fall
-                // back to the balance's policy-corrected total if the policy
-                // fetch itself failed, so a transient error doesn't zero the card.
-                val casualAlloc = policy?.casualPerYear?.toDouble() ?: (b?.casual ?: 0.0)
-                val sickAlloc = policy?.sickPerYear?.toDouble() ?: (b?.sick ?: 0.0)
-                val earnedAlloc = policy?.earnedPerYear?.toDouble() ?: (b?.earned ?: 0.0)
-
-                _uiState.value = _uiState.value.copy(
-                    casualLeft = (casualAlloc - (b?.casualUsed ?: 0.0)).coerceAtLeast(0.0),
-                    sickLeft = (sickAlloc - (b?.sickUsed ?: 0.0)).coerceAtLeast(0.0),
-                    earnedLeft = (earnedAlloc - (b?.earnedUsed ?: 0.0)).coerceAtLeast(0.0),
-                    casualTotal = casualAlloc,
-                    sickTotal = sickAlloc,
-                    earnedTotal = earnedAlloc,
-                    myLeaves = history?.leaves ?: emptyList(),
-                    pendingApprovals = pending?.leaves ?: emptyList(),
-                    teamLeaves = team?.leaves ?: emptyList(),
-                    leaveTypes = if (types.isNotEmpty()) types else listOf("casual", "sick", "earned")
-                )
-            } finally {
-                _uiState.value = _uiState.value.copy(isLoading = false)
+                launch {
+                    try {
+                        val response = hrRead { api.getPendingLeaveApprovals(bearerToken, teamOnly = true, scope = "direct",
+                            fromDate = fromDate, toDate = toDate, status = status, leaveType = leaveType,
+                            staffId = staffId, pageSize = 100) }
+                        if (generation == loadGeneration && response?.success == true) {
+                            _uiState.value = _uiState.value.copy(teamLeaves = response.leaves)
+                        }
+                    } finally {
+                        if (generation == loadGeneration) _uiState.value = _uiState.value.copy(isTeamLoading = false)
+                    }
+                }
             }
         }
+    }
+
+    private fun publishBalance() {
+        val b = cachedBalance
+        val policy = cachedPolicy
+        val types = mutableListOf<String>()
+        if ((policy?.casualPerYear ?: 1) > 0) types.add("casual")
+        if ((policy?.sickPerYear ?: 1) > 0) types.add("sick")
+        if ((policy?.earnedPerYear ?: 1) > 0) types.add("earned")
+        policy?.types?.forEach {
+            if (it !in listOf("casual", "sick", "earned") && it !in types) types.add(it)
+        }
+        val casual = policy?.casualPerYear?.toDouble() ?: b?.casual ?: 0.0
+        val sick = policy?.sickPerYear?.toDouble() ?: b?.sick ?: 0.0
+        val earned = policy?.earnedPerYear?.toDouble() ?: b?.earned ?: 0.0
+        _uiState.value = _uiState.value.copy(
+            casualLeft = (casual - (b?.casualUsed ?: 0.0)).coerceAtLeast(0.0),
+            sickLeft = (sick - (b?.sickUsed ?: 0.0)).coerceAtLeast(0.0),
+            earnedLeft = (earned - (b?.earnedUsed ?: 0.0)).coerceAtLeast(0.0),
+            casualTotal = casual, sickTotal = sick, earnedTotal = earned,
+            balanceLoaded = b != null,
+            leaveTypes = types.ifEmpty { listOf("casual", "sick", "earned") },
+        )
     }
 
     fun applyLeave(bearerToken: String, type: String, from: String, to: String, reason: String) {
@@ -160,7 +158,7 @@ class LeavesViewModel : ViewModel() {
                 val resp = api.applyLeave(bearerToken, ApplyLeaveRequest(type, from, to, reason))
                 if (resp.success) {
                     _event.emit("Leave applied successfully!")
-                    load(bearerToken, false)
+                    load(bearerToken, false, force = true)
                 } else {
                     _event.emit(resp.error ?: "Failed to apply leave")
                 }
@@ -178,7 +176,7 @@ class LeavesViewModel : ViewModel() {
                 val resp = api.approveLeave(bearerToken, IdRequest(id))
                 if (resp.success) {
                     _event.emit("Leave approved")
-                    load(bearerToken, canApprove)
+                    load(bearerToken, canApprove, force = true)
                 } else {
                     _event.emit(resp.error ?: "Failed to approve leave")
                 }
@@ -194,7 +192,7 @@ class LeavesViewModel : ViewModel() {
                 val resp = api.rejectLeave(bearerToken, RejectRequest(id, reason))
                 if (resp.success) {
                     _event.emit("Leave rejected")
-                    load(bearerToken, canApprove)
+                    load(bearerToken, canApprove, force = true)
                 } else {
                     _event.emit(resp.error ?: "Failed to reject leave")
                 }
@@ -216,7 +214,7 @@ class LeavesViewModel : ViewModel() {
                 val resp = api.cancelLeave(bearerToken, IdRequest(id))
                 if (resp.success) {
                     _event.emit("Leave request cancelled")
-                    load(bearerToken, canApprove)
+                    load(bearerToken, canApprove, force = true)
                 } else {
                     _event.emit(resp.error ?: "Failed to cancel leave")
                 }

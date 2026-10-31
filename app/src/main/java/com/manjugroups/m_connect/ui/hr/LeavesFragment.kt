@@ -56,10 +56,6 @@ class LeavesFragment : Fragment() {
     private var filterLeaveType: String? = null
     private var filterStaffId: String? = null
     private var skeletonAnimator: ObjectAnimator? = null
-    // True once leaves have rendered at least once. Gates the skeleton so
-    // a pull-to-refresh doesn't hide the list and flash placeholders over
-    // data that's already on screen.
-    private var hasRenderedLeavesOnce = false
 
     // Infinite scroll: render one page of the filtered history at a time and
     // grow the window as the user nears the bottom of the NestedScrollView.
@@ -160,7 +156,7 @@ class LeavesFragment : Fragment() {
             parentFragmentManager.setFragmentResultListener(ApplyLeaveBottomSheet.RESULT_KEY_APPLIED, viewLifecycleOwner) { _, bundle ->
                 val success = bundle.getBoolean("success", false)
                 if (success) {
-                    viewModel.load(session.bearerToken, session.hasPermission("leaves.approve"))
+                    viewModel.load(session.bearerToken, session.hasPermission("leaves.approve"), force = true)
                 }
             }
             ApplyLeaveBottomSheet.newInstance().showOnce(parentFragmentManager, "apply_leave_sheet")
@@ -246,7 +242,12 @@ class LeavesFragment : Fragment() {
                 filterHistoryLeaves(state.myLeaves)
             }
         }
-        val isLoading = state.isLoading
+        val isLoading = when {
+            screenMode == MODE_APPROVAL -> state.isAllLoading
+            activeScope == LeaveScope.TEAM && canApprove -> state.isTeamLoading
+            activeScope == LeaveScope.ALL && canApprove -> state.isAllLoading
+            else -> state.isLoading
+        }
 
         if (screenMode == MODE_HISTORY) {
             binding.filterRow.visibility = View.VISIBLE
@@ -275,7 +276,10 @@ class LeavesFragment : Fragment() {
         binding.balanceCard.visibility = if (screenMode == MODE_HISTORY) View.VISIBLE else View.GONE
         binding.btnApplyLeave.visibility = if (screenMode == MODE_HISTORY) View.VISIBLE else View.GONE
 
-        if (hasAllocation) {
+        if (!state.balanceLoaded) {
+            binding.tvLeaveAvailable.text = "--"
+            binding.tvLeaveUsed.text = "--"
+        } else if (hasAllocation) {
             val available = state.casualLeft + state.sickLeft + state.earnedLeft
             val used = (state.casualTotal - state.casualLeft).coerceAtLeast(0.0) +
                 (state.sickTotal - state.sickLeft).coerceAtLeast(0.0) +
@@ -287,10 +291,8 @@ class LeavesFragment : Fragment() {
             binding.tvLeaveUsed.text = "0"
         }
 
-        // Only skeleton on the FIRST load. A refresh keeps the existing
-        // list visible while the new data arrives instead of blanking to
-        // placeholders.
-        val showSkeleton = isLoading && !hasRenderedLeavesOnce
+        // Keep existing rows visible while this scope refreshes.
+        val showSkeleton = isLoading && displayLeaves.isEmpty()
         binding.skeletonContainer.visibility = if (showSkeleton) View.VISIBLE else View.GONE
         binding.leaveList.visibility = if (showSkeleton) View.GONE else View.VISIBLE
         if (showSkeleton) {
@@ -300,7 +302,6 @@ class LeavesFragment : Fragment() {
         }
 
         stopSkeletonPulse()
-        if (!isLoading) hasRenderedLeavesOnce = true
         setEmptyCopy(displayLeaves.isEmpty())
         val isApprovalForRender = (canApprove && screenMode == MODE_APPROVAL) || (canApprove && screenMode == MODE_HISTORY && activeScope != LeaveScope.MY)
 

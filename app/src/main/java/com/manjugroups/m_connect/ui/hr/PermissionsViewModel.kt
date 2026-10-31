@@ -3,7 +3,8 @@ package com.manjugroups.m_connect.ui.hr
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.manjugroups.m_connect.network.*
-import kotlinx.coroutines.async
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -23,11 +24,16 @@ data class PermissionsState(
     val allApprovals: List<PermissionData> = emptyList(),
     val isApplying: Boolean = false,
     val isLoading: Boolean = false,
+    val isTeamLoading: Boolean = false,
+    val isAllLoading: Boolean = false,
+    val usageLoaded: Boolean = false,
 )
 
-class PermissionsViewModel : ViewModel() {
+class PermissionsViewModel(private val api: ApiService = ApiService.create()) : ViewModel() {
 
-    private val api = ApiService.create()
+    private var loadJob: Job? = null
+    private var loadKey: List<Any?>? = null
+    private var loadGeneration = 0
     private val _uiState = MutableStateFlow(PermissionsState())
     val uiState: StateFlow<PermissionsState> = _uiState.asStateFlow()
 
@@ -41,77 +47,79 @@ class PermissionsViewModel : ViewModel() {
         toDate: String? = null,
         status: String? = null,
         staffId: String? = null,
+        force: Boolean = false,
     ) {
-        _uiState.value = _uiState.value.copy(isLoading = true)
-        viewModelScope.launch {
-            try {
-                // Independent reads fired in PARALLEL — previously serial, so the
-                // screen blocked on the SUM of up to five round-trips.
-                val usageD = async { runCatching { api.getPermissionUsage(bearerToken) }.getOrNull() }
-                val historyD = async {
-                    runCatching {
-                        api.getMyPermissions(
-                            bearerToken,
-                            staffId = staffId,
-                            fromDate = fromDate,
-                            toDate = toDate,
-                            status = status,
-                            pageSize = 100,
-                        )
-                    }.getOrNull()
+        val key = listOf(bearerToken, canApprove, fromDate, toDate, status, staffId)
+        if (!force && key == loadKey && loadJob?.isActive == true && _uiState.value.isLoading) return
+        val generation = ++loadGeneration
+        loadJob?.cancel()
+        if (loadKey?.firstOrNull() != bearerToken) _uiState.value = PermissionsState()
+        loadKey = key
+        _uiState.value = _uiState.value.copy(isLoading = true, isTeamLoading = canApprove, isAllLoading = canApprove)
+        loadJob = viewModelScope.launch {
+            // Publish each dataset independently; a slow optional read must not
+            // keep the selected list hidden or a refresh spinner running.
+            launch {
+                try {
+                    val history = api.getMyPermissions(bearerToken, staffId = staffId, fromDate = fromDate,
+                        toDate = toDate, status = status, pageSize = 100)
+                    if (generation == loadGeneration && history.success) {
+                        _uiState.value = _uiState.value.copy(myPermissions = history.permissions)
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    if (generation == loadGeneration) _event.emit(HrApplicationError.message(error, "Permission"))
+                } finally {
+                    if (generation == loadGeneration) _uiState.value = _uiState.value.copy(isLoading = false)
                 }
-                val pendingD = async {
-                    if (canApprove) {
-                        runCatching {
-                            api.getPendingPermissionApprovals(
-                                bearerToken,
-                                scope = "direct",
-                                fromDate = fromDate,
-                                toDate = toDate,
-                                status = status,
-                                staffId = staffId,
-                                pageSize = 100,
-                            )
-                        }.getOrNull()
-                    } else null
+            }
+            launch {
+                val usage = hrRead { api.getPermissionUsage(bearerToken) }
+                if (generation == loadGeneration && usage?.success == true) {
+                    _uiState.value = _uiState.value.copy(
+                        usedHours = usage.usedHours ?: usage.totalHours ?: _uiState.value.usedHours,
+                        limitHours = usage.limitHours ?: _uiState.value.limitHours,
+                        count = usage.count ?: _uiState.value.count,
+                        usageLoaded = true,
+                    )
                 }
-                // All-scope dataset (company-wide) — backend gates it to admins
-                // / permissions.viewAll and falls back to team scope otherwise.
-                val allD = async {
-                    if (canApprove) {
-                        runCatching {
-                            api.getPendingPermissionApprovals(
-                                bearerToken,
-                                scope = "direct",
-                                all = true,
-                                fromDate = fromDate,
-                                toDate = toDate,
-                                status = status,
-                                staffId = staffId,
-                                pageSize = 100,
-                            )
-                        }.getOrNull()
-                    } else null
+            }
+            launch {
+                val policy = hrRead { api.getPolicy(bearerToken) }
+                if (generation == loadGeneration && policy?.success == true && !_uiState.value.usageLoaded) {
+                    policy?.policy?.permission?.monthlyLimitHours?.let {
+                        _uiState.value = _uiState.value.copy(limitHours = it)
+                    }
                 }
-                val policyD = async { runCatching { api.getPolicy(bearerToken) }.getOrNull() }
-                val usage = usageD.await()
-                val history = historyD.await()
-                val pending = pendingD.await()
-                val all = allD.await()
-                val policyResp = policyD.await()
-
-                val limitFromApi = usage?.limitHours ?: policyResp?.policy?.permission?.monthlyLimitHours ?: 0.0
-
-                _uiState.value = _uiState.value.copy(
-                    usedHours = usage?.usedHours ?: usage?.totalHours ?: 0.0,
-                    limitHours = limitFromApi,
-                    count = usage?.count ?: 0,
-                    myPermissions = history?.permissions ?: emptyList(),
-                    pendingApprovals = pending?.permissions ?: emptyList(),
-                    allApprovals = all?.permissions ?: emptyList()
-                )
-            } finally {
-                _uiState.value = _uiState.value.copy(isLoading = false)
+            }
+            if (canApprove) {
+                launch {
+                    try {
+                        val response = hrRead { api.getPendingPermissionApprovals(
+                            bearerToken, scope = "direct", fromDate = fromDate, toDate = toDate,
+                            status = status, staffId = staffId, pageSize = 100,
+                        ) }
+                        if (generation == loadGeneration && response?.success == true) {
+                            _uiState.value = _uiState.value.copy(pendingApprovals = response.permissions)
+                        }
+                    } finally {
+                        if (generation == loadGeneration) _uiState.value = _uiState.value.copy(isTeamLoading = false)
+                    }
+                }
+                launch {
+                    try {
+                        val response = hrRead { api.getPendingPermissionApprovals(
+                            bearerToken, scope = "direct", all = true, fromDate = fromDate, toDate = toDate,
+                            status = status, staffId = staffId, pageSize = 100,
+                        ) }
+                        if (generation == loadGeneration && response?.success == true) {
+                            _uiState.value = _uiState.value.copy(allApprovals = response.permissions)
+                        }
+                    } finally {
+                        if (generation == loadGeneration) _uiState.value = _uiState.value.copy(isAllLoading = false)
+                    }
+                }
             }
         }
     }
@@ -124,7 +132,7 @@ class PermissionsViewModel : ViewModel() {
                 val resp = api.applyPermission(bearerToken, ApplyPermissionRequest(date, fromTime, toTime, reason))
                 if (resp.success) {
                     _event.emit("Permission applied successfully!")
-                    load(bearerToken, false)
+                    load(bearerToken, false, force = true)
                 } else {
                     _event.emit(resp.error ?: "Failed to apply")
                 }
@@ -142,7 +150,7 @@ class PermissionsViewModel : ViewModel() {
                 val resp = api.approvePermission(bearerToken, IdRequest(id))
                 if (resp.success) {
                     _event.emit("Permission approved")
-                    load(bearerToken, canApprove)
+                    load(bearerToken, canApprove, force = true)
                 } else {
                     _event.emit(resp.error ?: "Failed to approve permission")
                 }
@@ -158,7 +166,7 @@ class PermissionsViewModel : ViewModel() {
                 val resp = api.rejectPermission(bearerToken, RejectRequest(id, reason))
                 if (resp.success) {
                     _event.emit("Permission rejected")
-                    load(bearerToken, canApprove)
+                    load(bearerToken, canApprove, force = true)
                 } else {
                     _event.emit(resp.error ?: "Failed to reject permission")
                 }
@@ -180,7 +188,7 @@ class PermissionsViewModel : ViewModel() {
                 val resp = api.cancelPermission(bearerToken, IdRequest(id))
                 if (resp.success) {
                     _event.emit("Permission request cancelled")
-                    load(bearerToken, canApprove)
+                    load(bearerToken, canApprove, force = true)
                 } else {
                     _event.emit(resp.error ?: "Failed to cancel permission")
                 }

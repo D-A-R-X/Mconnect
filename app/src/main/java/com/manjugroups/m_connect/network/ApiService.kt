@@ -1573,7 +1573,7 @@ interface ApiService {
                 .build()
             return Retrofit.Builder()
                 .baseUrl(BuildConfig.BASE_URL)
-                .client(client)
+                .callFactory(InteractiveApiCallFactory(client))
                 .addConverterFactory(GsonConverterFactory.create())
                 .build()
                 .create(ApiService::class.java)
