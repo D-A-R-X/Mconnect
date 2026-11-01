@@ -7,6 +7,8 @@ import android.graphics.Matrix
 import android.media.ExifInterface
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.manjugroups.m_connect.attendance.AttendanceFailure
+import com.manjugroups.m_connect.attendance.AttendanceSubmissionGate
 import com.manjugroups.m_connect.attendance.OfflinePunchQueue
 import com.manjugroups.m_connect.attendance.PunchSyncWorker
 import com.manjugroups.m_connect.auth.SessionManager
@@ -21,6 +23,9 @@ import com.manjugroups.m_connect.network.PunchRequest
 import com.manjugroups.m_connect.network.SessionData
 import com.manjugroups.m_connect.network.StorageUploader
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -97,20 +102,27 @@ enum class PunchMode {
 
 sealed interface AttendanceFlowEvent {
     data class Loading(val mode: PunchMode) : AttendanceFlowEvent
-    /** Optimistic — emitted as soon as input validation passes, before upload completes. */
+    /** The server confirmed the punch, or the offline queue durably saved it for sync. */
     data class Success(val mode: PunchMode, val message: String) : AttendanceFlowEvent
     /** Pre-flight validation error (no submission attempted). */
     data class Error(val mode: PunchMode, val message: String) : AttendanceFlowEvent
-    /** Background upload/punch failed after optimistic Success was already emitted. */
+    /** Upload/submission was rejected or could not be confirmed or saved offline; no Success was emitted. */
     data class SubmissionFailed(val mode: PunchMode, val message: String) : AttendanceFlowEvent
 }
 
 class AttendanceFlowViewModel(
     private val api: ApiService = ApiService.create(),
     private val geoApi: GeoTrackApi = GeoTrackApi.create(),
+    private val uploadSelfie: suspend (String, File) -> StorageUploader.Result = { token, file ->
+        StorageUploader.upload(
+            api, token, file,
+            purpose = com.manjugroups.m_connect.network.MobileStoragePurpose.ATTENDANCE_PHOTO,
+        )
+    },
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AttendanceFlowState())
+    private val submission = AttendanceSubmissionGate()
 
     /**
      * The last punch the server confirmed, and when. For [CONFIRMED_PUNCH_GRACE_MS]
@@ -142,9 +154,16 @@ class AttendanceFlowViewModel(
             _uiState.update { it.copy(isLoading = true) }
             try {
                 val todayResp = api.getMyAttendanceToday(token)
-                val dayResp = runCatching { api.getDaySessions(token) }.getOrNull()
+                check(todayResp.success) { "Attendance read was not confirmed" }
+                val dayResp = try {
+                    api.getDaySessions(token).takeIf { it.success }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    null
+                }
 
-                val attendance = if (todayResp.success) todayResp.attendance else null
+                val attendance = todayResp.attendance
                 val totalMinutes = attendance?.totalMinutes ?: 0
 
                 val firstPunchIn = dayResp?.firstPunchIn ?: attendance?.firstPunchIn
@@ -178,7 +197,7 @@ class AttendanceFlowViewModel(
 
                 val fresh = AttendanceFlowState(
                     isLoading = false,
-                    isSubmitting = false,
+                    isSubmitting = submission.isActive,
                     hasLoaded = true,
                     isClockedIn = isClockedInForUi,
                     hasClockedInToday = hasClockedInTodayForUi,
@@ -207,7 +226,7 @@ class AttendanceFlowViewModel(
                 // displayed state or today would wrongly read as not-clocked-in.
                 val withPending = appCtx?.let { overlayPendingPunch(it, fresh) } ?: fresh
                 val withConfirmed = overlayConfirmedPunch(withPending)
-                _uiState.value = withConfirmed
+                _uiState.value = mergeAttendanceRefresh(withConfirmed, _uiState.value, submission.isActive)
                 if (withConfirmed != withPending && catchUpRefreshes < MAX_CATCH_UP_REFRESHES) {
                     // Server snapshot is behind the punch it already confirmed;
                     // look again shortly rather than waiting for the next poll.
@@ -217,13 +236,18 @@ class AttendanceFlowViewModel(
                         loadTodayAttendance(token, context)
                     }
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (_: Exception) {
                 // Offline / fetch failed: do NOT collapse to the empty default
                 // (which reads as not-clocked-in → "absent"). Keep the cached
                 // last-known status and overlay any queued offline punch.
-                val base = (appCtx?.let { readCachedTodayState(it) } ?: _uiState.value)
+                val base = _uiState.value.takeIf { it.hasLoaded }
+                    ?: appCtx?.let { readCachedTodayState(it) } ?: _uiState.value
                 val withPending = appCtx?.let { overlayPendingPunch(it, base) } ?: base
-                _uiState.value = withPending.copy(isLoading = false)
+                _uiState.value = mergeAttendanceRefresh(
+                    withPending.copy(isLoading = false), _uiState.value, submission.isActive,
+                )
             }
         }
     }
@@ -301,9 +325,11 @@ class AttendanceFlowViewModel(
 
         val summed = try {
             val resp = api.getMyAttendance(token, fromDate = from, toDate = to)
-            resp.records.sumOf { it.totalMinutes ?: 0 }
+            if (resp.success) resp.records.sumOf { it.totalMinutes ?: 0 } else _uiState.value.payPeriodMinutes
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (_: Exception) {
-            0
+            _uiState.value.payPeriodMinutes
         }
         return label to summed
     }
@@ -372,6 +398,7 @@ class AttendanceFlowViewModel(
             }
             return
         }
+        if (!submission.tryBegin()) return
         // A missing GPS fix must NOT block the punch: offline / indoors the
         // device often can't resolve a location, and that's exactly when staff
         // still need to clock in. The punch records (and queues offline) with
@@ -406,25 +433,21 @@ class AttendanceFlowViewModel(
         }
 
         viewModelScope.launch {
-            _events.emit(AttendanceFlowEvent.Loading(mode))
-
             try {
+                _events.emit(AttendanceFlowEvent.Loading(mode))
                 val compressed = withContext(Dispatchers.IO) {
                     runCatching { compressSelfie(selfieFile) }.getOrDefault(selfieFile)
                 }
-                val upload = StorageUploader.upload(
-                    api,
-                    token,
-                    compressed,
-                    purpose = com.manjugroups.m_connect.network.MobileStoragePurpose.ATTENDANCE_PHOTO,
-                )
+                currentCoroutineContext().ensureActive()
+                val upload = uploadSelfie(token, compressed)
+                currentCoroutineContext().ensureActive()
                 val storageId = upload.storageId
                 if (storageId.isNullOrBlank()) {
                     // The selfie upload couldn't reach the server → we're offline.
                     // Queue the punch with the LOCAL selfie (uploaded on flush)
                     // so it's never lost. Only for a genuine network failure — a
                     // server rejection (e.g. photo too large) still fails loudly.
-                    if (upload.isNetworkError && context != null &&
+                    if (AttendanceFailure.uploadFailure(upload) == AttendanceFailure.Offline && context != null &&
                         queueOfflinePunch(mode, punchIso, latitude, longitude, selfieFile, address, context)
                     ) {
                         return@launch
@@ -434,7 +457,7 @@ class AttendanceFlowViewModel(
                         AttendanceFlowEvent.SubmissionFailed(
                             mode,
                             "Failed to upload selfie." +
-                                (upload.errorMessage?.let { " $it" } ?: "") +
+                                " ${AttendanceFailure.serverMessage(upload.errorMessage)}" +
                                 " Please try again.",
                         ),
                     )
@@ -463,7 +486,7 @@ class AttendanceFlowViewModel(
                     _events.emit(
                         AttendanceFlowEvent.SubmissionFailed(
                             mode,
-                            response.error ?: "Punch request failed.",
+                            AttendanceFailure.serverMessage(response.error),
                         ),
                     )
                     return@launch
@@ -526,17 +549,17 @@ class AttendanceFlowViewModel(
                 }
 
                 loadTodayAttendance(token, context)
+            } catch (cancelled: CancellationException) {
+                rollbackOptimistic(previousState)
+                throw cancelled
             } catch (e: Exception) {
-                // Distinguish a genuine NETWORK failure (no server response) from
-                // a server REJECTION (5xx with a JSON body). extractHttpErrorMessage
-                // returns the server's message on an HttpException and null when
-                // the request never reached the server (offline / timeout).
-                val serverMessage = extractHttpErrorMessage(e)
-                // No server response body → genuine network failure → queue the
-                // punch offline (real tap time + local selfie) so it's never
-                // lost. A server rejection (serverMessage != null) is a real
-                // business error and must NOT be queued.
-                if (serverMessage == null && context != null &&
+                val failure = try {
+                    AttendanceFailure.route(e)
+                } catch (cancelled: CancellationException) {
+                    rollbackOptimistic(previousState)
+                    throw cancelled
+                }
+                if (failure == AttendanceFailure.Offline && context != null &&
                     queueOfflinePunch(mode, punchIso, latitude, longitude, selfieFile, address, context)
                 ) {
                     return@launch
@@ -544,8 +567,8 @@ class AttendanceFlowViewModel(
                 // Server rejection, or the offline queue itself failed — restore
                 // the prior state and surface the error.
                 rollbackOptimistic(previousState)
-                val message = serverMessage ?: e.message
-                    ?: "Network error while submitting punch."
+                val message = (failure as? AttendanceFailure.Rejected)?.message
+                    ?: AttendanceFailure.UNCONFIRMED
                 _events.emit(AttendanceFlowEvent.SubmissionFailed(mode, message))
                 // If the server says there's no active punch-in for today, the
                 // client's `isClockedIn` is stale (e.g. session was auto-closed
@@ -554,6 +577,9 @@ class AttendanceFlowViewModel(
                 if (message.contains("No active punch-in", ignoreCase = true)) {
                     loadTodayAttendance(token, context)
                 }
+            } finally {
+                submission.finish()
+                _uiState.update { it.copy(isSubmitting = false) }
             }
         }
     }
@@ -626,26 +652,6 @@ class AttendanceFlowViewModel(
                 )
             }
         }
-    }
-
-    /**
-     * Convex returns its handler-thrown errors as HTTP 5xx with a JSON body
-     * like `{ "code": "...", "message": "No active punch-in found for today" }`.
-     * Retrofit gives us an HttpException — try to surface that nested message
-     * instead of the generic "HTTP 500" Retrofit toString.
-     */
-    private fun extractHttpErrorMessage(e: Throwable): String? {
-        val httpEx = e as? retrofit2.HttpException ?: return null
-        val raw = runCatching { httpEx.response()?.errorBody()?.string() }.getOrNull()
-            ?: return null
-        // Prefer parsing the standard {message:..., error:...} fields without
-        // pulling in extra deps. Fall through to the raw body if parsing fails.
-        return runCatching {
-            val obj = com.google.gson.JsonParser.parseString(raw).asJsonObject
-            val msg = obj.get("message")?.asString
-                ?: obj.get("error")?.asString
-            msg?.takeIf { it.isNotBlank() }
-        }.getOrNull()
     }
 
     /**
@@ -761,6 +767,21 @@ class AttendanceFlowViewModel(
     internal data class PendingPunchLite(val isPunchIn: Boolean, val clientPunchTime: String)
 
     companion object {
+        internal fun mergeAttendanceRefresh(
+            fresh: AttendanceFlowState,
+            current: AttendanceFlowState,
+            isSubmitting: Boolean,
+        ): AttendanceFlowState = if (isSubmitting) {
+            fresh.copy(
+                isSubmitting = true,
+                isClockedIn = current.isClockedIn,
+                hasClockedInToday = current.hasClockedInToday,
+                clockedOutOnMobile = current.clockedOutOnMobile,
+            )
+        } else {
+            fresh.copy(isSubmitting = false)
+        }
+
         /** See [confirmedPunch]. */
         private const val CONFIRMED_PUNCH_GRACE_MS = 2 * 60_000L
         private const val CATCH_UP_REFRESH_MS = 4_000L

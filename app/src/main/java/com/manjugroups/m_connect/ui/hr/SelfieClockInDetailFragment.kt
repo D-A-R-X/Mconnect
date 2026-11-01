@@ -21,6 +21,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.manjugroups.m_connect.MainActivity
+import com.manjugroups.m_connect.attendance.canSubmitAttendance
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentSelfieClockInDetailBinding
 import com.manjugroups.m_connect.ui.common.navigateUp
@@ -82,6 +83,7 @@ class SelfieClockInDetailFragment : Fragment() {
         }
         ViewCompat.requestApplyInsets(binding.root)
         bindCapturedData()
+        collectSubmissionState()
         collectEvents()
 
         binding.btnBack.setOnClickListener {
@@ -97,6 +99,7 @@ class SelfieClockInDetailFragment : Fragment() {
         }
 
         binding.btnClockInAction.setOnClickListener {
+            if (flowViewModel.uiState.value.isSubmitting) return@setOnClickListener
             val file = photoPath?.let(::File)
             val remarks = binding.etClockInNotes.text?.toString()?.trim()
             if (mode == PunchMode.PUNCH_IN) {
@@ -156,7 +159,25 @@ class SelfieClockInDetailFragment : Fragment() {
             binding.tvCapturedLng.text = "Long : --"
         }
         binding.tvCapturedTime.text = buildCaptureTimeLabel()
-        binding.btnClockInAction.isEnabled = file?.exists() == true && latValue != null && lngValue != null
+        renderSubmissionState(flowViewModel.uiState.value)
+    }
+
+    private fun renderSubmissionState(state: AttendanceFlowState) {
+        binding.btnClockInAction.isEnabled = canSubmitAttendance(
+            hasPhoto = photoPath?.let(::File)?.exists() == true,
+            hasLocation = latitude != null && longitude != null,
+            isSubmitting = state.isSubmitting,
+        )
+        binding.btnClockInAction.text = if (state.isSubmitting) "Submitting..."
+            else if (mode == PunchMode.PUNCH_IN) "Clock In" else "Clock Out"
+    }
+
+    private fun collectSubmissionState() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                flowViewModel.uiState.collect(::renderSubmissionState)
+            }
+        }
     }
 
     private fun buildCaptureTimeLabel(): String {
@@ -223,16 +244,13 @@ class SelfieClockInDetailFragment : Fragment() {
                     when (event) {
                         is AttendanceFlowEvent.Loading -> {
                             if (event.mode == mode) {
-                                binding.btnClockInAction.isEnabled = false
-                                binding.btnClockInAction.text = "Submitting..."
+                                renderSubmissionState(flowViewModel.uiState.value)
                             }
                         }
 
                         is AttendanceFlowEvent.Error -> {
                             if (event.mode == mode) {
-                                binding.btnClockInAction.isEnabled = true
-                                binding.btnClockInAction.text =
-                                    if (mode == PunchMode.PUNCH_IN) "Clock In" else "Clock Out"
+                                renderSubmissionState(flowViewModel.uiState.value)
                                 toastSafe(event.message)
                             }
                         }
@@ -242,9 +260,7 @@ class SelfieClockInDetailFragment : Fragment() {
                         // can retry and surface the server's error message.
                         is AttendanceFlowEvent.SubmissionFailed -> {
                             if (event.mode == mode) {
-                                binding.btnClockInAction.isEnabled = true
-                                binding.btnClockInAction.text =
-                                    if (mode == PunchMode.PUNCH_IN) "Clock In" else "Clock Out"
+                                renderSubmissionState(flowViewModel.uiState.value)
                                 toastSafe(event.message, Toast.LENGTH_LONG)
                                 // Server says there's no open session — the UI
                                 // got into this screen because of a stale

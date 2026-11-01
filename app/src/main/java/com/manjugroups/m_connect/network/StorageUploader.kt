@@ -26,6 +26,7 @@ object StorageUploader {
         val storageId: String?,
         val errorMessage: String?,
         val isNetworkError: Boolean = false,
+        val failureCause: Throwable? = null,
     ) {
         val isSuccess: Boolean get() = !storageId.isNullOrBlank()
     }
@@ -33,7 +34,7 @@ object StorageUploader {
     private sealed interface PreferredResult {
         data class Success(val storageId: String) : PreferredResult
         data object Unavailable : PreferredResult
-        data class Failed(val message: String, val networkError: Boolean = false) : PreferredResult
+        data class Failed(val message: String, val networkError: Boolean = false, val cause: Throwable? = null) : PreferredResult
     }
 
     suspend fun upload(
@@ -143,7 +144,7 @@ object StorageUploader {
                 )
             ) {
                 is PreferredResult.Success -> return Result(preferred.storageId, null)
-                is PreferredResult.Failed -> return Result(null, preferred.message, preferred.networkError)
+                is PreferredResult.Failed -> return Result(null, preferred.message, preferred.networkError, preferred.cause)
                 PreferredResult.Unavailable -> Unit
             }
         }
@@ -193,7 +194,7 @@ object StorageUploader {
                 }
             } catch (error: IOException) {
                 if (attempt == attempts - 1) {
-                    return PreferredResult.Failed(networkMessage(error), networkError = true)
+                    return PreferredResult.Failed(networkMessage(error), networkError = true, cause = error)
                 }
             }
             if (contract == null && attempt < attempts - 1) delay(backoff(attempt))
@@ -230,7 +231,7 @@ object StorageUploader {
             } catch (error: IOException) {
                 if (attempt == attempts - 1) {
                     bestEffortAbort(storageApi, token, fileId)
-                    return PreferredResult.Failed(networkMessage(error), networkError = true)
+                    return PreferredResult.Failed(networkMessage(error), networkError = true, cause = error)
                 }
             }
             if (!putSucceeded && attempt < attempts - 1) delay(backoff(attempt))
@@ -260,7 +261,7 @@ object StorageUploader {
                 }
             } catch (error: IOException) {
                 if (attempt == attempts - 1) {
-                    return PreferredResult.Failed(networkMessage(error), networkError = true)
+                    return PreferredResult.Failed(networkMessage(error), networkError = true, cause = error)
                 }
             }
             if (attempt < attempts - 1) delay(backoff(attempt))
@@ -278,6 +279,7 @@ object StorageUploader {
     ): Result {
         var lastError: String? = null
         var lastWasNetwork = false
+        var lastCause: Throwable? = null
         repeat(attempts) { attempt ->
             try {
                 val response = api.uploadStorageFile(token, purpose.wireValue, fileName, body)
@@ -285,23 +287,28 @@ object StorageUploader {
                 if (response.success && !id.isNullOrBlank()) return Result(id, null)
                 lastError = response.error ?: "Server did not return a file ID."
                 lastWasNetwork = false
+                lastCause = null
             } catch (error: HttpException) {
                 if (error.code() in 400..499) return Result(null, httpMessage(error.code(), "Upload"))
                 lastError = httpMessage(error.code(), "Upload")
                 lastWasNetwork = false
+                lastCause = error
             } catch (error: SocketTimeoutException) {
                 lastError = "Connection timed out."
                 lastWasNetwork = true
+                lastCause = error
             } catch (error: IOException) {
                 lastError = "Network error. Check your connection."
                 lastWasNetwork = true
+                lastCause = error
             } catch (error: Exception) {
                 lastError = error.message ?: "Unexpected error."
                 lastWasNetwork = false
+                lastCause = error
             }
             if (attempt < attempts - 1) delay(backoff(attempt))
         }
-        return Result(null, lastError, isNetworkError = lastWasNetwork)
+        return Result(null, lastError, isNetworkError = lastWasNetwork, failureCause = lastCause)
     }
 
     private suspend fun bestEffortAbort(api: MobileStorageApi, token: String, fileId: String) {

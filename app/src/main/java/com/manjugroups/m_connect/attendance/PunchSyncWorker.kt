@@ -17,8 +17,18 @@ import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.PunchRequest
 import com.manjugroups.m_connect.network.StorageUploader
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import java.io.File
 import java.util.concurrent.TimeUnit
+
+/** A later clock-out depends on every earlier queued clock-in being resolved. */
+internal suspend fun <T> replayPunchesInOrder(pending: List<T>, replay: suspend (T) -> Boolean) {
+    for (punch in pending) {
+        if (!replay(punch)) break
+    }
+}
 
 /**
  * Flushes queued offline attendance punches once connectivity returns.
@@ -60,8 +70,9 @@ class PunchSyncWorker(
         val api = ApiService.create()
         var networkFailure = false
 
-        for (p in pending) {
+        replayPunchesInOrder(pending) { p ->
             try {
+                currentCoroutineContext().ensureActive()
                 val photo = p.photoPath?.let(::File)?.takeIf { it.exists() }
                 val storageId = photo?.let { f ->
                     runCatching {
@@ -73,6 +84,7 @@ class PunchSyncWorker(
                         ).storageId
                     }.getOrNull()?.takeIf { it.isNotBlank() }
                 }
+                currentCoroutineContext().ensureActive()
                 // The selfie is part of the punch. Keep the row and retry rather
                 // than recording it without the photo, which is how punches
                 // reached the web with time and GPS but no selfie. After many
@@ -81,7 +93,7 @@ class PunchSyncWorker(
                 if (photo != null && storageId == null && p.attemptCount < MAX_SELFIE_UPLOAD_ATTEMPTS) {
                     networkFailure = true
                     dao.bumpAttempt(p.id, "Selfie upload failed")
-                    continue
+                    return@replayPunchesInOrder false
                 }
                 val request = PunchRequest(
                     latitude = p.latitude,
@@ -117,10 +129,14 @@ class PunchSyncWorker(
                         api = GeoTrackApi.create(),
                     )
                 }
+                true
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (e: Exception) {
                 // Network / server error — keep the row and let WorkManager retry.
                 networkFailure = true
                 dao.bumpAttempt(p.id, e.message)
+                false
             }
         }
         return if (networkFailure) Result.retry() else Result.success()

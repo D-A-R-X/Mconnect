@@ -16,6 +16,8 @@ import com.manjugroups.m_connect.network.PunchRequest
 import com.manjugroups.m_connect.network.StorageUploader
 import com.manjugroups.m_connect.attendance.OfflinePunchQueue
 import com.manjugroups.m_connect.attendance.PunchSyncWorker
+import com.manjugroups.m_connect.attendance.AttendanceFailure
+import com.manjugroups.m_connect.attendance.AttendanceSubmissionGate
 import com.manjugroups.m_connect.geotrack.data.GeoTrackDatabase
 import com.manjugroups.m_connect.geotrack.data.PendingPunchEntity
 import com.manjugroups.m_connect.network.StartVisitRequest
@@ -27,6 +29,8 @@ import com.manjugroups.m_connect.ui.marketing.participantFor
 import com.manjugroups.m_connect.ui.marketing.resolveCpActivityDate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -106,6 +110,7 @@ class HomeViewModel : ViewModel() {
 
     private var cachedState: HomeUiState.Loaded? = null
     private var homeLoadGeneration = 0
+    private val punchSubmission = AttendanceSubmissionGate()
 
     fun loadHomeData(bearerToken: String, context: Context? = null) {
         // Flush any offline-queued punches whenever the home screen loads, so a
@@ -240,7 +245,7 @@ class HomeViewModel : ViewModel() {
                     firstPunchInMillis = if (attendanceKnown) firstPunchInMillis else (cachedState?.firstPunchInMillis ?: 0L),
                     totalMinutes = if (attendanceKnown) totalMin else (cachedState?.totalMinutes ?: 0),
                     sessions = if (attendanceKnown) sessions else (cachedState?.sessions ?: sessions),
-                    isPunching = false,
+                    isPunching = punchSubmission.isActive,
                 )
                 cachedState = loaded
                 _uiState.value = loaded
@@ -293,10 +298,11 @@ class HomeViewModel : ViewModel() {
 
     fun punch(context: Context, bearerToken: String, lat: Double?, lng: Double?, photoFile: File?) {
         val current = cachedState ?: return
+        if (!punchSubmission.tryBegin()) return
         val isPunchIn = !current.hasOpenSession
 
         // Show loading
-        _uiState.value = current.copy(isPunching = true)
+        setPunching(true)
 
         viewModelScope.launch {
             // Capture the REAL tap time up front. Everything below (photo upload,
@@ -308,8 +314,10 @@ class HomeViewModel : ViewModel() {
             // Geocoding is on-device and does not need the network, and a
             // queued punch that reaches the web without an address reads as a
             // punch from nowhere.
-            val address = reverseGeocode(context, lat, lng)
+            var address: String? = null
+            var punchRecorded = false
             try {
+                address = reverseGeocode(context, lat, lng)
                 // Step 1: Upload the selfie. A punch is NEVER recorded without
                 // the selfie the staff took: this used to punch with photo=null
                 // whenever the upload failed, so attendance landed on the web
@@ -318,18 +326,19 @@ class HomeViewModel : ViewModel() {
                 var storageId: String? = null
                 if (photoFile != null && photoFile.exists()) {
                     val upload = uploadPhoto(bearerToken, photoFile)
+                    currentCoroutineContext().ensureActive()
                     storageId = upload.storageId?.takeIf { it.isNotBlank() }
                     if (storageId == null) {
-                        if (upload.isNetworkError) {
+                        if (AttendanceFailure.uploadFailure(upload) == AttendanceFailure.Offline) {
                             // Unreachable: the catch below queues the punch WITH
                             // its selfie and the real tap time.
                             throw java.io.IOException(upload.errorMessage ?: "Selfie upload failed")
                         }
-                        _uiState.value = current.copy(isPunching = false)
+                        setPunching(false)
                         _punchEvent.emit(
                             PunchEvent.Error(
                                 "Failed to upload selfie." +
-                                    (upload.errorMessage?.let { " $it" } ?: "") +
+                                    " ${AttendanceFailure.serverMessage(upload.errorMessage)}" +
                                     " Please try again.",
                             ),
                         )
@@ -355,6 +364,7 @@ class HomeViewModel : ViewModel() {
                 }
 
                 if (response.success) {
+                    punchRecorded = true
                     // We're online — flush any punches that were queued offline
                     // on an earlier attempt so they don't linger.
                     PunchSyncWorker.enqueue(context)
@@ -375,17 +385,26 @@ class HomeViewModel : ViewModel() {
                     // Reload data to refresh state
                     loadHomeData(bearerToken, context)
                 } else {
-                    _uiState.value = current.copy(isPunching = false)
-                    _punchEvent.emit(PunchEvent.Error(response.error ?: "Punch failed"))
+                    setPunching(false)
+                    _punchEvent.emit(PunchEvent.Error(AttendanceFailure.serverMessage(response.error)))
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (e: Exception) {
-                // Network / server failure — DON'T lose the punch. Queue it with
-                // the real tap time (and photo) so it syncs when connectivity
-                // returns and records the time the staff actually punched.
+                // Tracking failures after acceptance must never replay the punch.
+                if (punchRecorded) {
+                    loadHomeData(bearerToken, context)
+                    return@launch
+                }
+                val failure = AttendanceFailure.route(e)
+                if (failure is AttendanceFailure.Rejected) {
+                    _punchEvent.emit(PunchEvent.Error(failure.message))
+                    return@launch
+                }
                 val queued = enqueueOfflinePunch(
                     context, isPunchIn, punchIso, lat, lng, photoFile, address,
                 )
-                _uiState.value = current.copy(isPunching = false)
+                setPunching(false)
                 if (queued) {
                     PunchSyncWorker.enqueue(context)
                     _punchEvent.emit(
@@ -395,9 +414,20 @@ class HomeViewModel : ViewModel() {
                         )
                     )
                 } else {
-                    _punchEvent.emit(PunchEvent.Error(e.message ?: "Network error"))
+                    _punchEvent.emit(PunchEvent.Error(AttendanceFailure.UNCONFIRMED))
                 }
+            } finally {
+                punchSubmission.finish()
+                setPunching(false)
             }
+        }
+    }
+
+    private fun setPunching(active: Boolean) {
+        val latest = _uiState.value as? HomeUiState.Loaded ?: cachedState ?: return
+        latest.copy(isPunching = active).let {
+            cachedState = it
+            _uiState.value = it
         }
     }
 
