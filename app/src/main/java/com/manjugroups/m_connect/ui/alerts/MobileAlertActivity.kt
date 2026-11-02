@@ -16,7 +16,9 @@ import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.widget.NestedScrollView
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import coil.load
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
@@ -88,6 +90,14 @@ class MobileAlertActivity : AppCompatActivity() {
             override fun handleOnBackPressed() = Unit
         })
         btnClose.setOnClickListener { closeCurrent() }
+        // Deleted on the web while on screen: say so and move on.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                MobileAlerts.withdrawn.collect { deliveryId ->
+                    if (current?.deliveryId == deliveryId) skipWithdrawn(deliveryId)
+                }
+            }
+        }
 
         if (!SessionManager(this).isLoggedIn) {
             finish()
@@ -122,8 +132,17 @@ class MobileAlertActivity : AppCompatActivity() {
         openJob = lifecycleScope.launch {
             val deliveryId = alert?.deliveryId
             val match = if (!deliveryId.isNullOrBlank()) {
-                runCatching { ApiService.create().getMobileAlertDetail(bearer, deliveryId) }
-                    .getOrNull()?.takeIf { it.success }?.alert
+                try {
+                    ApiService.create().getMobileAlertDetail(bearer, deliveryId).takeIf { it.success }?.alert
+                } catch (e: retrofit2.HttpException) {
+                    // Deleted on the web: clear its notification too.
+                    if (e.code() == 404) MobileAlerts.onWithdrawn(this@MobileAlertActivity, deliveryId)
+                    null
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    null
+                }
             } else null
             coroutineContext.ensureActive()
             if (SessionManager(this@MobileAlertActivity).bearerToken != bearer) {
@@ -191,6 +210,22 @@ class MobileAlertActivity : AppCompatActivity() {
         btnClose.isEnabled = enabled
         btnClose.alpha = if (enabled) 1f else 0.55f
         btnClose.text = label
+    }
+
+    private fun skipWithdrawn(deliveryId: String) {
+        countdown?.cancel()
+        current = null
+        Toast.makeText(this, "This alert was removed", Toast.LENGTH_SHORT).show()
+        if (intent.getBooleanExtra(EXTRA_REOPEN, false)) {
+            finish()
+            return
+        }
+        showLoading()
+        lifecycleScope.launch {
+            val next = MobileAlerts.fetchPending(this@MobileAlertActivity)
+                ?.firstOrNull { it.deliveryId != deliveryId }
+            if (next == null) finish() else show(next)
+        }
     }
 
     private fun closeCurrent() {

@@ -43,6 +43,9 @@ object MobileAlerts {
     private const val PREFS = "mobile_alerts"
     private const val KEY_VIEWED = "viewed"
     private const val KEY_UNACKED = "unacked"
+    private const val KEY_WITHDRAWN = "withdrawn"
+    /** Server lookups per refresh for notifications no longer pending. */
+    private const val MAX_RECONCILE_LOOKUPS = 10
     private const val DEFAULT_MIN_VIEW_SECONDS = 5
 
     private val gson = Gson()
@@ -53,6 +56,10 @@ object MobileAlerts {
     private val _pushArrived = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     /** A mobile_alert push arrived; a screen in the foreground shows it now. */
     val pushArrived: SharedFlow<Unit> = _pushArrived
+
+    private val _withdrawn = MutableSharedFlow<String>(extraBufferCapacity = 8)
+    /** An alert deleted on the web (delivery id); the alert screen moves on. */
+    val withdrawn: SharedFlow<String> = _withdrawn
 
     /** The alert screen is up (it shows the queue one by one itself). */
     @Volatile
@@ -106,6 +113,7 @@ object MobileAlerts {
                 val pending = fetchPending(appContext) ?: return@launch
                 if (SessionManager(appContext).bearerToken != bearer) return@launch
                 pending.forEach { postNotification(appContext, it) }
+                clearDeletedNotifications(appContext, pending, bearer)
                 val first = pending.firstOrNull() ?: return@launch
                 withContext(Dispatchers.Main) {
                     val resumed = (activity as? LifecycleOwner)?.lifecycle?.currentState
@@ -154,10 +162,52 @@ object MobileAlerts {
         if (done.isNotEmpty()) saveIdSet(context, KEY_UNACKED, idSet(context, KEY_UNACKED) - done)
     }
 
+    /**
+     * The alert was deleted on the web (withdraw push, or found gone on a
+     * refresh): its notification goes, it is never posted again, and an open
+     * alert screen moves on.
+     */
+    fun onWithdrawn(context: Context, deliveryId: String) {
+        if (deliveryId.isBlank()) return
+        val appContext = context.applicationContext
+        saveIdSet(appContext, KEY_WITHDRAWN, idSet(appContext, KEY_WITHDRAWN) + deliveryId)
+        cancelNotification(appContext, deliveryId)
+        _withdrawn.tryEmit(deliveryId)
+    }
+
+    /**
+     * Notifications of alerts that are no longer pending are checked with the
+     * server and removed only when it says the alert is gone (deleted), so a
+     * viewed alert that still exists keeps its notification.
+     */
+    private suspend fun clearDeletedNotifications(context: Context, pending: List<MobileAlert>, bearer: String) {
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return
+        val pendingIds = pending.mapNotNull { it.deliveryId }.toSet()
+        val candidates = runCatching { manager.activeNotifications }.getOrNull().orEmpty()
+            .filter { it.notification.channelId == CHANNEL_ID }
+            .mapNotNull { it.tag?.takeIf { tag -> tag.isNotBlank() && tag !in pendingIds } }
+            .distinct()
+            .take(MAX_RECONCILE_LOOKUPS)
+        if (candidates.isEmpty()) return
+        val api = ApiService.create()
+        for (deliveryId in candidates) {
+            val gone = try {
+                api.getMobileAlertDetail(bearer, deliveryId)
+                false
+            } catch (e: retrofit2.HttpException) {
+                e.code() == 404
+            } catch (_: Exception) {
+                false
+            }
+            if (gone) onWithdrawn(context, deliveryId)
+        }
+    }
+
     /** Push arrived: pin it now (it opens the alert) and tell the foreground. */
     fun onPush(context: Context, data: Map<String, String>) {
         val deliveryId = data["alertDeliveryId"]?.takeIf { it.isNotBlank() } ?: return
         if (deliveryId in idSet(context, KEY_VIEWED)) return
+        if (deliveryId in idSet(context, KEY_WITHDRAWN)) return
         postNotification(
             context.applicationContext,
             MobileAlert(
@@ -188,6 +238,7 @@ object MobileAlerts {
     /** Pinned until viewed: ongoing, not auto-cancelled; tapping opens the alert. */
     private fun postNotification(context: Context, alert: MobileAlert, previewText: String? = null, viewed: Boolean = false) {
         val deliveryId = alert.deliveryId ?: return
+        if (deliveryId in idSet(context, KEY_WITHDRAWN)) return
         if (!PushTokenManager.hasNotificationPermission(context)) return
         ensureChannel(context)
         val intent = MobileAlertActivity.intent(context, alert, reopen = true)
@@ -216,7 +267,19 @@ object MobileAlerts {
             .setAutoCancel(false)
             .setOnlyAlertOnce(true)
             .build()
-        runCatching { NotificationManagerCompat.from(context).notify(notificationId(deliveryId), notification) }
+        runCatching {
+            val manager = NotificationManagerCompat.from(context)
+            // Tagged with the delivery id so a deleted alert can be found and
+            // cleared; drops the untagged copy older builds posted.
+            manager.cancel(notificationId(deliveryId))
+            manager.notify(deliveryId, notificationId(deliveryId), notification)
+        }
+    }
+
+    private fun cancelNotification(context: Context, deliveryId: String) {
+        val manager = NotificationManagerCompat.from(context)
+        manager.cancel(deliveryId, notificationId(deliveryId))
+        manager.cancel(notificationId(deliveryId))
     }
 
 }

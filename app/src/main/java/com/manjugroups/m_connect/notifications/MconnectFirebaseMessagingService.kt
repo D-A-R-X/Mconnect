@@ -88,6 +88,12 @@ class MconnectFirebaseMessagingService : FirebaseMessagingService() {
             return
         }
 
+        // A mandatory alert deleted on the web: clear its notification.
+        if (message.data["type"] == "mobile_alert_withdrawn") {
+            message.data["alertDeliveryId"]?.let { MobileAlerts.onWithdrawn(applicationContext, it) }
+            return
+        }
+
         // Mandatory alert: pinned until viewed, shown full screen in the app.
         if (message.data["type"] == "mobile_alert") {
             MobileAlerts.onPush(applicationContext, message.data)
