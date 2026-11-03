@@ -108,6 +108,8 @@ sealed interface AttendanceFlowEvent {
     data class Error(val mode: PunchMode, val message: String) : AttendanceFlowEvent
     /** Upload/submission was rejected or could not be confirmed or saved offline; no Success was emitted. */
     data class SubmissionFailed(val mode: PunchMode, val message: String) : AttendanceFlowEvent
+    /** The server already has this punch (clocked in/out elsewhere meanwhile); not an error. */
+    data class AlreadyRecorded(val mode: PunchMode, val message: String, val clockedIn: Boolean) : AttendanceFlowEvent
 }
 
 class AttendanceFlowViewModel(
@@ -483,12 +485,10 @@ class AttendanceFlowViewModel(
 
                 if (!response.success) {
                     rollbackOptimistic(previousState)
-                    _events.emit(
-                        AttendanceFlowEvent.SubmissionFailed(
-                            mode,
-                            AttendanceFailure.serverMessage(response.error),
-                        ),
-                    )
+                    val message = AttendanceFailure.serverMessage(response.error)
+                    if (!emitAlreadyRecorded(mode, message, token, context)) {
+                        _events.emit(AttendanceFlowEvent.SubmissionFailed(mode, message))
+                    }
                     return@launch
                 }
 
@@ -569,19 +569,32 @@ class AttendanceFlowViewModel(
                 rollbackOptimistic(previousState)
                 val message = (failure as? AttendanceFailure.Rejected)?.message
                     ?: AttendanceFailure.UNCONFIRMED
-                _events.emit(AttendanceFlowEvent.SubmissionFailed(mode, message))
-                // If the server says there's no active punch-in for today, the
-                // client's `isClockedIn` is stale (e.g. session was auto-closed
-                // overnight, or never opened). Pull the truth from the server
-                // so the dashboard button flips back to "Clock In".
-                if (message.contains("No active punch-in", ignoreCase = true)) {
-                    loadTodayAttendance(token, context)
+                if (!emitAlreadyRecorded(mode, message, token, context)) {
+                    _events.emit(AttendanceFlowEvent.SubmissionFailed(mode, message))
                 }
             } finally {
                 submission.finish()
                 _uiState.update { it.copy(isSubmitting = false) }
             }
         }
+    }
+
+    /**
+     * The server refused the punch because it is already in place (clocked in
+     * or out elsewhere while this screen was open, or a stale button). Reload
+     * today's attendance so every screen shows the real state, and report it
+     * as information, not a failure. Returns false for any other rejection.
+     */
+    private suspend fun emitAlreadyRecorded(
+        mode: PunchMode,
+        message: String,
+        token: String,
+        context: Context?,
+    ): Boolean {
+        val already = AttendanceFailure.alreadyRecorded(message) ?: return false
+        _events.emit(AttendanceFlowEvent.AlreadyRecorded(mode, already.message, already.clockedIn))
+        loadTodayAttendance(token, context)
+        return true
     }
 
     /**

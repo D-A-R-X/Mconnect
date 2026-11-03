@@ -18,8 +18,26 @@ internal sealed interface AttendanceFailure {
     data object Offline : AttendanceFailure
     data class Rejected(val message: String) : AttendanceFailure
 
+    /**
+     * The punch the staff tried is already in place on the server: they
+     * clocked in (or out) elsewhere while this screen was open, e.g. another
+     * tap, the gate, or another device. Not an error; the screen just catches up.
+     */
+    enum class AlreadyRecorded(val clockedIn: Boolean, val message: String) {
+        CLOCKED_IN(true, "You're already clocked in. Your attendance session is active."),
+        CLOCKED_OUT(false, "You're already clocked out. No active punch-in found for today."),
+    }
+
     companion object {
         const val UNCONFIRMED = "Could not confirm your punch. Check today's attendance before trying again. Contact HR if it is still missing."
+
+        /** The server's (or our own) message for a punch that is already recorded, if it is one. */
+        fun alreadyRecorded(text: String?): AlreadyRecorded? = when {
+            text.isNullOrBlank() -> null
+            alreadyClockedIn.containsMatchIn(text) -> AlreadyRecorded.CLOCKED_IN
+            alreadyClockedOut.containsMatchIn(text) -> AlreadyRecorded.CLOCKED_OUT
+            else -> null
+        }
 
         fun uploadFailure(result: StorageUploader.Result): AttendanceFailure =
             result.failureCause?.let(::route)
@@ -52,12 +70,24 @@ internal sealed interface AttendanceFailure {
         fun serverMessage(detail: String?, status: Int? = null): String {
             val message = detail?.trim()?.takeIf { it.isNotEmpty() && it.length <= 400 }
             if (message != null && !diagnostic.containsMatchIn(message)) return message
+            // The backend wraps these in "Uncaught Error: ... at ..." (HTTP 500);
+            // keep their meaning instead of the generic unconfirmed text.
+            alreadyRecorded(detail?.take(2_000))?.let { return it.message }
             return when (status) {
                 401 -> "Your session expired. Please sign in again."
                 403 -> "You are not allowed to record this punch. Please contact HR."
                 else -> UNCONFIRMED
             }
         }
+
+        private val alreadyClockedIn = Regex(
+            "already (?:punched|clocked) in|punch out first",
+            RegexOption.IGNORE_CASE,
+        )
+        private val alreadyClockedOut = Regex(
+            "no active punch-?in|already (?:punched|clocked) out",
+            RegexOption.IGNORE_CASE,
+        )
 
         private val diagnostic = Regex(
             "Uncaught|\\b\\w*(?:Error|Exception)\\b|is not defined|not a function|" +

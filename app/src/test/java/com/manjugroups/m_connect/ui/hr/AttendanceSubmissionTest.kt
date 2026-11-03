@@ -40,7 +40,7 @@ class AttendanceSubmissionTest {
     private val store = ViewModelStore()
     private var today = AttendanceTodayResponse(true, attendance())
     private var day = DaySessionsResponse(true)
-    private var punch: suspend (PunchRequest) -> PunchResponse = { PunchResponse(false, null, "Already clocked in today.") }
+    private var punch: suspend (PunchRequest) -> PunchResponse = { PunchResponse(false, null, "Outside the allowed attendance location.") }
     private var upload: suspend () -> StorageUploader.Result = { StorageUploader.Result("photo-id", null) }
     private var uploadCount = 0
     private var punchCount = 0
@@ -188,6 +188,26 @@ class AttendanceSubmissionTest {
         failed.await()
         assertEquals(3, uploadCount)
         assertEquals(1, punchCount)
+    }
+
+    @Test fun punchAlreadyRecordedElsewhereIsReportedAndRefreshedNotFailed() = runTest(dispatcher) {
+        // The staff clocked in elsewhere while the clock-in screen was open:
+        // the backend answers HTTP 500 "Uncaught Error: Already punched in...".
+        val events = mutableListOf<AttendanceFlowEvent>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.events.collect { events += it } }
+        punch = { PunchResponse(false, null, "Uncaught Error: Already punched in. Punch out first.\n    at handler (../convex/staffAttendance.ts:6612:12)") }
+        val already = async(UnconfinedTestDispatcher(testScheduler)) {
+            vm.events.first { it is AttendanceFlowEvent.AlreadyRecorded }
+        }
+        submit()
+        assertEquals(
+            AttendanceFlowEvent.AlreadyRecorded(PunchMode.PUNCH_IN, AttendanceFailure.AlreadyRecorded.CLOCKED_IN.message, clockedIn = true),
+            already.await(),
+        )
+        runCurrent()
+        assertEquals(1, punchCount)
+        assertFalse(vm.uiState.value.isSubmitting)
+        assertTrue(events.none { it is AttendanceFlowEvent.SubmissionFailed || it is AttendanceFlowEvent.Success })
     }
 
     @Test fun activeSubmissionRefreshReducerPreservesOptimisticClockStateButIdleEmptyRefreshWorks() {

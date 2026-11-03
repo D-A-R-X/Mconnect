@@ -273,6 +273,19 @@ class SelfieClockInDetailFragment : Fragment() {
                             }
                         }
 
+                        // Clocked in (or out) elsewhere while this screen
+                        // was open: nothing to retry. Say so and close the
+                        // clock-in screens; the dashboard shows the real state.
+                        is AttendanceFlowEvent.AlreadyRecorded -> {
+                            if (event.mode == mode) {
+                                toastSafe(event.message, Toast.LENGTH_LONG)
+                                parentFragmentManager.popBackStack(
+                                    null,
+                                    FragmentManager.POP_BACK_STACK_INCLUSIVE,
+                                )
+                            }
+                        }
+
                         is AttendanceFlowEvent.Success -> {
                             if (event.mode == mode) {
                                 // No success toast — the success sheet already

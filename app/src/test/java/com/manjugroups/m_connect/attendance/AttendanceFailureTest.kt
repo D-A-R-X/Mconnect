@@ -122,4 +122,33 @@ class AttendanceFailureTest {
         assertFalse(canSubmitAttendance(hasPhoto = false, hasLocation = true, isSubmitting = false))
         assertFalse(canSubmitAttendance(hasPhoto = true, hasLocation = false, isSubmitting = false))
     }
+    @Test fun aPunchAlreadyRecordedElsewhereIsRecognisedEvenWhenTheBackendWrapsIt() {
+        // What the punch-in route returns (HTTP 500) when a session is already open.
+        val wrapped = http(500, """{"success":false,"error":"Uncaught Error: Already punched in. Punch out first.\n    at handler (../convex/staffAttendance.ts:6612:12)"}""")
+        val failure = AttendanceFailure.route(wrapped) as AttendanceFailure.Rejected
+        assertEquals(AttendanceFailure.AlreadyRecorded.CLOCKED_IN.message, failure.message)
+        assertEquals(AttendanceFailure.AlreadyRecorded.CLOCKED_IN, AttendanceFailure.alreadyRecorded(failure.message))
+        assertTrue(AttendanceFailure.AlreadyRecorded.CLOCKED_IN.clockedIn)
+
+        val clockedOut = AttendanceFailure.serverMessage("Uncaught Error: No active punch-in found for today")
+        assertEquals(AttendanceFailure.AlreadyRecorded.CLOCKED_OUT.message, clockedOut)
+        assertEquals(AttendanceFailure.AlreadyRecorded.CLOCKED_OUT, AttendanceFailure.alreadyRecorded(clockedOut))
+
+        // Clean server wording still passes through unchanged, and is still recognised.
+        assertEquals(AttendanceFailure.AlreadyRecorded.CLOCKED_IN,
+            AttendanceFailure.alreadyRecorded(AttendanceFailure.serverMessage("You have already clocked in today.")))
+        assertEquals(AttendanceFailure.AlreadyRecorded.CLOCKED_OUT,
+            AttendanceFailure.alreadyRecorded("No active punch-in found for today"))
+    }
+
+    @Test fun realFailuresAreNotMistakenForAnAlreadyRecordedPunch() {
+        listOf(
+            AttendanceFailure.UNCONFIRMED,
+            "Outside the allowed attendance location.",
+            "Failed to upload selfie. Please try again.",
+            AttendanceFailure.serverMessage("Uncaught ReferenceError: checkStaffEscalationPenalty is not defined"),
+            null,
+            "",
+        ).forEach { assertNull(it, AttendanceFailure.alreadyRecorded(it)) }
+    }
 }

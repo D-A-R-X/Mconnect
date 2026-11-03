@@ -806,6 +806,10 @@ class HrDashboardFragment : Fragment() {
                             loadRecentHistoryCards()
                         }
 
+                        is AttendanceFlowEvent.AlreadyRecorded -> {
+                            loadRecentHistoryCards()
+                        }
+
                         else -> Unit
                     }
                 }

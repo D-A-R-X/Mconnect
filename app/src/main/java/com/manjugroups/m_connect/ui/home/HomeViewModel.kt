@@ -81,6 +81,8 @@ sealed interface HomeUiState {
 sealed interface PunchEvent {
     data class Success(val message: String) : PunchEvent
     data class Error(val message: String) : PunchEvent
+    /** Not an error: e.g. the punch was already recorded elsewhere. */
+    data class Info(val message: String) : PunchEvent
 }
 
 class HomeViewModel : ViewModel() {
@@ -386,7 +388,10 @@ class HomeViewModel : ViewModel() {
                     loadHomeData(bearerToken, context)
                 } else {
                     setPunching(false)
-                    _punchEvent.emit(PunchEvent.Error(AttendanceFailure.serverMessage(response.error)))
+                    val message = AttendanceFailure.serverMessage(response.error)
+                    if (!reportAlreadyRecorded(message, bearerToken, context)) {
+                        _punchEvent.emit(PunchEvent.Error(message))
+                    }
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -398,7 +403,9 @@ class HomeViewModel : ViewModel() {
                 }
                 val failure = AttendanceFailure.route(e)
                 if (failure is AttendanceFailure.Rejected) {
-                    _punchEvent.emit(PunchEvent.Error(failure.message))
+                    if (!reportAlreadyRecorded(failure.message, bearerToken, context)) {
+                        _punchEvent.emit(PunchEvent.Error(failure.message))
+                    }
                     return@launch
                 }
                 val queued = enqueueOfflinePunch(
@@ -421,6 +428,19 @@ class HomeViewModel : ViewModel() {
                 setPunching(false)
             }
         }
+    }
+
+    /**
+     * The server refused the punch because it is already in place (clocked in
+     * or out elsewhere meanwhile, or a stale button). Reload Home, which also
+     * syncs tracking with the real session, and report it as information.
+     * Returns false for any other rejection.
+     */
+    private suspend fun reportAlreadyRecorded(message: String, bearerToken: String, context: Context): Boolean {
+        val already = AttendanceFailure.alreadyRecorded(message) ?: return false
+        _punchEvent.emit(PunchEvent.Info(already.message))
+        loadHomeData(bearerToken, context)
+        return true
     }
 
     private fun setPunching(active: Boolean) {

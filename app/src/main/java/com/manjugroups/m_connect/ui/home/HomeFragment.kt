@@ -831,6 +831,8 @@ class HomeFragment : Fragment() {
                     // Successful" sheet — only surface errors as a toast.
                     if (event is PunchEvent.Error) {
                         toastSafe(event.message)
+                    } else if (event is PunchEvent.Info) {
+                        toastSafe(event.message)
                     }
                 }
             }
