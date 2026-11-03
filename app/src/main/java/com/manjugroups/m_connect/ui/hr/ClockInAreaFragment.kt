@@ -9,7 +9,6 @@ import android.content.Intent
 import android.content.ActivityNotFoundException
 import android.content.pm.PackageManager
 import android.graphics.Color
-import android.location.Geocoder
 import android.location.Location
 import android.provider.MediaStore
 import android.os.Bundle
@@ -548,9 +547,8 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
             // NOT block the clock-in. The punch still records and queues offline
             // when there's no network; the backend accepts an optional location.
             val location = freshFixOrNull()
-            // Geocoder does network I/O; on the main thread it froze the screen
-            // right after the selfie.
-            val address = location?.let { withContext(Dispatchers.IO) { resolveAddress(it) } }
+            // Off the main thread and time-boxed (see PunchAddressLookup).
+            val address = PunchAddressLookup.resolve(requireContext(), location)
             if (_binding == null) return@launch
             isLaunchingCamera = false
             navigateToPunchDetail(
@@ -568,18 +566,6 @@ class ClockInAreaFragment : Fragment(), OnMapReadyCallback {
             val dir = File(requireContext().cacheDir, "punch_photos")
             if (!dir.exists()) dir.mkdirs()
             File.createTempFile("punch_selfie_", ".jpg", dir)
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    @Suppress("DEPRECATION")
-    private fun resolveAddress(location: Location): String? {
-        return try {
-            if (!Geocoder.isPresent()) return null
-            val geocoder = Geocoder(requireContext(), Locale.getDefault())
-            val results = geocoder.getFromLocation(location.latitude, location.longitude, 1)
-            results?.firstOrNull()?.getAddressLine(0)
         } catch (_: Exception) {
             null
         }

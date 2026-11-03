@@ -5,7 +5,6 @@ import com.manjugroups.m_connect.ui.common.toastSafe
 import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Color
-import android.location.Geocoder
 import android.location.Location
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -100,7 +99,9 @@ class SelfieCameraFragment : Fragment(), OnMapReadyCallback {
             // Best-effort location — a null fix (offline / indoors) must NOT
             // block the clock-in; the punch still records and queues offline.
             val location = latestLocation ?: getCurrentLocationOrNull()
-            val address = location?.let { resolveAddress(it) }
+            // Was a blocking Geocoder call on the main thread: the screen froze
+            // after the selfie until the network answered.
+            val address = PunchAddressLookup.resolve(requireContext(), location)
             setProcessing(false)
             navigateToSelfieDetail(
                 photoPath = photoFile.absolutePath,
@@ -321,18 +322,6 @@ class SelfieCameraFragment : Fragment(), OnMapReadyCallback {
             Manifest.permission.ACCESS_COARSE_LOCATION,
         ) == PackageManager.PERMISSION_GRANTED
         return fineGranted || coarseGranted
-    }
-
-    @Suppress("DEPRECATION")
-    private fun resolveAddress(location: Location): String? {
-        return try {
-            if (!Geocoder.isPresent()) return null
-            val geocoder = Geocoder(requireContext(), Locale.getDefault())
-            val results = geocoder.getFromLocation(location.latitude, location.longitude, 1)
-            results?.firstOrNull()?.getAddressLine(0)
-        } catch (_: Exception) {
-            null
-        }
     }
 
     private fun setProcessing(processing: Boolean) {

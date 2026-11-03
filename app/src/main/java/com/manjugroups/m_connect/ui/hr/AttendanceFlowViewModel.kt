@@ -23,6 +23,7 @@ import com.manjugroups.m_connect.network.PunchRequest
 import com.manjugroups.m_connect.network.SessionData
 import com.manjugroups.m_connect.network.StorageUploader
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -383,6 +384,59 @@ class AttendanceFlowViewModel(
     }
 
 
+    /**
+     * Selfie upload started as soon as the confirm screen opens, so Confirm
+     * only has to send the punch. The upload is three network calls (create,
+     * PUT, complete) and used to begin only after Confirm was tapped.
+     */
+    private data class PreparedSelfie(
+        val path: String,
+        val token: String,
+        val upload: kotlinx.coroutines.Deferred<StorageUploader.Result>,
+    )
+
+    private var preparedSelfie: PreparedSelfie? = null
+
+    /** Starts the confirm screen's selfie upload in the background (idempotent per file). */
+    fun prepareSelfie(token: String, selfieFile: File?) {
+        if (selfieFile == null || !selfieFile.exists() || token.isBlank()) return
+        val current = preparedSelfie
+        if (current != null && current.path == selfieFile.absolutePath && current.token == token) return
+        current?.upload?.cancel()
+        preparedSelfie = PreparedSelfie(
+            path = selfieFile.absolutePath,
+            token = token,
+            upload = viewModelScope.async {
+                val compressed = withContext(Dispatchers.IO) {
+                    runCatching { compressSelfie(selfieFile) }.getOrDefault(selfieFile)
+                }
+                uploadSelfie(token, compressed)
+            },
+        )
+    }
+
+    /**
+     * The prepared upload's result for this file, or null to upload now. A
+     * failed result is used once (offline queues straight away instead of
+     * waiting for a second timeout) and then dropped, so a retry re-uploads.
+     */
+    private suspend fun preparedUpload(token: String, selfieFile: File): StorageUploader.Result? {
+        val prepared = preparedSelfie?.takeIf { it.path == selfieFile.absolutePath && it.token == token }
+            ?: return null
+        val result = try {
+            prepared.upload.await()
+        } catch (cancelled: CancellationException) {
+            currentCoroutineContext().ensureActive()
+            null
+        } catch (_: Exception) {
+            null
+        }
+        if (result == null || result.storageId.isNullOrBlank()) {
+            if (preparedSelfie === prepared) preparedSelfie = null
+        }
+        return result
+    }
+
     private fun submitPunch(
         mode: PunchMode,
         token: String,
@@ -437,11 +491,15 @@ class AttendanceFlowViewModel(
         viewModelScope.launch {
             try {
                 _events.emit(AttendanceFlowEvent.Loading(mode))
-                val compressed = withContext(Dispatchers.IO) {
-                    runCatching { compressSelfie(selfieFile) }.getOrDefault(selfieFile)
+                // Usually already uploaded while the confirm screen was open;
+                // otherwise (not prepared, failed, offline) upload it now.
+                val upload = preparedUpload(token, selfieFile) ?: run {
+                    val compressed = withContext(Dispatchers.IO) {
+                        runCatching { compressSelfie(selfieFile) }.getOrDefault(selfieFile)
+                    }
+                    currentCoroutineContext().ensureActive()
+                    uploadSelfie(token, compressed)
                 }
-                currentCoroutineContext().ensureActive()
-                val upload = uploadSelfie(token, compressed)
                 currentCoroutineContext().ensureActive()
                 val storageId = upload.storageId
                 if (storageId.isNullOrBlank()) {

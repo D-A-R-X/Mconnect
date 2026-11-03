@@ -210,6 +210,47 @@ class AttendanceSubmissionTest {
         assertTrue(events.none { it is AttendanceFlowEvent.SubmissionFailed || it is AttendanceFlowEvent.Success })
     }
 
+    @Test fun selfieUploadedWhileConfirmScreenIsOpenIsReusedOnConfirm() = runTest(dispatcher) {
+        var photoSent: String? = null
+        punch = { request -> photoSent = request.photo; PunchResponse(false, null, "Outside the allowed attendance location.") }
+        vm.prepareSelfie("Bearer local-test", file)
+        vm.prepareSelfie("Bearer local-test", file) // same file: not uploaded twice
+        uploadStarted.await()
+        runCurrent()
+        assertEquals(1, uploadCount)
+        val failed = async(UnconfinedTestDispatcher(testScheduler)) { vm.events.first { it is AttendanceFlowEvent.SubmissionFailed } }
+        submit()
+        failed.await()
+        runCurrent()
+        // Confirm sent the punch with the prepared upload, without uploading again.
+        assertEquals(1, uploadCount)
+        assertEquals(1, punchCount)
+        assertEquals("photo-id", photoSent)
+    }
+
+    @Test fun failedPreparedUploadIsUsedOnceThenRetriedFresh() = runTest(dispatcher) {
+        upload = { StorageUploader.Result(null, "Storage service is temporarily unavailable.") }
+        vm.prepareSelfie("Bearer local-test", file)
+        uploadStarted.await()
+        runCurrent()
+        assertEquals(1, uploadCount)
+        val failed = async(UnconfinedTestDispatcher(testScheduler)) { vm.events.first { it is AttendanceFlowEvent.SubmissionFailed } }
+        submit()
+        failed.await()
+        runCurrent()
+        // The failed background result was used: no second upload on Confirm.
+        assertEquals(1, uploadCount)
+        assertEquals(0, punchCount)
+        // A retry uploads fresh instead of reusing the failure.
+        upload = { StorageUploader.Result("photo-id", null) }
+        val second = async(UnconfinedTestDispatcher(testScheduler)) { vm.events.first { it is AttendanceFlowEvent.SubmissionFailed } }
+        submit()
+        second.await()
+        runCurrent()
+        assertEquals(2, uploadCount)
+        assertEquals(1, punchCount)
+    }
+
     @Test fun activeSubmissionRefreshReducerPreservesOptimisticClockStateButIdleEmptyRefreshWorks() {
         val current = AttendanceFlowState(isSubmitting = true, isClockedIn = true, hasClockedInToday = true)
         val empty = AttendanceFlowState(hasLoaded = true)

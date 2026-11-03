@@ -85,6 +85,9 @@ class SelfieClockInDetailFragment : Fragment() {
         bindCapturedData()
         collectSubmissionState()
         collectEvents()
+        // Upload the selfie while the staff reviews this screen, so Confirm
+        // only sends the punch.
+        flowViewModel.prepareSelfie(session.bearerToken, photoPath?.let(::File))
 
         binding.btnBack.setOnClickListener {
             navigateUp()

@@ -9,7 +9,6 @@ import android.content.Intent
 import android.content.ActivityNotFoundException
 import android.content.pm.PackageManager
 import android.graphics.Color
-import android.location.Geocoder
 import android.location.Location
 import android.os.Bundle
 import android.provider.MediaStore
@@ -46,6 +45,7 @@ import com.manjugroups.m_connect.network.HomeFenceData
 import com.manjugroups.m_connect.ui.common.LocalCache
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -859,7 +859,24 @@ class HrDashboardFragment : Fragment() {
         )
     }
 
+    /**
+     * Location and address fetched while the selfie camera is open. They used
+     * to start only after the selfie (up to 6 s GPS plus an untimed address
+     * lookup) before the confirm screen could open.
+     */
+    private var punchPlacePrefetch: kotlinx.coroutines.Deferred<Pair<Location?, String?>>? = null
+
+    private fun prefetchPunchPlace() {
+        punchPlacePrefetch?.cancel()
+        val appContext = requireContext().applicationContext
+        punchPlacePrefetch = viewLifecycleOwner.lifecycleScope.async {
+            val location = fetchLocationOrNull()
+            location to PunchAddressLookup.resolve(appContext, location)
+        }
+    }
+
     private fun launchSelfieCamera() {
+        prefetchPunchPlace()
         val imageFile = createPunchPhotoFile()
         if (imageFile == null) {
             isLaunchingCamera = false
@@ -936,11 +953,11 @@ class HrDashboardFragment : Fragment() {
             // Best-effort location. Offline / indoors it may be null — that must
             // NOT block the clock-in. The punch still records and queues offline
             // when there's no network; the backend accepts an optional location.
-            val location = fetchLocationOrNull()
-            // Geocoder does network I/O — keep it off the main thread.
-            val address = location?.let {
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { resolveAddress(it) }
-            }
+            val prefetched = punchPlacePrefetch
+            punchPlacePrefetch = null
+            val (location, address) = prefetched
+                ?.let { runCatching { it.await() }.getOrNull() }
+                ?: fetchLocationOrNull().let { it to PunchAddressLookup.resolve(requireContext(), it) }
             isLaunchingCamera = false
             navigateToPunchDetail(
                 mode = mode,
@@ -1526,18 +1543,6 @@ class HrDashboardFragment : Fragment() {
             Math.sin(dLng / 2) * Math.sin(dLng / 2)
         val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
         return r * c
-    }
-
-    @Suppress("DEPRECATION")
-    private fun resolveAddress(location: Location): String? {
-        return try {
-            if (!Geocoder.isPresent()) return null
-            val geocoder = Geocoder(requireContext(), Locale.getDefault())
-            val results = geocoder.getFromLocation(location.latitude, location.longitude, 1)
-            results?.firstOrNull()?.getAddressLine(0)
-        } catch (_: Exception) {
-            null
-        }
     }
 
     private fun navigateToPunchDetail(
