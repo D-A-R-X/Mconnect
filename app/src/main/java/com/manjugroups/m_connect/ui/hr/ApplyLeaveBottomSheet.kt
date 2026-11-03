@@ -271,6 +271,10 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
             toastSafe("To date must be on or after from date")
             return
         }
+        if (HrApplicationDates.isPastDay(fromMillis)) {
+            toastSafe(HrApplicationDates.LEAVE_PAST_MESSAGE)
+            return
+        }
         if (view?.findViewById<EditText>(R.id.etReason)?.text?.toString()?.trim().isNullOrEmpty()) {
             toastSafe("Enter a reason for the leave")
             return
@@ -442,6 +446,10 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
             toastSafe("To date must be on or after from date")
             return
         }
+        if (HrApplicationDates.isPastDay(fromMillis)) {
+            toastSafe(HrApplicationDates.LEAVE_PAST_MESSAGE)
+            return
+        }
         if (reason.isBlank()) {
             toastSafe("Enter a reason for the leave")
             return
@@ -508,6 +516,10 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
         }
         if (dayMillis == null) {
             toastSafe("Select the day to take")
+            return
+        }
+        if (HrApplicationDates.isPastDay(dayMillis)) {
+            toastSafe(HrApplicationDates.LEAVE_PAST_MESSAGE)
             return
         }
         val date = apiDateFormat.format(dayMillis)
@@ -690,8 +702,14 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
             clearTime()
         }
 
-        var tempFrom = selectedFromMillis
-        var tempTo = selectedToMillis
+        val currentMonthStart = Calendar.getInstance().apply {
+            timeInMillis = HrApplicationDates.startOfToday()
+            set(Calendar.DAY_OF_MONTH, 1)
+        }
+        if (displayMonth.before(currentMonthStart)) displayMonth.timeInMillis = currentMonthStart.timeInMillis
+        // A selection kept from an earlier day may now be in the past.
+        var tempFrom = selectedFromMillis?.takeUnless { HrApplicationDates.isPastDay(it) }
+        var tempTo = if (tempFrom == null) null else selectedToMillis
 
         lateinit var renderCalendar: () -> Unit
 
@@ -724,10 +742,12 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
             val inRange = from != null && to != null && dayMillis in minOf(from, to)..maxOf(from, to)
             // For comp-off, the earned day itself is not selectable.
             val isEarnedDay = isComp && compEarnedMillis != null && sameDay(dayMillis, compEarnedMillis)
-            val selectable = inCurrentMonth && !isEarnedDay
+            // Leave can't be applied for a past day.
+            val isPast = HrApplicationDates.isPastDay(dayMillis)
+            val selectable = inCurrentMonth && !isEarnedDay && !isPast
 
             when {
-                !inCurrentMonth || isEarnedDay -> {
+                !inCurrentMonth || isEarnedDay || isPast -> {
                     cell.setTextColor(ContextCompat.getColor(requireContext(), R.color.lt_foreground_muted))
                 }
                 isStart || isEnd -> {
@@ -775,6 +795,9 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
         renderCalendar = {
             monthLabel.text = monthFormat.format(displayMonth.time)
             grid.removeAllViews()
+            if (!isComp) {
+                prevMonth.visibility = if (displayMonth.after(currentMonthStart)) View.VISIBLE else View.INVISIBLE
+            }
 
             val firstVisible = displayMonth.clone() as Calendar
             val monthStartWeekday = firstVisible.get(Calendar.DAY_OF_WEEK) - 1
@@ -792,6 +815,7 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
         }
 
         prevMonth.setOnClickListener {
+            if (!displayMonth.after(currentMonthStart)) return@setOnClickListener
             displayMonth.add(Calendar.MONTH, -1)
             displayMonth.set(Calendar.DAY_OF_MONTH, 1)
             displayMonth.clearTime()
@@ -812,6 +836,7 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
                     displayMonth.set(Calendar.MONTH, month)
                     displayMonth.set(Calendar.DAY_OF_MONTH, 1)
                     displayMonth.clearTime()
+                    if (displayMonth.before(currentMonthStart)) displayMonth.timeInMillis = currentMonthStart.timeInMillis
                     renderCalendar()
                 }
             }

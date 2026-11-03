@@ -134,7 +134,8 @@ class ApplyPermissionBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun showDatePicker() {
-        val current = selectedDate ?: SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Calendar.getInstance().time)
+        val today = HrApplicationDates.todayIso()
+        val current = selectedDate?.takeUnless { HrApplicationDates.isPastIsoDate(it) } ?: today
         setFragmentResultListener(RESULT_KEY_DATE) { _, bundle ->
             val date = bundle.getString(CalendarRangePickerSheet.KEY_FROM) ?: return@setFragmentResultListener
             selectedDate = date
@@ -151,6 +152,8 @@ class ApplyPermissionBottomSheet : BottomSheetDialogFragment() {
             initialFrom = current,
             initialTo = current,
             resultKey = RESULT_KEY_DATE,
+            // Permission can't be applied for a past day.
+            minDate = today,
         ).showOnce(parentFragmentManager, "apply_permission_calendar")
     }
 
@@ -271,6 +274,10 @@ class ApplyPermissionBottomSheet : BottomSheetDialogFragment() {
         }
         if (!isValidTimeRange(from, to)) {
             toastSafe("To time must be after from time")
+            return
+        }
+        if (HrApplicationDates.isPastIsoDate(date)) {
+            toastSafe(HrApplicationDates.PERMISSION_PAST_MESSAGE)
             return
         }
         if (shiftLoading || shiftTiming == null) {
