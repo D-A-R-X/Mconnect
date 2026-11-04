@@ -309,17 +309,20 @@ class ApplyPermissionBottomSheet : BottomSheetDialogFragment() {
                     )
                 )
                 if (resp.success) {
-                    applicationSubmitted = true
-                    toastSafe("Permission applied!")
-                    parentFragmentManager.setFragmentResult(RESULT_KEY_APPLIED, Bundle().apply { putBoolean("success", true) })
-                    dismissAllowingStateLoss()
+                    onPermissionApplied()
                 } else {
-                    toastSafe(resp.error ?: "Failed")
+                    toastSafe(HrApplicationError.clean(resp.error) ?: "Could not submit the permission request. Please try again.")
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                toastSafe(HrApplicationError.message(e, "Permission"))
+                // A timeout or a reasonless 5xx may still have saved the
+                // request: check the history before calling it a failure.
+                if (HrApplicationError.isAmbiguous(e) && wasPermissionSaved(date, from, to)) {
+                    onPermissionApplied()
+                } else {
+                    toastSafe(HrApplicationError.message(e, "Permission"))
+                }
             } finally {
                 isSubmitting = false
                 tvSubmit?.visibility = View.VISIBLE
@@ -329,6 +332,25 @@ class ApplyPermissionBottomSheet : BottomSheetDialogFragment() {
                 updateSubmitButtonState()
             }
         }
+    }
+
+    private fun onPermissionApplied() {
+        applicationSubmitted = true
+        toastSafe("Permission applied!")
+        parentFragmentManager.setFragmentResult(RESULT_KEY_APPLIED, Bundle().apply { putBoolean("success", true) })
+        dismissAllowingStateLoss()
+    }
+
+    /** True when the server already holds this exact request (same date and times, still live). */
+    private suspend fun wasPermissionSaved(date: String, from: String, to: String): Boolean = try {
+        api.getMyPermissions(session.bearerToken, fromDate = date, toDate = date).permissions.orEmpty().any {
+            it.date == date && it.fromTime == from && it.toTime == to &&
+                it.status?.lowercase() !in setOf("rejected", "cancelled", "canceled")
+        }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        false
     }
 
     companion object {
