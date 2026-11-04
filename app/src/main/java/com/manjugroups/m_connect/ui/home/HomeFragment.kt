@@ -1768,8 +1768,10 @@ class HomeFragment : Fragment() {
                 itemView.setOnClickListener(openOutcome)
                 actionBtn.isClickable = true
                 actionBtn.setOnClickListener(openOutcome)
-            } else if (isCompleted) {
+            } else if (isCompleted || pendingGmApproval) {
                 // Completed visits open a read-only summary instead of the trip flow.
+                // So does one held for approval: OTP, proof and outcome are all
+                // done, and the trip screen would offer "Start Trip" again.
                 val openDetail: (View) -> Unit = { openCompletedVisitDetail(visit) }
                 itemView.isClickable = true
                 itemView.isFocusable = true

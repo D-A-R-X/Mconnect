@@ -612,6 +612,9 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         // in-progress/arrived, override the "Start" pill rendered above so
         // there's no flicker where the detail page disagrees with the list.
         val incomingStatus = args.getString(ARG_STATUS).orEmpty().lowercase(Locale.getDefault())
+        if (incomingStatus == "pending_gm_approval" || incomingStatus == "pending-gm-approval") {
+            renderHeldForApproval()
+        }
         when (incomingStatus) {
             "arrived", "arrival_verified", "arrival-verified", "on_site", "on-site" -> {
                 visitStarted = true
@@ -1415,13 +1418,13 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                         // so it never masks a genuinely finished trip.
                         clearVisitLocallyStarted()
                     }
-                    "cancelled", "canceled", "postponed", "pending_gm_approval" -> {
+                    "pending_gm_approval" -> renderHeldForApproval()
+                    "cancelled", "canceled", "postponed" -> {
                         visitStarted = false
                         arrivalInProgress = false
                         val label = when (effective) {
                             "cancelled", "canceled" -> "Cancelled"
-                            "postponed" -> "Postponed"
-                            else -> "Pending Approval"
+                            else -> "Postponed"
                         }
                         applyStatusPill(label)
                         btnOpenMaps?.visibility = View.GONE
@@ -1879,7 +1882,33 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         fetchCurrentLocationAndUpdate()
     }
 
+    /**
+     * The outcome was recorded outside the client geofence and is waiting for
+     * the approver. OTP, proof and outcome are all done, so nothing here may
+     * start or complete the trip again — the screen used to fall through to
+     * "Start Trip" because this status had no branch on open.
+     */
+    private var heldForApproval = false
+
+    private fun renderHeldForApproval() {
+        heldForApproval = true
+        visitStarted = false
+        arrivalInProgress = false
+        cpVisitDecisionCaptured = true
+        serverOutcomePendingFinalClose = false
+        loadingOverlay?.visibility = View.GONE
+        applyStatusPill("Pending Approval")
+        btnOpenMaps?.visibility = View.GONE
+        swipeArrived?.visibility = View.GONE
+        btnCompleteCpDetails?.visibility = View.GONE
+        clearVisitLocallyStarted()
+    }
+
     private fun ensureVisitStarted() {
+        if (heldForApproval) {
+            toastSafe("This visit is waiting for approval")
+            return
+        }
         loadingOverlay?.visibility = View.VISIBLE
         applyStatusPill("Starting…")
         hideTripStartTime()
