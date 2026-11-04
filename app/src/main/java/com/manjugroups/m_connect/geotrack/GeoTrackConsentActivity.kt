@@ -91,13 +91,39 @@ class GeoTrackConsentActivity : AppCompatActivity() {
             recordConsentAndRequestPermissions()
         }
 
-        binding.btnDecline.setOnClickListener {
-            session.geoConsentGiven = false
-            session.geoConsentDeclined = true
-            lastDeclinedAtMs = System.currentTimeMillis()
-            session.shouldTrackNow = false
-            goToMain()
-        }
+        // Tracking is part of the job for a geo-tracked staffer, so neither
+        // Decline nor Back may skip this screen into the app (staff were
+        // declining and working all day untracked). Both explain why and offer
+        // Go back or Sign out: always a way forward and a way out, never a
+        // dead end.
+        binding.btnDecline.setOnClickListener { showTrackingRequired() }
+        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (!setupInFlight) showTrackingRequired()
+            }
+        })
+    }
+
+    private var requiredDialog: androidx.appcompat.app.AlertDialog? = null
+
+    private fun showTrackingRequired() {
+        if (setupInFlight || requiredDialog?.isShowing == true || isFinishing) return
+        requiredDialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setTitle("Location tracking is required")
+            .setMessage(
+                "Your role uses location tracking for attendance and field visits. " +
+                    "It runs only while you are clocked in. To use M-Connect, tap " +
+                    "\"I Understand and Agree\" and allow the permissions, or sign out.",
+            )
+            .setPositiveButton("Go back", null)
+            .setNegativeButton("Sign out") { _, _ -> signOut() }
+            .show()
+    }
+
+    private fun signOut() {
+        if (supportFragmentManager.findFragmentByTag("consent_logout") != null) return
+        com.manjugroups.m_connect.ui.profile.LogoutBottomSheet()
+            .show(supportFragmentManager, "consent_logout")
     }
 
     private fun recordConsentAndRequestPermissions() {
