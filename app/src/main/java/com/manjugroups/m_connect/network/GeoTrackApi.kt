@@ -1712,6 +1712,9 @@ data class LoanCaseRow(
     val date: String? = null,
     val statusLabel: String = "",
     val status: String = "",
+    // Loan workflow stage (loan_initiation, document_collection, ...);
+    // decides whether uploads attach now or on Submit. Older servers omit it.
+    val currentLoanStage: String? = null,
     val applicantType: String? = null,
     val requestedAmount: Double? = null,
     val sanctionedAmount: Double? = null,

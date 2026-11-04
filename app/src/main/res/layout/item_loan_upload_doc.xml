@@ -13,99 +13,25 @@
     android:layout_height="wrap_content"
     android:orientation="vertical">
 
-    <RelativeLayout
-        android:layout_width="match_parent"
+    <TextView
+        android:id="@+id/tvDocTitle"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp">
+        android:layout_marginTop="8dp"
+        android:fontFamily="@font/inter_semibold"
+        android:textColor="#344054"
+        android:textSize="12sp"
+        tools:text="PAN Card *" />
 
-        <TextView
-            android:id="@+id/tvDocTitle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_centerVertical="true"
-            android:fontFamily="@font/inter_semibold"
-            android:textColor="#344054"
-            android:textSize="12sp"
-            tools:text="PAN Card *" />
-
-        <LinearLayout
-            android:id="@+id/btnCamera"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_alignParentEnd="true"
-            android:layout_centerVertical="true"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:clickable="true"
-            android:focusable="true"
-            android:foreground="?attr/selectableItemBackground"
-            android:paddingVertical="4dp"
-            android:paddingStart="8dp">
-
-            <ImageView
-                android:layout_width="16dp"
-                android:layout_height="16dp"
-                android:src="@drawable/ic_header_camera_outline"
-                app:tint="#0B61CA"
-                android:importantForAccessibility="no" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="4dp"
-                android:fontFamily="@font/inter_semibold"
-                android:text="Scan"
-                android:textColor="#0B61CA"
-                android:textSize="12sp" />
-        </LinearLayout>
-    </RelativeLayout>
-
-    <FrameLayout
+    <!-- States stack vertically; only the active ones are visible. A failed
+         upload keeps the Upload / Scan pair under it so the user can pick
+         another file or scan again without hunting for a control. -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
-        android:layout_marginBottom="16dp">
-
-        <!-- Unuploaded — dashed drop zone -->
-        <LinearLayout
-            android:id="@+id/layoutUnuploaded"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:background="@drawable/bg_dash_upload"
-            android:clickable="true"
-            android:focusable="true"
-            android:foreground="?attr/selectableItemBackground"
-            android:gravity="center"
-            android:orientation="vertical"
-            android:paddingVertical="18dp"
-            android:paddingHorizontal="16dp">
-
-            <ImageView
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:src="@drawable/ic_upload_cloud" />
-
-            <TextView
-                android:id="@+id/tvUnuploadedTitle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:fontFamily="@font/inter_semibold"
-                android:textColor="#344054"
-                android:textSize="14sp"
-                tools:text="Upload PAN Card" />
-
-            <TextView
-                android:id="@+id/tvUnuploadedSubtitle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:fontFamily="@font/inter_regular"
-                android:gravity="center"
-                android:textColor="#98A2B3"
-                android:textSize="11sp"
-                tools:text="Max 20 MB · Scan, JPG, PNG or PDF" />
-        </LinearLayout>
+        android:layout_marginBottom="16dp"
+        android:orientation="vertical">
 
         <!-- Uploading — pill with spinner + status text. Shown while
              the file is being copied to cache + posted to /api/storage/upload.
@@ -146,6 +72,7 @@
             android:id="@+id/layoutFailed"
             android:layout_width="match_parent"
             android:layout_height="48dp"
+            android:layout_marginBottom="8dp"
             android:background="@drawable/bg_loan_input_box"
             android:paddingHorizontal="12dp"
             android:visibility="gone">
@@ -188,6 +115,93 @@
                 android:textColor="#0B61CA"
                 android:textSize="12sp" />
         </RelativeLayout>
+
+        <!-- Unuploaded — Upload and Scan, equal width and height. -->
+        <LinearLayout
+            android:id="@+id/layoutUnuploaded"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:id="@+id/btnUpload"
+                    android:layout_width="0dp"
+                    android:layout_height="64dp"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="6dp"
+                    android:background="@drawable/bg_dash_upload"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="8dp">
+
+                    <ImageView
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/ic_upload_cloud" />
+
+                    <TextView
+                        android:id="@+id/tvUnuploadedTitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:fontFamily="@font/inter_semibold"
+                        android:text="Upload"
+                        android:textColor="#344054"
+                        android:textSize="14sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/btnCamera"
+                    android:layout_width="0dp"
+                    android:layout_height="64dp"
+                    android:layout_weight="1"
+                    android:layout_marginStart="6dp"
+                    android:background="@drawable/bg_dash_upload"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="8dp">
+
+                    <ImageView
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/ic_header_camera_outline"
+                        app:tint="#0B61CA" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:fontFamily="@font/inter_semibold"
+                        android:text="Scan"
+                        android:textColor="#344054"
+                        android:textSize="14sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tvUnuploadedSubtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:fontFamily="@font/inter_regular"
+                android:gravity="center"
+                android:textColor="#98A2B3"
+                android:textSize="11sp"
+                tools:text="Max 20 MB · Scan, JPG, PNG or PDF" />
+        </LinearLayout>
 
         <!-- Uploaded — solid pill with file name + check -->
         <RelativeLayout
@@ -256,5 +270,5 @@
                 android:padding="10dp"
                 android:src="@drawable/ic_trash_red" />
         </RelativeLayout>
-    </FrameLayout>
+    </LinearLayout>
 </LinearLayout>

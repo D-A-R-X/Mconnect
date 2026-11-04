@@ -42,6 +42,7 @@ import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.DeleteLoanDocumentRequest
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.LoanCaseDocument
+import com.manjugroups.m_connect.util.DocumentImageNormalizer
 import com.manjugroups.m_connect.util.ScanPdfBuilder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -93,6 +94,7 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
         val index: Int,
         val label: String,
         val row: View,
+        val btnUpload: View,
         val btnCamera: View,
         val layoutUnuploaded: View,
         val layoutUploading: View,
@@ -116,6 +118,9 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
         var uploadRequestId: String? = null,
         var lastError: String? = null,
         var uploadJob: Job? = null,
+        // False when the file was uploaded on its own (Loan Initiation): it
+        // is on the case only after Submit, so Delete just clears it here.
+        var attached: Boolean = true,
     )
 
     private val slots = mutableListOf<DocSlotState>()
@@ -127,6 +132,8 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
     /** postSaleLoanCases id — when present, each successful slot upload is
      *  also persisted server-side via /api/postsales/loans/upload-document. */
     private var loanCaseId: String? = null
+    /** Where uploads go at the case's current stage (see LoanDocumentUploadPolicy). */
+    private var uploadMode = LoanDocumentUploadPolicy.Mode.ATTACH
     /** Camera-scanned pages accumulated for the active slot; assembled into a
      *  single PDF on "Finish scan". */
     private val scanPages = mutableListOf<File>()
@@ -142,6 +149,24 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
             .setScannerMode(GmsDocumentScannerOptions.SCANNER_MODE_FULL)
             .build()
         GmsDocumentScanning.getClient(options)
+    }
+
+    /**
+     * The scanner (edge detection, auto-capture, perspective fix) is a Play
+     * services module downloaded on first use. Without it the sheet falls
+     * back to the plain camera, which has none of that — so ask for it as
+     * soon as the sheet opens instead of at the first tap on Scan.
+     */
+    private fun prefetchScannerModule() {
+        val ctx = context ?: return
+        runCatching {
+            com.google.android.gms.common.moduleinstall.ModuleInstall.getClient(ctx)
+                .installModules(
+                    com.google.android.gms.common.moduleinstall.ModuleInstallRequest.newBuilder()
+                        .addApi(documentScanner)
+                        .build(),
+                )
+        }
     }
 
     private var onSubmitted: ((uploads: List<SubmittedDoc>) -> Unit)? = null
@@ -250,6 +275,10 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
         isViewMode = arguments?.getBoolean("isViewMode", false) ?: false
         caseId = arguments?.getString(ARG_CASE_ID)
         loanCaseId = arguments?.getString(ARG_LOAN_CASE_ID)
+        uploadMode = LoanDocumentUploadPolicy.mode(arguments?.getString(ARG_LOAN_STAGE))
+        // Past verification the server refuses document changes.
+        if (uploadMode == LoanDocumentUploadPolicy.Mode.LOCKED) isViewMode = true
+        if (!isViewMode) prefetchScannerModule()
         val requiredLabels = arguments?.getStringArrayList(ARG_REQUIRED_LABELS).orEmpty()
         val preExistingNames = arguments?.getStringArrayList(ARG_PRE_NAMES).orEmpty()
         val preExistingStorageIds = arguments?.getStringArrayList(ARG_PRE_STORAGE_IDS).orEmpty()
@@ -284,7 +313,11 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
             }
             else -> {
                 title?.text = "Submit Documents"
-                subtitle?.text = "Upload the ${requiredLabels.size} required files below to proceed"
+                subtitle?.text = if (uploadMode == LoanDocumentUploadPolicy.Mode.ON_SUBMIT) {
+                    "Upload the ${requiredLabels.size} required files. They are added to the loan case when you tap Submit."
+                } else {
+                    "Upload the ${requiredLabels.size} required files below to proceed"
+                }
             }
         }
 
@@ -295,6 +328,7 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
             val tvDocTitle = row.findViewById<TextView>(R.id.tvDocTitle)
             val tvUnuploadedTitle = row.findViewById<TextView>(R.id.tvUnuploadedTitle)
             val tvUnuploadedSubtitle = row.findViewById<TextView>(R.id.tvUnuploadedSubtitle)
+            val btnUpload = row.findViewById<View>(R.id.btnUpload)
             val btnCamera = row.findViewById<View>(R.id.btnCamera)
             val layoutUnuploaded = row.findViewById<View>(R.id.layoutUnuploaded)
             val layoutUploading = row.findViewById<View>(R.id.layoutUploading)
@@ -307,8 +341,10 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
             val btnDeleteUploaded = row.findViewById<View>(R.id.btnDeleteUploaded)
 
             tvDocTitle.text = "$label *"
-            tvUnuploadedTitle.text = "Upload $label"
-            tvUnuploadedSubtitle.text = "Max 20 MB · Scan, JPG, PNG or PDF"
+            tvUnuploadedTitle.text = "Upload"
+            btnUpload.contentDescription = "Upload $label"
+            btnCamera.contentDescription = "Scan $label"
+            tvUnuploadedSubtitle.text = "Max 20 MB · PDF or photo (JPG, PNG, HEIC)"
 
             val preExisting = preExistingNames.getOrNull(index)?.takeIf { it.isNotBlank() }
             val preExistingStorageId =
@@ -318,6 +354,7 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
                 index = index,
                 label = label,
                 row = row,
+                btnUpload = btnUpload,
                 btnCamera = btnCamera,
                 layoutUnuploaded = layoutUnuploaded,
                 layoutUploading = layoutUploading,
@@ -343,9 +380,11 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
             }
             btnDeleteUploaded.visibility = if (isViewMode) View.GONE else View.VISIBLE
             if (isViewMode) {
+                btnUpload.visibility = View.GONE
                 btnCamera.visibility = View.GONE
+                tvUnuploadedSubtitle.text = "Not uploaded"
             } else {
-                layoutUnuploaded.setOnClickListener {
+                btnUpload.setOnClickListener {
                     activeSlotIndex = index
                     filePickerLauncher.launch("*/*")
                 }
@@ -405,7 +444,8 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
                 slot.btnCamera.alpha = 0.4f
             }
             SlotUiState.FAILED -> {
-                slot.layoutUnuploaded.visibility = View.GONE
+                // Keep Upload / Scan under the error: pick another file or rescan.
+                slot.layoutUnuploaded.visibility = if (isViewMode) View.GONE else View.VISIBLE
                 slot.layoutUploading.visibility = View.GONE
                 slot.layoutFailed.visibility = View.VISIBLE
                 slot.layoutUploaded.visibility = View.GONE
@@ -480,7 +520,8 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
 
     private fun confirmDeleteSlot(slot: DocSlotState) {
         val storageId = slot.storageId ?: slot.preExistingStorageId
-        if (storageId.isNullOrBlank()) {
+        // Not on the case yet (uploaded for Submit): nothing to remove server-side.
+        if (storageId.isNullOrBlank() || (slot.storageId != null && !slot.attached)) {
             clearSlot(slot)
             return
         }
@@ -579,7 +620,47 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
                 onSlotUploadFailed(slot, "Couldn't read the picked file")
                 return@launch
             }
-            performUpload(slot, cached)
+            val prepared = withContext(Dispatchers.IO) { prepareForUpload(cached) }
+            if (prepared == null) {
+                onSlotUploadFailed(slot, "Only PDF and image documents are supported")
+                return@launch
+            }
+            slot.fileName = prepared.name
+            performUpload(slot, prepared)
+        }
+    }
+
+    /**
+     * Name the file after what it really is (picked files often have no or a
+     * wrong extension) and turn photos into upright, reasonably sized JPEGs
+     * (HEIC / WebP / PNG included). PDFs go up untouched. Null = unsupported.
+     */
+    private fun prepareForUpload(file: File): File? {
+        val header = runCatching {
+            file.inputStream().use { input ->
+                val buffer = ByteArray(32)
+                var read = 0
+                while (read < buffer.size) {
+                    val n = input.read(buffer, read, buffer.size - read)
+                    if (n < 0) break
+                    read += n
+                }
+                buffer.copyOf(read)
+            }
+        }.getOrNull() ?: return null
+        return when (LoanDocumentUploadPolicy.sniff(header)) {
+            LoanDocumentUploadPolicy.Kind.PDF -> {
+                if (file.extension.equals("pdf", ignoreCase = true)) {
+                    file
+                } else {
+                    File(file.parentFile, "${file.nameWithoutExtension}.pdf").takeIf { file.renameTo(it) }
+                }
+            }
+            LoanDocumentUploadPolicy.Kind.IMAGE -> {
+                val out = File(file.parentFile, "${file.nameWithoutExtension}_doc.jpg")
+                DocumentImageNormalizer.toJpeg(file, out)?.also { if (it != file) file.delete() }
+            }
+            LoanDocumentUploadPolicy.Kind.OTHER -> null
         }
     }
 
@@ -679,6 +760,7 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
         val token = SessionManager(requireContext()).bearerToken
         val requestId = slot.uploadRequestId
             ?: UUID.randomUUID().toString().also { slot.uploadRequestId = it }
+        val attach = uploadMode == LoanDocumentUploadPolicy.Mode.ATTACH && !loanCaseId.isNullOrBlank()
         val result = withContext(Dispatchers.IO) {
             runCatching {
                 val textType = "text/plain".toMediaType()
@@ -690,7 +772,7 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
                 GeoTrackApi.create().uploadLoanDocumentFile(
                     token = token,
                     loanCaseId = loanCaseId
-                        ?.takeIf { it.isNotBlank() }
+                        ?.takeIf { attach && it.isNotBlank() }
                         ?.toRequestBody(textType),
                     label = slot.label.toRequestBody(textType),
                     file = filePart,
@@ -707,10 +789,13 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
                 slot.fileName = resp.document.fileName.ifBlank { file.name }
                 slot.state = SlotUiState.READY
                 slot.lastError = null
+                slot.attached = attach
                 renderSlot(slot)
                 persistDraft()
                 updateSubmitButtonState()
-                onDocumentChanged?.invoke(
+                // A file uploaded for Submit is not on the case yet; the list
+                // must not show it as attached.
+                if (attach) onDocumentChanged?.invoke(
                     slot.label,
                     LoanCaseDocument(
                         label = slot.label,
@@ -720,7 +805,8 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
                     resp.loanCase,
                 )
             } else {
-                onSlotUploadFailed(slot, resp.error ?: "Upload rejected by server")
+                val message = resp.error ?: "Upload rejected by server"
+                if (!retryForSubmit(slot, file, attach, message)) onSlotUploadFailed(slot, message)
             }
         }
         result.onFailure { err ->
@@ -729,8 +815,22 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
             } else {
                 err.message ?: "Network error"
             }
-            onSlotUploadFailed(slot, message)
+            if (!retryForSubmit(slot, file, attach, message)) onSlotUploadFailed(slot, message)
         }
+    }
+
+    /**
+     * The case is still at Loan Initiation (the server doesn't attach files
+     * there): upload the file on its own and let Submit attach it. Returns
+     * true when a retry was started.
+     */
+    private suspend fun retryForSubmit(slot: DocSlotState, file: File, attempted: Boolean, message: String): Boolean {
+        if (!attempted || !LoanDocumentUploadPolicy.isStageRefusal(message)) return false
+        uploadMode = LoanDocumentUploadPolicy.Mode.ON_SUBMIT
+        // A new request: the attach attempt's idempotency key is spent.
+        slot.uploadRequestId = UUID.randomUUID().toString()
+        performUpload(slot, file)
+        return true
     }
 
     private fun onSlotUploadFailed(slot: DocSlotState, message: String) {
@@ -801,6 +901,7 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
                     localFilePath = s.localFilePath,
                     uploadRequestId = s.uploadRequestId,
                     state = s.state.name,
+                    attached = s.attached,
                 )
             }
         prefs.edit().putString(key, gson.toJson(payload)).apply()
@@ -824,6 +925,7 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
             slot.storageId = match.storageId
             slot.localFilePath = match.localFilePath
             slot.uploadRequestId = match.uploadRequestId
+            slot.attached = match.attached ?: true
             slot.state = if (!match.storageId.isNullOrBlank()) {
                 SlotUiState.READY
             } else if (match.localFilePath?.let(::File)?.exists() == true) {
@@ -845,6 +947,7 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
         val localFilePath: String? = null,
         val uploadRequestId: String? = null,
         val state: String? = null,
+        val attached: Boolean? = null,
     )
 
     // ── Camera ──
@@ -1100,6 +1203,7 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
         private const val ARG_PRE_STORAGE_IDS = "preExistingStorageIds"
         private const val ARG_CASE_ID = "caseId"
         private const val ARG_LOAN_CASE_ID = "loanCaseId"
+        private const val ARG_LOAN_STAGE = "loanStage"
         private const val DRAFT_PREFS = "loan_desk_drafts"
         private const val MAX_SCAN_PAGES = 20
         private const val MAX_DOCUMENT_BYTES = 20L * 1024L * 1024L
@@ -1137,12 +1241,15 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
             /** postSaleLoanCases id — pass it so each slot upload also persists
              *  server-side immediately via /loans/upload-document. */
             loanCaseId: String? = null,
+            /** currentLoanStage from the server row, when it sends one. */
+            loanStage: String? = null,
             onSubmitted: (uploads: List<SubmittedDoc>) -> Unit,
         ): LoanDeskUploadBottomSheet = LoanDeskUploadBottomSheet().apply {
             arguments = Bundle().apply {
                 putBoolean("isViewMode", isViewMode)
                 putString(ARG_CASE_ID, caseId)
                 putString(ARG_LOAN_CASE_ID, loanCaseId)
+                putString(ARG_LOAN_STAGE, loanStage)
                 putStringArrayList(ARG_REQUIRED_LABELS, ArrayList(requiredLabels))
                 putStringArrayList(
                     ARG_PRE_NAMES,

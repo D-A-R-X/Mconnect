@@ -357,6 +357,7 @@ class LoanDeskFragment : Fragment() {
             // into a PDF) lands on the loan case immediately via
             // /api/postsales/loans/upload-document.
             loanCaseId = item.id,
+            loanStage = row?.currentLoanStage,
         ) { uploads ->
             // Sales-side submit only — view-mode opens never invoke
             // this callback so Legal Team / Legal Manager taps stay
