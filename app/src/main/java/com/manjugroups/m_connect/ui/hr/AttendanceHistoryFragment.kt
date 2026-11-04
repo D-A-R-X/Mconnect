@@ -1072,7 +1072,8 @@ class AttendanceHistoryFragment : Fragment() {
             // session (single-touch day), then "--" for truly empty rows.
             val firstIn = record.punchInTime ?: record.sessions?.firstOrNull()?.punchInTime
             val inLabel = firstIn?.let(::formatIsoTime) ?: "--"
-            val resolvedOut = record.punchOutTime ?: record.sessions?.lastOrNull()?.punchOutTime
+            val resolvedOut = record.punchOutTime
+                ?: record.sessions?.lastOrNull()?.let { AttendanceSessions.realPunchOut(it, record.date) }
             // Three-state label for the "Clock in & Out" column:
             //   - resolvedOut set → render the time.
             //   - currently clocked in (hasOpenSession) → "---".
@@ -1475,7 +1476,8 @@ class AttendanceHistoryFragment : Fragment() {
         val fine = record.lateFineDeduction ?: record.fineAmount ?: 0.0
         if (fine <= 0) return 0
 
-        val punchOut = record.punchOutTime ?: record.sessions?.lastOrNull()?.punchOutTime
+        val punchOut = record.punchOutTime
+            ?: record.sessions?.lastOrNull()?.let { AttendanceSessions.realPunchOut(it, record.date) }
         if (punchOut != null) {
             val millis = parseIsoMillis(punchOut)
             if (millis != null) {

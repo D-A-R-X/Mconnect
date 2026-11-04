@@ -1935,6 +1935,8 @@ data class SessionData(
     // Storage IDs of the captured punch photos (mobile clock in/out).
     val punchInPhoto: String? = null,
     val punchOutPhoto: String? = null,
+    // Set when the midnight job closed a session left open (no real punch-out).
+    val autoClosedAtDayEnd: Boolean? = null,
 )
 data class TodayShiftResponse(
     val success: Boolean? = null,

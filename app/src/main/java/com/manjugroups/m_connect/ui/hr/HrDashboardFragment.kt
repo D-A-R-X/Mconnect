@@ -1227,7 +1227,8 @@ class HrDashboardFragment : Fragment() {
 
     private fun buildPunchRange(record: AttendanceRecord): String {
         val firstIn = record.punchInTime ?: record.sessions?.firstOrNull()?.punchInTime
-        val lastOut = record.punchOutTime ?: record.sessions?.lastOrNull()?.punchOutTime
+        val lastOut = record.punchOutTime
+            ?: record.sessions?.lastOrNull()?.let { AttendanceSessions.realPunchOut(it, record.date) }
         val inLabel = firstIn?.let(::formatIsoTime) ?: "--"
         val outLabel = if (record.hasOpenSession == true) "--" else (lastOut?.let(::formatIsoTime) ?: "--")
         return "$inLabel - $outLabel"

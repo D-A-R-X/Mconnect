@@ -38,6 +38,16 @@
                 android:fontFamily="@font/inter_regular"
                 android:textColor="#475467"
                 android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/tvPunchLogAutoClosed"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:fontFamily="@font/inter_medium"
+                android:textColor="#B54708"
+                android:textSize="12sp"
+                android:visibility="gone" />
         </LinearLayout>
 
         <ImageView

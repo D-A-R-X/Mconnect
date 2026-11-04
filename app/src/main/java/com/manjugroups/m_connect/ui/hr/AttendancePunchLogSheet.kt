@@ -87,7 +87,14 @@ class AttendancePunchLogSheet : BottomSheetDialogFragment() {
 
         renderHeader(view, dateIso, sessions, hasOpen, totalMinutes)
         renderPenalty(view, penaltyReason)
-        renderEvents(view, sessions)
+        renderEvents(view, sessions, dateIso)
+        // The midnight job closed a session left open: say so instead of
+        // listing its 11:59 pm close as a punch (as the web does).
+        view.findViewById<TextView>(R.id.tvPunchLogAutoClosed).apply {
+            val autoClosed = sessions.any { AttendanceSessions.isSyntheticClose(it, dateIso) }
+            text = AttendanceSessions.AUTO_CLOSED_NOTE
+            visibility = if (autoClosed) View.VISIBLE else View.GONE
+        }
     }
 
     private fun renderPenalty(root: View, reason: String?) {
@@ -110,7 +117,7 @@ class AttendancePunchLogSheet : BottomSheetDialogFragment() {
         val title = formatDate(dateIso) ?: dateIso
         root.findViewById<TextView>(R.id.tvPunchLogTitle).text = title
 
-        val events = flatten(sessions)
+        val events = flatten(sessions, dateIso)
         val firstTime = events.firstOrNull()?.let { formatIsoTime(it.timeIso) }
         val lastTime = events.lastOrNull()?.let { formatIsoTime(it.timeIso) }
         val durationLabel = if (totalMinutes > 0) {
@@ -129,12 +136,12 @@ class AttendancePunchLogSheet : BottomSheetDialogFragment() {
             parts.joinToString(" · ")
     }
 
-    private fun renderEvents(root: View, sessions: List<SessionData>) {
+    private fun renderEvents(root: View, sessions: List<SessionData>, dateIso: String) {
         val list = root.findViewById<LinearLayout>(R.id.punchLogList)
         val empty = root.findViewById<TextView>(R.id.tvPunchLogEmpty)
         list.removeAllViews()
 
-        val events = flatten(sessions)
+        val events = flatten(sessions, dateIso)
         if (events.isEmpty()) {
             empty.visibility = View.VISIBLE
             return
@@ -207,13 +214,14 @@ class AttendancePunchLogSheet : BottomSheetDialogFragment() {
      * mis-orders biometric rows whose timestamps use a different format /
      * offset, which is why the log read newest-first.)
      */
-    private fun flatten(sessions: List<SessionData>): List<Event> {
+    private fun flatten(sessions: List<SessionData>, dateIso: String): List<Event> {
         val out = mutableListOf<Event>()
         sessions.forEach { s ->
             s.punchInTime?.takeIf { it.isNotBlank() }?.let {
                 out.add(Event(it, Kind.IN, s.source, s.punchInAddress, s.punchInPhoto))
             }
-            s.punchOutTime?.takeIf { it.isNotBlank() }?.let {
+            // The midnight job's close is not a punch anybody made.
+            AttendanceSessions.realPunchOut(s, dateIso)?.let {
                 // The OUT event's chip is the punch-out's own source (e.g. a
                 // mobile clock-out on a biometric punch-in), falling back to
                 // the session source for historical rows without it.
