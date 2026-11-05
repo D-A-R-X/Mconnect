@@ -109,7 +109,7 @@ android {
         applicationId = "com.manjugroups.mconnect"
         minSdk = 24
         targetSdk = 36
-        versionCode = 99
+        versionCode = 100
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
