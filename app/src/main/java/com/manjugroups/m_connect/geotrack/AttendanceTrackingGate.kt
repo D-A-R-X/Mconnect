@@ -26,6 +26,22 @@ object AttendanceTrackingGate {
     /** A cold service start must never rely on stale local tracking state. */
     fun mayStartTracking(openSession: Boolean?): Boolean = openSession == true
 
+    /**
+     * Cold start when the attendance check can't be answered (no network).
+     * Starts only for the SAME shift the server already confirmed today: the
+     * phone still says tracking is on (cleared at Clock Out / day end), and
+     * the confirmation is from this India day. Never on a new day, never after
+     * an explicit "closed". Without this, a phone the OS restarted in a dead
+     * zone recorded nothing until it was back online — the route gaps.
+     */
+    fun mayStartTrackingOffline(
+        openSession: Boolean?,
+        shouldTrackNow: Boolean,
+        verifiedDay: String?,
+        today: String,
+    ): Boolean = openSession == true ||
+        (openSession == null && shouldTrackNow && !verifiedDay.isNullOrBlank() && verifiedDay == today)
+
     /** Once verified and running, a temporary outage must not break the route. */
     fun mayContinueTracking(openSession: Boolean?): Boolean = openSession != false
 

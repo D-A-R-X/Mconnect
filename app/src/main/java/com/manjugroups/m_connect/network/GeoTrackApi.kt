@@ -705,6 +705,15 @@ interface GeoTrackApi {
         @Url url: String = DIRECT_SESSION_ROUTE_URL,
     ): SessionRouteResponse
 
+    /** The day's route matched to roads (geo service roadsnap). */
+    @GET
+    suspend fun getSnappedRoute(
+        @Header("Authorization") token: String,
+        @Query("staffId") staffId: String? = null,
+        @Query("date") date: String,
+        @Url url: String = DIRECT_SNAPPED_ROUTE_URL,
+    ): SnappedRouteResponse
+
     @GET
     suspend fun getTrips(
         @Header("Authorization") token: String,
@@ -728,6 +737,7 @@ interface GeoTrackApi {
         const val DIRECT_TRIPS_URL = "$DIRECT_BASE_URL/api/tracking/trips"
         const val DIRECT_NEARBY_STAFF_URL = "$DIRECT_BASE_URL/api/geotrack/nearby-staff"
         const val DIRECT_SESSION_ROUTE_URL = "$DIRECT_BASE_URL/api/geotrack/session-route"
+        const val DIRECT_SNAPPED_ROUTE_URL = "$DIRECT_BASE_URL/api/geotrack/snapped-route"
         const val DIRECT_PLACE_SEARCH_URL = "$DIRECT_BASE_URL/api/tracking/places/search"
         const val DIRECT_ROUTE_URL = "$DIRECT_BASE_URL/api/geotrack/route"
         const val DIRECT_GEOCODE_URL = "$DIRECT_BASE_URL/api/geotrack/geocode-address"

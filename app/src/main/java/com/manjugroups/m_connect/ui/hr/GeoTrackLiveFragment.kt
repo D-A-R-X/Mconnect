@@ -55,6 +55,7 @@ class GeoTrackLiveFragment : Fragment(), OnMapReadyCallback {
     private var timeline: List<TimelinePoint> = emptyList()
     private var trips: List<GeoTrip> = emptyList()
     private var routeStops: List<GeoTripStop> = emptyList()
+    private var snappedSegments: List<com.manjugroups.m_connect.network.SnappedSegment> = emptyList()
     private var routeDistanceMeters: Int = 0
     private var refreshJob: Job? = null
     private var selectedStaffId: String? = null
@@ -132,6 +133,7 @@ class GeoTrackLiveFragment : Fragment(), OnMapReadyCallback {
                 if (liveStatuses.isEmpty()) {
                     selectedStaffId = null
                     timeline = emptyList()
+                    snappedSegments = emptyList()
                     trips = emptyList()
                     routeStops = emptyList()
                     routeDistanceMeters = 0
@@ -180,6 +182,15 @@ class GeoTrackLiveFragment : Fragment(), OnMapReadyCallback {
                 )
             }.onSuccess { response ->
                 val route = response.data
+                // Road-matched route for the same staff/day; empty = keep the raw line.
+                snappedSegments = runCatching {
+                    geoApi.getSnappedRoute(
+                        session.bearerToken, staffId,
+                        java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).apply {
+                            timeZone = java.util.TimeZone.getTimeZone("Asia/Kolkata")
+                        }.format(java.util.Date(range.first)),
+                    ).data?.segments
+                }.getOrNull().orEmpty()
                 timeline = route?.timeline.orEmpty()
                 trips = route?.trips.orEmpty().sortedBy { it.startedAt }
                 routeStops = route?.stops.orEmpty()
@@ -188,6 +199,7 @@ class GeoTrackLiveFragment : Fragment(), OnMapReadyCallback {
                 renderMap()
             }.onFailure { error ->
                 timeline = emptyList()
+                snappedSegments = emptyList()
                 trips = emptyList()
                 routeStops = emptyList()
                 routeDistanceMeters = 0
@@ -317,7 +329,29 @@ class GeoTrackLiveFragment : Fragment(), OnMapReadyCallback {
                 if (snapped.size >= 2) snapped else null
             }
 
-        if (selectedTripPaths.isNotEmpty()) {
+        if (snappedSegments.isNotEmpty()) {
+            // Road-matched day: solid where it follows roads, dashed where inferred.
+            snappedSegments.forEach { seg ->
+                val path = seg.path
+                if (path.size < 2) return@forEach
+                map.addPolyline(
+                    PolylineOptions()
+                        .addAll(path)
+                        .color(Color.parseColor("#2563EB"))
+                        .width(if (isExpanded) 10f else 8f)
+                        .apply {
+                            if (seg.isDashed) pattern(listOf(
+                                com.google.android.gms.maps.model.Dash(24f),
+                                com.google.android.gms.maps.model.Gap(16f),
+                            ))
+                        }
+                )
+                path.forEach { point ->
+                    boundsBuilder.include(point)
+                    hasBounds = true
+                }
+            }
+        } else if (selectedTripPaths.isNotEmpty()) {
             selectedTripPaths.forEach { path ->
                 map.addPolyline(
                     PolylineOptions()

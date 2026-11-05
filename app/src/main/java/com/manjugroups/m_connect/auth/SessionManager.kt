@@ -192,6 +192,15 @@ class SessionManager(context: Context) {
         set(value) = setCachedBoolean(KEY_SHOULD_TRACK_NOW, value)
 
     /**
+     * India day (yyyy-MM-dd) on which the server last confirmed an open
+     * attendance session for tracking. Lets a cold restart with no network
+     * keep recording the same shift instead of stopping until it is online.
+     */
+    var trackingVerifiedDay: String?
+        get() = getCachedString(KEY_TRACKING_VERIFIED_DAY, null)
+        set(value) = setCachedString(KEY_TRACKING_VERIFIED_DAY, value)
+
+    /**
      * Set once at login (saveSession); consumed by the next GeoTrack bootstrap
      * sync to raise a USER_LOGIN tamper event IF the user is inside their
      * clock-in/tracking window. Lets us flag a mid-shift re-login without
@@ -800,6 +809,7 @@ class SessionManager(context: Context) {
         private const val KEY_TRACKING_DEVICE_ID = "tracking_device_id"
         private const val KEY_ACTIVE_TRACKING_SESSION_ID = "active_tracking_session_id"
         private const val KEY_SHOULD_TRACK_NOW = "should_track_now"
+        private const val KEY_TRACKING_VERIFIED_DAY = "tracking_verified_day"
         private const val KEY_PENDING_LOGIN_EVENT = "pending_login_event"
         private const val KEY_BOUND_BASE_URL = "bound_base_url"
         private const val KEY_USER_PHOTO_URL = "user_photo_url"

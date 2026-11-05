@@ -75,6 +75,12 @@ class GeoTrackService : Service() {
         private const val IDLE_LOCATION_INTERVAL_MS = 150_000L // 2.5 min
         private const val IDLE_SYNC_INTERVAL_MS = 90_000L
         private const val RECENT_MOTION_MS = 120_000L // keep precise 2 min after motion
+        // Store fixes up to 100 m: normal for city streets and indoor-to-road
+        // (was 50 m, which dropped most of them). The 15 m / 50 m spacing
+        // filters below still absorb jitter; the server accepts up to 250 m.
+        private const val MAX_STORE_ACCURACY_M = 100f
+        // A raw-fix move must exceed this (and both fixes' error) to count as motion.
+        private const val MIN_MOTION_DISTANCE_M = 120.0
         // Short, self-timing wakelock taken ONLY around a network sync burst
         // (not for the whole shift) so an upload can finish even if the device
         // is dozing. The OS auto-releases after this timeout as a safety net.
@@ -380,7 +386,11 @@ class GeoTrackService : Service() {
         // no tracking component until attendance is authoritatively open.
         startupGateJob = serviceScope.launch {
             val open = AttendanceTrackingGate.hasOpenSessionNow(session.bearerToken)
-            if (!AttendanceTrackingGate.mayStartTracking(open)) {
+            val today = AttendanceDayBoundary.dateKey()
+            if (!AttendanceTrackingGate.mayStartTrackingOffline(
+                    open, session.shouldTrackNow, session.trackingVerifiedDay, today,
+                )
+            ) {
                 Log.i(TAG, "GeoTrack cold start blocked: attendanceOpen=$open")
                 if (open == false) {
                     session.shouldTrackNow = false
@@ -390,8 +400,10 @@ class GeoTrackService : Service() {
                 stopSelf()
                 return@launch
             }
+            if (open == true) session.trackingVerifiedDay = today
+            else Log.i(TAG, "GeoTrack offline cold start: resuming today's confirmed shift")
             sessionOpen = true
-            verifiedAttendanceDay = AttendanceDayBoundary.dateKey()
+            verifiedAttendanceDay = today
             scheduleAttendanceDayBoundaryStop()
             initializeTracking()
         }
@@ -610,7 +622,9 @@ class GeoTrackService : Service() {
     private fun reevaluateLocationMode() {
         if (!fusedLocationRegistered) return
         val hasFieldActivity = session.fieldActivity() != null
+        val recognized = ActivityRecognitionReceiver.currentActivity
         val moving = (lastActivity != "STILL" && lastActivity != "UNKNOWN") ||
+            (recognized != "STILL" && recognized != "UNKNOWN") ||
             (System.currentTimeMillis() - lastMovingAtMs < RECENT_MOTION_MS)
         val desiredLowPower = !hasFieldActivity && !moving
         if (desiredLowPower == lowPowerLocationMode) return
@@ -782,7 +796,15 @@ class GeoTrackService : Service() {
         // point has been stored for 5+ minutes, let ONE coarse fix (≤250m)
         // through, tagged with its real accuracy — the server accepts ≤250m
         // and the display-side pin stabilizer absorbs the wobble.
-        if (location.accuracy > 50f) {
+        // Motion check FIRST, before any fix is discarded. It used to run after
+        // the accuracy gate and only on the fix's own speed: in low-power mode
+        // the fixes are wifi/cell (often >50 m, speed 0), so it never fired and
+        // the phone stayed on a fix every ~5 min all shift — a start pin and
+        // then gaps. Motion = the fix's speed OR a real move between raw fixes
+        // (beyond both fixes' error), or activity recognition saying so.
+        noteMotion(location, now)
+
+        if (location.accuracy > MAX_STORE_ACCURACY_M) {
             val sinceStoredMs = now - lastStoredTimeMs
             val coarseFallbackDue =
                 location.accuracy <= 250f && sinceStoredMs >= 5 * 60_000L
@@ -802,13 +824,6 @@ class GeoTrackService : Service() {
 
         if (isMock) reportTamper("MOCK_LOCATION")
 
-        // Motion detector for the power mode, independent of the storage dedup
-        // below (which may early-return). A moving fix snaps GPS back to precise
-        // immediately if we'd relaxed it.
-        if (location.speed >= 1.5f) {
-            lastMovingAtMs = now
-            if (lowPowerLocationMode) reevaluateLocationMode()
-        }
 
         // ── Smart dedup: different rules for moving vs stationary ──
         // An activity transition (still→vehicle, vehicle→still, …) forces the
@@ -890,6 +905,36 @@ class GeoTrackService : Service() {
         if (firstLocationReceived.compareAndSet(false, true)) {
             Log.i(TAG, "First location received — triggering immediate sync")
             syncPoints()
+        }
+    }
+
+    // Last raw fix seen (any accuracy), for motion detection only.
+    private var lastRawLat = 0.0
+    private var lastRawLng = 0.0
+    private var lastRawAccuracy = 0f
+    private var lastRawAtMs = 0L
+
+    /** Marks motion and snaps GPS back to precise if it had been relaxed. */
+    private fun noteMotion(location: Location, now: Long) {
+        var moving = location.speed >= 1.5f
+        if (!moving && lastRawAtMs > 0L && location.accuracy <= 250f) {
+            val dist = distanceMeters(lastRawLat, lastRawLng, location.latitude, location.longitude)
+            val dtSeconds = ((now - lastRawAtMs) / 1000.0).coerceAtLeast(1.0)
+            // A real move: clearly beyond both fixes' error (so wifi/cell
+            // wobble doesn't count) at walking speed or faster, and plausible.
+            val errorBand = maxOf(MIN_MOTION_DISTANCE_M, (location.accuracy + lastRawAccuracy).toDouble())
+            val impliedSpeed = dist / dtSeconds
+            moving = dist > errorBand && impliedSpeed >= 1.5 && impliedSpeed <= MAX_PLAUSIBLE_SPEED_MPS
+        }
+        if (location.accuracy <= 250f) {
+            lastRawLat = location.latitude
+            lastRawLng = location.longitude
+            lastRawAccuracy = location.accuracy
+            lastRawAtMs = now
+        }
+        if (moving) {
+            lastMovingAtMs = now
+            if (lowPowerLocationMode) reevaluateLocationMode()
         }
     }
 
@@ -988,6 +1033,7 @@ class GeoTrackService : Service() {
             return false
         }
         val open = AttendanceTrackingGate.hasOpenSessionNow(session.bearerToken)
+        if (open == true) session.trackingVerifiedDay = AttendanceDayBoundary.dateKey()
         if (AttendanceTrackingGate.mayContinueTracking(open)) return true
         stopForClosedAttendance("Attendance session closed (clocked out)")
         return false

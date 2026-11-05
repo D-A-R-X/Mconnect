@@ -333,6 +333,11 @@ object GeoTrackBootstrapSync {
      */
     private suspend fun queuePermissionCleared(context: Context) {
         if (!BackgroundPermissionsGateDialog.isDeviceLocationEnabled(context)) return
+        // Only while a shift is being tracked. Sent outside it, this heartbeat
+        // made the live board show staff with no attendance as active ("9m
+        // ago"), including overnight. The alert it clears is cleared at the
+        // next clock-in instead.
+        if (!SessionManager(context).shouldTrackNow) return
         GeoTrackEventQueue.enqueueDistinct(
             context,
             GeoTrackEventQueue.HEARTBEAT_EVENT_TYPE,

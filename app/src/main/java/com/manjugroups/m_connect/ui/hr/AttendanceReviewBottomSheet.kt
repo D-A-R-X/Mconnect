@@ -33,6 +33,7 @@ import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.SessionRouteData
 import com.manjugroups.m_connect.network.TimelinePoint
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -53,6 +54,7 @@ class AttendanceReviewBottomSheet : BottomSheetDialogFragment() {
     private var record: AttendanceApprovalRecord? = null
     // Last loaded day-route — reused by the full-screen map dialog.
     private var lastRouteData: SessionRouteData? = null
+    private var snappedSegments: List<com.manjugroups.m_connect.network.SnappedSegment> = emptyList()
     private var listener: OnActionClickListener? = null
 
     private var isPlaying = false
@@ -171,6 +173,13 @@ class AttendanceReviewBottomSheet : BottomSheetDialogFragment() {
         val staffId = rec.staffId ?: return
         val range = dayRangeMillis(rec.date) ?: return
         viewLifecycleOwner.lifecycleScope.launch {
+            // Road-matched route in parallel; the drawing falls back to the
+            // existing trip / raw lines when it isn't available.
+            val snappedJob = async {
+                runCatching {
+                    geoApi.getSnappedRoute(session.bearerToken, staffId, rec.date.orEmpty()).data?.segments
+                }.getOrNull().orEmpty()
+            }
             val data = runCatching {
                 geoApi.getSessionRoute(
                     token = session.bearerToken,
@@ -193,6 +202,8 @@ class AttendanceReviewBottomSheet : BottomSheetDialogFragment() {
                 else "$meters m"
 
             lastRouteData = data
+            snappedSegments = snappedJob.await()
+            if (_binding == null) return@launch
             drawRoute(map, data)
             renderJourneyTimeline(data)
         }
@@ -272,7 +283,14 @@ class AttendanceReviewBottomSheet : BottomSheetDialogFragment() {
         // Trip lines, coloured per kind (on-duty → amber, field visit → green,
         // else blue), each with a white casing + forward direction arrows.
         qualifyingTrips.forEach { trip ->
-            val snapped = trip.snappedPath.orEmpty().map { LatLng(it.lat, it.lng) }
+            val snapped = trip.snappedPath.orEmpty().map { LatLng(it.lat, it.lng) }.ifEmpty {
+                // Trip rows built by the server have no snapped path; take the
+                // road-matched route for the trip's time window instead of a
+                // straight start-to-end chord.
+                com.manjugroups.m_connect.network.SnappedRoute.pathBetween(
+                    snappedSegments, trip.startedAt, trip.endedAt ?: Long.MAX_VALUE,
+                )
+            }
             // Only a start and an end point survive for some trips (no GPS
             // fixes in between, or snapping never ran). Joining them draws a
             // straight line that reads as a real travelled road — so draw it
@@ -302,9 +320,20 @@ class AttendanceReviewBottomSheet : BottomSheetDialogFragment() {
         // geofence (100 m around the day's punch-in) — pacing around the office
         // must never put a route on the approval map. The raw path sum here
         // would wrongly count that wandering.
-        if (!drewRoute && data.timeline.size >= 2) {
-            val timelinePath = data.timeline.map { LatLng(it.lat, it.lng) }
-            if (data.distanceMeters > minMeters) {
+        if (!drewRoute && data.timeline.size >= 2 && data.distanceMeters > minMeters) {
+            if (snappedSegments.isNotEmpty()) {
+                // Road-matched day: solid where it follows roads, dashed where inferred.
+                snappedSegments.forEach { seg ->
+                    val path = seg.path
+                    if (path.size < 2) return@forEach
+                    if (seg.isDashed) drawEstimatedLine(map, path, Color.parseColor("#2563EB"))
+                    else drawTripLine(map, path, Color.parseColor("#2563EB"))
+                    path.forEach { boundsBuilder.include(it); hasBounds = true }
+                }
+                drewRoute = hasBounds
+            }
+            if (!drewRoute) {
+                val timelinePath = data.timeline.map { LatLng(it.lat, it.lng) }
                 drawTripLine(map, timelinePath, Color.parseColor("#2563EB"))
                 timelinePath.forEach { boundsBuilder.include(it); hasBounds = true }
                 drewRoute = true
