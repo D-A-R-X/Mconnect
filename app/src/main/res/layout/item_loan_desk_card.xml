@@ -142,79 +142,70 @@
         android:layout_marginBottom="12dp"
         android:background="#E4E7EC" />
 
-    <!-- Bottom Row (Location, Date, Pills, Chevron) -->
-    <RelativeLayout
+    <!-- Bottom row: location, date and chevron on one line, all centred.
+         The chevron used to align to the pills row below, so with no pills
+         it dropped under the date. -->
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content">
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
 
-        <!-- Location/Address (Left) -->
-        <LinearLayout
-            android:id="@+id/locationContainer"
+        <ImageView
+            android:layout_width="14dp"
+            android:layout_height="14dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_map_pin"
+            app:tint="#667085" />
+
+        <TextView
+            android:id="@+id/tvLocation"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:layout_marginEnd="12dp"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:fontFamily="@font/inter_regular"
+            android:maxLines="1"
+            android:textColor="#667085"
+            android:textSize="12sp"
+            tools:text="OMR Road, Sholinganallur..." />
+
+        <ImageView
+            android:layout_width="14dp"
+            android:layout_height="14dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_booking_calendar"
+            app:tint="#667085" />
+
+        <TextView
+            android:id="@+id/tvDate"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_alignParentStart="true"
-            android:layout_alignParentTop="true"
-            android:layout_toStartOf="@+id/dateContainer"
-            android:layout_marginEnd="16dp"
-            android:orientation="horizontal"
-            android:gravity="center_vertical">
+            android:layout_marginStart="4dp"
+            android:fontFamily="@font/inter_regular"
+            android:maxLines="1"
+            android:textColor="#667085"
+            android:textSize="12sp"
+            tools:text="16 Jun '26" />
 
-            <ImageView
-                android:layout_width="14dp"
-                android:layout_height="14dp"
-                android:src="@drawable/ic_location_compass"
-                app:tint="#667085"
-                android:importantForAccessibility="no" />
-
-            <TextView
-                android:id="@+id/tvLocation"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="4dp"
-                android:ellipsize="end"
-                android:fontFamily="@font/inter_regular"
-                android:maxLines="1"
-                android:textColor="#667085"
-                android:textSize="12sp"
-                tools:text="OMR Road, Sholinganallur..." />
-        </LinearLayout>
-
-        <!-- Date (Right) -->
-        <LinearLayout
-            android:id="@+id/dateContainer"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_alignParentEnd="true"
-            android:layout_alignParentTop="true"
-            android:orientation="horizontal"
-            android:gravity="center_vertical">
-
-            <ImageView
-                android:layout_width="14dp"
-                android:layout_height="14dp"
-                android:src="@drawable/ic_booking_calendar"
-                app:tint="#667085"
-                android:importantForAccessibility="no" />
-
-            <TextView
-                android:id="@+id/tvDate"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="4dp"
-                android:fontFamily="@font/inter_regular"
-                android:textColor="#667085"
-                android:textSize="12sp"
-                tools:text="16 Jun '26" />
-        </LinearLayout>
+        <ImageView
+            android:id="@+id/ivChevron"
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:layout_marginStart="8dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_arrow_right_sm"
+            app:tint="#98A2B3" />
+    </LinearLayout>
 
         <!-- Document Pills Row (Bottom Left) -->
         <LinearLayout
             android:id="@+id/pillsContainer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_below="@id/locationContainer"
             android:layout_marginTop="12dp"
-            android:layout_toStartOf="@+id/ivChevron"
             android:orientation="horizontal"
             android:gravity="center_vertical">
 
@@ -294,17 +285,6 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- Right Chevron (Bottom Right) -->
-        <ImageView
-            android:id="@+id/ivChevron"
-            android:layout_width="20dp"
-            android:layout_height="20dp"
-            android:layout_alignParentEnd="true"
-            android:layout_alignBottom="@id/pillsContainer"
-            android:src="@drawable/ic_arrow_right_sm"
-            app:tint="#98A2B3"
-            android:importantForAccessibility="no" />
-    </RelativeLayout>
 
     <!-- Remarks from Legal Team (Visible when Rejected) -->
     <LinearLayout

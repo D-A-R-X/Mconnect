@@ -1795,7 +1795,9 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             else -> {
-                setTopBarAppearance(Color.parseColor("#FEFEFE"), true, fullBleed = false)
+                // Chat: full-bleed like the other tabs (ChatListFragment pads
+                // its own header), so no strip resize when switching tabs.
+                setTopBarAppearance(Color.parseColor("#FEFEFE"), true, fullBleed = true)
                 if (::bottomNavFadeOverlay.isInitialized) {
                     bottomNavFadeOverlay.setBackgroundResource(R.drawable.bg_bottom_nav_fade_white)
                 }

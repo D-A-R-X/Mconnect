@@ -1074,12 +1074,10 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
             val file = slot.localFilePath?.let(::File) ?: File(folder, freshName)
             if (file.exists() && file.length() > 0) {
                 if (file.extension.equals("pdf", ignoreCase = true)) {
-                    val uri = FileProvider.getUriForFile(
-                        requireContext(),
-                        "${requireContext().packageName}.fileprovider",
-                        file,
+                    // In the app, not an outside viewer.
+                    com.manjugroups.m_connect.ui.common.InAppPdfViewer.showFile(
+                        requireContext(), viewLifecycleOwner, file, slot.label,
                     )
-                    openDocument(uri, "application/pdf", grantRead = true)
                     return
                 }
                 showPreviewDialog { imageView, progressBar ->
@@ -1110,7 +1108,7 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
         }
         val effectiveName = slot.fileName ?: slot.preExistingFileName
         if (effectiveName?.endsWith(".pdf", ignoreCase = true) == true) {
-            openRemotePdf(storageId)
+            openRemotePdf(storageId, slot.label)
             return
         }
         showPreviewDialog { imageView, progressBar ->
@@ -1139,29 +1137,15 @@ class LoanDeskUploadBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
-    private fun openRemotePdf(storageId: String) {
+    private fun openRemotePdf(storageId: String, title: String) {
         val url = com.manjugroups.m_connect.network.MobileStorageFiles.resolve(storageId)
         if (url == null) {
             toastSafe("Couldn't open PDF")
             return
         }
-        openDocument(Uri.parse(url), "application/pdf", grantRead = false)
-    }
-
-    private fun openDocument(uri: Uri, mime: String, grantRead: Boolean) {
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, mime)
-            if (grantRead) addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        try {
-            startActivity(intent)
-        } catch (_: ActivityNotFoundException) {
-            runCatching {
-                startActivity(Intent(Intent.ACTION_VIEW, uri))
-            }.onFailure {
-                toastSafe("No PDF viewer is installed")
-            }
-        }
+        com.manjugroups.m_connect.ui.common.InAppPdfViewer.showUrl(
+            requireContext(), viewLifecycleOwner, url, title,
+        )
     }
 
     private fun showPreviewDialog(bind: (imageView: ImageView, progressBar: View) -> Unit) {

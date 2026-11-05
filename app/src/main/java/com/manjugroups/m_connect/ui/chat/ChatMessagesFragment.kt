@@ -197,6 +197,11 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
+        // Full-bleed, header padded by the status-bar inset: matches the Chat
+        // tab, so opening and leaving a thread doesn't resize MainActivity's
+        // status strip mid-slide (the page used to jump).
+        com.manjugroups.m_connect.ui.common.StatusBarInsets.padHeader(binding.headerContainer)
+
         channelId = arguments?.getString("channelId")
         conversationId = arguments?.getString("conversationId")
         chatTitle = arguments?.getString("title") ?: "Chat"
@@ -1978,7 +1983,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
         super.onResume()
         (activity as? MainActivity)?.let { main ->
             main.setTabBarVisible(false)
-            main.setTopBarAppearance(android.graphics.Color.WHITE, true, fullBleed = false)
+            main.setTopBarAppearance(android.graphics.Color.WHITE, true, fullBleed = true)
         }
         startPolling()
         // Take a swing at the offline outbox every time the user opens
@@ -4129,7 +4134,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
             // Don't force the tab bar back on here — the backstack listener
             // decides it on the pop. Blindly restoring it raced the incoming
             // screen's hide and made the nav bar flash into chat threads.
-            main.setTopBarAppearance(android.graphics.Color.parseColor("#0B61CA"), false, fullBleed = false)
+            main.setTopBarAppearance(android.graphics.Color.parseColor("#0B61CA"), false, fullBleed = true)
         }
         binding.etMessage.removeTextChangedListener(typingWatcher)
         pollJob?.cancel()

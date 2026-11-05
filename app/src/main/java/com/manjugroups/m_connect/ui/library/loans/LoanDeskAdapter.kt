@@ -47,6 +47,15 @@ class LoanDeskAdapter(
         const val ROLE_SALES_TEAM = 0
         const val ROLE_LEGAL_TEAM = 1
         const val ROLE_LEGAL_MANAGER = 2
+
+        private val AVATAR_COLORS = intArrayOf(
+            Color.parseColor("#0B61CA"),
+            Color.parseColor("#9333EA"),
+            Color.parseColor("#F79009"),
+            Color.parseColor("#12B76A"),
+            Color.parseColor("#DD2590"),
+            Color.parseColor("#0E9384"),
+        )
     }
 
     private var currentRole = ROLE_LEGAL_TEAM // Default matches start state
@@ -94,6 +103,7 @@ class LoanDeskAdapter(
         private val pillPan: View = itemView.findViewById(R.id.pillPan)
         private val pillAadhaar: View = itemView.findViewById(R.id.pillAadhaar)
         private val pillCount: View = itemView.findViewById(R.id.pillCount)
+        private val pillsContainer: View = itemView.findViewById(R.id.pillsContainer)
         private val tvPillCountText: TextView = itemView.findViewById(R.id.tvPillCountText)
 
         private val layoutRemarks: View = itemView.findViewById(R.id.layoutRemarks)
@@ -118,11 +128,9 @@ class LoanDeskAdapter(
             tvInitial.text = initials
             
             // Assign different background colors to initials circles
-            val avatarColor = when (item.id) {
-                "1" -> Color.parseColor("#0B61CA") // Blue
-                "2" -> Color.parseColor("#9333EA") // Purple
-                else -> Color.parseColor("#F79009") // Orange
-            }
+            // Stable per client: the old switch keyed on demo ids "1"/"2", so
+            // every real row came out orange.
+            val avatarColor = AVATAR_COLORS[Math.floorMod(item.name.trim().lowercase().hashCode(), AVATAR_COLORS.size)]
             tvInitial.backgroundTintList = ColorStateList.valueOf(avatarColor)
 
             tvName.text = item.name
@@ -182,6 +190,12 @@ class LoanDeskAdapter(
             } else {
                 pillCount.visibility = View.GONE
             }
+            // No documents yet: drop the row so it doesn't leave a blank gap.
+            pillsContainer.visibility = if (
+                pillPan.visibility == View.VISIBLE ||
+                pillAadhaar.visibility == View.VISIBLE ||
+                pillCount.visibility == View.VISIBLE
+            ) View.VISIBLE else View.GONE
 
             // Role and Status adaptive layout
             when (currentRole) {

@@ -90,6 +90,12 @@ class ChatListFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
 
+        // Chat is full-bleed like the other tabs and pads its own header by
+        // the status-bar inset. It used to be the one tab with MainActivity's
+        // status strip (fullBleed = false), so finishing a swipe or tab switch
+        // to or from it resized the strip and the page jumped mid-transition.
+        com.manjugroups.m_connect.ui.common.StatusBarInsets.padHeader(binding.chatListHeader)
+
         setupRecyclerView()
 
         binding.rvChatList.addOnScrollListener(object : androidx.recyclerview.widget.RecyclerView.OnScrollListener() {
@@ -372,7 +378,7 @@ class ChatListFragment : Fragment() {
     private fun applyChatChrome() {
         (activity as? MainActivity)?.let { main ->
             main.setTabBarVisible(true)
-            main.setTopBarAppearance(Color.parseColor("#FEFEFE"), true, fullBleed = false)
+            main.setTopBarAppearance(Color.parseColor("#FEFEFE"), true, fullBleed = true)
         }
     }
 

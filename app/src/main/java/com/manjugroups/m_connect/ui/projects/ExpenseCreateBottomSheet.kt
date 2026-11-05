@@ -138,7 +138,7 @@ class ExpenseCreateBottomSheet : BottomSheetDialogFragment() {
     private val cameraPermLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
-        if (granted) launchCamera()
+        if (granted) openInAppCamera()
         else toastSafe("Camera permission is required")
     }
 
@@ -184,14 +184,7 @@ class ExpenseCreateBottomSheet : BottomSheetDialogFragment() {
         btnAddPhoto = view.findViewById(R.id.btnAddPhoto)
         tvPhotoCount = view.findViewById(R.id.tvPhotoCount)
 
-        // ── Category dropdown ───────────────────────────────────────────
-        etCategory.setAdapter(
-            ArrayAdapter(
-                requireContext(),
-                android.R.layout.simple_list_item_1,
-                categories.map { it.second },
-            ),
-        )
+        // ── Category: the shared searchable picker (app convention) ─────
         var pickedCategory: String =
             initialCategory?.takeIf { initial -> categories.any { it.first == initial } }
                 ?: "labour"
@@ -199,38 +192,60 @@ class ExpenseCreateBottomSheet : BottomSheetDialogFragment() {
             categories.firstOrNull { it.first == pickedCategory }?.second.orEmpty(),
             /* filter = */ false,
         )
-        etCategory.setOnClickListener { etCategory.showDropDown() }
-        etCategory.setOnItemClickListener { _, _, position, _ ->
-            pickedCategory = categories.getOrNull(position)?.first ?: pickedCategory
-        }
-
-        // ── Date — defaults to today, taps open the DateFilter sheet ────
-        val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-        var pickedDateIso = fmt.format(Calendar.getInstance().time)
-        etDate.setText(pickedDateIso)
-        etDate.setOnClickListener {
-            DateFilterBottomSheet.newInstance()
-                .showOnce(parentFragmentManager, "date_filter")
-            parentFragmentManager.setFragmentResultListener(
-                DateFilterBottomSheet.REQUEST_KEY,
-                viewLifecycleOwner,
-            ) { _, bundle ->
-                pickedDateIso = bundle.getString(DateFilterBottomSheet.RESULT_FROM)
-                    ?: pickedDateIso
-                etDate.setText(pickedDateIso)
+        etCategory.setOnClickListener {
+            com.manjugroups.m_connect.ui.common.SearchableSelectionDialog.show(
+                requireContext(),
+                "Select Expense Category",
+                categories.map { (slug, label) ->
+                    com.manjugroups.m_connect.ui.common.SearchableOption(slug, label)
+                },
+            ) { slug ->
+                pickedCategory = slug
+                etCategory.setText(categories.firstOrNull { it.first == slug }?.second.orEmpty(), false)
             }
         }
 
-        // ── Payment method dropdown (icons per method) ──────────────────
-        etPaymentMethod.setAdapter(PaymentMethodAdapter(requireContext(), paymentOptions))
+        // ── Date: the shared single-date calendar; shown as "05 Nov 2026",
+        // sent as yyyy-MM-dd. Expenses are for today or earlier. ───────────
+        val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val displayFmt = SimpleDateFormat("dd MMM yyyy", Locale.ENGLISH)
+        val todayIso = fmt.format(Calendar.getInstance().time)
+        var pickedDateIso = todayIso
+        fun showDate() {
+            etDate.setText(runCatching { displayFmt.format(fmt.parse(pickedDateIso)!!) }.getOrDefault(pickedDateIso))
+        }
+        showDate()
+        parentFragmentManager.setFragmentResultListener(RESULT_KEY_DATE, viewLifecycleOwner) { _, bundle ->
+            pickedDateIso = bundle.getString(com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet.KEY_FROM)
+                ?: pickedDateIso
+            showDate()
+        }
+        etDate.setOnClickListener {
+            com.manjugroups.m_connect.ui.hr.CalendarRangePickerSheet.newInstance(
+                title = "Expense Date",
+                subtitle = "Select the date of the expense",
+                initialFrom = pickedDateIso,
+                initialTo = pickedDateIso,
+                maxDate = todayIso,
+                resultKey = RESULT_KEY_DATE,
+                singleSelect = true,
+            ).showOnce(parentFragmentManager, "expense_date_picker")
+        }
+
+        // ── Payment method: the shared searchable picker; the picked
+        // method's icon still shows on the field. ────────────────────────
         var pickedPaymentMethod: String? = null
-        etPaymentMethod.setOnClickListener { etPaymentMethod.showDropDown() }
-        etPaymentMethod.setOnItemClickListener { _, _, position, _ ->
-            val opt = paymentOptions.getOrNull(position) ?: return@setOnItemClickListener
-            pickedPaymentMethod = opt.slug
-            etPaymentMethod.setText(opt.label, false)
-            tilPaymentMethod.startIconDrawable =
-                ContextCompat.getDrawable(requireContext(), opt.iconRes)
+        etPaymentMethod.setOnClickListener {
+            com.manjugroups.m_connect.ui.common.SearchableSelectionDialog.show(
+                requireContext(),
+                "Select Payment Method",
+                paymentOptions.map { com.manjugroups.m_connect.ui.common.SearchableOption(it, it.label) },
+            ) { opt ->
+                pickedPaymentMethod = opt.slug
+                etPaymentMethod.setText(opt.label, false)
+                tilPaymentMethod.startIconDrawable =
+                    ContextCompat.getDrawable(requireContext(), opt.iconRes)
+            }
         }
 
         // ── Photos ──────────────────────────────────────────────────────
@@ -288,26 +303,40 @@ class ExpenseCreateBottomSheet : BottomSheetDialogFragment() {
 
     // ── Photo picking + upload ──────────────────────────────────────────────
     private fun showPhotoSourceChooser() {
-        AlertDialog.Builder(requireContext())
-            .setTitle("Add receipt photo")
-            .setItems(arrayOf("Take photo", "Choose from gallery")) { _, which ->
-                if (which == 0) {
-                    if (ContextCompat.checkSelfPermission(
-                            requireContext(),
-                            Manifest.permission.CAMERA,
-                        ) == PackageManager.PERMISSION_GRANTED
-                    ) {
-                        launchCamera()
-                    } else {
-                        cameraPermLauncher.launch(Manifest.permission.CAMERA)
-                    }
-                } else {
-                    galleryLauncher.launch("image/*")
-                }
-            }
-            .show()
+        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            openInAppCamera()
+        } else {
+            cameraPermLauncher.launch(Manifest.permission.CAMERA)
+        }
     }
 
+    /**
+     * The app's shared camera (live preview, flash, zoom, Gallery button), as
+     * used by chat and Daily Log. Built as a plain local, never inside
+     * `apply {}`, so host members below resolve to this sheet.
+     */
+    private fun openInAppCamera() {
+        val camera = com.manjugroups.m_connect.ui.chat.CustomCameraBottomSheet()
+        camera.setListener(object : com.manjugroups.m_connect.ui.chat.CustomCameraBottomSheet.CameraResultListener {
+            override fun onMediaCaptured(uri: Uri, isVideo: Boolean) {
+                if (isVideo) {
+                    this@ExpenseCreateBottomSheet.toastSafe("Receipts must be photos")
+                    return
+                }
+                this@ExpenseCreateBottomSheet.copyUriToTempFile(uri)
+                    ?.let(this@ExpenseCreateBottomSheet::handleImageFile)
+            }
+
+            override fun onGalleryClicked() {
+                galleryLauncher.launch("image/*")
+            }
+        })
+        camera.show(childFragmentManager, "expense_receipt_camera")
+    }
+
+    @Suppress("unused")
     private fun launchCamera() {
         val f = createReceiptFile("receipt_cam_") ?: run {
             toastSafe("Unable to create photo file")
@@ -507,6 +536,8 @@ class ExpenseCreateBottomSheet : BottomSheetDialogFragment() {
         const val RESULT_KEY = "ExpenseCreated"
         private const val ARG_PROJECT_ID = "projectId"
         private const val ARG_INITIAL_CATEGORY = "initialCategory"
+
+        private const val RESULT_KEY_DATE = "expense_create_date"
 
         fun newInstance(projectId: String, initialCategory: String? = null) =
             ExpenseCreateBottomSheet().apply {

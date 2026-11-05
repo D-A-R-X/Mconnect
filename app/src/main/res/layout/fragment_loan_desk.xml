@@ -7,8 +7,11 @@
     android:background="#F1F3F8"
     android:orientation="vertical">
 
-    <!-- Header bar -->
+    <!-- Header bar. Draws under the status bar (full-bleed) and pads itself
+         by the inset in code, so leaving for the full-bleed Apps screen
+         changes no layout. -->
     <RelativeLayout
+        android:id="@+id/loanDeskHeader"
         android:layout_width="match_parent"
         android:layout_height="56dp"
         android:background="#FFFFFF"

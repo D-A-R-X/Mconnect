@@ -112,6 +112,14 @@ class LoanDeskFragment : Fragment() {
             parentFragmentManager.popBackStack()
         }
 
+        // The status bar strip used to be MainActivity's (fullBleed = false).
+        // Popping back to the full-bleed Apps screen collapsed that strip
+        // mid-slide, so this page's header jumped up under the status bar as
+        // it left. Drawing the strip here keeps both screens full-bleed.
+        com.manjugroups.m_connect.ui.common.StatusBarInsets.padHeader(
+            view.findViewById(R.id.loanDeskHeader), fixedHeight = true,
+        )
+
         view.findViewById<View>(R.id.btnCalendar).setOnClickListener {
             CalendarRangePickerSheet.newInstance(
                 title = "Filter Loan Desk",
@@ -758,7 +766,7 @@ class LoanDeskFragment : Fragment() {
         super.onResume()
         (activity as? MainActivity)?.let { main ->
             main.setTabBarVisible(false)
-            main.setTopBarAppearance(Color.parseColor("#FFFFFF"), true, fullBleed = false)
+            main.setTopBarAppearance(Color.parseColor("#FFFFFF"), true, fullBleed = true)
         }
     }
 }

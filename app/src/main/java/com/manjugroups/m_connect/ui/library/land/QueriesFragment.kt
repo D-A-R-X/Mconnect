@@ -314,7 +314,7 @@ class QueriesFragment : Fragment() {
                 statusPill.setBackgroundResource(R.drawable.bg_inspection_status_completed)
                 statusPill.setTextColor(android.graphics.Color.parseColor("#065F46"))
             } else {
-                statusPill.text = "PENDING"
+                statusPill.text = "Pending"
                 statusPill.setBackgroundResource(R.drawable.bg_query_status_pending)
                 statusPill.setTextColor(android.graphics.Color.parseColor("#0B61CA"))
             }
