@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One Team Performance metric: label, "actual / target", progress, caption. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="0dp"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_team_perf_card"
+    android:orientation="vertical"
+    android:padding="14dp">
+
+    <TextView
+        android:id="@+id/tvTpLabel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:fontFamily="@font/inter_medium"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:textColor="#667085"
+        android:textSize="12sp"
+        tools:text="Calls" />
+
+    <TextView
+        android:id="@+id/tvTpValue"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:fontFamily="@font/inter_semibold"
+        android:fontFeatureSettings="tnum"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:textColor="#101828"
+        android:textSize="18sp"
+        tools:text="33,431 / No target" />
+
+    <ProgressBar
+        android:id="@+id/pbTpProgress"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="6dp"
+        android:layout_marginTop="10dp"
+        android:max="100"
+        android:progress="0"
+        android:progressDrawable="@drawable/bg_team_perf_progress" />
+
+    <TextView
+        android:id="@+id/tvTpCaption"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:fontFamily="@font/inter_regular"
+        android:maxLines="2"
+        android:textColor="#667085"
+        android:textSize="11sp"
+        tools:text="No count target set" />
+</LinearLayout>

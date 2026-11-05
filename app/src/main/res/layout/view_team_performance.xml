@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Team Performance (from the web Insights "Executive cockpit"): targets and
+  achievements for the viewer's permitted team over a date range. Content is
+  added by TeamPerformanceView.
+-->
+<merge xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:parentTag="android.widget.LinearLayout"
+    tools:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <ImageView
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_team_performance" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:fontFamily="@font/inter_semibold"
+            android:text="Team Performance"
+            android:textColor="#101828"
+            android:textSize="16sp" />
+
+        <ImageView
+            android:id="@+id/btnTpRefresh"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Refresh team performance"
+            android:padding="9dp"
+            android:src="@drawable/ic_refresh_small" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/tvTpSubtitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:fontFamily="@font/inter_regular"
+        android:textColor="#667085"
+        android:textSize="12sp"
+        tools:text="Targets and achievements · 30 Oct – 5 Nov · Your permitted team" />
+
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:overScrollMode="never"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:id="@+id/tpRangeChips"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal" />
+    </HorizontalScrollView>
+
+    <GridLayout
+        android:id="@+id/tpGrid"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:columnCount="2"
+        android:useDefaultMargins="false" />
+
+    <TextView
+        android:id="@+id/tvTpError"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:background="?attr/selectableItemBackground"
+        android:fontFamily="@font/inter_medium"
+        android:paddingVertical="6dp"
+        android:textColor="#B42318"
+        android:textSize="12sp"
+        android:visibility="gone"
+        tools:text="Couldn't load team performance. Tap to retry."
+        tools:visibility="visible" />
+</merge>

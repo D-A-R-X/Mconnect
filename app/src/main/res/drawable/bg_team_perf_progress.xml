@@ -1,0 +1,17 @@
+<!-- 6dp rounded bar: violet-100 track, violet-600 fill (matches web). -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@android:id/background">
+        <shape android:shape="rectangle">
+            <corners android:radius="3dp" />
+            <solid android:color="#EDE9FE" />
+        </shape>
+    </item>
+    <item android:id="@android:id/progress">
+        <clip>
+            <shape android:shape="rectangle">
+                <corners android:radius="3dp" />
+                <solid android:color="#7C3AED" />
+            </shape>
+        </clip>
+    </item>
+</layer-list>

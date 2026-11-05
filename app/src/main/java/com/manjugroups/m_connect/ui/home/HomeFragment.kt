@@ -1098,6 +1098,8 @@ class HomeFragment : Fragment() {
         "dash:${session.staffId.orEmpty()}:${date ?: "today"}"
 
     private fun loadVpDashboard(force: Boolean = false) {
+        // Pull-to-refresh / dashboard reload refreshes Team Performance too.
+        if (force) _binding?.root?.findViewById<TeamPerformanceView>(R.id.teamPerformance)?.load(force = true)
         if (vpDashboardLoading && !force) return
         vpDashboardLoading = true
         val requestedDate = vpSelectedDate
@@ -2283,6 +2285,11 @@ class HomeFragment : Fragment() {
         // lands or the date changes). The three it does NOT return —
         // bookings, collections, booking value — render as "–" until the
         // backend carries them, rather than inventing a figure.
+        // Team Performance (web Insights cards) in place of the KPI tiles.
+        root.findViewById<TeamPerformanceView>(R.id.teamPerformance)?.let { tp ->
+            tp.bind(viewLifecycleOwner, session.staffId) { session.bearerToken }
+            if (session.canViewVpDashboard()) tp.load()
+        }
         bindMarketingCard(root.findViewById(R.id.cardTotalCalls), "Total Calls", "–", null, true, R.drawable.ic_3d_calls, "#3B82F6", true)
         bindMarketingCard(root.findViewById(R.id.cardHotLeads), "Hot Leads", "–", null, true, R.drawable.ic_3d_hot, "#10B981", true)
         bindMarketingCard(root.findViewById(R.id.cardSiteVisits), "Site Visits", "–", null, true, R.drawable.ic_3d_sv, "#8B5CF6", true)

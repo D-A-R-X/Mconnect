@@ -93,11 +93,19 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
-    <!-- 3x2 Grid for KPI Cards -->
+    <!-- Team Performance (web Insights cards) replaces the six KPI tiles. -->
+    <com.manjugroups.m_connect.ui.home.TeamPerformanceView
+        android:id="@+id/teamPerformance"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp" />
+
+    <!-- Old 3x2 KPI tiles: kept (their binding code still runs) but hidden. -->
     <GridLayout
         android:id="@+id/marketingKpiGrid"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:visibility="gone"
         android:columnCount="3"
         android:useDefaultMargins="true"
         android:alignmentMode="alignBounds"
