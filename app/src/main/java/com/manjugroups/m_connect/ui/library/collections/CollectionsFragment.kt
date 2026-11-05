@@ -121,7 +121,7 @@ class CollectionsFragment : Fragment() {
         setupRecyclerView()
         setupListeners()
         setupResultListener()
-        refreshFromApi()
+        paintFromCacheThenRefresh()
     }
 
     private fun setupRecyclerView() {
@@ -153,20 +153,24 @@ class CollectionsFragment : Fragment() {
         // No placeholder or error mock — adapter cleared the view
         // before calling, and a blank tile is the right intermediate
         // state until Coil crossfades the real image in.
-        val cached = proofUrlCache[storageId]
-        if (cached != null) {
-            target.load(cached) { crossfade(true) }
-            return
-        }
-        val url = com.manjugroups.m_connect.network.MobileStorageFiles.resolve(storageId)
-        if (url != null) {
-            proofUrlCache[storageId] = url
-            target.load(url) { crossfade(true) }
+        val url = proofUrlCache[storageId]
+            ?: com.manjugroups.m_connect.network.MobileStorageFiles.resolve(storageId)
+                ?.also { proofUrlCache[storageId] = it }
+            ?: return
+        // Decode at tile size, not the full camera photo.
+        val edge = maxOf(target.width, target.height)
+            .takeIf { it > 0 } ?: (resources.displayMetrics.density * 144).toInt()
+        target.load(url) {
+            crossfade(true)
+            size(edge)
         }
     }
 
     private fun setupListeners() {
         binding.btnBack.setOnClickListener { parentFragmentManager.popBackStack() }
+        // Full-bleed with its own status-bar padding: no strip resize (page
+        // jump) when entering or leaving. See StatusBarInsets.
+        com.manjugroups.m_connect.ui.common.StatusBarInsets.padHeader(binding.collectionsHeader, fixedHeight = true)
 
         binding.btnAddCollection.setOnClickListener {
             CollectionCreateBottomSheet.newInstance()
@@ -218,7 +222,11 @@ class CollectionsFragment : Fragment() {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 currentSearchQuery = s?.toString()?.trim().orEmpty()
-                filterCollections()
+                searchJob?.cancel()
+                searchJob = viewLifecycleOwner.lifecycleScope.launch {
+                    kotlinx.coroutines.delay(250)
+                    filterCollections()
+                }
             }
             override fun afterTextChanged(s: Editable?) {}
         })
@@ -449,6 +457,34 @@ class CollectionsFragment : Fragment() {
 
     private fun refreshFromApi() = loadCollectionsPage(reset = true)
 
+    private var searchJob: kotlinx.coroutines.Job? = null
+
+    /** First page as last seen, painted instantly on the next open. */
+    private val firstPageCacheKey: String
+        get() = "collections_first_page_${session.staffId.orEmpty()}"
+
+    private fun paintFromCacheThenRefresh() {
+        val ctx = requireContext().applicationContext
+        viewLifecycleOwner.lifecycleScope.launch {
+            val cached = withContext(Dispatchers.IO) {
+                runCatching {
+                    com.manjugroups.m_connect.ui.common.LocalCache.getList(
+                        ctx, firstPageCacheKey, com.manjugroups.m_connect.network.CustomerCollectionRow::class.java,
+                    )
+                }.getOrNull()
+            }
+            if (!cached.isNullOrEmpty() && masterList.isEmpty()) {
+                val mapped = withContext(Dispatchers.Default) { cached.map(CollectionMapper::map) }
+                if (_binding != null && masterList.isEmpty()) {
+                    cached.forEach { rowsById[it.id] = it }
+                    masterList.addAll(mapped)
+                    filterCollections()
+                }
+            }
+            refreshFromApi()
+        }
+    }
+
     /**
      * Pull the next server page once the user scrolls to the end of what we
      * hold. No-ops unless the backend said more rows exist, so a fully loaded
@@ -470,6 +506,8 @@ class CollectionsFragment : Fragment() {
                         token = session.bearerToken,
                         verificationStatus = null,
                         cursor = cursor?.toString(),
+                        // A screenful arrives sooner; later pages load on scroll.
+                        pageSize = if (reset) FIRST_PAGE_SIZE else null,
                     )
                 }
                 if (!resp.success) {
@@ -485,8 +523,20 @@ class CollectionsFragment : Fragment() {
                 // written between two requests could shift the boundary, and a
                 // duplicate card is more visible than a missing one.
                 val fresh = resp.collections.filterNot { rowsById.containsKey(it.id) }
+                val mapped = withContext(Dispatchers.Default) { fresh.map(CollectionMapper::map) }
+                if (_binding == null) return@launch
                 fresh.forEach { rowsById[it.id] = it }
-                masterList.addAll(fresh.map(CollectionMapper::map))
+                masterList.addAll(mapped)
+                if (reset) {
+                    val ctx = requireContext().applicationContext
+                    val page = resp.collections
+                    launch(Dispatchers.IO) {
+                        runCatching {
+                            com.manjugroups.m_connect.ui.common.LocalCache
+                                .put(ctx, firstPageCacheKey, page, System.currentTimeMillis())
+                        }
+                    }
+                }
                 collectionsCursor = resp.nextCursor
                 // Stop only when the backend says the stream is exhausted. A
                 // page can legitimately arrive short — rows get filtered out
@@ -653,7 +703,7 @@ class CollectionsFragment : Fragment() {
         super.onResume()
         (activity as? com.manjugroups.m_connect.MainActivity)?.let { main ->
             main.setTabBarVisible(false)
-            main.setTopBarAppearance(Color.WHITE, true, fullBleed = false)
+            main.setTopBarAppearance(Color.WHITE, true, fullBleed = true)
         }
     }
 
@@ -664,5 +714,6 @@ class CollectionsFragment : Fragment() {
 
     companion object {
         private const val MAX_EMPTY_APPEND_STREAK = 3
+        private const val FIRST_PAGE_SIZE = 30
     }
 }

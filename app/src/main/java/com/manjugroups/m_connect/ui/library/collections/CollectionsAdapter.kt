@@ -36,9 +36,27 @@ class CollectionsAdapter : RecyclerView.Adapter<CollectionsAdapter.CollectionVH>
     var proofLoader: ((storageId: String, target: ImageView) -> Unit)? = null
 
     fun submit(list: List<CollectionItem>) {
+        // Growing the window (infinite scroll) only appends: insert the new
+        // rows instead of rebinding — and re-requesting the proof image for —
+        // every row already on screen.
+        val old = items.toList()
+        if (list.size > old.size && old.indices.all { list[it] === old[it] }) {
+            items.addAll(list.subList(old.size, list.size))
+            notifyItemRangeInserted(old.size, list.size - old.size)
+            return
+        }
+        val diff = androidx.recyclerview.widget.DiffUtil.calculateDiff(
+            object : androidx.recyclerview.widget.DiffUtil.Callback() {
+                override fun getOldListSize() = old.size
+                override fun getNewListSize() = list.size
+                override fun areItemsTheSame(o: Int, n: Int) = old[o].id == list[n].id
+                override fun areContentsTheSame(o: Int, n: Int) = old[o] == list[n]
+            },
+            false,
+        )
         items.clear()
         items.addAll(list)
-        notifyDataSetChanged()
+        diff.dispatchUpdatesTo(this)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): CollectionVH {

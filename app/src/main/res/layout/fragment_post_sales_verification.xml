@@ -9,6 +9,7 @@
 
     <!-- Header bar -->
     <RelativeLayout
+        android:id="@+id/postSalesVerificationHeader"
         android:layout_width="match_parent"
         android:layout_height="56dp"
         android:background="#FFFFFF"

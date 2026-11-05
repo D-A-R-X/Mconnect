@@ -70,6 +70,12 @@ class PostSalesVerificationFragment : Fragment() {
     private var filteredCollections: List<CollectionItem> = emptyList()
     private var skeletonAnim: android.animation.ObjectAnimator? = null
     private var hasRenderedOnce = false
+    private var searchJob: kotlinx.coroutines.Job? = null
+    private var loadJob: kotlinx.coroutines.Job? = null
+
+    /** Last queue this staff member saw, painted instantly on the next open. */
+    private val cacheKey: String
+        get() = "postsales_verification_${session.staffId.orEmpty()}"
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -87,7 +93,59 @@ class PostSalesVerificationFragment : Fragment() {
         setupRecyclerView()
         setupListeners()
         setupResultListener()
-        refreshFromApi()
+        paintFromCacheThenRefresh()
+    }
+
+    /**
+     * The queue is one large response (it can carry ~900 rows). Show the last
+     * copy at once, then refresh quietly instead of holding the skeleton until
+     * the whole download lands.
+     */
+    private fun paintFromCacheThenRefresh() {
+        val ctx = requireContext().applicationContext
+        viewLifecycleOwner.lifecycleScope.launch {
+            val cached = withContext(Dispatchers.IO) {
+                runCatching {
+                    com.manjugroups.m_connect.ui.common.LocalCache
+                        .getList(ctx, cacheKey, CustomerCollectionRow::class.java)
+                }.getOrNull()
+            }
+            if (!cached.isNullOrEmpty() && !hasRenderedOnce) applyRows(cached)
+            refreshFromApi()
+        }
+    }
+
+    /** Maps off the main thread, then renders. */
+    private suspend fun applyRows(rows: List<CustomerCollectionRow>) {
+        val mapped = withContext(Dispatchers.Default) { rows.map(CollectionMapper::map) }
+        if (_binding == null) return
+        rowsById.clear()
+        rows.forEach { rowsById[it.id] = it }
+        masterList.clear()
+        masterList.addAll(mapped)
+        hasRenderedOnce = true
+        showSkeleton(false)
+        filterCollections()
+    }
+
+    /** Approve / reject change one row: update it here, no full reload. */
+    private fun markRow(collectionId: String, status: CollectionStatus, remarks: String?) {
+        val index = masterList.indexOfFirst { it.id == collectionId }
+        if (index < 0) return
+        // A copy, not an in-place edit, so the adapter's diff sees the change.
+        val item = masterList[index]
+        masterList[index] = item.copy(status = status, remarks = remarks ?: item.remarks)
+        val serverStatus = if (status == CollectionStatus.APPROVED) "approved" else "rejected"
+        rowsById[collectionId]?.let { rowsById[collectionId] = it.copy(verificationStatus = serverStatus) }
+        filterCollections()
+        val ctx = context?.applicationContext ?: return
+        val snapshot = rowsById.values.toList()
+        viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
+            runCatching {
+                com.manjugroups.m_connect.ui.common.LocalCache
+                    .put(ctx, cacheKey, snapshot, System.currentTimeMillis())
+            }
+        }
     }
 
     private fun setupRecyclerView() {
@@ -135,20 +193,24 @@ class PostSalesVerificationFragment : Fragment() {
 
     private fun loadProofThumbnail(storageId: String, target: ImageView) {
         // No placeholder/error mocks — adapter pre-cleared the tile.
-        val cached = proofUrlCache[storageId]
-        if (cached != null) {
-            target.load(cached) { crossfade(true) }
-            return
-        }
-        val url = com.manjugroups.m_connect.network.MobileStorageFiles.resolve(storageId)
-        if (url != null) {
-            proofUrlCache[storageId] = url
-            target.load(url) { crossfade(true) }
+        val url = proofUrlCache[storageId]
+            ?: com.manjugroups.m_connect.network.MobileStorageFiles.resolve(storageId)
+                ?.also { proofUrlCache[storageId] = it }
+            ?: return
+        // Decode at tile size (the full-screen preview passes its own size).
+        val edge = maxOf(target.width, target.height)
+            .takeIf { it > 0 } ?: (resources.displayMetrics.density * 144).toInt()
+        target.load(url) {
+            crossfade(true)
+            size(edge)
         }
     }
 
     private fun setupListeners() {
         binding.btnBack.setOnClickListener { parentFragmentManager.popBackStack() }
+        // Full-bleed with its own status-bar padding: no strip resize (page
+        // jump) when entering or leaving. See StatusBarInsets.
+        com.manjugroups.m_connect.ui.common.StatusBarInsets.padHeader(binding.postSalesVerificationHeader, fixedHeight = true)
 
         binding.tabAll.setOnClickListener {
             selectedTypeFilter = null
@@ -170,7 +232,11 @@ class PostSalesVerificationFragment : Fragment() {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 currentSearchQuery = s?.toString()?.trim().orEmpty()
-                filterCollections()
+                searchJob?.cancel()
+                searchJob = viewLifecycleOwner.lifecycleScope.launch {
+                    kotlinx.coroutines.delay(250)
+                    filterCollections()
+                }
             }
             override fun afterTextChanged(s: Editable?) {}
         })
@@ -205,7 +271,7 @@ class PostSalesVerificationFragment : Fragment() {
                     return@launch
                 }
                 toast("Collection approved")
-                refreshFromApi()
+                markRow(item.id, CollectionStatus.APPROVED, null)
             } catch (e: Exception) {
                 toast(e.message ?: "Approval failed")
             }
@@ -226,7 +292,7 @@ class PostSalesVerificationFragment : Fragment() {
                     return@launch
                 }
                 toast("Collection rejected")
-                refreshFromApi()
+                markRow(collectionId, CollectionStatus.REJECTED, remarks)
             } catch (e: Exception) {
                 toast(e.message ?: "Rejection failed")
             }
@@ -237,23 +303,27 @@ class PostSalesVerificationFragment : Fragment() {
         // Skeleton only on the cold load — an approve/reject refresh keeps the
         // existing rows on screen instead of flashing placeholders.
         if (!hasRenderedOnce) showSkeleton(true)
-        viewLifecycleOwner.lifecycleScope.launch {
+        loadJob?.cancel()
+        val ctx = requireContext().applicationContext
+        loadJob = viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val resp = withContext(Dispatchers.IO) {
                     api.listCustomerCollectionsForAccounts(session.bearerToken)
                 }
                 if (!resp.success) {
                     showSkeleton(false)
-                    toast(resp.error ?: "Failed to load verification queue")
+                    if (!hasRenderedOnce) toast(resp.error ?: "Failed to load verification queue")
                     return@launch
                 }
-                rowsById.clear()
-                resp.collections.forEach { rowsById[it.id] = it }
-                masterList.clear()
-                masterList.addAll(resp.collections.map(CollectionMapper::map))
-                hasRenderedOnce = true
-                showSkeleton(false)
-                filterCollections()
+                applyRows(resp.collections)
+                withContext(Dispatchers.IO) {
+                    runCatching {
+                        com.manjugroups.m_connect.ui.common.LocalCache
+                            .put(ctx, cacheKey, resp.collections, System.currentTimeMillis())
+                    }
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 showSkeleton(false)
                 toast(e.message ?: "Failed to load verification queue")
@@ -371,7 +441,7 @@ class PostSalesVerificationFragment : Fragment() {
         super.onResume()
         (activity as? com.manjugroups.m_connect.MainActivity)?.let { main ->
             main.setTabBarVisible(false)
-            main.setTopBarAppearance(Color.WHITE, true, fullBleed = false)
+            main.setTopBarAppearance(Color.WHITE, true, fullBleed = true)
         }
     }
 
