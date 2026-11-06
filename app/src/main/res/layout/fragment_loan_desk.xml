@@ -10,11 +10,18 @@
     <!-- Header bar. Draws under the status bar (full-bleed) and pads itself
          by the inset in code, so leaving for the full-bleed Apps screen
          changes no layout. -->
-    <RelativeLayout
+    <!-- FrameLayout outside: StatusBarInsets pads it by the status-bar
+         inset. RelativeLayout's centerVertical ignores padding, so the row
+         itself lives in the inner 56dp RelativeLayout below the padding. -->
+    <FrameLayout
         android:id="@+id/loanDeskHeader"
         android:layout_width="match_parent"
         android:layout_height="56dp"
-        android:background="#FFFFFF"
+        android:background="#FFFFFF">
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
         android:paddingHorizontal="16dp">
 
         <com.manjugroups.m_connect.ui.common.BackButton
@@ -50,6 +57,7 @@
                 android:importantForAccessibility="no" />
         </FrameLayout>
     </RelativeLayout>
+    </FrameLayout>
 
     <!-- Scrollable Content Area -->
     <FrameLayout
