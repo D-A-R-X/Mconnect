@@ -3308,6 +3308,7 @@ class HomeFragment : Fragment() {
     private fun submitFleetAllocate(
         siteVisitId: String,
         result: com.manjugroups.m_connect.ui.library.AllocateVehicleResult,
+        allowOvercapacity: Boolean = false,
     ) {
         viewLifecycleOwner.lifecycleScope.launch {
             val external = result.assignMode == "external"
@@ -3331,6 +3332,7 @@ class HomeFragment : Fragment() {
                             pickupTime = result.pickupTime,
                             driverName = result.driverName,
                             driverPhone = result.driverPhone,
+                            allowOvercapacity = if (allowOvercapacity) true else null,
                         ),
                     )
                 }
@@ -3353,6 +3355,17 @@ class HomeFragment : Fragment() {
                 val msg = resp?.error
                     ?: outcome.exceptionOrNull()?.let { fleetErrorMessage(it) }
                     ?: "Allocation failed."
+                val capacityQuestion = if (!external && !allowOvercapacity) {
+                    com.manjugroups.m_connect.ui.library.FleetCapacityConfirm.question(msg)
+                } else {
+                    null
+                }
+                if (capacityQuestion != null) {
+                    com.manjugroups.m_connect.ui.library.FleetCapacityConfirm.confirm(requireContext(), capacityQuestion) {
+                        submitFleetAllocate(siteVisitId, result, allowOvercapacity = true)
+                    }
+                    return@launch
+                }
                 android.widget.Toast.makeText(
                     requireContext(), msg, android.widget.Toast.LENGTH_LONG,
                 ).show()

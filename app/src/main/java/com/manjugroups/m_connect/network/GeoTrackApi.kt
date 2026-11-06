@@ -798,6 +798,7 @@ interface GeoTrackApi {
                 .addNetworkInterceptor(OfflineHttpCache.storeResponses)
                 .addInterceptor(AppBuildHeaders.interceptor)
                 .addInterceptor(completionTimeout)
+                .addInterceptor(ApiErrors.interceptor)
                 .addInterceptor(authWatchdog)
                 .addInterceptor(logging)
                 .connectTimeout(30, TimeUnit.SECONDS)
@@ -1629,6 +1630,11 @@ data class CustomerCollectionsListResponse(
 data class ApproveCollectionRequest(
     val collectionId: String,
     val notes: String? = null,
+    // Required by the server (web parity): "with_receipt" | "without_receipt",
+    // and the receipt number when a receipt exists. Without them every
+    // approve answered HTTP 400.
+    val receiptMode: String? = null,
+    val receiptNo: String? = null,
 )
 
 /** Accountant taps Reject. `remarks` is required — server returns 400

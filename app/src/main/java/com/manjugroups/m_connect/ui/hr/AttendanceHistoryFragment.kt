@@ -29,6 +29,7 @@ import com.manjugroups.m_connect.ui.common.AdvancedListFilterSheet
 import com.manjugroups.m_connect.ui.common.AvatarUtils.loadUserAvatar
 import com.manjugroups.m_connect.ui.common.RejectWithReasonBottomSheet
 import com.manjugroups.m_connect.network.ApiService
+import com.manjugroups.m_connect.network.userMessage
 import com.manjugroups.m_connect.network.AttendanceCancelRequest
 import com.manjugroups.m_connect.network.AttendanceRecord
 import com.manjugroups.m_connect.network.ApproveAttendanceRequest
@@ -1676,7 +1677,7 @@ class AttendanceHistoryFragment : Fragment() {
                             toastSafe(resp.error ?: "Failed to hold")
                         }
                     } catch (e: Exception) {
-                        toastSafe("Error: ${e.message}")
+                        toastSafe(e.userMessage())
                     }
                 }
             }
@@ -1684,21 +1685,45 @@ class AttendanceHistoryFragment : Fragment() {
             .show()
     }
 
-    private fun approveRecord(id: String, approvedAttendance: String, isRequest: Boolean = false) {
+    private fun approveRecord(
+        id: String,
+        approvedAttendance: String,
+        isRequest: Boolean = false,
+        overrideReason: String? = null,
+    ) {
         viewLifecycleOwner.lifecycleScope.launch {
-            try {
+            val failure: String = try {
                 val resp = api.approveAttendance(
                     session.bearerToken,
-                    ApproveAttendanceRequest(id, approvedAttendance, isRequest = if (isRequest) true else null)
+                    ApproveAttendanceRequest(
+                        id,
+                        approvedAttendance,
+                        isRequest = if (isRequest) true else null,
+                        approvalOverrideReason = overrideReason,
+                    )
                 )
                 if (resp.success) {
-                    toastSafe("Approved successfully")
+                    toastSafe("Approved as ${ApprovalOverrideReason.label(approvedAttendance)}")
                     refreshAllData(showSkeleton = false, forceRefresh = true)
-                } else {
-                    toastSafe("Failed to approve")
+                    return@launch
                 }
+                resp.error ?: "Failed to approve"
             } catch (e: Exception) {
-                toastSafe("Error: ${e.message}")
+                e.userMessage("Failed to approve")
+            }
+            val system = ApprovalOverrideReason.systemResultIn(failure)
+            when {
+                system != null && overrideReason == null && isAdded ->
+                    ApprovalOverrideReason.prompt(requireContext(), approvedAttendance, system) { reason ->
+                        approveRecord(id, approvedAttendance, isRequest, reason)
+                    }
+                // The reason was sent but this server doesn't read it yet.
+                system != null ->
+                    toastSafe(
+                        "The server couldn't save the reason yet. Approve as " +
+                            "${ApprovalOverrideReason.label(system)} for now, or ask HR to approve it on the web.",
+                    )
+                else -> toastSafe(failure)
             }
         }
     }
@@ -1714,10 +1739,10 @@ class AttendanceHistoryFragment : Fragment() {
                     toastSafe("Rejected successfully")
                     refreshAllData(showSkeleton = false, forceRefresh = true)
                 } else {
-                    toastSafe("Failed to reject")
+                    toastSafe(resp.error ?: "Failed to reject")
                 }
             } catch (e: Exception) {
-                toastSafe("Error: ${e.message}")
+                toastSafe(e.userMessage())
             }
         }
     }

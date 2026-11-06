@@ -300,6 +300,8 @@ data class AllocateTripRequest(
     val travelDeskDriverId: String? = null,
     val kmRate: Double? = null,
     val packageAmount: Double? = null,
+    // Dispatcher confirmed assigning despite an unknown / larger party size.
+    val allowOvercapacity: Boolean? = null,
 )
 
 // ── Vehicles create ─────────────────────────────────────────────────────

@@ -1561,6 +1561,7 @@ interface ApiService {
                 .addInterceptor(AppBuildHeaders.interceptor)
                 .addInterceptor(mobileAuthContract)
                 .addInterceptor(storageUploadTimeout)
+                .addInterceptor(ApiErrors.interceptor)
                 .addInterceptor(authWatchdog)
                 .addInterceptor(logging)
                 .connectTimeout(30, TimeUnit.SECONDS)
@@ -2197,6 +2198,9 @@ data class ApproveAttendanceRequest(
     // the backend then applies the request-review mutation instead of the
     // plain attendance approve. Omitted (null) for normal punch records.
     val isRequest: Boolean? = null,
+    // Web parity: needed when the chosen value differs from the shift-based
+    // system result; the server asks for it with OVERRIDE_REASON_REQUIRED.
+    val approvalOverrideReason: String? = null,
 )
 
 // Punch models

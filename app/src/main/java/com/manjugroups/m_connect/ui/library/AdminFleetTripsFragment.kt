@@ -1078,7 +1078,11 @@ class AdminFleetTripsFragment : Fragment() {
         }.showOnce(parentFragmentManager, "AddDriverFromAllocate")
     }
 
-    private fun submitAllocate(trip: TravelDeskTrip, result: AllocateVehicleResult) {
+    private fun submitAllocate(
+        trip: TravelDeskTrip,
+        result: AllocateVehicleResult,
+        allowOvercapacity: Boolean = false,
+    ) {
         val token = session.bearerToken
         if (token.isBlank()) {
             toastSafe("Session expired — sign in again.")
@@ -1100,6 +1104,7 @@ class AdminFleetTripsFragment : Fragment() {
                         driverName = result.driverName,
                         driverPhone = result.driverPhone,
                         travelDeskDriverId = result.driverId,
+                        allowOvercapacity = if (allowOvercapacity) true else null,
                 )
                 val resp = if (useMmsFleet) {
                     api.allocateMms(token, request)
@@ -1107,11 +1112,13 @@ class AdminFleetTripsFragment : Fragment() {
                     api.allocate(token, request)
                 }
                 if (!resp.success) {
-                    Toast.makeText(
-                        requireContext(),
-                        resp.error ?: "Allocation failed.",
-                        Toast.LENGTH_LONG,
-                    ).show()
+                    if (!askCapacity(trip, result, allowOvercapacity, resp.error)) {
+                        Toast.makeText(
+                            requireContext(),
+                            resp.error ?: "Allocation failed.",
+                            Toast.LENGTH_LONG,
+                        ).show()
+                    }
                     return@launch
                 }
                 Toast.makeText(
@@ -1127,13 +1134,30 @@ class AdminFleetTripsFragment : Fragment() {
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
+                val message = loadErrorMessage(e)
+                if (askCapacity(trip, result, allowOvercapacity, message)) return@launch
                 Toast.makeText(
                     requireContext(),
-                    "Allocation failed: ${loadErrorMessage(e)}",
+                    "Allocation failed: $message",
                     Toast.LENGTH_LONG,
                 ).show()
             }
         }
+    }
+
+    /** Capacity refusal → "assign anyway?" and retry with allowOvercapacity. True when asked. */
+    private fun askCapacity(
+        trip: TravelDeskTrip,
+        result: AllocateVehicleResult,
+        alreadyAllowed: Boolean,
+        error: String?,
+    ): Boolean {
+        if (alreadyAllowed || !isAdded) return false
+        val question = FleetCapacityConfirm.question(error) ?: return false
+        FleetCapacityConfirm.confirm(requireContext(), question) {
+            submitAllocate(trip, result, allowOvercapacity = true)
+        }
+        return true
     }
 
     private fun setupFilters() {

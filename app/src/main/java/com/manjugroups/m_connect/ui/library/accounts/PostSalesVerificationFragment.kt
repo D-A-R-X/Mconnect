@@ -22,6 +22,7 @@ import com.manjugroups.m_connect.network.ApproveCollectionRequest
 import com.manjugroups.m_connect.network.CustomerCollectionRow
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.RejectCollectionRequest
+import com.manjugroups.m_connect.network.userMessage
 import com.manjugroups.m_connect.ui.library.collections.CollectionItem
 import com.manjugroups.m_connect.ui.library.collections.CollectionMapper
 import com.manjugroups.m_connect.ui.library.collections.CollectionRejectBottomSheet
@@ -257,13 +258,81 @@ class PostSalesVerificationFragment : Fragment() {
         }
     }
 
+    /**
+     * Web parity: the accountant confirms whether a receipt number exists
+     * before approving (the server rejects an approve without it).
+     */
     private fun approveCollection(item: CollectionItem) {
+        val ctx = requireContext()
+        val pad = (20 * resources.displayMetrics.density).toInt()
+        val withReceipt = android.widget.RadioButton(ctx).apply {
+            id = View.generateViewId()
+            text = "With receipt"
+        }
+        val withoutReceipt = android.widget.RadioButton(ctx).apply {
+            id = View.generateViewId()
+            text = "Without receipt"
+        }
+        val group = android.widget.RadioGroup(ctx).apply {
+            orientation = android.widget.RadioGroup.VERTICAL
+            addView(withReceipt)
+            addView(withoutReceipt)
+        }
+        val receiptInput = android.widget.EditText(ctx).apply {
+            hint = "Receipt number"
+            isSingleLine = true
+            visibility = View.GONE
+        }
+        group.setOnCheckedChangeListener { _, checked ->
+            receiptInput.visibility = if (checked == withReceipt.id) View.VISIBLE else View.GONE
+        }
+        val content = android.widget.LinearLayout(ctx).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(pad, pad / 2, pad, 0)
+            addView(group)
+            addView(receiptInput)
+        }
+        val dialog = android.app.AlertDialog.Builder(ctx)
+            .setTitle("Approve collection")
+            .setMessage("Is a receipt number available for this collection?")
+            .setView(content)
+            .setPositiveButton("Approve", null)
+            .setNegativeButton("Cancel", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val mode = when (group.checkedRadioButtonId) {
+                    withReceipt.id -> "with_receipt"
+                    withoutReceipt.id -> "without_receipt"
+                    else -> {
+                        toast("Choose With receipt or Without receipt")
+                        return@setOnClickListener
+                    }
+                }
+                val receiptNo = receiptInput.text?.toString()?.trim().orEmpty()
+                if (mode == "with_receipt" && receiptNo.isEmpty()) {
+                    receiptInput.error = "Enter the receipt number"
+                    return@setOnClickListener
+                }
+                dialog.dismiss()
+                submitApproval(item, mode, receiptNo.takeIf { mode == "with_receipt" })
+            }
+        }
+        dialog.show()
+    }
+
+    private fun submitApproval(item: CollectionItem, receiptMode: String, receiptNo: String?) {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val resp = withContext(Dispatchers.IO) {
                     api.approveCustomerCollection(
                         token = session.bearerToken,
-                        body = ApproveCollectionRequest(collectionId = item.id, notes = null),
+                        body = ApproveCollectionRequest(
+                            collectionId = item.id,
+                            notes = null,
+                            receiptMode = receiptMode,
+                            receiptNo = receiptNo,
+                        ),
                     )
                 }
                 if (!resp.success) {
@@ -273,7 +342,7 @@ class PostSalesVerificationFragment : Fragment() {
                 toast("Collection approved")
                 markRow(item.id, CollectionStatus.APPROVED, null)
             } catch (e: Exception) {
-                toast(e.message ?: "Approval failed")
+                toast(e.userMessage("Approval failed"))
             }
         }
     }
@@ -294,7 +363,7 @@ class PostSalesVerificationFragment : Fragment() {
                 toast("Collection rejected")
                 markRow(collectionId, CollectionStatus.REJECTED, remarks)
             } catch (e: Exception) {
-                toast(e.message ?: "Rejection failed")
+                toast(e.userMessage("Rejection failed"))
             }
         }
     }

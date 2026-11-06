@@ -6,6 +6,7 @@ import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.ApproveAttendanceRequest
 import com.manjugroups.m_connect.network.AttendanceApprovalRecord
 import com.manjugroups.m_connect.network.RejectRequest
+import com.manjugroups.m_connect.network.userMessage
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -44,6 +45,12 @@ class AttendanceReviewViewModel : ViewModel() {
     private val _event = MutableSharedFlow<String>()
     val event: SharedFlow<String> = _event.asSharedFlow()
 
+    /** The chosen value differs from the shift-based result: ask for a reason, then retry. */
+    data class OverrideNeeded(val id: String, val chosen: String, val system: String)
+
+    private val _overrideNeeded = MutableSharedFlow<OverrideNeeded>()
+    val overrideNeeded: SharedFlow<OverrideNeeded> = _overrideNeeded.asSharedFlow()
+
     /** Switch category and reload. Ignores taps while a load is in flight. */
     fun selectCategory(bearerToken: String, category: ApprovalCategory) {
         if (_uiState.value.isLoading) return
@@ -69,26 +76,46 @@ class AttendanceReviewViewModel : ViewModel() {
                 )
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(isLoading = false)
-                _event.emit(e.message ?: "Failed to load approvals")
+                _event.emit(e.userMessage("Failed to load approvals"))
             }
         }
     }
 
-    fun approve(bearerToken: String, id: String, approvedAttendance: String) {
+    fun approve(
+        bearerToken: String,
+        id: String,
+        approvedAttendance: String,
+        overrideReason: String? = null,
+    ) {
         viewModelScope.launch {
-            try {
+            val failure: String = try {
                 val resp = api.approveAttendance(
                     bearerToken,
-                    ApproveAttendanceRequest(id = id, approvedAttendance = approvedAttendance),
+                    ApproveAttendanceRequest(
+                        id = id,
+                        approvedAttendance = approvedAttendance,
+                        approvalOverrideReason = overrideReason,
+                    ),
                 )
                 if (resp.success) {
-                    _event.emit("Attendance marked $approvedAttendance")
+                    _event.emit("Attendance marked ${ApprovalOverrideReason.label(approvedAttendance)}")
                     load(bearerToken)
-                } else {
-                    _event.emit(resp.error ?: "Failed to approve")
+                    return@launch
                 }
+                resp.error ?: "Failed to approve"
             } catch (e: Exception) {
-                _event.emit(e.message ?: "Network error")
+                e.userMessage("Failed to approve")
+            }
+            val system = ApprovalOverrideReason.systemResultIn(failure)
+            when {
+                system != null && overrideReason == null ->
+                    _overrideNeeded.emit(OverrideNeeded(id, approvedAttendance, system))
+                // The reason was sent but this server doesn't read it yet.
+                system != null -> _event.emit(
+                    "The server couldn't save the reason yet. Approve as " +
+                        "${ApprovalOverrideReason.label(system)} for now, or ask HR to approve it on the web.",
+                )
+                else -> _event.emit(failure)
             }
         }
     }
@@ -107,7 +134,7 @@ class AttendanceReviewViewModel : ViewModel() {
                     _event.emit(resp.error ?: "Failed to reject")
                 }
             } catch (e: Exception) {
-                _event.emit(e.message ?: "Network error")
+                _event.emit(e.userMessage())
             }
         }
     }

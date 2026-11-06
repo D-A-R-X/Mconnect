@@ -89,6 +89,15 @@ class AttendanceReviewFragment : Fragment() {
                 }
             }
         }
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.overrideNeeded.collect { need ->
+                    ApprovalOverrideReason.prompt(requireContext(), need.chosen, need.system) { reason ->
+                        viewModel.approve(session.bearerToken, need.id, need.chosen, reason)
+                    }
+                }
+            }
+        }
     }
 
     private fun render(state: AttendanceReviewState) {
