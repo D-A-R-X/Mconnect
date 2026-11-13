@@ -35,7 +35,7 @@ import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.databinding.ActivityOtpBinding
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.notifications.PushTokenManager
-import com.manjugroups.m_connect.ui.common.SkeletonUtils
+import com.manjugroups.m_connect.ui.common.ButtonLoader
 import kotlinx.coroutines.launch
 
 class OtpActivity : AppCompatActivity() {
@@ -368,10 +368,15 @@ class OtpActivity : AppCompatActivity() {
     private fun fillFromClipboard() {
         if (isVerifying || getOtp().length == OtpCodeParser.OTP_LENGTH) return
         val clipboard = getSystemService(android.content.ClipboardManager::class.java) ?: return
-        val clip = runCatching { clipboard.primaryClip }.getOrNull() ?: return
+        // Check the description first: it doesn't trigger Android 12+'s
+        // "pasted from your clipboard" toast, so the clip itself is only read
+        // when something text-like was copied after this screen opened.
+        val description = runCatching { clipboard.primaryClipDescription }.getOrNull() ?: return
+        if (!description.hasMimeType(android.content.ClipDescription.MIMETYPE_TEXT_PLAIN)) return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
-            clip.description.timestamp in 1 until openedAt
+            description.timestamp < openedAt
         ) return
+        val clip = runCatching { clipboard.primaryClip }.getOrNull() ?: return
         val text = clip.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(this)?.toString()?.trim() ?: return
         if (!Regex("\\d{${OtpCodeParser.OTP_LENGTH}}").matches(text) || text == lastClipboardCode) return
         lastClipboardCode = text
@@ -384,10 +389,7 @@ class OtpActivity : AppCompatActivity() {
                 viewModel.uiState.collect { state ->
                     when (state) {
                         is AuthUiState.Loading -> {
-                            binding.tvVerify.visibility = View.INVISIBLE
-                            binding.skeletonVerify.visibility = View.VISIBLE
-                            SkeletonUtils.startSkeletonPulse(binding.skeletonVerify)
-                            binding.btnVerify.isClickable = false
+                            ButtonLoader.start(binding.btnVerify, "Verifying")
                         }
                         is AuthUiState.OtpSent -> {
                             // A resend re-runs detection; keep the verify path
@@ -442,10 +444,7 @@ class OtpActivity : AppCompatActivity() {
     }
 
     private fun resetButton() {
-        binding.tvVerify.visibility = View.VISIBLE
-        SkeletonUtils.stopSkeletonPulse(binding.skeletonVerify)
-        binding.skeletonVerify.visibility = View.GONE
-        binding.btnVerify.isClickable = true
+        ButtonLoader.stop(binding.btnVerify)
     }
 
     private fun clearOtp() {

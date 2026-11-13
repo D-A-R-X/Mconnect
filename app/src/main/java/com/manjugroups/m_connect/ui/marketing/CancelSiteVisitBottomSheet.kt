@@ -1,5 +1,6 @@
 package com.manjugroups.m_connect.ui.marketing
 
+import com.manjugroups.m_connect.ui.common.ButtonLoader
 import com.manjugroups.m_connect.ui.common.toastSafe
 
 import android.app.Dialog
@@ -42,8 +43,7 @@ class CancelSiteVisitBottomSheet : BottomSheetDialogFragment() {
 
         view.findViewById<View>(R.id.btnKeepSiteVisit).setOnClickListener { dismiss() }
         confirm.setOnClickListener {
-            confirm.isEnabled = false
-            confirm.text = "Cancelling..."
+            ButtonLoader.start(confirm, "Cancelling")
             error.visibility = View.GONE
             viewLifecycleOwner.lifecycleScope.launch {
                 try {
@@ -63,8 +63,7 @@ class CancelSiteVisitBottomSheet : BottomSheetDialogFragment() {
                 } catch (exception: Exception) {
                     error.text = exception.message ?: "Unable to cancel site visit"
                     error.visibility = View.VISIBLE
-                    confirm.isEnabled = true
-                    confirm.text = "Cancel visit"
+                    ButtonLoader.stop(confirm)
                 }
             }
         }

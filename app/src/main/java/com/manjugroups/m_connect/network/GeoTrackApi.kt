@@ -106,8 +106,8 @@ interface GeoTrackApi {
     @GET
     suspend fun searchPlaces(
         @Header("Authorization") token: String,
-        @Query("q") query: String,
         @Url url: String = DIRECT_PLACE_SEARCH_URL,
+        @Query("q") query: String,
     ): PlaceSearchResponse
 
     @GET
@@ -689,38 +689,38 @@ interface GeoTrackApi {
     @GET
     suspend fun getTimeline(
         @Header("Authorization") token: String,
+        @Url url: String = DIRECT_TIMELINE_URL,
         @Query("staffId") staffId: String? = null,
         @Query("dayStart") dayStart: Long,
         @Query("dayEnd") dayEnd: Long,
-        @Url url: String = DIRECT_TIMELINE_URL,
     ): TimelineResponse
 
     @GET
     suspend fun getSessionRoute(
         @Header("Authorization") token: String,
+        @Url url: String = DIRECT_SESSION_ROUTE_URL,
         @Query("staffId") staffId: String? = null,
         @Query("dayStart") dayStart: Long,
         @Query("dayEnd") dayEnd: Long,
         @Query("minStopMinutes") minStopMinutes: Int? = null,
-        @Url url: String = DIRECT_SESSION_ROUTE_URL,
     ): SessionRouteResponse
 
     /** The day's route matched to roads (geo service roadsnap). */
     @GET
     suspend fun getSnappedRoute(
         @Header("Authorization") token: String,
+        @Url url: String = DIRECT_SNAPPED_ROUTE_URL,
         @Query("staffId") staffId: String? = null,
         @Query("date") date: String,
-        @Url url: String = DIRECT_SNAPPED_ROUTE_URL,
     ): SnappedRouteResponse
 
     @GET
     suspend fun getTrips(
         @Header("Authorization") token: String,
+        @Url url: String = DIRECT_TRIPS_URL,
         @Query("staffId") staffId: String? = null,
         @Query("from") startDate: Long,
         @Query("to") endDate: Long,
-        @Url url: String = DIRECT_TRIPS_URL,
     ): TripsResponse
 
     companion object {
@@ -1404,6 +1404,8 @@ data class CpApprovalRouteResponse(
 
 data class CpApprovalRouteData(
     val id: String,
+    // Whose GPS to read from the geo service when Convex has no points.
+    val staffId: String? = null,
     val startedAt: Double? = null,
     val endedAt: Double? = null,
     val startLat: Double? = null,

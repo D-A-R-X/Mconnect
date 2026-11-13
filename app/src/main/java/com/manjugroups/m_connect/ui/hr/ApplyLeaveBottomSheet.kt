@@ -26,6 +26,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.ApplyLeaveRequest
 import com.manjugroups.m_connect.ui.common.MonthYearPicker
+import com.manjugroups.m_connect.ui.common.ButtonLoader
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
@@ -200,7 +201,7 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
                 view.findViewById<EditText>(R.id.etReason).text?.toString()?.trim()?.isNotEmpty() == true
         }
 
-        if (isEnabled) {
+        if (isEnabled || isSubmitting) {
             btnSubmit.setBackgroundResource(R.drawable.bg_apply_leave_btn_enabled)
             btnSubmit.isEnabled = true
         } else {
@@ -458,16 +459,11 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
         val from = apiDateFormat.format(fromMillis)
         val to = apiDateFormat.format(toMillis)
 
-        val tvSubmit = view?.findViewById<TextView>(R.id.tvSubmit)
-        val skeletonSubmit = view?.findViewById<View>(R.id.skeletonSubmit)
         val btnSubmit = view?.findViewById<View>(R.id.btnSubmit)
 
         isSubmitting = true
         updateSubmitButtonState()
-        tvSubmit?.visibility = View.INVISIBLE
-        skeletonSubmit?.visibility = View.VISIBLE
-        skeletonSubmit?.let { SkeletonUtils.startSkeletonPulse(it) }
-        btnSubmit?.isClickable = false
+        btnSubmit?.let { ButtonLoader.start(it, "Applying") }
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
@@ -496,10 +492,7 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
                 toastSafe(parseErrorMessage(e))
             } finally {
                 isSubmitting = false
-                tvSubmit?.visibility = View.VISIBLE
-                skeletonSubmit?.let { SkeletonUtils.stopSkeletonPulse(it) }
-                skeletonSubmit?.visibility = View.GONE
-                btnSubmit?.isClickable = true
+                btnSubmit?.let { ButtonLoader.stop(it) }
                 updateSubmitButtonState()
             }
         }
@@ -524,16 +517,11 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
         }
         val date = apiDateFormat.format(dayMillis)
 
-        val tvSubmit = view?.findViewById<TextView>(R.id.tvSubmit)
-        val skeletonSubmit = view?.findViewById<View>(R.id.skeletonSubmit)
         val btnSubmit = view?.findViewById<View>(R.id.btnSubmit)
 
         isSubmitting = true
         updateSubmitButtonState()
-        tvSubmit?.visibility = View.INVISIBLE
-        skeletonSubmit?.visibility = View.VISIBLE
-        skeletonSubmit?.let { SkeletonUtils.startSkeletonPulse(it) }
-        btnSubmit?.isClickable = false
+        btnSubmit?.let { ButtonLoader.start(it, "Applying") }
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
@@ -557,10 +545,7 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
                 toastSafe(parseErrorMessage(e))
             } finally {
                 isSubmitting = false
-                tvSubmit?.visibility = View.VISIBLE
-                skeletonSubmit?.let { SkeletonUtils.stopSkeletonPulse(it) }
-                skeletonSubmit?.visibility = View.GONE
-                btnSubmit?.isClickable = true
+                btnSubmit?.let { ButtonLoader.stop(it) }
                 updateSubmitButtonState()
             }
         }

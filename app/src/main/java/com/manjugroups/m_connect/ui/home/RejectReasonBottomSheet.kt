@@ -1,5 +1,6 @@
 package com.manjugroups.m_connect.ui.home
 
+import com.manjugroups.m_connect.ui.common.ButtonLoader
 import android.app.Dialog
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -111,8 +112,7 @@ class RejectReasonBottomSheet : BottomSheetDialogFragment() {
 
         // Lock the submit button while the network calls run so a
         // double-tap doesn't fire two rejections back to back.
-        btnSubmit?.isClickable = false
-        tvSubmitLabel?.text = "Submitting…"
+        btnSubmit?.let { ButtonLoader.start(it, "Submitting") }
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
@@ -164,8 +164,7 @@ class RejectReasonBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun finishWithError(message: String) {
-        btnSubmit?.isClickable = true
-        tvSubmitLabel?.text = "Submit Now"
+        btnSubmit?.let(ButtonLoader::stop)
         showError(message)
     }
 

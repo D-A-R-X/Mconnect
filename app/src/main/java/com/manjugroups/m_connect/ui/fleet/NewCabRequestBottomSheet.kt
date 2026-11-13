@@ -1,5 +1,6 @@
 package com.manjugroups.m_connect.ui.fleet
 
+import com.manjugroups.m_connect.ui.common.ButtonLoader
 import android.app.Dialog
 import android.app.TimePickerDialog
 import android.graphics.Color
@@ -106,8 +107,7 @@ class NewCabRequestBottomSheet : BottomSheetDialogFragment() {
         }
         val passengers = etPassengers.text.toString().trim().toIntOrNull()?.takeIf { it >= 1 }
         submitting = true
-        btnSubmit.isEnabled = false
-        btnSubmit.text = "Submitting..."
+        ButtonLoader.start(btnSubmit, "Submitting")
         viewLifecycleOwner.lifecycleScope.launch {
             val error = try {
                 val resp = api.createCabRequest(
@@ -128,8 +128,7 @@ class NewCabRequestBottomSheet : BottomSheetDialogFragment() {
             }
             submitting = false
             if (!isAdded) return@launch
-            btnSubmit.isEnabled = true
-            btnSubmit.text = "Submit request"
+            ButtonLoader.stop(btnSubmit)
             if (error != null) {
                 Toast.makeText(requireContext(), error, Toast.LENGTH_LONG).show()
                 return@launch

@@ -7,4 +7,6 @@
       entry rows when iterating the container to reposition or count.
     -->
     <item name="areaEntryAddPillTag" type="id" />
+    <!-- ButtonLoader: what a button showed before its loading state. -->
+    <item name="button_loader_state" type="id" />
 </resources>

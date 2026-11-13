@@ -22,6 +22,7 @@ import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.ApplyPermissionRequest
+import com.manjugroups.m_connect.ui.common.ButtonLoader
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.util.EditableTimeFormat
 import kotlinx.coroutines.launch
@@ -123,7 +124,7 @@ class ApplyPermissionBottomSheet : BottomSheetDialogFragment() {
         val isEnabled = !isSubmitting && !applicationSubmitted && !shiftLoading && shiftTiming != null &&
             selectedDate != null && selectedFromTime != null && selectedToTime != null && hasReason &&
             shiftTiming?.error(selectedFromTime, selectedToTime) == null
-        if (isEnabled) {
+        if (isEnabled || isSubmitting) {
             btnSubmit.setBackgroundResource(R.drawable.bg_apply_leave_btn_enabled)
             btnSubmit.isEnabled = true
         } else {
@@ -286,16 +287,11 @@ class ApplyPermissionBottomSheet : BottomSheetDialogFragment() {
         }
         shiftTiming?.error(from, to)?.let { toastSafe(it); return }
 
-        val tvSubmit = view?.findViewById<TextView>(R.id.tvSubmit)
-        val skeletonSubmit = view?.findViewById<View>(R.id.skeletonSubmit)
         val btnSubmit = view?.findViewById<View>(R.id.btnSubmit)
 
         isSubmitting = true
         updateSubmitButtonState()
-        tvSubmit?.visibility = View.INVISIBLE
-        skeletonSubmit?.visibility = View.VISIBLE
-        skeletonSubmit?.let { SkeletonUtils.startSkeletonPulse(it) }
-        btnSubmit?.isClickable = false
+        btnSubmit?.let { ButtonLoader.start(it, "Applying") }
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
@@ -325,10 +321,7 @@ class ApplyPermissionBottomSheet : BottomSheetDialogFragment() {
                 }
             } finally {
                 isSubmitting = false
-                tvSubmit?.visibility = View.VISIBLE
-                skeletonSubmit?.let { SkeletonUtils.stopSkeletonPulse(it) }
-                skeletonSubmit?.visibility = View.GONE
-                btnSubmit?.isClickable = true
+                btnSubmit?.let { ButtonLoader.stop(it) }
                 updateSubmitButtonState()
             }
         }

@@ -1,5 +1,6 @@
 package com.manjugroups.m_connect.ui.marketing
 
+import com.manjugroups.m_connect.ui.common.ButtonLoader
 import android.app.DatePickerDialog
 import android.app.Dialog
 import android.app.TimePickerDialog
@@ -90,8 +91,7 @@ class PostponeSiteVisitBottomSheet : BottomSheetDialogFragment() {
                 error.visibility = View.VISIBLE
                 return@setOnClickListener
             }
-            confirm.isEnabled = false
-            confirm.text = "Saving..."
+            ButtonLoader.start(confirm, "Saving")
             viewLifecycleOwner.lifecycleScope.launch {
                 try {
                     val response = api.postponeSiteVisit(
@@ -119,8 +119,7 @@ class PostponeSiteVisitBottomSheet : BottomSheetDialogFragment() {
                 } catch (exception: Exception) {
                     error.text = exception.message ?: "Unable to postpone site visit"
                     error.visibility = View.VISIBLE
-                    confirm.isEnabled = true
-                    confirm.text = "Postpone SV"
+                    ButtonLoader.stop(confirm)
                 }
             }
         }

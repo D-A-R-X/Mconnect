@@ -185,8 +185,8 @@ class GeoTrackLiveFragment : Fragment(), OnMapReadyCallback {
                 // Road-matched route for the same staff/day; empty = keep the raw line.
                 snappedSegments = runCatching {
                     geoApi.getSnappedRoute(
-                        session.bearerToken, staffId,
-                        java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).apply {
+                        session.bearerToken, staffId = staffId,
+                        date = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).apply {
                             timeZone = java.util.TimeZone.getTimeZone("Asia/Kolkata")
                         }.format(java.util.Date(range.first)),
                     ).data?.segments

@@ -17,7 +17,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.manjugroups.m_connect.MainActivity
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.databinding.ActivityLoginBinding
-import com.manjugroups.m_connect.ui.common.SkeletonUtils
+import com.manjugroups.m_connect.ui.common.ButtonLoader
 import kotlinx.coroutines.launch
 
 class LoginActivity : AppCompatActivity() {
@@ -71,8 +71,45 @@ class LoginActivity : AppCompatActivity() {
         collectState()
     }
 
+    // Phone Number Hint: Google's sheet with this phone's own SIM number(s).
+    // Offered once per screen, on the first tap into an empty phone field.
+    private var phoneHintOffered = false
+    private val phoneHintLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode != RESULT_OK) return@registerForActivityResult
+        val number = runCatching {
+            com.google.android.gms.auth.api.identity.Identity.getSignInClient(this)
+                .getPhoneNumberFromIntent(result.data)
+        }.getOrNull() ?: return@registerForActivityResult
+        val phone = normalizePhone(number)
+        if (isValidIndianMobile(phone)) {
+            binding.etPhone.setText(phone)
+            binding.etPhone.setSelection(phone.length)
+            binding.tvPhoneError.visibility = View.GONE
+        }
+    }
+
+    private fun offerPhoneNumberHint() {
+        if (phoneHintOffered || binding.etPhone.text?.isNotEmpty() == true) return
+        phoneHintOffered = true
+        val request = com.google.android.gms.auth.api.identity.GetPhoneNumberHintIntentRequest.builder().build()
+        com.google.android.gms.auth.api.identity.Identity.getSignInClient(this)
+            .getPhoneNumberHintIntent(request)
+            .addOnSuccessListener { pendingIntent ->
+                runCatching {
+                    phoneHintLauncher.launch(
+                        androidx.activity.result.IntentSenderRequest.Builder(pendingIntent.intentSender).build()
+                    )
+                }
+            }
+        // No SIM / no Play services: the field simply stays as it is.
+    }
+
     private fun setupListeners() {
+        binding.etPhone.setOnClickListener { offerPhoneNumberHint() }
         binding.etPhone.setOnFocusChangeListener { _, hasFocus ->
+            if (hasFocus) offerPhoneNumberHint()
             binding.phoneInputContainer.setBackgroundResource(
                 if (hasFocus) R.drawable.bg_auth_input_focused else R.drawable.bg_auth_input
             )
@@ -117,10 +154,7 @@ class LoginActivity : AppCompatActivity() {
                 viewModel.uiState.collect { state ->
                     when (state) {
                         is AuthUiState.Loading -> {
-                            binding.tvSendOtp.visibility = View.INVISIBLE
-                            binding.skeletonSendOtp.visibility = View.VISIBLE
-                            SkeletonUtils.startSkeletonPulse(binding.skeletonSendOtp)
-                            binding.btnSendOtp.isClickable = false
+                            ButtonLoader.start(binding.btnSendOtp, "Sending OTP")
                         }
                         is AuthUiState.OtpSent -> {
                             resetButton()
@@ -156,10 +190,7 @@ class LoginActivity : AppCompatActivity() {
     }
 
     private fun resetButton() {
-        binding.tvSendOtp.visibility = View.VISIBLE
-        SkeletonUtils.stopSkeletonPulse(binding.skeletonSendOtp)
-        binding.skeletonSendOtp.visibility = View.GONE
-        binding.btnSendOtp.isClickable = true
+        ButtonLoader.stop(binding.btnSendOtp)
     }
 
     private fun openOtpEntry(agencyDriver: Boolean) {

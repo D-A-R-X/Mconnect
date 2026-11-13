@@ -188,6 +188,8 @@ dependencies {
     implementation(libs.play.services.location)
     implementation(libs.play.services.maps)
     implementation(libs.play.services.auth.api.phone)
+    // Phone Number Hint: the sign-in phone field offers the SIM's own number.
+    implementation(libs.play.services.auth)
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     implementation(libs.workmanager)

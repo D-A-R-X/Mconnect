@@ -1,5 +1,6 @@
 package com.manjugroups.m_connect.ui.projects
 
+import com.manjugroups.m_connect.ui.common.ButtonLoader
 import android.Manifest
 import android.app.Dialog
 import android.content.Context
@@ -550,7 +551,7 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
         // Lock the sheet shut while uploading/saving so a swipe/back/tap-outside
         // can't abandon an in-flight photo upload or a half-saved entry.
         isCancelable = false
-        val btn = root.findViewById<MaterialButton>(R.id.btnSubmitDailyLog).apply { isEnabled = false }
+        val btn = root.findViewById<MaterialButton>(R.id.btnSubmitDailyLog).also { ButtonLoader.start(it, "Saving") }
         val appCtx = requireContext().applicationContext
         val labourCount = root.findViewById<EditText>(R.id.etLabourCount).text?.toString()?.trim()?.toIntOrNull()
         val labourHours = root.findViewById<EditText>(R.id.etLabourHours).text?.toString()?.trim()?.toDoubleOrNull()
@@ -564,18 +565,17 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
             // Upload any picked photos/videos first, then create the log with
             // their storage IDs. A failed upload aborts the save so the entry
             // never lands without its attachments.
-            if (pickedMedia.isNotEmpty()) btn.text = "Uploading media…"
+            ButtonLoader.start(btn, if (pickedMedia.isNotEmpty()) "Uploading media" else "Saving")
             val attachments = uploadPickedMedia(appCtx)
             if (view == null) return@launch
             if (attachments == null) {
                 submitting = false
                 isCancelable = true
-                btn.isEnabled = true
-                btn.text = "Save Daily Log"
+                ButtonLoader.stop(btn)
                 Toast.makeText(appCtx, "Couldn't upload media. Check your connection and try again.", Toast.LENGTH_LONG).show()
                 return@launch
             }
-            btn.text = "Saving…"
+            ButtonLoader.start(btn, "Saving")
             val req = CreateDailyLogRequest(
                 projectId = project.id,
                 date = date,
@@ -594,8 +594,7 @@ class CreateDailyLogBottomSheet : BottomSheetDialogFragment() {
             val resp = runCatching { dprApi.createDailyLog(session.bearerToken, req) }.getOrNull()
             submitting = false
             if (view == null) return@launch
-            btn.isEnabled = true
-            btn.text = "Save Daily Log"
+            ButtonLoader.stop(btn)
             if (resp?.success == true) {
                 submitted = true
                 clearDraft()

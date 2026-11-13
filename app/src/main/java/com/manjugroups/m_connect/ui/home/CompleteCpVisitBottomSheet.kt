@@ -1,5 +1,6 @@
 package com.manjugroups.m_connect.ui.home
 
+import com.manjugroups.m_connect.ui.common.ButtonLoader
 import com.manjugroups.m_connect.ui.common.toastSafe
 
 import android.Manifest
@@ -1197,10 +1198,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             showError("Cancellation remarks are required")
             return
         }
-        btnSubmit?.isClickable = false
-        btnSubmit?.text = "Cancelling…"
-        btnCpLockedCancel?.isClickable = false
-        btnCpLockedCancel?.text = "Cancelling..."
+        btnSubmit?.let { ButtonLoader.start(it, "Cancelling") }
+        btnCpLockedCancel?.let { ButtonLoader.start(it, "Cancelling") }
         btnCpLockedReject?.isClickable = false
         btnCpLockedConfirm?.isClickable = false
         otherOutcomeSaving = true
@@ -5097,8 +5096,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
         if (requestReferralBeforeNewClientCompletion(::persistSiteVisit)) return
 
-        btnSubmit?.isClickable = false
-        btnSubmit?.text = "Saving…"
+        btnSubmit?.let { ButtonLoader.start(it, "Saving") }
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
@@ -5214,7 +5212,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun finishCtaSiteVisit(error: String) {
-        btnSubmit?.isClickable = true
+        btnSubmit?.let(ButtonLoader::stop)
         btnSubmit?.text = "Save"
         showError(error)
     }
@@ -5280,8 +5278,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             showError("Pick a valid next visit date")
             return
         }
-        btnSubmit?.isClickable = false
-        btnSubmit?.text = "Saving…"
+        btnSubmit?.let { ButtonLoader.start(it, "Saving") }
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 // No markOnCounselling here: counselling starts ONLY from the
@@ -5415,8 +5412,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         // spawns another booking_cp for this date; ignored for other cpTypes.
         followUpDate: String? = null,
     ) {
-        btnSubmit?.isClickable = false
-        btnSubmit?.text = "Saving…"
+        btnSubmit?.let { ButtonLoader.start(it, "Saving") }
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 // SV mode: write directly to the siteVisits row via the
@@ -5580,7 +5576,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
 
     private fun finishCtaSave(rawError: String) {
         val error = com.manjugroups.m_connect.ui.marketing.siteVisitOutcomeUserMessage(rawError)
-        btnSubmit?.isClickable = true
+        btnSubmit?.let(ButtonLoader::stop)
         btnSubmit?.text = "Save"
         if (otherOutcomeSaving) {
             otherOutcomeSaving = false
@@ -5590,9 +5586,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                     maybeShowOutcomePicker()
                     return
                 }
-                btnCpLockedCancel?.isClickable = true
+                btnCpLockedCancel?.let(ButtonLoader::stop)
                 btnCpLockedCancel?.text = "Cancel SV"
                 btnCpLockedReject?.isClickable = true
+                btnCpLockedConfirm?.let(ButtonLoader::stop)
                 btnCpLockedConfirm?.isClickable = true
                 showError(error)
                 return
@@ -6450,8 +6447,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     // ---- Persistence ------------------------------------------------
     private fun persistBooking() {
         val met = true
-        btnSubmit?.isClickable = false
-        btnSubmit?.text = "Saving…"
+        btnSubmit?.let { ButtonLoader.start(it, "Saving") }
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
@@ -6610,7 +6606,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun finishCta(error: String) {
-        btnSubmit?.isClickable = true
+        btnSubmit?.let(ButtonLoader::stop)
         btnSubmit?.text = "Save Booking"
         showError(error)
     }
@@ -7321,8 +7317,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
      * when convertedSiteVisitId is already set.
      */
     private fun persistSvCumCpConfirm(cpVisitId: String, expectedSiteVisitId: String) {
-        btnCpLockedConfirm?.isClickable = false
-        btnCpLockedConfirm?.text = "Saving…"
+        btnCpLockedConfirm?.let { ButtonLoader.start(it, "Saving") }
         btnCpLockedReject?.isClickable = false
         if (cpVisitId.isBlank() || expectedSiteVisitId.isBlank()) {
             finishCtaLockedConfirm("Site visit details are incomplete. Refresh and retry.")
@@ -7343,10 +7338,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun finishCtaLockedConfirm(error: String) {
-        btnCpLockedConfirm?.isClickable = true
+        btnCpLockedConfirm?.let(ButtonLoader::stop)
         btnCpLockedConfirm?.text = "Confirm"
         btnCpLockedReject?.isClickable = true
-        btnCpLockedCancel?.isClickable = true
+        btnCpLockedCancel?.let(ButtonLoader::stop)
         btnCpLockedCancel?.text = "Cancel SV"
         showError(error)
     }

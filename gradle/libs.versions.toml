@@ -17,6 +17,7 @@ kotlin = "2.1.20"
 playServicesLocation = "21.3.0"
 playServicesMaps = "19.2.0"
 playServicesAuthApiPhone = "18.1.0"
+playServicesAuth = "21.2.0"
 firebaseBom = "33.15.0"
 room = "2.7.1"
 workmanager = "2.10.1"
@@ -50,6 +51,7 @@ swiperefresh = { group = "androidx.swiperefreshlayout", name = "swiperefreshlayo
 play-services-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "playServicesLocation" }
 play-services-maps = { group = "com.google.android.gms", name = "play-services-maps", version.ref = "playServicesMaps" }
 play-services-auth-api-phone = { group = "com.google.android.gms", name = "play-services-auth-api-phone", version.ref = "playServicesAuthApiPhone" }
+play-services-auth = { group = "com.google.android.gms", name = "play-services-auth", version.ref = "playServicesAuth" }
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
 firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging-ktx" }
 room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }

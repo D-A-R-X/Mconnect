@@ -1,5 +1,6 @@
 package com.manjugroups.m_connect.ui.hr
 
+import com.manjugroups.m_connect.ui.common.ButtonLoader
 import com.manjugroups.m_connect.ui.common.toastSafe
 
 import android.Manifest
@@ -312,8 +313,7 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun resetSubmitButton() {
-        binding.btnSubmitFine.isEnabled = true
-        binding.btnSubmitFine.text = "Create It"
+        ButtonLoader.stop(binding.btnSubmitFine)
     }
 
     private suspend fun uploadBytesToServer(bytes: ByteArray): String? {
@@ -374,8 +374,7 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
         val dateStr = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date())
 
         // Disable views during upload/submit
-        binding.btnSubmitFine.isEnabled = false
-        binding.btnSubmitFine.text = "Submitting..."
+        ButtonLoader.start(binding.btnSubmitFine, "Submitting")
 
         fun completeCreation(photoId: String?) {
             // Persist the fine to the backend (was previously a no-op stub, so
@@ -386,7 +385,7 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
             val year = cal.get(java.util.Calendar.YEAR)
             viewLifecycleOwner.lifecycleScope.launch {
                 try {
-                    binding.btnSubmitFine.text = "Creating..."
+                    ButtonLoader.start(binding.btnSubmitFine, "Creating fine")
                     val resp = api.createFine(
                         session.bearerToken,
                         com.manjugroups.m_connect.network.CreateFineRequest(
@@ -439,7 +438,7 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
         if (file != null) {
             viewLifecycleOwner.lifecycleScope.launch {
                 try {
-                    binding.btnSubmitFine.text = "Uploading Photo..."
+                    ButtonLoader.start(binding.btnSubmitFine, "Uploading photo")
                     val compressedFile = withContext(Dispatchers.IO) {
                         compressImage(file)
                     }
@@ -470,7 +469,7 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
         } else if (uri != null) {
             viewLifecycleOwner.lifecycleScope.launch {
                 try {
-                    binding.btnSubmitFine.text = "Uploading Photo..."
+                    ButtonLoader.start(binding.btnSubmitFine, "Uploading photo")
                     val tempFile = withContext(Dispatchers.IO) {
                         val file = File(requireContext().cacheDir, "temp_uri_${System.currentTimeMillis()}.jpg")
                         requireContext().contentResolver.openInputStream(uri)?.use { input ->

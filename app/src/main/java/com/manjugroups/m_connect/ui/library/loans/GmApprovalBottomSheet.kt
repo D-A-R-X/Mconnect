@@ -1,5 +1,6 @@
 package com.manjugroups.m_connect.ui.library.loans
 
+import com.manjugroups.m_connect.ui.common.ButtonLoader
 import com.manjugroups.m_connect.ui.common.toastSafe
 
 import android.app.Dialog
@@ -281,8 +282,7 @@ class GmApprovalBottomSheet(
     }
 
     private fun approveLoan() {
-        binding.btnAccept.isEnabled = false
-        binding.btnAccept.text = "Approving..."
+        ButtonLoader.start(binding.btnAccept, "Approving")
         val token = SessionManager(requireContext()).bearerToken
 
         viewLifecycleOwner.lifecycleScope.launch {
@@ -300,8 +300,7 @@ class GmApprovalBottomSheet(
                 // Sheet dismissed mid-request cancels this coroutine; skip the
                 // view + Toast work when the binding is already gone.
                 if (_binding == null) return@launch
-                binding.btnAccept.isEnabled = true
-                binding.btnAccept.text = "Accept"
+                ButtonLoader.stop(binding.btnAccept)
                 val serverMsg = extractHttpErrorMessage(e)
                 Toast.makeText(
                     requireContext(),
@@ -313,8 +312,7 @@ class GmApprovalBottomSheet(
     }
 
     private fun rejectLoan() {
-        binding.btnReject.isEnabled = false
-        binding.btnReject.text = "Rejecting..."
+        ButtonLoader.start(binding.btnReject, "Rejecting")
         val token = SessionManager(requireContext()).bearerToken
 
         viewLifecycleOwner.lifecycleScope.launch {
@@ -330,8 +328,7 @@ class GmApprovalBottomSheet(
                 dismiss()
             } catch (e: Exception) {
                 if (_binding == null) return@launch
-                binding.btnReject.isEnabled = true
-                binding.btnReject.text = "Reject"
+                ButtonLoader.stop(binding.btnReject)
                 val serverMsg = extractHttpErrorMessage(e)
                 Toast.makeText(
                     requireContext(),

@@ -19,7 +19,7 @@ import com.manjugroups.m_connect.databinding.ActivityForcePasswordChangeBinding
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.ChangeOwnPasswordRequest
 import com.manjugroups.m_connect.notifications.PushTokenManager
-import com.manjugroups.m_connect.ui.common.SkeletonUtils
+import com.manjugroups.m_connect.ui.common.ButtonLoader
 import kotlinx.coroutines.launch
 
 class ForcePasswordChangeActivity : AppCompatActivity() {
@@ -317,15 +317,11 @@ class ForcePasswordChangeActivity : AppCompatActivity() {
     }
 
     private fun setLoading(loading: Boolean) {
-        binding.btnUpdatePassword.isClickable = !loading
         binding.etNewPassword.isEnabled = !loading
         binding.etConfirmPassword.isEnabled = !loading
         binding.btnToggleNewPassword.isEnabled = !loading
         binding.btnToggleConfirmPassword.isEnabled = !loading
-        binding.tvUpdatePassword.visibility = if (loading) View.INVISIBLE else View.VISIBLE
-        binding.skeletonUpdatePassword.visibility = if (loading) View.VISIBLE else View.GONE
-        if (loading) SkeletonUtils.startSkeletonPulse(binding.skeletonUpdatePassword)
-        else SkeletonUtils.stopSkeletonPulse(binding.skeletonUpdatePassword)
+        ButtonLoader.set(binding.btnUpdatePassword, loading, "Updating password")
     }
 
 }

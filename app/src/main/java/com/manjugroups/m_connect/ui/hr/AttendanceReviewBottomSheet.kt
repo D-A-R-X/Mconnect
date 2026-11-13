@@ -177,7 +177,7 @@ class AttendanceReviewBottomSheet : BottomSheetDialogFragment() {
             // existing trip / raw lines when it isn't available.
             val snappedJob = async {
                 runCatching {
-                    geoApi.getSnappedRoute(session.bearerToken, staffId, rec.date.orEmpty()).data?.segments
+                    geoApi.getSnappedRoute(session.bearerToken, staffId = staffId, date = rec.date.orEmpty()).data?.segments
                 }.getOrNull().orEmpty()
             }
             val data = runCatching {

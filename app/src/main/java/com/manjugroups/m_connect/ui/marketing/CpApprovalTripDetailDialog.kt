@@ -179,16 +179,18 @@ class CpApprovalTripDetailDialog : DialogFragment() {
                     ?.takeIf(::hasRecordedTrail)
                     ?.also { routeCache.put(item.id, it) }
                     ?: routeCache.get(item.id)
-                    ?: responseData
+                    ?: geoServiceTrail(responseData)?.also { routeCache.put(item.id, it) }
                 if (data == null) {
+                    // No GPS trail anywhere: estimated road route between the
+                    // server's recorded start/end (not a straight chord).
                     progress.visibility = View.GONE
-                    showRouteFallback(response.error)
+                    showRouteFallback(response.error, responseData)
                 } else {
                     renderDetailedRoute(data)
                 }
             }.onFailure { error ->
                 Log.w(TAG, "Unable to load detailed CP approval route for ${item.id}", error)
-                val cached = routeCache.get(item.id)
+                val cached = routeCache.get(item.id) ?: geoServiceTrail(null)
                 if (cached != null) {
                     renderDetailedRoute(cached)
                 } else {
@@ -205,6 +207,7 @@ class CpApprovalTripDetailDialog : DialogFragment() {
         val roadMatchedTrail = DirectionsClient.fetchRoadMatchedTrail(
             session.bearerToken,
             recorded,
+            maxAnchors = ROAD_MATCH_ANCHORS,
         )
         if (!isAdded) return
         progress.visibility = View.GONE
@@ -231,6 +234,40 @@ class CpApprovalTripDetailDialog : DialogFragment() {
         bestResponse ?: throw lastError ?: IllegalStateException("Detailed route was unavailable")
     }
 
+    /**
+     * The trip's GPS trail from the geo service. Tracking points now land
+     * there (api-geo), not in Convex's locationPoints, so the approval route
+     * came back empty and the map drew a straight start-to-end line. Reads the
+     * same staff + time window; null when it has no trail either.
+     */
+    private suspend fun geoServiceTrail(base: CpApprovalRouteData?): CpApprovalRouteData? {
+        val staffId = base?.staffId?.takeIf { it.isNotBlank() } ?: item.staffId?.takeIf { it.isNotBlank() } ?: return null
+        val start = (base?.startedAt ?: item.startedAt)?.toLong()?.takeIf { it > 0 } ?: return null
+        val end = (base?.endedAt ?: item.completedAt ?: item.requestedAt)?.toLong()?.takeIf { it > start } ?: return null
+        val timeline = runCatching {
+            withTimeout(ROUTE_LOAD_TIMEOUT_MS) {
+                api.getSessionRoute(session.bearerToken, staffId = staffId, dayStart = start, dayEnd = end).data?.timeline
+            }
+        }.onFailure { Log.w(TAG, "Geo service trail unavailable for ${item.id}", it) }.getOrNull().orEmpty()
+        val points = timeline
+            .filter { it.recordedAt in start..end && coordinates(it.lat, it.lng) != null }
+            .sortedBy { it.recordedAt }
+        if (points.size < 2) return null
+        // Keep the first/last fix and thin long trips to a bounded map payload.
+        val stride = maxOf(1, (points.size + 299) / 300)
+        val thinned = points.filterIndexed { index, _ -> index == 0 || index == points.lastIndex || index % stride == 0 }
+        val fallback = base ?: fallbackRoute()
+        return fallback.copy(
+            staffId = staffId,
+            startedAt = start.toDouble(),
+            endedAt = end.toDouble(),
+            routePoints = thinned.map {
+                com.manjugroups.m_connect.network.CpApprovalRoutePoint(it.lat, it.lng, it.recordedAt.toDouble())
+            },
+            routeSource = "geo",
+        )
+    }
+
     private fun hasRecordedTrail(data: CpApprovalRouteData?): Boolean =
         validRoutePointCount(data) >= 2
 
@@ -247,12 +284,21 @@ class CpApprovalTripDetailDialog : DialogFragment() {
         endLng = item.endLng ?: item.completionLng ?: item.arrivalLng ?: item.placeLng,
     )
 
-    private fun showRouteFallback(error: String?) {
-        val fallback = fallbackRoute()
-        val hasFallback = coordinates(fallback.startLat, fallback.startLng) != null ||
-            coordinates(fallback.endLat, fallback.endLng) != null
-        if (hasFallback) {
-            renderRoute(fallback, null)
+    private suspend fun showRouteFallback(error: String?, base: CpApprovalRouteData? = null) {
+        val fallback = base?.takeIf {
+            coordinates(it.startLat, it.startLng) != null || coordinates(it.endLat, it.endLng) != null
+        } ?: fallbackRoute()
+        val start = coordinates(fallback.startLat, fallback.startLng)
+        val end = coordinates(fallback.endLat, fallback.endLng)
+        if (start != null || end != null) {
+            // No GPS trail at all: show the likely road route between the
+            // recorded start and end (drawn dashed), not a straight chord.
+            val estimated = if (start != null && end != null) {
+                DirectionsClient.fetchRoadMatchedTrail(session.bearerToken, listOf(start, end), maxAnchors = 2)
+                    ?.takeIf { it.matchedLegCount > 0 }
+            } else null
+            if (!isAdded) return
+            renderRoute(fallback, null, estimated)
         } else {
             mapView.visibility = View.GONE
             mapStatus.text = "No GPS coordinates were recorded for this trip."
@@ -265,6 +311,7 @@ class CpApprovalTripDetailDialog : DialogFragment() {
     private fun renderRoute(
         data: CpApprovalRouteData,
         roadMatchedTrail: DirectionsClient.RoadMatchedTrail?,
+        estimatedRoad: DirectionsClient.RoadMatchedTrail? = null,
     ) {
         mapView.visibility = View.VISIBLE
         mapView.getMapAsync { map ->
@@ -303,6 +350,19 @@ class CpApprovalTripDetailDialog : DialogFragment() {
                         .color(Color.parseColor("#0B61CA"))
                         .width(8f)
                 )
+            } else if (estimatedRoad != null) {
+                estimatedRoad.legs.forEach { leg ->
+                    map.addPolyline(
+                        PolylineOptions()
+                            .addAll(leg.points)
+                            .color(Color.parseColor("#0B61CA"))
+                            .width(8f)
+                            .pattern(listOf(
+                                com.google.android.gms.maps.model.Dash(dp(10).toFloat()),
+                                com.google.android.gms.maps.model.Gap(dp(6).toFloat()),
+                            ))
+                    )
+                }
             } else if (displayPoints.size >= 2) {
                 map.addPolyline(
                     PolylineOptions()
@@ -311,7 +371,8 @@ class CpApprovalTripDetailDialog : DialogFragment() {
                         .width(8f)
                 )
             }
-            val cameraPoints = routedDisplayPoints.ifEmpty { displayPoints }
+            val estimatedPoints = estimatedRoad?.legs.orEmpty().flatMap { it.points }
+            val cameraPoints = routedDisplayPoints.ifEmpty { estimatedPoints }.ifEmpty { displayPoints }
             if (cameraPoints.isNotEmpty()) {
                 mapView.post {
                     if (cameraPoints.size == 1) {
@@ -331,6 +392,8 @@ class CpApprovalTripDetailDialog : DialogFragment() {
                     "Road-matched route based on ${recorded.size} GPS points. Unmatched sections use recorded GPS geometry."
                 hasRecordedTrail ->
                     "Recorded GPS trail shown because road matching is unavailable."
+                estimatedRoad != null ->
+                    "No GPS trail was recorded for this trip. The dashed line is the likely road route between the trip start and end."
                 displayPoints.size >= 2 ->
                     "Recorded GPS trail unavailable. Line connects the recorded trip start and end."
                 displayPoints.size == 1 -> "Only one trip coordinate was recorded."
@@ -388,6 +451,9 @@ class CpApprovalTripDetailDialog : DialogFragment() {
         const val TAG = "CpApprovalTripDetail"
         private const val ARG_ITEM = "item"
         private const val ROUTE_LOAD_ATTEMPTS = 3
+        // Road-matching anchors along the recorded trail: more anchors keep a
+        // long trip on the roads actually driven (8 cut corners on 15+ km).
+        private const val ROAD_MATCH_ANCHORS = 20
         private const val ROUTE_LOAD_TIMEOUT_MS = 10_000L
         private const val ROUTE_RETRY_DELAY_MS = 500L
         private val routeCache = CpApprovalRouteMemoryCache(16)

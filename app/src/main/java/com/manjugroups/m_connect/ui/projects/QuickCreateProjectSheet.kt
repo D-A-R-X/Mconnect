@@ -1,5 +1,6 @@
 package com.manjugroups.m_connect.ui.projects
 
+import com.manjugroups.m_connect.ui.common.ButtonLoader
 import android.app.DatePickerDialog
 import android.content.Context
 import android.graphics.Color
@@ -108,8 +109,7 @@ object QuickCreateProjectSheet {
             val endCal = Calendar.getInstance().apply { timeInMillis = start; add(Calendar.DAY_OF_MONTH, days) }
             val budget = etBudget.text?.toString()?.trim()?.toDoubleOrNull()
 
-            btnCreate.isEnabled = false
-            btnCreate.text = "Creating…"
+            ButtonLoader.start(btnCreate, "Creating")
             owner.lifecycleScope.launch {
                 val resp = runCatching {
                     api.createProject(
@@ -124,8 +124,7 @@ object QuickCreateProjectSheet {
                         ),
                     )
                 }.getOrNull()
-                btnCreate.isEnabled = true
-                btnCreate.text = "Create Project"
+                ButtonLoader.stop(btnCreate)
                 val project = resp?.project
                 if (resp?.success == true && project != null) {
                     Toast.makeText(context, "Project created", Toast.LENGTH_SHORT).show()

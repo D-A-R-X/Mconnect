@@ -1,5 +1,6 @@
 package com.manjugroups.m_connect.ui.library.loans
 
+import com.manjugroups.m_connect.ui.common.ButtonLoader
 import com.manjugroups.m_connect.ui.common.toastSafe
 
 import android.app.Dialog
@@ -109,7 +110,7 @@ class AcceptLoanBottomSheet(
     private var existingSignatureStorageId: String? = null
 
     private fun submitApproval() {
-        binding.btnSubmit.isEnabled = false
+        ButtonLoader.start(binding.btnSubmit, "Approving")
         val token = SessionManager(requireContext()).bearerToken
         val drewNew = binding.signaturePad.hasUserDrawn()
         val existing = existingSignatureStorageId
@@ -119,7 +120,7 @@ class AcceptLoanBottomSheet(
                 val storageId: String = if (drewNew || existing == null) {
                     // Fresh signature → upload, then persist it as the
                     // staff's profile digital sign so it's reused next time.
-                    binding.btnSubmit.text = "Uploading..."
+                    ButtonLoader.start(binding.btnSubmit, "Uploading signature")
                     val bitmap = binding.signaturePad.getSignatureBitmap()
                     val file = File(requireContext().cacheDir, "signature_${System.currentTimeMillis()}.png")
                     withContext(Dispatchers.IO) {
@@ -154,7 +155,7 @@ class AcceptLoanBottomSheet(
                     existing
                 }
 
-                binding.btnSubmit.text = "Approving..."
+                ButtonLoader.start(binding.btnSubmit, "Approving")
                 val req = ApproveLoanRequest(id = loan.id!!, eSignatureId = storageId)
                 withContext(Dispatchers.IO) { api.approveLoan(token, req) }
 
@@ -166,8 +167,7 @@ class AcceptLoanBottomSheet(
                 // Sheet dismissed mid-approval cancels this coroutine; skip the
                 // view + Toast work when the binding is already gone.
                 if (_binding == null) return@launch
-                binding.btnSubmit.isEnabled = true
-                binding.btnSubmit.text = "Submit"
+                ButtonLoader.stop(binding.btnSubmit)
                 val serverMsg = extractHttpErrorMessage(e)
                 Toast.makeText(
                     requireContext(),

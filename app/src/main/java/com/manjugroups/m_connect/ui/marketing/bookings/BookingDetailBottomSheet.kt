@@ -1,5 +1,6 @@
 package com.manjugroups.m_connect.ui.marketing.bookings
 
+import com.manjugroups.m_connect.ui.common.ButtonLoader
 import com.manjugroups.m_connect.ui.common.toastSafe
 
 import android.app.Dialog
@@ -691,8 +692,7 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
 
     private fun uploadApprovalAttachment(uri: Uri) {
         val ctx = context ?: return
-        btnUploadAttachment?.text = "Uploading…"
-        btnUploadAttachment?.isEnabled = false
+        btnUploadAttachment?.let { ButtonLoader.start(it, "Uploading") }
         viewLifecycleOwner.lifecycleScope.launch {
             val displayName = resolveDocName(uri)
             val mime = ctx.contentResolver.getType(uri) ?: "application/octet-stream"
@@ -718,7 +718,7 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
                 }.getOrNull()
             }
             val storageId = uploaded?.storageId
-            btnUploadAttachment?.isEnabled = true
+            btnUploadAttachment?.let(ButtonLoader::stop)
             if (!storageId.isNullOrBlank()) {
                 pendingProofStorageId = storageId
                 pendingProofFileName = displayName

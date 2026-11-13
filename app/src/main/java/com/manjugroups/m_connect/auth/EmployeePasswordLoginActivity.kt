@@ -17,7 +17,7 @@ import com.manjugroups.m_connect.databinding.ActivityEmployeePasswordLoginBindin
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.EmployeePasswordLoginResponse
 import com.manjugroups.m_connect.notifications.PushTokenManager
-import com.manjugroups.m_connect.ui.common.SkeletonUtils
+import com.manjugroups.m_connect.ui.common.ButtonLoader
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withTimeoutOrNull
@@ -309,14 +309,10 @@ class EmployeePasswordLoginActivity : AppCompatActivity() {
     }
 
     private fun setLoading(loading: Boolean) {
-        binding.btnEmployeeLogin.isClickable = !loading
         binding.etEmployeeId.isEnabled = !loading
         binding.etEmployeePassword.isEnabled = !loading
         binding.btnTogglePassword.isEnabled = !loading
-        binding.tvEmployeeLogin.visibility = if (loading) View.INVISIBLE else View.VISIBLE
-        binding.skeletonEmployeeLogin.visibility = if (loading) View.VISIBLE else View.GONE
-        if (loading) SkeletonUtils.startSkeletonPulse(binding.skeletonEmployeeLogin)
-        else SkeletonUtils.stopSkeletonPulse(binding.skeletonEmployeeLogin)
+        ButtonLoader.set(binding.btnEmployeeLogin, loading, "Signing in")
     }
 
     private fun parseErrorMessage(error: Throwable, fallback: String): String {
