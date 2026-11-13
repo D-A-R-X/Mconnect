@@ -95,7 +95,12 @@ class LoginActivity : AppCompatActivity() {
             when {
                 phone.isEmpty() -> showPhoneError(getString(R.string.phone_required))
                 !isValidIndianMobile(phone) -> showPhoneError(getString(R.string.phone_invalid))
-                else -> viewModel.sendOtp(phone, LoginDeviceInfo.capture(applicationContext))
+                else -> {
+                    // WhatsApp one-tap / zero-tap autofill needs this before the
+                    // OTP is sent; harmless when WhatsApp isn't installed.
+                    WhatsAppOtp.sendHandshake(this)
+                    viewModel.sendOtp(phone, LoginDeviceInfo.capture(applicationContext))
+                }
             }
         }
     }

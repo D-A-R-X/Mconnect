@@ -34,6 +34,9 @@
          sideloaded Mconnect, a separate app id, is still installed. -->
     <queries>
         <package android:name="com.manjugroups.m_connect" />
+        <!-- WhatsApp OTP autofill handshake (one-tap / zero-tap). -->
+        <package android:name="com.whatsapp" />
+        <package android:name="com.whatsapp.w4b" />
     </queries>
 
     <uses-feature android:name="android.hardware.camera" android:required="false" />
@@ -98,6 +101,32 @@
         <activity
             android:name=".auth.OtpActivity"
             android:windowSoftInputMode="stateVisible|adjustResize" />
+
+        <!-- WhatsApp one-tap OTP: the template's "Autofill" button opens this;
+             it hands the code to the OTP screen and closes. The code is only
+             accepted from WhatsApp (WhatsAppOtp.codeFrom checks the sender). -->
+        <activity
+            android:name=".auth.WhatsAppOtpCodeActivity"
+            android:enabled="true"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="com.whatsapp.otp.OTP_RETRIEVED" />
+            </intent-filter>
+        </activity>
+
+        <!-- WhatsApp zero-tap OTP: the code arrives with no tap. -->
+        <receiver
+            android:name=".auth.WhatsAppOtpCodeReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.whatsapp.otp.OTP_RETRIEVED" />
+            </intent-filter>
+        </receiver>
 
         <activity
             android:name=".auth.ForcePasswordChangeActivity"

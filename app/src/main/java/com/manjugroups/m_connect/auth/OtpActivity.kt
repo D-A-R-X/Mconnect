@@ -61,6 +61,11 @@ class OtpActivity : AppCompatActivity() {
     private var isVerifying = false
     private var smsReceiverRegistered = false
 
+    // Copied-code pickup (WhatsApp "Copy code"): only a clip copied after this
+    // screen opened, and each clip once.
+    private val openedAt = System.currentTimeMillis()
+    private var lastClipboardCode: String? = null
+
     /**
      * SMS User Consent: Android shows "Allow Mconnect to read this message?"
      * for the OTP SMS; on Allow the code fills the boxes and verifies. Needs no
@@ -83,6 +88,14 @@ class OtpActivity : AppCompatActivity() {
             @Suppress("DEPRECATION")
             val status = extras.get(SmsRetriever.EXTRA_STATUS) as? Status ?: return
             if (status.statusCode != CommonStatusCodes.SUCCESS) return
+            // Zero-tap (SMS Retriever): an SMS ending in this app's hash comes
+            // with its text, no prompt.
+            extras.getString(SmsRetriever.EXTRA_SMS_MESSAGE)?.let { message ->
+                OtpCodeParser.extract(message)?.let { fillOtp(it, autoVerify = true) }
+                return
+            }
+            // Code already in (zero-tap, WhatsApp, typed): no consent prompt.
+            if (isVerifying || getOtp().length == OtpCodeParser.OTP_LENGTH) return
             @Suppress("DEPRECATION")
             val consentIntent = extras.getParcelable<Intent>(SmsRetriever.EXTRA_CONSENT_INTENT) ?: return
             // Only launch Google Play services' own consent screen, and never
@@ -157,6 +170,7 @@ class OtpActivity : AppCompatActivity() {
         setupOtpBoxes()
         setupListeners()
         collectState()
+        collectExternalCodes()
         startTimer()
         startSmsConsent()
 
@@ -270,8 +284,13 @@ class OtpActivity : AppCompatActivity() {
         if (getOtp().length == OtpCodeParser.OTP_LENGTH && !isVerifying) verifyOtp()
     }
 
-    /** Listens for the OTP SMS for up to five minutes (SMS User Consent). */
+    /**
+     * Listens for the OTP SMS for up to five minutes: SMS Retriever (zero-tap,
+     * when the SMS ends in this app's hash) and SMS User Consent (the "Allow"
+     * prompt, any OTP SMS).
+     */
     private fun startSmsConsent() {
+        runCatching { SmsRetriever.getClient(this).startSmsRetriever() }
         runCatching {
             SmsRetriever.getClient(this).startSmsUserConsent(null)
             if (!smsReceiverRegistered) {
@@ -301,6 +320,7 @@ class OtpActivity : AppCompatActivity() {
 
         binding.tvResend.setOnClickListener {
             if (canResend) {
+                WhatsAppOtp.sendHandshake(this)
                 viewModel.sendOtp(
                     phone,
                     if (agencyDriver) null else LoginDeviceInfo.capture(applicationContext),
@@ -320,6 +340,42 @@ class OtpActivity : AppCompatActivity() {
         val deviceInfo =
             if (agencyDriver) null else LoginDeviceInfo.capture(applicationContext)
         viewModel.verifyOtp(phone, getOtp(), agencyDriver, deviceInfo)
+    }
+
+    /** WhatsApp one-tap / zero-tap codes, delivered through [OtpCodeInbox]. */
+    private fun collectExternalCodes() {
+        OtpCodeInbox.otpScreenOpen = true
+        OtpCodeInbox.take() // nothing from an earlier sign-in
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                OtpCodeInbox.latest.collect { delivery ->
+                    if (delivery == null) return@collect
+                    OtpCodeInbox.take()?.let { fillOtp(it, autoVerify = true) }
+                }
+            }
+        }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) fillFromClipboard()
+    }
+
+    /**
+     * Back from WhatsApp after tapping "Copy code": a 6-digit code copied
+     * since this screen opened fills the boxes and signs in.
+     */
+    private fun fillFromClipboard() {
+        if (isVerifying || getOtp().length == OtpCodeParser.OTP_LENGTH) return
+        val clipboard = getSystemService(android.content.ClipboardManager::class.java) ?: return
+        val clip = runCatching { clipboard.primaryClip }.getOrNull() ?: return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            clip.description.timestamp in 1 until openedAt
+        ) return
+        val text = clip.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(this)?.toString()?.trim() ?: return
+        if (!Regex("\\d{${OtpCodeParser.OTP_LENGTH}}").matches(text) || text == lastClipboardCode) return
+        lastClipboardCode = text
+        fillOtp(text, autoVerify = true)
     }
 
     private fun collectState() {
@@ -810,6 +866,7 @@ class OtpActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        OtpCodeInbox.otpScreenOpen = false
         countDownTimer?.cancel()
         if (smsReceiverRegistered) {
             runCatching { unregisterReceiver(smsConsentReceiver) }
