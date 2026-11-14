@@ -16,7 +16,7 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.widget.Toast
+import com.manjugroups.m_connect.ui.common.AppToast as Toast
 import com.manjugroups.m_connect.network.WorkflowStepData
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.bottomsheet.BottomSheetDialog

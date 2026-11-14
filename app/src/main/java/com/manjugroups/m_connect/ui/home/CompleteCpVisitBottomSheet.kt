@@ -20,7 +20,7 @@ import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.widget.Toast
+import com.manjugroups.m_connect.ui.common.AppToast as Toast
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.res.ResourcesCompat
@@ -4044,12 +4044,12 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             // Bump the "AI prefill already happened" flag so the AI
             // analysis prefill that runs after lookup doesn't overwrite
             // the operator's saved typing.
-            android.widget.Toast.makeText(
+            com.manjugroups.m_connect.ui.common.AppToast.makeText(
                 requireContext(),
                 "Resumed your draft from " +
                     java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT)
                         .format(java.util.Date(snapshot.updatedAt)),
-                android.widget.Toast.LENGTH_SHORT,
+                com.manjugroups.m_connect.ui.common.AppToast.LENGTH_SHORT,
             ).show()
         }
     }

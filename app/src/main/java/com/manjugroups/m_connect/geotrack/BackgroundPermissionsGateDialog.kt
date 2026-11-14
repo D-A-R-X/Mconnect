@@ -19,7 +19,7 @@ import android.view.View
 import android.widget.TextView
 import android.view.ViewGroup
 import android.view.WindowManager
-import android.widget.Toast
+import com.manjugroups.m_connect.ui.common.AppToast as Toast
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.ContextCompat
 import com.manjugroups.m_connect.notifications.PushTokenManager

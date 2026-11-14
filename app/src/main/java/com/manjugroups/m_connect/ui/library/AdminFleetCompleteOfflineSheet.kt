@@ -16,7 +16,7 @@ import android.widget.ArrayAdapter
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.Spinner
-import android.widget.Toast
+import com.manjugroups.m_connect.ui.common.AppToast as Toast
 import androidx.core.widget.NestedScrollView
 import androidx.core.widget.doAfterTextChanged
 import androidx.activity.result.contract.ActivityResultContracts

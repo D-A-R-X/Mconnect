@@ -13,7 +13,7 @@ import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.TextView
-import android.widget.Toast
+import com.manjugroups.m_connect.ui.common.AppToast as Toast
 import android.content.ContentUris
 import android.provider.MediaStore
 import androidx.activity.OnBackPressedCallback

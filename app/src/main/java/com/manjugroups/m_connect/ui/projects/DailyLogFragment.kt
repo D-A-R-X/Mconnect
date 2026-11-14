@@ -14,7 +14,7 @@ import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.widget.Toast
+import com.manjugroups.m_connect.ui.common.AppToast as Toast
 import coil.load
 import com.manjugroups.m_connect.BuildConfig
 import androidx.core.view.ViewCompat

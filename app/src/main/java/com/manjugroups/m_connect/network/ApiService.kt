@@ -1561,6 +1561,7 @@ interface ApiService {
                 .addInterceptor(AppBuildHeaders.interceptor)
                 .addInterceptor(mobileAuthContract)
                 .addInterceptor(storageUploadTimeout)
+                .addInterceptor(IssueReporter.httpInterceptor)
                 .addInterceptor(ApiErrors.interceptor)
                 .addInterceptor(authWatchdog)
                 .addInterceptor(logging)

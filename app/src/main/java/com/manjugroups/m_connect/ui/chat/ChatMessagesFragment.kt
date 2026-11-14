@@ -26,7 +26,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.TextView
-import android.widget.Toast
+import com.manjugroups.m_connect.ui.common.AppToast as Toast
 import androidx.emoji2.emojipicker.EmojiPickerView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.ViewCompat

@@ -380,14 +380,14 @@ class IncomingCallActivity : AppCompatActivity() {
                 acceptButton?.alpha = 1f
                 rejectButton?.alpha = 1f
                 if (!isFinishing) startIncomingAlert()
-                android.widget.Toast.makeText(
+                com.manjugroups.m_connect.ui.common.AppToast.makeText(
                     this@IncomingCallActivity,
                     when (error) {
                         is java.net.UnknownHostException -> "No network. Reconnect and retry."
                         else -> error.message?.takeIf { it.isNotBlank() }
                             ?: "Dialer action failed. Check your network and retry."
                     },
-                    android.widget.Toast.LENGTH_LONG,
+                    com.manjugroups.m_connect.ui.common.AppToast.LENGTH_LONG,
                 ).show()
             }
         }

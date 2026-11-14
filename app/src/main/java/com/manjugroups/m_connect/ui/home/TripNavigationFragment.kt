@@ -23,7 +23,7 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.widget.Toast
+import com.manjugroups.m_connect.ui.common.AppToast as Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
@@ -3844,10 +3844,10 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     private fun openSiteVisitOutcomeSheet() {
         val svId = arguments?.getString(ARG_VISIT_ID)
         if (svId.isNullOrBlank()) {
-            android.widget.Toast.makeText(
+            com.manjugroups.m_connect.ui.common.AppToast.makeText(
                 requireContext(),
                 "Site visit id is missing",
-                android.widget.Toast.LENGTH_SHORT,
+                com.manjugroups.m_connect.ui.common.AppToast.LENGTH_SHORT,
             ).show()
             return
         }

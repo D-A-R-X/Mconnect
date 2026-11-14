@@ -18,7 +18,7 @@ import android.view.animation.RotateAnimation
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.TextView
-import android.widget.Toast
+import com.manjugroups.m_connect.ui.common.AppToast as Toast
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.*
 import com.google.android.material.bottomsheet.BottomSheetBehavior

@@ -341,6 +341,7 @@ interface TravelDeskApi {
             }
             val client = OkHttpClient.Builder()
                 .addInterceptor(AppBuildHeaders.interceptor)
+                .addInterceptor(IssueReporter.httpInterceptor)
                 .addInterceptor(ApiErrors.interceptor)
                 .addInterceptor(authWatchdog)
                 .addInterceptor(logging)

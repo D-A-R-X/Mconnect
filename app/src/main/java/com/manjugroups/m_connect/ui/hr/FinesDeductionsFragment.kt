@@ -165,10 +165,10 @@ class FinesDeductionsFragment : Fragment() {
                 throw e
             } catch (e: Exception) {
                 if (_binding == null) return@launch
-                android.widget.Toast.makeText(
+                com.manjugroups.m_connect.ui.common.AppToast.makeText(
                     requireContext(),
                     "Couldn't load fines: ${e.message ?: "network error"}",
-                    android.widget.Toast.LENGTH_SHORT,
+                    com.manjugroups.m_connect.ui.common.AppToast.LENGTH_SHORT,
                 ).show()
             } finally {
                 if (_binding != null) binding.finesRefresh.isRefreshing = false

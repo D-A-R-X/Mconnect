@@ -5,7 +5,7 @@ import com.manjugroups.m_connect.ui.common.toastSafe
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.widget.Toast
+import com.manjugroups.m_connect.ui.common.AppToast as Toast
 import android.graphics.Color
 import android.view.LayoutInflater
 import android.view.View
@@ -2070,10 +2070,10 @@ class HomeFragment : Fragment() {
                 // Submit trip details to backend, then open outcome sheet.
                 val token = session.bearerToken
                 if (token.isBlank()) {
-                    android.widget.Toast.makeText(
+                    com.manjugroups.m_connect.ui.common.AppToast.makeText(
                         requireContext(),
                         "Session expired \u2014 sign in again.",
-                        android.widget.Toast.LENGTH_SHORT,
+                        com.manjugroups.m_connect.ui.common.AppToast.LENGTH_SHORT,
                     ).show()
                     return@newInstance
                 }
@@ -2113,20 +2113,20 @@ class HomeFragment : Fragment() {
                     }.getOrNull()
                     if (_binding == null) return@launch
                     if (resp?.success == true) {
-                        android.widget.Toast.makeText(
+                        com.manjugroups.m_connect.ui.common.AppToast.makeText(
                             requireContext(),
                             "Trip details saved.",
-                            android.widget.Toast.LENGTH_SHORT,
+                            com.manjugroups.m_connect.ui.common.AppToast.LENGTH_SHORT,
                         ).show()
                         // Step 2: outcome sheet
                         CompleteCpVisitBottomSheet
                             .forSiteVisit(siteVisitId = svId)
                             .showOnce(parentFragmentManager, "fleet_sv_outcome")
                     } else {
-                        android.widget.Toast.makeText(
+                        com.manjugroups.m_connect.ui.common.AppToast.makeText(
                             requireContext(),
                             resp?.error ?: "Could not save trip details.",
-                            android.widget.Toast.LENGTH_LONG,
+                            com.manjugroups.m_connect.ui.common.AppToast.LENGTH_LONG,
                         ).show()
                     }
                 }
@@ -2489,10 +2489,10 @@ class HomeFragment : Fragment() {
      */
     private fun openClockInForTrip(visit: TodayVisit? = null) {
         pendingTripVisitAfterClockIn = visit
-        android.widget.Toast.makeText(
+        com.manjugroups.m_connect.ui.common.AppToast.makeText(
             requireContext(),
             "Clock in to start your trip",
-            android.widget.Toast.LENGTH_SHORT,
+            com.manjugroups.m_connect.ui.common.AppToast.LENGTH_SHORT,
         ).show()
         parentFragmentManager.pushDetail(
             com.manjugroups.m_connect.ui.hr.ClockInAreaFragment.newInstance(visit?.id),
@@ -2902,20 +2902,20 @@ class HomeFragment : Fragment() {
             if (_binding == null) return@launch
             val external = trip.travelAgency?.name?.isNotBlank() == true
             if (resp?.success == true) {
-                android.widget.Toast.makeText(
+                com.manjugroups.m_connect.ui.common.AppToast.makeText(
                     requireContext(),
                     if (external) "Agency removed — back to Pending."
                     else "Driver removed — back to Pending.",
-                    android.widget.Toast.LENGTH_SHORT,
+                    com.manjugroups.m_connect.ui.common.AppToast.LENGTH_SHORT,
                 ).show()
                 loadFleetDispatch()
             } else {
-                android.widget.Toast.makeText(
+                com.manjugroups.m_connect.ui.common.AppToast.makeText(
                     requireContext(),
                     resp?.error
                         ?: if (external) "Could not remove the agency."
                         else "Could not remove the driver.",
-                    android.widget.Toast.LENGTH_LONG,
+                    com.manjugroups.m_connect.ui.common.AppToast.LENGTH_LONG,
                 ).show()
             }
         }
@@ -2925,10 +2925,10 @@ class HomeFragment : Fragment() {
         trip: com.manjugroups.m_connect.network.TravelDeskTrip,
     ) {
         if (trip.outcome.isNullOrBlank()) {
-            android.widget.Toast.makeText(
+            com.manjugroups.m_connect.ui.common.AppToast.makeText(
                 requireContext(),
                 "Record the Site Visit outcome before completing fleet details.",
-                android.widget.Toast.LENGTH_SHORT,
+                com.manjugroups.m_connect.ui.common.AppToast.LENGTH_SHORT,
             ).show()
             return
         }
@@ -2979,10 +2979,10 @@ class HomeFragment : Fragment() {
     ) {
         val token = session.bearerToken
         if (token.isBlank()) {
-            android.widget.Toast.makeText(
+            com.manjugroups.m_connect.ui.common.AppToast.makeText(
                 requireContext(),
                 "Session expired \u2014 sign in again.",
-                android.widget.Toast.LENGTH_SHORT,
+                com.manjugroups.m_connect.ui.common.AppToast.LENGTH_SHORT,
             ).show()
             return
         }
@@ -3022,17 +3022,17 @@ class HomeFragment : Fragment() {
             }.getOrNull()
             if (_binding == null) return@launch
             if (resp?.success == true) {
-                android.widget.Toast.makeText(
+                com.manjugroups.m_connect.ui.common.AppToast.makeText(
                     requireContext(),
                     "Trip details saved.",
-                    android.widget.Toast.LENGTH_SHORT,
+                    com.manjugroups.m_connect.ui.common.AppToast.LENGTH_SHORT,
                 ).show()
                 loadFleetDispatch()
             } else {
-                android.widget.Toast.makeText(
+                com.manjugroups.m_connect.ui.common.AppToast.makeText(
                     requireContext(),
                     resp?.error ?: "Could not complete this trip.",
-                    android.widget.Toast.LENGTH_LONG,
+                    com.manjugroups.m_connect.ui.common.AppToast.LENGTH_LONG,
                 ).show()
             }
         }
@@ -3053,10 +3053,10 @@ class HomeFragment : Fragment() {
     ) {
         val token = session.bearerToken
         if (token.isBlank()) {
-            android.widget.Toast.makeText(
+            com.manjugroups.m_connect.ui.common.AppToast.makeText(
                 requireContext(),
                 "Session expired \u2014 sign in again.",
-                android.widget.Toast.LENGTH_SHORT,
+                com.manjugroups.m_connect.ui.common.AppToast.LENGTH_SHORT,
             ).show()
             return
         }
@@ -3160,10 +3160,10 @@ class HomeFragment : Fragment() {
                         }
                     }
                 }
-                android.widget.Toast.makeText(
+                com.manjugroups.m_connect.ui.common.AppToast.makeText(
                     requireContext(),
                     "Progress updated",
-                    android.widget.Toast.LENGTH_SHORT,
+                    com.manjugroups.m_connect.ui.common.AppToast.LENGTH_SHORT,
                 ).show()
                 sheet?.dismissAllowingStateLoss()
                 loadFleetDispatch()
@@ -3277,9 +3277,9 @@ class HomeFragment : Fragment() {
         // agencies. With agencies available the dispatcher can still allot
         // externally even with no MFPL vehicle on file.
         if (options.isEmpty() && fleetAllocateAgencies().isEmpty()) {
-            android.widget.Toast.makeText(
+            com.manjugroups.m_connect.ui.common.AppToast.makeText(
                 requireContext(), "No active vehicles to allocate.",
-                android.widget.Toast.LENGTH_SHORT,
+                com.manjugroups.m_connect.ui.common.AppToast.LENGTH_SHORT,
             ).show()
             return
         }
@@ -3340,10 +3340,10 @@ class HomeFragment : Fragment() {
             if (_binding == null) return@launch
             val resp = outcome.getOrNull()
             if (resp?.success == true) {
-                android.widget.Toast.makeText(
+                com.manjugroups.m_connect.ui.common.AppToast.makeText(
                     requireContext(),
                     if (external) "Sent to Travel Desk." else "Trip allocated.",
-                    android.widget.Toast.LENGTH_SHORT,
+                    com.manjugroups.m_connect.ui.common.AppToast.LENGTH_SHORT,
                 ).show()
                 loadFleetDispatch()
             } else {
@@ -3366,8 +3366,8 @@ class HomeFragment : Fragment() {
                     }
                     return@launch
                 }
-                android.widget.Toast.makeText(
-                    requireContext(), msg, android.widget.Toast.LENGTH_LONG,
+                com.manjugroups.m_connect.ui.common.AppToast.makeText(
+                    requireContext(), msg, com.manjugroups.m_connect.ui.common.AppToast.LENGTH_LONG,
                 ).show()
             }
         }

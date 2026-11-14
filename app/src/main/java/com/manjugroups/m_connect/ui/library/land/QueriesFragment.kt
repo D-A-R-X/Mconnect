@@ -219,7 +219,7 @@ class QueriesFragment : Fragment() {
 
     private fun showError(message: String) {
         if (_binding == null) return
-        toastSafe(message, android.widget.Toast.LENGTH_LONG)
+        toastSafe(message, com.manjugroups.m_connect.ui.common.AppToast.LENGTH_LONG)
     }
 
     private fun QueryListItem.toRow(position: Int): QueryRow {
@@ -420,9 +420,9 @@ class QueriesFragment : Fragment() {
                     ),
                 )
                 if (resp.success) {
-                    android.widget.Toast.makeText(
+                    com.manjugroups.m_connect.ui.common.AppToast.makeText(
                         requireContext(), "Marked completed",
-                        android.widget.Toast.LENGTH_SHORT,
+                        com.manjugroups.m_connect.ui.common.AppToast.LENGTH_SHORT,
                     ).show()
                     loadQueries()
                 } else {

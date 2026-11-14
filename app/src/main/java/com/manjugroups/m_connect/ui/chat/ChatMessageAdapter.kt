@@ -4,7 +4,7 @@ import android.content.res.ColorStateList
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.widget.Toast
+import com.manjugroups.m_connect.ui.common.AppToast as Toast
 import android.graphics.Color
 import android.view.LayoutInflater
 import android.view.View

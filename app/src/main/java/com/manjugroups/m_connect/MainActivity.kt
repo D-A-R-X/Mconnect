@@ -266,10 +266,10 @@ class MainActivity : AppCompatActivity() {
                         // after a fresh login. Its late 401 must not erase the
                         // newly saved, valid session.
                         if (!signal.matchesCurrentToken(session.token)) return@collect
-                        android.widget.Toast.makeText(
+                        com.manjugroups.m_connect.ui.common.AppToast.makeText(
                             this@MainActivity,
                             "Session expired. Please sign in again.",
-                            android.widget.Toast.LENGTH_LONG,
+                            com.manjugroups.m_connect.ui.common.AppToast.LENGTH_LONG,
                         ).show()
                         session.clearSession()
                         // Same teardown as a deliberate sign-out: an expired

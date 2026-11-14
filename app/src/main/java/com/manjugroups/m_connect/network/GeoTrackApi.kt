@@ -270,6 +270,8 @@ interface GeoTrackApi {
     @GET("api/marketing/cp-visits/pending-approvals")
     suspend fun getPendingCpApprovals(
         @Header("Authorization") token: String,
+        // team | all (same views as the web CP Approval page); null = widest allowed.
+        @Query("scope") scope: String? = null,
     ): CpApprovalsResponse
 
     @GET("api/marketing/cp-visits/approval-route")
@@ -798,6 +800,7 @@ interface GeoTrackApi {
                 .addNetworkInterceptor(OfflineHttpCache.storeResponses)
                 .addInterceptor(AppBuildHeaders.interceptor)
                 .addInterceptor(completionTimeout)
+                .addInterceptor(IssueReporter.httpInterceptor)
                 .addInterceptor(ApiErrors.interceptor)
                 .addInterceptor(authWatchdog)
                 .addInterceptor(logging)
@@ -1372,6 +1375,11 @@ data class CpApprovalItem(
     val clientName: String? = null,
     val staffName: String? = null,
     val staffId: String? = null,
+    // The GM this completion waits on; only they can approve/reject.
+    // Older backends omit these (canDecide null = unknown, buttons shown).
+    val gmStaffId: String? = null,
+    val gmName: String? = null,
+    val canDecide: Boolean? = null,
     val placeName: String? = null,
     val placeAddress: String? = null,
     val distanceMeters: Double? = null,

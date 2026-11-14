@@ -225,10 +225,10 @@ class LoansFragment : Fragment() {
                     if (_binding == null || !isAdded) return@onFailure
                     showLoansSkeleton(false)
                     loaded = true
-                    android.widget.Toast.makeText(
+                    com.manjugroups.m_connect.ui.common.AppToast.makeText(
                         requireContext(),
                         "Couldn't load loans. Check your connection and try again.",
-                        android.widget.Toast.LENGTH_LONG
+                        com.manjugroups.m_connect.ui.common.AppToast.LENGTH_LONG
                     ).show()
                     updateTabSelection()
                     render()
@@ -826,18 +826,18 @@ class LoansFragment : Fragment() {
             runCatching {
                 api.approveLoan(token, com.manjugroups.m_connect.network.ApproveLoanRequest(id))
             }.onSuccess {
-                android.widget.Toast.makeText(
+                com.manjugroups.m_connect.ui.common.AppToast.makeText(
                     requireContext(),
                     if (isAdvance) "Advance approved" else "Loan approved",
-                    android.widget.Toast.LENGTH_SHORT,
+                    com.manjugroups.m_connect.ui.common.AppToast.LENGTH_SHORT,
                 ).show()
                 loadPendingApprovals()
             }.onFailure { err ->
-                android.widget.Toast.makeText(
+                com.manjugroups.m_connect.ui.common.AppToast.makeText(
                     requireContext(),
                     extractHttpErrorMessage(err)
                         ?: "Failed to approve: ${err.message ?: "network error"}",
-                    android.widget.Toast.LENGTH_LONG,
+                    com.manjugroups.m_connect.ui.common.AppToast.LENGTH_LONG,
                 ).show()
             }
         }
@@ -889,11 +889,11 @@ class LoansFragment : Fragment() {
                     loadFromApi()
                 }
                 .onFailure { err ->
-                    android.widget.Toast.makeText(
+                    com.manjugroups.m_connect.ui.common.AppToast.makeText(
                         requireContext(),
                         extractHttpErrorMessage(err)
                             ?: "Failed to reject loan: ${err.message ?: "network error"}",
-                        android.widget.Toast.LENGTH_LONG,
+                        com.manjugroups.m_connect.ui.common.AppToast.LENGTH_LONG,
                     ).show()
                 }
         }

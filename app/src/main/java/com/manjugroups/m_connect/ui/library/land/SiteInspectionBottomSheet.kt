@@ -337,8 +337,8 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun toastValidation(message: String) {
-        android.widget.Toast.makeText(
-            requireContext(), message, android.widget.Toast.LENGTH_SHORT,
+        com.manjugroups.m_connect.ui.common.AppToast.makeText(
+            requireContext(), message, com.manjugroups.m_connect.ui.common.AppToast.LENGTH_SHORT,
         ).show()
     }
 
@@ -397,10 +397,10 @@ class SiteInspectionBottomSheet : BottomSheetDialogFragment() {
                     toastSafe("Inspection saved")
                     dismissAllowingStateLoss()
                 } else {
-                    toastSafe(resp.error ?: "Save failed", android.widget.Toast.LENGTH_LONG)
+                    toastSafe(resp.error ?: "Save failed", com.manjugroups.m_connect.ui.common.AppToast.LENGTH_LONG)
                 }
             } catch (err: Exception) {
-                toastSafe(err.message ?: "Network error", android.widget.Toast.LENGTH_LONG)
+                toastSafe(err.message ?: "Network error", com.manjugroups.m_connect.ui.common.AppToast.LENGTH_LONG)
             } finally {
                 isSaving = false
             }

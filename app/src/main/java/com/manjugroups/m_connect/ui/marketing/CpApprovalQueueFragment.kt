@@ -1,6 +1,9 @@
 package com.manjugroups.m_connect.ui.marketing
 
 import com.manjugroups.m_connect.ui.common.toastSafe
+import com.manjugroups.m_connect.ui.common.ButtonLoader
+import com.manjugroups.m_connect.ui.common.Floater
+import com.manjugroups.m_connect.network.userMessage
 
 import android.app.AlertDialog
 import android.graphics.Color
@@ -18,7 +21,7 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
-import android.widget.Toast
+import com.manjugroups.m_connect.ui.common.AppToast as Toast
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.view.setPadding
 import androidx.fragment.app.Fragment
@@ -56,6 +59,19 @@ class CpApprovalQueueFragment : Fragment() {
     // Guards against a double-tap firing two approve/reject calls for one item.
     private var submitting = false
 
+    // Same views as the web CP Approval page: Team (completions waiting on
+    // you, from your team) and All (every pending completion; only each
+    // one's own GM can decide it). Team first, as on the web.
+    private val canViewTeam by lazy { session.hasPermission("marketing.cpApproval.viewTeam") }
+    private val canViewAll by lazy { session.hasPermission("marketing.cpApproval.viewAll") }
+    private val canApprove by lazy {
+        session.hasPermission("marketing.cpApproval.approve") ||
+            session.hasPermission("marketing.cpVisits.approve")
+    }
+    private var scope: String? = null
+    private lateinit var subtitle: TextView
+    private val scopeChips = mutableMapOf<String, TextView>()
+
     private fun dp(v: Int): Int =
         (v * resources.displayMetrics.density).roundToInt()
 
@@ -80,14 +96,21 @@ class CpApprovalQueueFragment : Fragment() {
             includeFontPadding = false
             typeface = font(R.font.inter_semibold) ?: typeface
         })
-        root.addView(TextView(requireContext()).apply {
-            text = "Out-of-geofence completions waiting on your approval."
+        scope = when {
+            canViewTeam -> "team"
+            canViewAll -> "all"
+            else -> null
+        }
+        subtitle = TextView(requireContext()).apply {
             textSize = 13f
             setTextColor(Color.parseColor("#667085"))
             includeFontPadding = false
             typeface = font(R.font.inter_regular) ?: typeface
-            setPadding(0, dp(4), 0, dp(16))
-        })
+            setPadding(0, dp(4), 0, dp(12))
+        }
+        root.addView(subtitle)
+        if (canViewTeam && canViewAll) root.addView(buildScopeTabs())
+        updateSubtitle()
 
         progress = ProgressBar(requireContext()).apply {
             layoutParams = LinearLayout.LayoutParams(dp(28), dp(28)).apply {
@@ -136,6 +159,56 @@ class CpApprovalQueueFragment : Fragment() {
             },
         )
         return page
+    }
+
+    /** Team / All pills (only when the staff member can see both). */
+    private fun buildScopeTabs(): View {
+        val row = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, 0, 0, dp(14))
+        }
+        listOf("team" to "Team", "all" to "All").forEach { (value, label) ->
+            val chip = TextView(requireContext()).apply {
+                text = label
+                textSize = 13f
+                includeFontPadding = false
+                typeface = font(R.font.inter_semibold) ?: typeface
+                setPadding(dp(18), dp(9), dp(18), dp(9))
+                isClickable = true
+                isFocusable = true
+                setOnClickListener {
+                    if (scope == value) return@setOnClickListener
+                    scope = value
+                    styleScopeChips()
+                    updateSubtitle()
+                    load()
+                }
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { rightMargin = dp(8) }
+            }
+            scopeChips[value] = chip
+            row.addView(chip)
+        }
+        styleScopeChips()
+        return row
+    }
+
+    private fun styleScopeChips() {
+        scopeChips.forEach { (value, chip) ->
+            val active = value == scope
+            chip.setTextColor(Color.parseColor(if (active) "#FFFFFF" else "#344054"))
+            chip.background = if (active) roundedBg("#0B61CA", "#0B61CA", 20) else roundedBg("#FFFFFF", "#D0D5DD", 20)
+        }
+    }
+
+    private fun updateSubtitle() {
+        subtitle.text = if (scope == "all") {
+            "Every pending out-of-geofence completion. Only each one's assigned GM can approve it."
+        } else {
+            "Out-of-geofence completions waiting on your approval."
+        }
     }
 
     /** Back bar matching the other pushed detail screens. */
@@ -192,7 +265,7 @@ class CpApprovalQueueFragment : Fragment() {
         emptyView.visibility = View.GONE
         container.removeAllViews()
         viewLifecycleOwner.lifecycleScope.launch {
-            val result = runCatching { api.getPendingCpApprovals(session.bearerToken) }
+            val result = runCatching { api.getPendingCpApprovals(session.bearerToken, scope) }
             if (!isAdded) return@launch
             progress.visibility = View.GONE
             result.onSuccess { resp ->
@@ -403,23 +476,51 @@ class CpApprovalQueueFragment : Fragment() {
             ).apply { topMargin = dp(10) }
         })
 
+        // Without the approve permission the card is view-only (as on the web).
+        if (!canApprove) return card
+
+        // Only the completion's own GM can decide; the server refuses anyone
+        // else ("Only the assigned GM can approve…"), so the All view shows
+        // whose turn it is instead of buttons that would fail.
+        if (item.canDecide == false) {
+            card.addView(TextView(requireContext()).apply {
+                text = "Waiting for ${item.gmName?.takeIf { it.isNotBlank() } ?: "the assigned GM"} to approve"
+                textSize = 13f
+                gravity = Gravity.CENTER
+                setTextColor(Color.parseColor("#475467"))
+                includeFontPadding = false
+                typeface = font(R.font.inter_medium) ?: typeface
+                setPadding(dp(12), dp(13), dp(12), dp(13))
+                background = roundedBg("#F2F4F7", "#EAECF0")
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { topMargin = dp(12) }
+            })
+            return card
+        }
+
         // Approve / Reject row
         val actions = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(0, dp(12), 0, 0)
         }
-        actions.addView(actionButton("Reject", "#B42318", "#FEE4E2") {
-            promptReject(item)
+        lateinit var rejectButton: TextView
+        rejectButton = actionButton("Reject", "#B42318", "#FEE4E2") {
+            promptReject(item, rejectButton)
         }.also {
             (it.layoutParams as LinearLayout.LayoutParams).apply {
                 weight = 1f; rightMargin = dp(8)
             }
-        })
-        actions.addView(actionButton("Approve", "#FFFFFF", "#169B2F") {
-            approve(item)
+        }
+        actions.addView(rejectButton)
+        lateinit var approveButton: TextView
+        approveButton = actionButton("Approve", "#FFFFFF", "#169B2F") {
+            approve(item, approveButton)
         }.also {
             (it.layoutParams as LinearLayout.LayoutParams).weight = 1f
-        })
+        }
+        actions.addView(approveButton)
         card.addView(actions)
         return card
     }
@@ -499,33 +600,39 @@ class CpApprovalQueueFragment : Fragment() {
             })
         }
 
-    private fun approve(item: CpApprovalItem) {
+    private fun approve(item: CpApprovalItem, button: View) {
         if (submitting) return
         submitting = true
+        ButtonLoader.start(button, "Approving")
         viewLifecycleOwner.lifecycleScope.launch {
-            val resp = runCatching {
+            val result = runCatching {
                 api.approveCpCompletion(
                     session.bearerToken,
                     CpApprovalActionRequest(id = item.id),
                 )
-            }.getOrNull()
-            if (!isAdded) { submitting = false; return@launch }
+            }
             submitting = false
+            ButtonLoader.stop(button)
+            if (!isAdded) return@launch
+            val resp = result.getOrNull()
             if (resp?.success == true) {
-                toastSafe("Approved")
+                Floater.success("Approved")
                 notifyChanged()
                 load()
             } else {
-                Toast.makeText(
-                    requireContext(),
-                    resp?.error ?: "Could not approve",
-                    Toast.LENGTH_LONG,
-                ).show()
+                // The server's own reason ("Only the assigned GM can approve…"),
+                // not a bare "Could not approve" (failed calls threw and were
+                // swallowed, so the reason never showed).
+                Floater.error(
+                    resp?.error?.takeIf { it.isNotBlank() }
+                        ?: result.exceptionOrNull()?.userMessage()
+                        ?: "Could not approve",
+                )
             }
         }
     }
 
-    private fun promptReject(item: CpApprovalItem) {
+    private fun promptReject(item: CpApprovalItem, button: View) {
         val input = EditText(requireContext()).apply {
             hint = "Reason for rejecting"
             setHintTextColor(Color.parseColor("#94A3B8"))
@@ -562,37 +669,36 @@ class CpApprovalQueueFragment : Fragment() {
                     ).show()
                     return@setPositiveButton
                 }
-                reject(item, remark)
+                reject(item, remark, button)
             }
             .show()
     }
 
-    private fun reject(item: CpApprovalItem, remark: String) {
+    private fun reject(item: CpApprovalItem, remark: String, button: View) {
         if (submitting) return
         submitting = true
+        ButtonLoader.start(button, "Rejecting")
         viewLifecycleOwner.lifecycleScope.launch {
-            val resp = runCatching {
+            val result = runCatching {
                 api.rejectCpCompletion(
                     session.bearerToken,
                     CpApprovalRejectRequest(id = item.id, remark = remark),
                 )
-            }.getOrNull()
-            if (!isAdded) { submitting = false; return@launch }
+            }
             submitting = false
+            ButtonLoader.stop(button)
+            if (!isAdded) return@launch
+            val resp = result.getOrNull()
             if (resp?.success == true) {
-                Toast.makeText(
-                    requireContext(),
-                    "Rejected & reassigned",
-                    Toast.LENGTH_SHORT,
-                ).show()
+                Floater.success("Rejected & reassigned")
                 notifyChanged()
                 load()
             } else {
-                Toast.makeText(
-                    requireContext(),
-                    resp?.error ?: "Could not reject",
-                    Toast.LENGTH_LONG,
-                ).show()
+                Floater.error(
+                    resp?.error?.takeIf { it.isNotBlank() }
+                        ?: result.exceptionOrNull()?.userMessage()
+                        ?: "Could not reject",
+                )
             }
         }
     }

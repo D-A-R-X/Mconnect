@@ -12,7 +12,7 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.widget.Toast
+import com.manjugroups.m_connect.ui.common.AppToast as Toast
 import android.app.Dialog
 import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat

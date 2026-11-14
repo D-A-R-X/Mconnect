@@ -45,7 +45,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
-import android.widget.Toast
+import com.manjugroups.m_connect.ui.common.AppToast as Toast
 import com.manjugroups.m_connect.ui.common.commitOnce
 
 

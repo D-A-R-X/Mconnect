@@ -168,8 +168,8 @@ class MapPinDropBottomSheet : BottomSheetDialogFragment() {
             val lat = pickedLat
             val lng = pickedLng
             if (lat == null || lng == null) {
-                android.widget.Toast.makeText(
-                    requireContext(), "Move the map to set a location", android.widget.Toast.LENGTH_SHORT,
+                com.manjugroups.m_connect.ui.common.AppToast.makeText(
+                    requireContext(), "Move the map to set a location", com.manjugroups.m_connect.ui.common.AppToast.LENGTH_SHORT,
                 ).show()
                 return@setOnClickListener
             }

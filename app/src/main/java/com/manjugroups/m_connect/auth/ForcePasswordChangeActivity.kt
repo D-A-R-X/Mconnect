@@ -230,10 +230,10 @@ class ForcePasswordChangeActivity : AppCompatActivity() {
         PendingPasswordChangeCredential.clear()
         runCatching { com.manjugroups.m_connect.ui.common.LocalCache.clearAll(this) }
         session.clearSession()
-        android.widget.Toast.makeText(
+        com.manjugroups.m_connect.ui.common.AppToast.makeText(
             this,
             "Please sign in with your current password, then set the new password again.",
-            android.widget.Toast.LENGTH_LONG,
+            com.manjugroups.m_connect.ui.common.AppToast.LENGTH_LONG,
         ).show()
         startActivity(Intent(this, EmployeePasswordLoginActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
@@ -260,10 +260,10 @@ class ForcePasswordChangeActivity : AppCompatActivity() {
         PendingPasswordChangeCredential.clear()
         runCatching { com.manjugroups.m_connect.ui.common.LocalCache.clearAll(this) }
         session.clearSession()
-        android.widget.Toast.makeText(
+        com.manjugroups.m_connect.ui.common.AppToast.makeText(
             this,
             "Session expired. Please sign in again.",
-            android.widget.Toast.LENGTH_LONG,
+            com.manjugroups.m_connect.ui.common.AppToast.LENGTH_LONG,
         ).show()
         startActivity(Intent(this, LoginActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK

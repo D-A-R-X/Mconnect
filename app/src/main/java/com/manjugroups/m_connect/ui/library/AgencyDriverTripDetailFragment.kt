@@ -7,7 +7,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.widget.LinearLayout
-import android.widget.Toast
+import com.manjugroups.m_connect.ui.common.AppToast as Toast
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup

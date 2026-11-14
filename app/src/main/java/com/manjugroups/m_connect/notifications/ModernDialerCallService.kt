@@ -9,7 +9,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
-import android.widget.Toast
+import com.manjugroups.m_connect.ui.common.AppToast as Toast
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
 import kotlinx.coroutines.CoroutineScope

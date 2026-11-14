@@ -11,7 +11,7 @@ import android.view.ViewGroup
 import android.widget.TextView
 import android.graphics.Color
 import android.widget.ImageView
-import android.widget.Toast
+import com.manjugroups.m_connect.ui.common.AppToast as Toast
 import android.widget.EditText
 import androidx.appcompat.app.AlertDialog
 import coil.load

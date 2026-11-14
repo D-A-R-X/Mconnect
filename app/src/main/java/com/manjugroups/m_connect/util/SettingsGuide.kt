@@ -4,7 +4,7 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.provider.Settings
-import android.widget.Toast
+import com.manjugroups.m_connect.ui.common.AppToast as Toast
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 /**

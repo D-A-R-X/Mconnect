@@ -229,7 +229,7 @@ class LandInspectionFragment : Fragment() {
 
     private fun showError(message: String) {
         if (_binding == null) return
-        toastSafe(message, android.widget.Toast.LENGTH_LONG)
+        toastSafe(message, com.manjugroups.m_connect.ui.common.AppToast.LENGTH_LONG)
     }
 
     /**
@@ -269,9 +269,9 @@ class LandInspectionFragment : Fragment() {
                     session.bearerToken, InspectionAcceptRequest(propertyId),
                 )
                 if (resp.success) {
-                    android.widget.Toast.makeText(
+                    com.manjugroups.m_connect.ui.common.AppToast.makeText(
                         requireContext(), "Inspection accepted",
-                        android.widget.Toast.LENGTH_SHORT,
+                        com.manjugroups.m_connect.ui.common.AppToast.LENGTH_SHORT,
                     ).show()
                     // Open the form immediately on acceptance (once), then
                     // refresh the list underneath so the card flips to Accepted.
@@ -346,10 +346,10 @@ class LandInspectionFragment : Fragment() {
                     // every subsequent render for this property. Survives
                     // re-list, fragment recreate, app restart (SharedPrefs).
                     markRescheduled(propertyId)
-                    android.widget.Toast.makeText(
+                    com.manjugroups.m_connect.ui.common.AppToast.makeText(
                         requireContext(),
                         "Date change requested for ${formatInspectionDate(date)}",
-                        android.widget.Toast.LENGTH_SHORT,
+                        com.manjugroups.m_connect.ui.common.AppToast.LENGTH_SHORT,
                     ).show()
                     loadInspections()
                 } else {
@@ -634,10 +634,10 @@ class LandInspectionFragment : Fragment() {
                     acceptBtn.isClickable = false
                     acceptBtn.setOnClickListener(null)
                     card.setOnClickListener {
-                        android.widget.Toast.makeText(
+                        com.manjugroups.m_connect.ui.common.AppToast.makeText(
                             requireContext(),
                             "Date change requested — awaiting approval.",
-                            android.widget.Toast.LENGTH_SHORT,
+                            com.manjugroups.m_connect.ui.common.AppToast.LENGTH_SHORT,
                         ).show()
                     }
                 }
@@ -691,10 +691,10 @@ class LandInspectionFragment : Fragment() {
                         // Pending acceptance: click accept accepts, click card shows warning toast
                         acceptBtn.setOnClickListener { acceptInspection(item.propertyId, item.title) }
                         card.setOnClickListener {
-                            android.widget.Toast.makeText(
+                            com.manjugroups.m_connect.ui.common.AppToast.makeText(
                                 requireContext(),
                                 "Accept the inspection before filling the form.",
-                                android.widget.Toast.LENGTH_SHORT,
+                                com.manjugroups.m_connect.ui.common.AppToast.LENGTH_SHORT,
                             ).show()
                         }
                     }

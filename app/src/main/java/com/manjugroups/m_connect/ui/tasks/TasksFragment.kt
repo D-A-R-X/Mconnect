@@ -10,7 +10,7 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.widget.Toast
+import com.manjugroups.m_connect.ui.common.AppToast as Toast
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import coil.load
@@ -173,10 +173,10 @@ class TasksFragment : Fragment() {
                 throw e
             } catch (e: Exception) {
                 val ctx = context ?: return@launch
-                android.widget.Toast.makeText(
+                com.manjugroups.m_connect.ui.common.AppToast.makeText(
                     ctx,
                     "Couldn't load tasks: ${e.message ?: "network error"}",
-                    android.widget.Toast.LENGTH_SHORT,
+                    com.manjugroups.m_connect.ui.common.AppToast.LENGTH_SHORT,
                 ).show()
                 renderSummary(deriveSummary(allTasks))
                 renderTasks()
