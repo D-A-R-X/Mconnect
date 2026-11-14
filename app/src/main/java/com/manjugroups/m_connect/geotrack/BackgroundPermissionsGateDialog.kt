@@ -153,6 +153,9 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
             return missing
         }
 
+        /** True while the gate sheet is on screen (or about to be). */
+        fun isShowing(fm: FragmentManager): Boolean = fm.findFragmentByTag(TAG) != null
+
         fun showIfNeeded(fm: FragmentManager, ctx: Context, tracked: Boolean = true) {
             val existing = fm.findFragmentByTag(TAG) as? BackgroundPermissionsGateDialog
             if (existing != null) {
@@ -409,6 +412,10 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
 
     override fun onStart() {
         super.onStart()
+        // Nothing else may sit on top of the gate (the pending-tasks sheet
+        // used to open in front of it): it closes, and reopens once this is
+        // done.
+        (activity as? com.manjugroups.m_connect.MainActivity)?.onPermissionGateShown()
         dialog?.window?.setLayout(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT
@@ -428,6 +435,12 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
     override fun onStop() {
         context?.let { runCatching { it.unregisterReceiver(locationToggleReceiver) } }
         super.onStop()
+    }
+
+    override fun onDismiss(dialog: android.content.DialogInterface) {
+        super.onDismiss(dialog)
+        // Everything granted: whatever waited behind the gate can show now.
+        (activity as? com.manjugroups.m_connect.MainActivity)?.onPermissionGateCleared()
     }
 
     override fun onResume() {

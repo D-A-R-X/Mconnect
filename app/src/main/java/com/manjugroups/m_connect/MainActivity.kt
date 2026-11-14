@@ -842,8 +842,39 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * The permission gate (and the old-app notice before it) must be finished
+     * first: the pending-tasks sheet used to open in front of the gate, so
+     * staff closed it and never granted what tracking/punch-in needs.
+     */
+    private fun permissionGateBlocking(): Boolean {
+        if (com.manjugroups.m_connect.ui.common.OldAppUninstallGate.isBlocking(this)) return true
+        val gate = com.manjugroups.m_connect.geotrack.BackgroundPermissionsGateDialog
+        if (gate.isShowing(supportFragmentManager)) return true
+        return !gate.allGranted(this, tracked = session.geoTrackingEnabled)
+    }
+
+    // Set while the gate closes the tasks sheet, so that close doesn't start
+    // the reopen cool-off: the sheet comes straight back once the gate is done.
+    private var closingPendingSheetForGate = false
+
+    /** From [com.manjugroups.m_connect.geotrack.BackgroundPermissionsGateDialog]: it is on screen. */
+    fun onPermissionGateShown() {
+        val sheet = supportFragmentManager.findFragmentByTag(TAG_PENDING_SHEET)
+            as? androidx.fragment.app.DialogFragment ?: return
+        closingPendingSheetForGate = true
+        sheet.dismissAllowingStateLoss()
+    }
+
+    /** From the gate: everything is granted and it closed. */
+    fun onPermissionGateCleared() {
+        if (isFinishing || isDestroyed) return
+        refreshTasksBanner()
+    }
+
     private fun showTaskNudgeOverlay() {
         if (pendingTasksList.isEmpty()) return
+        if (permissionGateBlocking()) return
         // Don't stack a second sheet: a peek tap and a live refresh's auto-open
         // can otherwise both fire, and a config change re-adds the fragment.
         if (supportFragmentManager.findFragmentByTag(TAG_PENDING_SHEET) != null) return
@@ -869,7 +900,10 @@ class MainActivity : AppCompatActivity() {
         if (isFinishing || isDestroyed) return
         // Sheet gone — drop the solid nav-bar fill back to transparent.
         setNavBarSolid(false)
-        hideTaskNudgeOverlay(markDismissed = true)
+        // Closed for the permission gate, not by the user: no cool-off.
+        val byGate = closingPendingSheetForGate
+        closingPendingSheetForGate = false
+        hideTaskNudgeOverlay(markDismissed = !byGate)
     }
 
     /** Glide the carousel to the next card after a short dwell. */

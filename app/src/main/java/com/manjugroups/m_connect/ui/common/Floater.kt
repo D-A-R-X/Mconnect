@@ -60,6 +60,7 @@ object Floater {
 
     private const val MAX_VISIBLE = 3
     private const val EXPANDED_MS = 8_000L
+    private const val HEADER_OFFSET_DP = 64
 
     private val main = Handler(Looper.getMainLooper())
     private var resumed: WeakReference<Activity>? = null
@@ -318,7 +319,9 @@ object Floater {
         private fun attach(activity: Activity): Boolean {
             if (attached) return true
             if (activity.window?.decorView?.windowToken == null) return false
-            val top = statusBarHeight(activity) + dp(4)
+            // Below the screen header (status bar + the 56dp title bar + a gap),
+            // not on top of the title and back button.
+            val top = statusBarHeight(activity) + dp(HEADER_OFFSET_DP)
             val params = WindowManager.LayoutParams(
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 WindowManager.LayoutParams.WRAP_CONTENT,

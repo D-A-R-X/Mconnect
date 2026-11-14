@@ -22,6 +22,14 @@ class ActivityRecognitionReceiver : BroadcastReceiver() {
         // still lands on the timeline instead of being collapsed away.
         @Volatile private var transitionPending: Boolean = false
 
+        /**
+         * The running GeoTrackService, told the moment a transition arrives so
+         * it switches GPS back to precise when a trip starts — instead of
+         * waiting for its next low-power fix (up to 2.5 min) or loop tick,
+         * which left the first part of every trip unrecorded.
+         */
+        @Volatile var onTransition: ((String) -> Unit)? = null
+
         fun consumeTransitionPending(): Boolean {
             val was = transitionPending
             transitionPending = false
@@ -40,6 +48,7 @@ class ActivityRecognitionReceiver : BroadcastReceiver() {
                     currentConfidence = 80 // Transition events don't provide confidence, use high default
                     transitionPending = true
                     Log.i(TAG, "Activity transition: $name")
+                    runCatching { onTransition?.invoke(name) }
                 }
             }
         }

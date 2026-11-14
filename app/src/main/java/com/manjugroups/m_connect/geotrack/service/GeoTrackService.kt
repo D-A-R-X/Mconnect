@@ -37,6 +37,7 @@ import com.manjugroups.m_connect.network.LocationPoint
 import com.manjugroups.m_connect.network.PushBatchRequest
 import com.manjugroups.m_connect.network.TamperReportRequest
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.atomic.AtomicBoolean
 import com.google.android.gms.location.ActivityRecognition
 import com.google.android.gms.location.ActivityTransition
@@ -79,6 +80,8 @@ class GeoTrackService : Service() {
         // (was 50 m, which dropped most of them). The 15 m / 50 m spacing
         // filters below still absorb jitter; the server accepts up to 250 m.
         private const val MAX_STORE_ACCURACY_M = 100f
+        // A batched fix older than this is stamped "now" instead (stale cache).
+        private const val MAX_FIX_AGE_MS = 15 * 60 * 1000L
         // A raw-fix move must exceed this (and both fixes' error) to count as motion.
         private const val MIN_MOTION_DISTANCE_M = 120.0
         // Short, self-timing wakelock taken ONLY around a network sync burst
@@ -222,6 +225,8 @@ class GeoTrackService : Service() {
     private val pointsSynced = AtomicInteger(0)
     private val firstLocationReceived = AtomicBoolean(false)
     private val lastProcessedTime = AtomicLong(0L)
+    // One fix at a time, in order (a batch, then the next batch).
+    private val locationMutex = kotlinx.coroutines.sync.Mutex()
     // Live clock-in gate. GeoTrack must capture travel ONLY between punch-in
     // and punch-out, so we refuse to buffer points (and tear the service down)
     // the moment the attendance session is no longer open. It deliberately
@@ -334,8 +339,13 @@ class GeoTrackService : Service() {
 
     private val locationCallback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
-            val best = result.locations.maxByOrNull { it.accuracy.let { a -> -a } } ?: return
-            serviceScope.launch { processLocation(best) }
+            // Every fix, oldest first. Android hands over several at once when
+            // the screen is off / the phone dozes; keeping only the most
+            // accurate one threw the rest of the path away (dashed gaps on
+            // the map, a trip with a start and an end and nothing between).
+            val fixes = result.locations.sortedBy { it.time }
+            if (fixes.isEmpty()) return
+            serviceScope.launch { locationMutex.withLock { fixes.forEach { processLocation(it) } } }
             // A fix wakes the CPU anyway: send an overdue heartbeat now rather
             // than whenever the sleeping loop's timer next gets CPU time.
             if (System.currentTimeMillis() - lastHeartbeatAt >= HEARTBEAT_INTERVAL_MS) {
@@ -354,6 +364,15 @@ class GeoTrackService : Service() {
         api = GeoTrackApi.create()
         fusedClient = LocationServices.getFusedLocationProviderClient(this)
         createNotificationChannel()
+        // Started walking / riding / driving → precise GPS now, not at the
+        // next idle fix (the start of a trip after a long stop went missing).
+        ActivityRecognitionReceiver.onTransition = { activity ->
+            if (activity != "STILL" && activity != "UNKNOWN" && activity != "TILTING") {
+                lastMovingAtMs = System.currentTimeMillis()
+                lastActivity = activity
+            }
+            serviceScope.launch { runCatching { reevaluateLocationMode() } }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -474,6 +493,7 @@ class GeoTrackService : Service() {
     override fun onDestroy() {
         Log.i(TAG, "onDestroy — flushing ${pointsCaptured.get() - pointsSynced.get()} pending points")
         isRunning = false
+        ActivityRecognitionReceiver.onTransition = null
         fusedClient.removeLocationUpdates(locationCallback)
         // Remove activity recognition
         activityPendingIntent?.let {
@@ -651,7 +671,7 @@ class GeoTrackService : Service() {
 
             val listener = object : android.location.LocationListener {
                 override fun onLocationChanged(location: Location) {
-                    serviceScope.launch { processLocation(location) }
+                    serviceScope.launch { locationMutex.withLock { processLocation(location) } }
                 }
                 override fun onProviderEnabled(provider: String) {}
                 override fun onProviderDisabled(provider: String) {}
@@ -781,8 +801,13 @@ class GeoTrackService : Service() {
             return
         }
         if (!sessionOpen || clockGateStopped) return
-        // Dedup: skip if less than 3 seconds since last processed point (atomic)
-        val now = System.currentTimeMillis()
+        // Timing uses WHEN THE FIX WAS TAKEN, not when we got to it: a batch
+        // of fixes arrives together, and stamping them all "now" made every
+        // point of the batch share one time (0 s segments on the timeline,
+        // wrong speeds) and the 3 s dedup below discarded all but the first.
+        val now = fixTimeOf(location, System.currentTimeMillis())
+        // Dedup: skip a fix less than 3 s after the last processed one (atomic);
+        // an older fix arriving late is dropped too, keeping the path in order.
         val last = lastProcessedTime.get()
         if (now - last < 3_000) return
         if (!lastProcessedTime.compareAndSet(last, now)) return // Another thread got here first
@@ -884,7 +909,7 @@ class GeoTrackService : Service() {
             networkType = getNetworkType(),
             gpsEnabled = isGpsEnabled(),
             airplaneMode = isAirplaneModeOn(),
-            recordedAt = System.currentTimeMillis(),
+            recordedAt = now, // the fix's own time
             sessionId = session.activeTrackingSessionId,
             // Which trip this point belongs to, decided HERE rather than at
             // upload: a backlog flushed after the trip ended must keep the
@@ -906,6 +931,15 @@ class GeoTrackService : Service() {
             Log.i(TAG, "First location received — triggering immediate sync")
             syncPoints()
         }
+    }
+
+    /**
+     * The fix's own timestamp (UTC ms from GNSS / fused), or [wallNow] when it
+     * is missing or implausible (a phone clock far off, a stale cached fix).
+     */
+    private fun fixTimeOf(location: Location, wallNow: Long): Long {
+        val t = location.time
+        return if (t > 0L && t <= wallNow + 30_000L && wallNow - t <= MAX_FIX_AGE_MS) t else wallNow
     }
 
     // Last raw fix seen (any accuracy), for motion detection only.
