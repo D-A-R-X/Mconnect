@@ -135,9 +135,14 @@ object MobileAlerts {
     fun markViewed(context: Context, alert: MobileAlert) {
         val deliveryId = alert.deliveryId?.takeIf { it.isNotBlank() } ?: return
         val appContext = context.applicationContext
+        // Read: take its pinned notification down. This used to RE-POST it
+        // (cancel + notify, as dismissible), so opening an old alert from the
+        // inbox popped and rang a notification like a fresh push.
+        cancelNotification(appContext, deliveryId)
+        // Already viewed (reopened from the inbox): nothing more to record.
+        if (deliveryId in idSet(appContext, KEY_VIEWED)) return
         saveIdSet(appContext, KEY_VIEWED, idSet(appContext, KEY_VIEWED) + deliveryId)
         saveIdSet(appContext, KEY_UNACKED, idSet(appContext, KEY_UNACKED) + deliveryId)
-        postNotification(appContext, alert, viewed = true)
         scope.launch {
             val session = SessionManager(appContext)
             if (session.isLoggedIn) retryReceipts(appContext, ApiService.create(), session)

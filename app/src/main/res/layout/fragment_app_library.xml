@@ -1290,6 +1290,67 @@
                             android:layout_height="1dp"
                             android:background="@drawable/bg_apps_divider_gradient" />
 
+                        <!-- SV Approvals — out-of-station / immediate-pickup / direct site
+                             visits waiting on this GM (their SV approval tasks). -->
+                        <LinearLayout
+                            android:id="@+id/itemMarketingSvApprovals"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="12dp">
+
+                            <ImageView
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
+                                android:contentDescription="@null"
+                                android:scaleType="fitCenter"
+                                android:src="@drawable/ic_apps_site_visits" />
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="12dp"
+                                android:layout_weight="1"
+                                android:fontFamily="@font/inter_medium"
+                                android:includeFontPadding="false"
+                                android:text="SV Approvals"
+                                android:textColor="#111111"
+                                android:textSize="14sp" />
+
+                            <!-- Pending count. Hidden at zero so the row never
+                                 shows a "0" badge. -->
+                            <TextView
+                                android:id="@+id/tvMarketingSvApprovalsCount"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginEnd="8dp"
+                                android:background="@drawable/bg_cp_approvals_count"
+                                android:fontFamily="@font/inter_medium"
+                                android:includeFontPadding="false"
+                                android:minWidth="20dp"
+                                android:paddingHorizontal="6dp"
+                                android:paddingVertical="2dp"
+                                android:textAlignment="center"
+                                android:textColor="#5925DC"
+                                android:textSize="11sp"
+                                android:visibility="gone" />
+
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:contentDescription="@null"
+                                android:src="@drawable/ic_apps_chevron" />
+                        </LinearLayout>
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:background="@drawable/bg_apps_divider_gradient" />
+
                         <!-- Site Visits — client-comes-to-plot trips owned by the
                              site incharge. Sits below CP Visits in the Marketing
                              group to mirror the web sidebar order. -->

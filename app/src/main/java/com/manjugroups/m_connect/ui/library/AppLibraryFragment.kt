@@ -97,6 +97,7 @@ class AppLibraryFragment : Fragment() {
         setupClickActions()
         pruneEmptySections()
         refreshCpApprovalsEntry()
+        refreshSvApprovalsEntry()
         setupFilterPills()
         setupScrollAnimation()
         applyFilter(Filter.ALL)
@@ -118,6 +119,7 @@ class AppLibraryFragment : Fragment() {
                     pruneEmptySections()
                     applyFilter(currentFilter)
                     refreshCpApprovalsEntry()
+                    refreshSvApprovalsEntry()
                 }
             }
         }
@@ -129,6 +131,9 @@ class AppLibraryFragment : Fragment() {
         parentFragmentManager.setFragmentResultListener(
             CpApprovalQueueFragment.RESULT_KEY, viewLifecycleOwner,
         ) { _, _ -> refreshCpApprovalsEntry() }
+        parentFragmentManager.setFragmentResultListener(
+            com.manjugroups.m_connect.ui.marketing.SvApprovalQueueFragment.RESULT_KEY, viewLifecycleOwner,
+        ) { _, _ -> refreshSvApprovalsEntry() }
 
         // App Library has no remote data of its own — the pull just
         // re-plays the entry animation so the user sees the screen
@@ -458,6 +463,14 @@ class AppLibraryFragment : Fragment() {
             allowed = session.hasPermission("marketing.cpVisits.approve"),
         ) { openCpApprovalQueue() }
 
+        // SV Approvals — site visits handed to this GM to approve (out of
+        // station / immediate pickup / direct). Shown to GMs who can confirm
+        // SVs; refreshSvApprovalsEntry() also reveals it when work is waiting.
+        bindIamEntry(
+            row = binding.itemMarketingSvApprovals,
+            allowed = session.hasPermission("marketing.siteVisits.confirm"),
+        ) { openScreen(com.manjugroups.m_connect.ui.marketing.SvApprovalQueueFragment.newInstance()) }
+
         bindIamEntry(
             row = binding.itemMarketingSiteVisits,
             allowed = session.hasPermission("marketing.siteVisits.view"),
@@ -756,9 +769,36 @@ class AppLibraryFragment : Fragment() {
      * network call — an approver sees the row immediately, and the badge (or a
      * late reveal) lands when the count returns.
      */
+    /** SV Approvals row: pending count, and reveal it when work is waiting. */
+    private fun refreshSvApprovalsEntry() {
+        if (_binding == null) return
+        val session = SessionManager(requireContext())
+        viewLifecycleOwner.lifecycleScope.launch {
+            val count = runCatching {
+                com.manjugroups.m_connect.ui.marketing.SvApprovalQueueFragment
+                    .loadPending(com.manjugroups.m_connect.network.ApiService.create(), session).size
+            }.getOrNull() ?: return@launch
+            if (!isAdded || _binding == null) return@launch
+            val badge = binding.tvMarketingSvApprovalsCount
+            badge.text = count.toString()
+            badge.visibility = if (count > 0) View.VISIBLE else View.GONE
+            val row = binding.itemMarketingSvApprovals
+            if (count > 0 && row.visibility != View.VISIBLE) {
+                row.visibility = View.VISIBLE
+                row.setOnClickListener {
+                    openScreen(com.manjugroups.m_connect.ui.marketing.SvApprovalQueueFragment.newInstance())
+                }
+                pruneEmptySections()
+                applyFilter(currentFilter)
+            }
+        }
+    }
+
     private fun refreshCpApprovalsEntry() {
         if (_binding == null) return
         val session = SessionManager(requireContext())
+        // The server refuses the queue without CP Approval access; don't ask.
+        if (!CpApprovalQueueFragment.canViewQueue(session)) return
         viewLifecycleOwner.lifecycleScope.launch {
             val count = runCatching {
                 geoApi.getPendingCpApprovals(session.bearerToken).items.size
@@ -819,6 +859,7 @@ class AppLibraryFragment : Fragment() {
                 listOf(
                     R.id.itemMarketingCpVisits,
                     R.id.itemMarketingCpApprovals,
+                    R.id.itemMarketingSvApprovals,
                     R.id.itemMarketingSiteVisits,
                     R.id.itemMarketingMyLeads,
                     R.id.itemMarketingDialer,
@@ -995,6 +1036,7 @@ class AppLibraryFragment : Fragment() {
         // changed permission set.
         if (_binding == null) return
         refreshCpApprovalsEntry()
+        refreshSvApprovalsEntry()
         val session = SessionManager(requireContext())
         viewLifecycleOwner.lifecycleScope.launch {
             IamUpdateBus.refresh(session)

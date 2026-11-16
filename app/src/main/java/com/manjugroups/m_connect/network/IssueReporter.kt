@@ -170,7 +170,13 @@ object IssueReporter {
         }
         val took = SystemClock.elapsedRealtime() - started
         crumb("${request.method} $path → ${response.code} (${took} ms)")
-        if (!response.isSuccessful && response.code != 401 && !response.isRedirect) {
+        // OkHttp's own 504 "Unsatisfiable Request (only-if-cached)" is the
+        // offline cache saying it has nothing saved after the real call
+        // failed — not a server reply. The real failure is already reported,
+        // so this only made a second issue for the same problem.
+        val offlineCacheMiss = request.cacheControl.onlyIfCached ||
+            (response.code == 504 && response.message.contains("only-if-cached", ignoreCase = true))
+        if (!response.isSuccessful && response.code != 401 && !response.isRedirect && !offlineCacheMiss) {
             val body = runCatching { response.peekBody(4_096).string() }.getOrNull()
             reportHttp(request, response.code, response.message, body, took)
         }
