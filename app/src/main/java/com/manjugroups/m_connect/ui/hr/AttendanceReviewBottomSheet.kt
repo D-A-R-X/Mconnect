@@ -333,7 +333,10 @@ class AttendanceReviewBottomSheet : BottomSheetDialogFragment() {
                 drewRoute = hasBounds
             }
             if (!drewRoute) {
-                val timelinePath = data.timeline.map { LatLng(it.lat, it.lng) }
+                // Cleaned: a stop is one point, not a star of jitter lines.
+                val timelinePath = com.manjugroups.m_connect.geotrack.TrackCleaner.cleanTimeline(data.timeline)
+                    .map { LatLng(it.lat, it.lng) }
+                    .ifEmpty { data.timeline.map { LatLng(it.lat, it.lng) } }
                 drawTripLine(map, timelinePath, Color.parseColor("#2563EB"))
                 timelinePath.forEach { boundsBuilder.include(it); hasBounds = true }
                 drewRoute = true

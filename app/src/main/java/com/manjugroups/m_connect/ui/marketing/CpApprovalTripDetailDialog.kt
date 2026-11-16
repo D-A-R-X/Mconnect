@@ -249,9 +249,13 @@ class CpApprovalTripDetailDialog : DialogFragment() {
                 api.getSessionRoute(session.bearerToken, staffId = staffId, dayStart = start, dayEnd = end).data?.timeline
             }
         }.onFailure { Log.w(TAG, "Geo service trail unavailable for ${item.id}", it) }.getOrNull().orEmpty()
-        val points = timeline
-            .filter { it.recordedAt in start..end && coordinates(it.lat, it.lng) != null }
-            .sortedBy { it.recordedAt }
+        // Cleaned: stops become one point and spikes go, so neither the drawn
+        // trail nor the road matching zig-zags around the visit.
+        val points = com.manjugroups.m_connect.geotrack.TrackCleaner.cleanTimeline(
+            timeline
+                .filter { it.recordedAt in start..end && coordinates(it.lat, it.lng) != null }
+                .sortedBy { it.recordedAt },
+        ).map { com.manjugroups.m_connect.network.TimelinePoint(it.lat, it.lng, 0.0, "", recordedAt = it.atMs ?: start) }
         if (points.size < 2) return null
         // Keep the first/last fix and thin long trips to a bounded map payload.
         val stride = maxOf(1, (points.size + 299) / 300)

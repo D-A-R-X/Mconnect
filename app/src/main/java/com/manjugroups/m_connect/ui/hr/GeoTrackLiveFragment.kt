@@ -365,7 +365,10 @@ class GeoTrackLiveFragment : Fragment(), OnMapReadyCallback {
                 }
             }
         } else if (timeline.size >= 2) {
-            val timelinePath = timeline.map { LatLng(it.lat, it.lng) }
+            // Cleaned: a stop is one point, not a star of jitter lines.
+            val timelinePath = com.manjugroups.m_connect.geotrack.TrackCleaner.cleanTimeline(timeline)
+                .map { LatLng(it.lat, it.lng) }
+                .ifEmpty { timeline.map { LatLng(it.lat, it.lng) } }
             map.addPolyline(
                 PolylineOptions()
                     .addAll(timelinePath)

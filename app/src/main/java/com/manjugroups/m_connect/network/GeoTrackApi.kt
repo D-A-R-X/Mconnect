@@ -1094,6 +1094,9 @@ data class TimelinePoint(
     val speed: Double,
     val activity: String,
     val movementMode: String? = null,
+    // Optional: older payloads omit them (nullable so Gson never fails the list).
+    val accuracy: Double? = null,
+    val isMock: Boolean? = null,
     @com.google.gson.annotations.JsonAdapter(EpochMillisAdapter::class)
     val recordedAt: Long,
 )
