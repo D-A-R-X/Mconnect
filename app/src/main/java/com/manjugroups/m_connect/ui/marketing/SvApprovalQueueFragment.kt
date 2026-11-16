@@ -232,6 +232,7 @@ class SvApprovalQueueFragment : Fragment() {
             val resp = result.getOrNull()
             if (resp?.success == true) {
                 Floater.success(if (status == "completed") "Site visit approved and created" else "Site visit rejected")
+                markDecided(task.id)
                 parentFragmentManager.setFragmentResult(RESULT_KEY, bundleOf("changed" to true))
                 load()
             } else {
@@ -306,6 +307,23 @@ class SvApprovalQueueFragment : Fragment() {
 
         fun newInstance(): SvApprovalQueueFragment = SvApprovalQueueFragment()
 
+        // The task list is cached for 60 s (server read cache + Cache-Control
+        // max-age=60 in OkHttp), so a reload right after Approve / Reject can
+        // still list the decided visit. Hide decided ones for a few minutes so
+        // the GM never sees it come back and taps it twice.
+        private const val DECIDED_HIDE_MS = 5 * 60_000L
+        private val decidedAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+        private fun markDecided(id: String) {
+            decidedAt[id] = System.currentTimeMillis()
+        }
+
+        private fun isRecentlyDecided(id: String): Boolean {
+            val now = System.currentTimeMillis()
+            decidedAt.entries.removeIf { now - it.value >= DECIDED_HIDE_MS }
+            return decidedAt.containsKey(id)
+        }
+
         /** Open SV approvals assigned to the signed-in GM, oldest visit first. */
         suspend fun loadPending(api: ApiService, session: SessionManager): List<DailyTaskData> {
             val me = session.staffId ?: return emptyList()
@@ -315,7 +333,8 @@ class SvApprovalQueueFragment : Fragment() {
                 .filter {
                     it.sourceReferenceType == "out_of_station_handoff" &&
                         it.assignedTo == me &&
-                        (it.status == "pending" || it.status == "in-progress")
+                        (it.status == "pending" || it.status == "in-progress") &&
+                        !isRecentlyDecided(it.id)
                 }
                 .sortedBy { it.deadline ?: "" }
         }
