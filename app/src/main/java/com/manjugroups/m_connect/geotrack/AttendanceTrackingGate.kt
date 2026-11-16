@@ -5,6 +5,7 @@ import com.manjugroups.m_connect.network.SessionData
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
+import kotlinx.coroutines.async
 
 /**
  * Decides whether the staff member counts as "clocked in for today" so trip
@@ -155,8 +156,13 @@ object AttendanceTrackingGate {
         api: ApiService = ApiService.create(),
     ): Boolean? {
         if (token.isBlank()) return null
-        val todayResp = runCatching { api.getMyAttendanceToday(token) }.getOrNull()
-        val dayResp = runCatching { api.getDaySessions(token) }.getOrNull()
+        // Both at once: back to back, a stalled connection held this for two
+        // full timeouts. A caller's timeout cancels both.
+        val (todayResp, dayResp) = kotlinx.coroutines.coroutineScope {
+            val today = async { runCatching { api.getMyAttendanceToday(token) }.getOrNull() }
+            val day = async { runCatching { api.getDaySessions(token) }.getOrNull() }
+            today.await() to day.await()
+        }
         val todayOk = todayResp?.success == true
         val dayOk = dayResp?.success == true
         // Neither endpoint answered authoritatively → unknown, don't act.

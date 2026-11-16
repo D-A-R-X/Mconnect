@@ -11,6 +11,11 @@ import com.manjugroups.m_connect.R
  * nested fragment.
  */
 fun Fragment.navigateUp() {
+    // A dialog/callback can outlive its screen (the activity was re-created or
+    // the tab replaced while it was up); parentFragmentManager then throws
+    // "not associated with a fragment manager" (crash in Mobile → Issues,
+    // 15 Nov). The screen is gone, so there is nothing to navigate.
+    if (!isAdded) return
     val fm = parentFragmentManager
     // Use the ASYNC popBackStack, never popBackStackImmediate(). Immediate pop
     // rebuilds the destination fragment's whole view tree synchronously on the
@@ -90,6 +95,9 @@ fun FragmentManager.pushDetail(next: Fragment, allowStateLoss: Boolean = false) 
 
 /** Fragment-scoped convenience for [FragmentManager.pushDetail]. */
 fun Fragment.pushDetail(next: Fragment, allowStateLoss: Boolean = false) {
+    // Same as navigateUp(): a tap delivered after this screen left its
+    // fragment manager must not crash the app.
+    if (!isAdded) return
     parentFragmentManager.pushDetail(next, allowStateLoss)
 }
 

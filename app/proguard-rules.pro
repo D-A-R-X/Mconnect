@@ -75,3 +75,18 @@
 -keep class * implements com.google.firebase.components.ComponentRegistrar {
     <init>();
 }
+
+# Java serialization of fragment arguments / saved state. Kotlin's buildMap /
+# buildList / buildSet collections (and our own Serializable data classes)
+# are written through writeReplace()/readResolve(), which only reflection
+# calls, so R8 stripped them and saving state crashed with
+# NotSerializableException when the app went to the background (filter sheet
+# open, Settings -> Mobile -> Issues, 14 Nov).
+-keepclassmembers class * implements java.io.Serializable {
+    static final long serialVersionUID;
+    private static final java.io.ObjectStreamField[] serialPersistentFields;
+    private void writeObject(java.io.ObjectOutputStream);
+    private void readObject(java.io.ObjectInputStream);
+    java.lang.Object writeReplace();
+    java.lang.Object readResolve();
+}

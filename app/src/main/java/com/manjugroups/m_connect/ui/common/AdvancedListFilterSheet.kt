@@ -187,7 +187,10 @@ class AdvancedListFilterSheet : DialogFragment() {
     }
 
     private fun currentState(): State = State(
-        selected = selected.mapValues { it.value.toSet() },
+        // Plain collections: this State is put in a result Bundle too.
+        selected = LinkedHashMap<String, Set<String>>().also { out ->
+            selected.forEach { (key, values) -> out[key] = LinkedHashSet(values) }
+        },
         fromDate = fromDate,
         toDate = toDate,
     )
@@ -396,12 +399,23 @@ class AdvancedListFilterSheet : DialogFragment() {
             initial: State,
             resultKey: String,
         ) = AdvancedListFilterSheet().apply {
+            // Plain java.util collections only: Android serializes these
+            // arguments when the app goes to the background, and callers build
+            // them with buildMap/buildList, whose classes can't be written
+            // once R8 has shrunk the release build (NotSerializableException).
             arguments = bundleOf(
-                ARG_CATEGORIES to ArrayList(categories),
-                ARG_INITIAL to initial,
+                ARG_CATEGORIES to ArrayList(categories.map { it.copy(options = ArrayList(it.options)) }),
+                ARG_INITIAL to initial.portable(),
                 ARG_RESULT_KEY to resultKey,
             )
         }
+
+        /** [State] with plain LinkedHashMap / LinkedHashSet inside (always serializable). */
+        private fun State.portable(): State = copy(
+            selected = LinkedHashMap<String, Set<String>>().also { out ->
+                selected.forEach { (key, values) -> out[key] = LinkedHashSet(values) }
+            },
+        )
 
         @Suppress("DEPRECATION")
         fun state(bundle: Bundle): State? = bundle.getSerializable(KEY_STATE) as? State

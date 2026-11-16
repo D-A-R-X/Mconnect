@@ -228,6 +228,11 @@ class CpVisitsFragment : Fragment() {
     private fun refreshApprovalsBanner() {
         val banner = rootView?.findViewById<View>(R.id.cpvApprovalsBanner) ?: return
         val title = rootView?.findViewById<TextView>(R.id.tvApprovalsBannerTitle)
+        // Without CP Approval access the server always refuses the queue.
+        if (!CpApprovalQueueFragment.canViewQueue(session)) {
+            banner.visibility = View.GONE
+            return
+        }
         viewLifecycleOwner.lifecycleScope.launch {
             val count = runCatching {
                 geoApi.getPendingCpApprovals(session.bearerToken).items.size

@@ -243,15 +243,28 @@ class NotificationsFragment : Fragment() {
         }
     }
 
+    /**
+     * False once the screen's views are gone. A request still in flight when
+     * the user leaves is cancelled, and runCatching catches that cancellation
+     * as an ordinary failure, so its handler used to render into the
+     * destroyed view and crash (NullPointerException, Mobile → Issues,
+     * 16 Nov). Every async callback checks this first.
+     */
+    private val viewAlive: Boolean get() = _binding != null && isAdded
+
     private fun loadNotifications() {
+        if (!viewAlive) return
         binding.skeletonContainer.visibility = View.VISIBLE
         binding.rvNotifications.visibility = View.GONE
         binding.emptyState.visibility = View.GONE
         SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
         viewLifecycleOwner.lifecycleScope.launch {
-            runCatching {
-                api.getNotifications(session.bearerToken)
-            }.onSuccess { response ->
+            val result = runCatching { api.getNotifications(session.bearerToken) }
+            // Left the screen mid-request (cancelled): nothing to show it on.
+            if (!viewAlive || result.exceptionOrNull() is kotlinx.coroutines.CancellationException) {
+                return@launch
+            }
+            result.onSuccess { response ->
                 allNotifications = response.notifications
                 // Surface unread approvals/tasks on the phone's tray so they
                 // aren't missed once the app is closed. Only genuinely new
@@ -270,6 +283,7 @@ class NotificationsFragment : Fragment() {
     }
 
     private fun renderNotifications() {
+        if (!viewAlive) return
         SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
         binding.skeletonContainer.visibility = View.GONE
         binding.notificationsRefresh.dismissRefresh()
@@ -291,9 +305,11 @@ class NotificationsFragment : Fragment() {
 
     private fun markAllRead() {
         viewLifecycleOwner.lifecycleScope.launch {
-            runCatching {
-                api.markAllNotificationsRead(session.bearerToken)
-            }.onSuccess {
+            val result = runCatching { api.markAllNotificationsRead(session.bearerToken) }
+            if (!viewAlive || result.exceptionOrNull() is kotlinx.coroutines.CancellationException) {
+                return@launch
+            }
+            result.onSuccess {
                 loadNotifications()
             }.onFailure {
                 toast("Unable to mark all as read")
@@ -318,6 +334,9 @@ class NotificationsFragment : Fragment() {
                     api.markNotificationRead(session.bearerToken, IdRequest(id))
                 }
             }
+            // Left the screen while marking it read: don't navigate or toast
+            // from a screen that is gone (requireContext would throw).
+            if (!viewAlive) return@launch
 
             // Map each backend referenceType to the mobile destination
             val fragment = when (notification.referenceType) {

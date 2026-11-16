@@ -82,6 +82,9 @@ class GeoTrackService : Service() {
         private const val MAX_STORE_ACCURACY_M = 100f
         // A batched fix older than this is stamped "now" instead (stale cache).
         private const val MAX_FIX_AGE_MS = 15 * 60 * 1000L
+        // Server "still clocked in?" check: how often, and how long to wait.
+        private const val CLOCK_GATE_INTERVAL_MS = 5 * 60 * 1000L
+        private const val CLOCK_GATE_TIMEOUT_MS = 15_000L
         // A raw-fix move must exceed this (and both fixes' error) to count as motion.
         private const val MIN_MOTION_DISTANCE_M = 120.0
         // Short, self-timing wakelock taken ONLY around a network sync burst
@@ -1060,13 +1063,33 @@ class GeoTrackService : Service() {
      *
      * @return true to keep running, false if we stopped the service.
      */
-    private suspend fun enforceClockInGate(): Boolean {
+    // Elapsed-realtime of the last server "still clocked in?" check.
+    private var lastGateCheckAtMs = 0L
+
+    /**
+     * Still clocked in? Asked of the server at most every [CLOCK_GATE_INTERVAL_MS]
+     * (always on [force], i.e. service start). It used to run on every 30 s
+     * sync: two attendance calls back to back, each able to wait 30 s on a
+     * stalled mobile connection, all day for every tracked phone (~5,700
+     * calls/day each, 140 timeout reports in Mobile → Issues) and holding the
+     * point upload behind them. A clock-out on this phone stops tracking
+     * directly; this only catches one made elsewhere (web/HR), within minutes.
+     */
+    private suspend fun enforceClockInGate(force: Boolean = false): Boolean {
         if (clockGateStopped) return false
         if (!isInsideVerifiedAttendanceDay()) {
             stopForClosedAttendance("India attendance day ended")
             return false
         }
-        val open = AttendanceTrackingGate.hasOpenSessionNow(session.bearerToken)
+        val nowMs = android.os.SystemClock.elapsedRealtime()
+        if (!force && lastGateCheckAtMs > 0L && nowMs - lastGateCheckAtMs < CLOCK_GATE_INTERVAL_MS) {
+            return true
+        }
+        val open = withTimeoutOrNull(CLOCK_GATE_TIMEOUT_MS) {
+            AttendanceTrackingGate.hasOpenSessionNow(session.bearerToken)
+        }
+        // Unknown (no answer in time): keep tracking, ask again in a minute.
+        lastGateCheckAtMs = if (open == null) nowMs - CLOCK_GATE_INTERVAL_MS + 60_000L else nowMs
         if (open == true) session.trackingVerifiedDay = AttendanceDayBoundary.dateKey()
         if (AttendanceTrackingGate.mayContinueTracking(open)) return true
         stopForClosedAttendance("Attendance session closed (clocked out)")
@@ -1186,7 +1209,7 @@ class GeoTrackService : Service() {
             // Immediate gate check at startup — catches a service that came up
             // while already clocked out (stale prefs, boot, biometric gate
             // punch that closed at once, or a pre-clock-in start).
-            if (!enforceClockInGate()) return@launch
+            if (!enforceClockInGate(force = true)) return@launch
             delay(SYNC_INTERVAL_MS)
             while (isActive) {
                 try {

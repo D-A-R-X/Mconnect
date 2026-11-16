@@ -741,5 +741,26 @@ class CpApprovalQueueFragment : Fragment() {
         const val RESULT_KEY = "cp_approval_changed"
 
         fun newInstance(): CpApprovalQueueFragment = CpApprovalQueueFragment()
+
+        /**
+         * Whether the server will list CP approvals for this staff member
+         * (same rule as resolveCpApprovalViewScope). Without it the queue call
+         * is always refused ("FORBIDDEN: missing permission
+         * marketing.cpApproval.view"), so badge/banner counts must not ask:
+         * 888 such refusals from 50 staff showed up in Mobile → Issues.
+         */
+        fun canViewQueue(session: SessionManager): Boolean {
+            if (session.isAdmin || session.role.equals("super-admin", ignoreCase = true)) return true
+            if (listOf(
+                    "marketing.cpApproval.view",
+                    "marketing.cpApproval.viewOwn",
+                    "marketing.cpApproval.viewTeam",
+                    "marketing.cpApproval.viewAll",
+                ).any(session::hasPermission)
+            ) return true
+            val canApprove = session.hasPermission("marketing.cpApproval.approve") ||
+                session.hasPermission("marketing.cpVisits.approve")
+            return canApprove && session.hasPermission("marketing.cpVisits.viewCompany")
+        }
     }
 }
