@@ -88,7 +88,7 @@ object GeoTrackBootstrapSync {
         runCatching { GeoTrackEventQueue.flush(appContext, api, session) }
 
         val currentResponse = runCatching {
-            api.getCurrentTrackingSession(session.bearerToken)
+            api.getCurrentTrackingSession(session.bearerToken, staffId = session.staffId?.takeIf { it.isNotBlank() })
         }.getOrElse {
             // A timeout is not proof that no session exists. Keep the last
             // acknowledged local session and retry recovery later instead of
@@ -226,7 +226,7 @@ object GeoTrackBootstrapSync {
         endedAt: Long = System.currentTimeMillis(),
     ) {
         val activeId = session.activeTrackingSessionId ?: runCatching {
-            api.getCurrentTrackingSession(session.bearerToken).data?.sessionId
+            api.getCurrentTrackingSession(session.bearerToken, staffId = session.staffId?.takeIf { it.isNotBlank() }).data?.sessionId
         }.getOrNull()
         if (!activeId.isNullOrBlank()) {
             val requestId = "tracking-end-$activeId"

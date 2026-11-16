@@ -1159,7 +1159,7 @@ class GeoTrackService : Service() {
             return false
         }
 
-        val response = runCatching { api.getCurrentTrackingSession(session.bearerToken) }.getOrNull()
+        val response = runCatching { api.getCurrentTrackingSession(session.bearerToken, staffId = session.staffId?.takeIf { it.isNotBlank() }) }.getOrNull()
         if (response?.success != true) return true
         val active = response.data?.takeIf { it.state.equals("active", ignoreCase = true) }
         val activeId = active?.sessionId?.takeIf { it.isNotBlank() }

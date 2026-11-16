@@ -23,6 +23,10 @@ interface GeoTrackApi {
     suspend fun getCurrentTrackingSession(
         @Header("Authorization") token: String,
         @Url url: String = DIRECT_CURRENT_SESSION_URL,
+        // Fallback identity for when the bearer token no longer resolves on the
+        // geo service (auth-disabled mode answers 400 "staffId is required").
+        // A valid token still wins server-side, so this never widens access.
+        @Query("staffId") staffId: String? = null,
     ): DirectTrackingSessionResponse
 
     // ── Location ──
