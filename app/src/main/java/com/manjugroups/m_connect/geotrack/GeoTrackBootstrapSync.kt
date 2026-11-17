@@ -225,9 +225,31 @@ object GeoTrackBootstrapSync {
         reason: String,
         endedAt: Long = System.currentTimeMillis(),
     ) {
+        // Serialized with every other end (see GeoTrackStopGuard): a second
+        // caller resolves the session again after the first one ended it.
+        GeoTrackStopGuard.serialized {
+            endDirectSessionLocked(context, session, api, lat, lng, reason, endedAt)
+        }
+        stopLocally(context, session, clearSession = false)
+    }
+
+    private suspend fun endDirectSessionLocked(
+        context: Context,
+        session: SessionManager,
+        api: GeoTrackApi,
+        lat: Double?,
+        lng: Double?,
+        reason: String,
+        endedAt: Long,
+    ) {
         val activeId = session.activeTrackingSessionId ?: runCatching {
             api.getCurrentTrackingSession(session.bearerToken, staffId = session.staffId?.takeIf { it.isNotBlank() }).data?.sessionId
         }.getOrNull()
+        if (!activeId.isNullOrBlank() && GeoTrackStopGuard.wasEnded(activeId)) {
+            // Already ended by another path a moment ago.
+            if (session.activeTrackingSessionId == activeId) session.activeTrackingSessionId = null
+            return
+        }
         if (!activeId.isNullOrBlank()) {
             val requestId = "tracking-end-$activeId"
             val stopped = runCatching {
@@ -247,6 +269,7 @@ object GeoTrackBootstrapSync {
                 error is retrofit2.HttpException && GeoTrackQueuePolicy.isStopAlreadyGone(error.code())
             }
             if (stopped) {
+                GeoTrackStopGuard.markEnded(activeId)
                 session.activeTrackingSessionId = null
             } else {
                 kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
@@ -254,7 +277,6 @@ object GeoTrackBootstrapSync {
                 }
             }
         }
-        stopLocally(context, session, clearSession = false)
     }
 
     private suspend fun queuePermissionHealth(context: Context) {
