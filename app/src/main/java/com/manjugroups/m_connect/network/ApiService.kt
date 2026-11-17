@@ -3087,6 +3087,8 @@ data class DailyTaskData(
     // "Assigned By Me" info cards client-side, exactly like the web page.
     val assignedTo: String? = null,
     val assignedBy: String? = null,
+    // Supervisor of a GM handoff task: may approve / reject it too.
+    val supervisorId: String? = null,
     val assignedToName: String? = null,
     val assignedByName: String? = null,
     val assignedByRole: String? = null,

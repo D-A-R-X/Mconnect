@@ -1,17 +1,20 @@
 package com.manjugroups.m_connect.ui.marketing
 
+import android.animation.ObjectAnimator
 import android.app.AlertDialog
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.text.TextUtils
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.core.content.res.ResourcesCompat
@@ -19,6 +22,7 @@ import androidx.core.os.bundleOf
 import androidx.core.view.setPadding
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.ApiService
@@ -27,6 +31,7 @@ import com.manjugroups.m_connect.network.UpdateDailyTaskStatusRequest
 import com.manjugroups.m_connect.network.userMessage
 import com.manjugroups.m_connect.ui.common.ButtonLoader
 import com.manjugroups.m_connect.ui.common.Floater
+import com.manjugroups.m_connect.ui.common.SkeletonLoader
 import com.manjugroups.m_connect.ui.common.navigateUp
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -35,20 +40,29 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 /**
- * GM queue for site visits waiting on their approval: out-of-station,
- * immediate-pickup and direct SVs a telecaller (or the CP form) handed to the
- * GM. Each is the GM's "SV approval" task (sourceReferenceType
- * out_of_station_handoff, assigned to them). Approve completes that task,
- * which on the server creates the real site visit (the same path as the web
- * Fixed tab and the Task Manager); Reject cancels it, closing the handoff.
+ * SV approvals: out-of-station, immediate-pickup and direct site visits a
+ * telecaller (or the CP form) handed to a GM. Each is that GM's task
+ * (sourceReferenceType out_of_station_handoff). Approve completes it, which
+ * creates the site visit on the server; Reject cancels it.
+ *
+ * Mine = assigned to me; Team = my team's GMs (task list teamIds); All = every
+ * open one (task list scope "all", super admins). The server lets the GM, their
+ * supervisor, the requester or a super admin decide; anyone else sees whose
+ * turn it is.
  */
 class SvApprovalQueueFragment : Fragment() {
 
+    private enum class Tab(val label: String) { MINE("Mine"), TEAM("Team"), ALL("All") }
+
     private val api = ApiService.create()
     private lateinit var session: SessionManager
-    private lateinit var container: LinearLayout
-    private lateinit var progress: ProgressBar
-    private lateinit var emptyView: TextView
+    private lateinit var list: LinearLayout
+    private lateinit var tabsRow: LinearLayout
+    private lateinit var refresh: SwipeRefreshLayout
+    private val tabChips = mutableMapOf<Tab, TextView>()
+    private var queue: Queue? = null
+    private var tab = Tab.MINE
+    private var skeleton: ObjectAnimator? = null
     private var submitting = false
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).roundToInt()
@@ -57,49 +71,42 @@ class SvApprovalQueueFragment : Fragment() {
 
     override fun onCreateView(inflater: LayoutInflater, parent: ViewGroup?, savedInstanceState: Bundle?): View {
         session = SessionManager(requireContext())
-        val root = LinearLayout(requireContext()).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(4), dp(20), dp(24))
-        }
-        root.addView(text("Site visits to approve", 18f, "#101828", R.font.inter_semibold))
-        root.addView(text(
-            "Out-of-station, immediate-pickup and direct site visits waiting on you. " +
-                "Approve creates the site visit; reject sends it back.",
-            13f, "#667085", R.font.inter_regular,
-        ).apply { setPadding(0, dp(4), 0, dp(16)) })
-        progress = ProgressBar(requireContext()).apply {
-            layoutParams = LinearLayout.LayoutParams(dp(28), dp(28)).apply {
-                gravity = Gravity.CENTER_HORIZONTAL
-                topMargin = dp(16)
-            }
-        }
-        emptyView = text("Nothing to approve right now.", 14f, "#667085", R.font.inter_regular).apply {
-            gravity = Gravity.CENTER
-            setPadding(0, dp(24), 0, dp(24))
-            visibility = View.GONE
-        }
-        container = LinearLayout(requireContext()).apply { orientation = LinearLayout.VERTICAL }
-        root.addView(progress)
-        root.addView(emptyView)
-        root.addView(container)
-
         val page = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(themeColor(R.attr.colorSurfaceSecondary))
             layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         }
         page.addView(topBar())
-        page.addView(ScrollView(requireContext()).apply {
-            isFillViewport = true
-            addView(root)
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0).apply { weight = 1f }
+
+        tabsRow = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dp(16), dp(12), dp(16), dp(4))
+            visibility = View.GONE
+        }
+        page.addView(HorizontalScrollView(requireContext()).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(tabsRow)
         })
+
+        list = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(12), dp(16), dp(32))
+        }
+        refresh = SwipeRefreshLayout(requireContext()).apply {
+            addView(ScrollView(requireContext()).apply {
+                isFillViewport = true
+                addView(list)
+            })
+            setOnRefreshListener { load(showSkeleton = false) }
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0).apply { weight = 1f }
+        }
+        page.addView(refresh)
         return page
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        load()
+        load(showSkeleton = true)
     }
 
     override fun onResume() {
@@ -115,6 +122,13 @@ class SvApprovalQueueFragment : Fragment() {
         super.onPause()
     }
 
+    override fun onDestroyView() {
+        skeleton?.cancel()
+        skeleton = null
+        tabChips.clear()
+        super.onDestroyView()
+    }
+
     private fun topBar(): View {
         val bar = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -124,7 +138,7 @@ class SvApprovalQueueFragment : Fragment() {
         }
         bar.addView(ImageView(requireContext()).apply {
             setImageResource(R.drawable.ic_arrow_left)
-            imageTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#0B61CA"))
+            imageTintList = ColorStateList.valueOf(Color.parseColor("#0B61CA"))
             layoutParams = LinearLayout.LayoutParams(dp(40), dp(40))
             setPadding(dp(8))
             isClickable = true
@@ -138,81 +152,226 @@ class SvApprovalQueueFragment : Fragment() {
         return bar
     }
 
-    private fun load() {
-        progress.visibility = View.VISIBLE
-        emptyView.visibility = View.GONE
-        container.removeAllViews()
+    // ── Loading ──
+
+    private fun load(showSkeleton: Boolean) {
+        if (showSkeleton) {
+            skeleton?.cancel()
+            skeleton = SkeletonLoader.show(list, count = 3)
+        }
         viewLifecycleOwner.lifecycleScope.launch {
-            val result = runCatching { loadPending(api, session) }
+            val result = runCatching { loadQueue(api, session) }
             if (!isAdded) return@launch
-            progress.visibility = View.GONE
-            result.onSuccess { items ->
-                if (items.isEmpty()) showMessage("Nothing to approve right now.", retry = false)
-                else items.forEach { container.addView(card(it)) }
+            skeleton?.cancel()
+            skeleton = null
+            list.alpha = 1f
+            refresh.isRefreshing = false
+            result.onSuccess { q ->
+                val first = queue == null
+                queue = q
+                if (first) tab = when {
+                    q.mine.isNotEmpty() -> Tab.MINE
+                    q.showTeam && q.team.isNotEmpty() -> Tab.TEAM
+                    q.showAll && q.all.isNotEmpty() -> Tab.ALL
+                    else -> Tab.MINE
+                }
+                renderTabs()
+                render()
             }.onFailure {
-                showMessage("Couldn't load SV approvals. ${it.userMessage()} Tap to retry.", retry = true)
+                list.removeAllViews()
+                list.addView(message("Couldn't load", it.userMessage(), retry = true))
             }
         }
     }
 
-    private fun showMessage(msg: String, retry: Boolean) {
-        emptyView.text = msg
-        emptyView.visibility = View.VISIBLE
-        emptyView.isClickable = retry
-        emptyView.setOnClickListener(if (retry) View.OnClickListener { load() } else null)
+    private fun itemsFor(t: Tab): List<DailyTaskData> = queue?.let {
+        when (t) {
+            Tab.MINE -> it.mine
+            Tab.TEAM -> it.team
+            Tab.ALL -> it.all
+        }
+    }.orEmpty()
+
+    private fun renderTabs() {
+        val q = queue ?: return
+        val tabs = listOfNotNull(Tab.MINE, Tab.TEAM.takeIf { q.showTeam }, Tab.ALL.takeIf { q.showAll })
+        tabsRow.removeAllViews()
+        tabChips.clear()
+        tabsRow.visibility = if (tabs.size > 1) View.VISIBLE else View.GONE
+        if (tabs.size <= 1) {
+            tab = Tab.MINE
+            return
+        }
+        if (tab !in tabs) tab = Tab.MINE
+        tabs.forEach { t ->
+            val chip = text("${t.label}  ${itemsFor(t).size}", 13f, "#344054", R.font.inter_semibold).apply {
+                gravity = Gravity.CENTER
+                setPadding(dp(16), dp(9), dp(16), dp(9))
+                isClickable = true
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { rightMargin = dp(8) }
+                setOnClickListener {
+                    if (tab == t) return@setOnClickListener
+                    tab = t
+                    styleTabs()
+                    render()
+                }
+            }
+            tabChips[t] = chip
+            tabsRow.addView(chip)
+        }
+        styleTabs()
     }
+
+    private fun styleTabs() {
+        tabChips.forEach { (t, chip) ->
+            val active = t == tab
+            chip.background = rounded(if (active) "#0B61CA" else "#FFFFFF", if (active) "#0B61CA" else "#E4E7EC", 20)
+            chip.setTextColor(Color.parseColor(if (active) "#FFFFFF" else "#344054"))
+        }
+    }
+
+    private fun render() {
+        list.removeAllViews()
+        val items = itemsFor(tab)
+        if (items.isEmpty()) {
+            list.addView(message("No site visits to approve", null, retry = false))
+            return
+        }
+        items.forEach { list.addView(card(it)) }
+    }
+
+    private fun message(title: String, detail: String?, retry: Boolean): View =
+        LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(dp(24), dp(72), dp(24), dp(24))
+            addView(ImageView(requireContext()).apply {
+                setImageResource(R.drawable.ic_check_circle)
+                imageTintList = ColorStateList.valueOf(Color.parseColor("#98A2B3"))
+                layoutParams = LinearLayout.LayoutParams(dp(44), dp(44))
+            })
+            addView(text(title, 15f, "#344054", R.font.inter_semibold).apply {
+                gravity = Gravity.CENTER
+                setPadding(0, dp(14), 0, 0)
+            })
+            if (!detail.isNullOrBlank()) {
+                addView(text(detail, 13f, "#667085", R.font.inter_regular).apply {
+                    gravity = Gravity.CENTER
+                    setPadding(0, dp(6), 0, 0)
+                })
+            }
+            if (retry) {
+                addView(text("Try again", 14f, "#0B61CA", R.font.inter_semibold).apply {
+                    setPadding(dp(16), dp(14), dp(16), dp(8))
+                    isClickable = true
+                    setOnClickListener { load(showSkeleton = true) }
+                })
+            }
+        }
+
+    // ── Card ──
 
     private fun card(task: DailyTaskData): View {
         val card = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16))
-            background = rounded("#FFFFFF", "#EAECF0", 14)
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            background = rounded("#FFFFFF", "#EAECF0", 16)
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
             ).apply { bottomMargin = dp(12) }
         }
+
         val header = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
         header.addView(text(clientName(task), 16f, "#101828", R.font.inter_semibold).apply {
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT).apply { weight = 1f }
         })
-        header.addView(text(routeLabel(task), 12f, "#B54708", R.font.inter_medium).apply {
+        val (chipFg, chipBg) = routeColors(task)
+        header.addView(text(routeLabel(task), 11f, chipFg, R.font.inter_semibold).apply {
             setPadding(dp(10), dp(4), dp(10), dp(4))
-            background = rounded("#FFFAEB", "#FEDF89", 20)
+            background = rounded(chipBg, chipBg, 20)
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { leftMargin = dp(8) }
         })
         card.addView(header)
 
-        fun fact(label: String, value: String?) {
-            if (value.isNullOrBlank()) return
-            card.addView(text(label, 11f, "#667085", R.font.inter_medium).apply { setPadding(0, dp(10), 0, 0) })
-            card.addView(text(value, 13f, "#101828", R.font.inter_regular).apply { setPadding(0, dp(2), 0, 0) })
+        card.addView(line(R.drawable.ic_calendar_days, visitDate(task.deadline) ?: "No date", "#101828"))
+        val requester = listOfNotNull(task.assignedByName, task.assignedByDesignation)
+            .joinToString(" · ").ifBlank { null }
+        if (requester != null) card.addView(line(R.drawable.ic_user_outline, requester, "#344054"))
+        if (tab != Tab.MINE && !task.assignedToName.isNullOrBlank()) {
+            card.addView(line(R.drawable.ic_profile_office, "GM ${task.assignedToName}", "#344054"))
         }
-        fact("Visit date", visitDate(task.deadline))
-        fact("Requested by", listOfNotNull(task.assignedByName, task.assignedByDesignation).joinToString(" · ").ifBlank { null })
-        fact("Requested on", task.creationTime?.let { stamp(it.toLong()) })
-        fact("Notes", task.description)
+        task.description?.trim()?.takeIf { it.isNotEmpty() }?.let { notes ->
+            card.addView(text(notes, 13f, "#475467", R.font.inter_regular).apply {
+                maxLines = 2
+                ellipsize = TextUtils.TruncateAt.END
+                setPadding(dp(12), dp(10), dp(12), dp(10))
+                background = rounded("#F9FAFB", "#F9FAFB", 10)
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { topMargin = dp(10) }
+            })
+        }
 
-        val actions = LinearLayout(requireContext()).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(0, dp(14), 0, 0)
+        if (canDecide(task)) {
+            val actions = LinearLayout(requireContext()).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(0, dp(14), 0, 0)
+            }
+            lateinit var reject: TextView
+            reject = button("Reject", "#B42318", "#FFFFFF", "#FDA29B") { confirmReject(task, reject) }
+                .also { (it.layoutParams as LinearLayout.LayoutParams).rightMargin = dp(10) }
+            lateinit var approve: TextView
+            approve = button("Approve", "#FFFFFF", "#169B2F", "#169B2F") { decide(task, "completed", approve) }
+            actions.addView(reject)
+            actions.addView(approve)
+            card.addView(actions)
+        } else {
+            card.addView(text("Waiting for ${task.assignedToName ?: "the GM"} to approve", 13f, "#475467", R.font.inter_medium).apply {
+                gravity = Gravity.CENTER
+                setPadding(dp(12), dp(11), dp(12), dp(11))
+                background = rounded("#F2F4F7", "#F2F4F7", 12)
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { topMargin = dp(14) }
+            })
         }
-        lateinit var reject: TextView
-        reject = button("Reject", "#B42318", "#FEE4E2") { confirmReject(task, reject) }
-            .also { (it.layoutParams as LinearLayout.LayoutParams).rightMargin = dp(8) }
-        lateinit var approve: TextView
-        approve = button("Approve", "#FFFFFF", "#169B2F") { decide(task, "completed", approve) }
-        actions.addView(reject)
-        actions.addView(approve)
-        card.addView(actions)
         return card
+    }
+
+    /** Same rule as the server (canChangeDailyTaskStatus for handoff tasks). */
+    private fun canDecide(task: DailyTaskData): Boolean {
+        val me = session.staffId ?: return false
+        return task.assignedTo == me || task.supervisorId == me || task.assignedBy == me ||
+            queue?.scope == "all"
+    }
+
+    private fun line(icon: Int, value: String, color: String): View = LinearLayout(requireContext()).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(0, dp(8), 0, 0)
+        addView(ImageView(requireContext()).apply {
+            setImageResource(icon)
+            imageTintList = ColorStateList.valueOf(Color.parseColor("#98A2B3"))
+            layoutParams = LinearLayout.LayoutParams(dp(16), dp(16)).apply { rightMargin = dp(8) }
+        })
+        addView(text(value, 13f, color, R.font.inter_regular).apply {
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+        })
     }
 
     private fun confirmReject(task: DailyTaskData, button: View) {
         AlertDialog.Builder(requireContext())
-            .setTitle("Reject this site visit?")
-            .setMessage("The request from ${task.assignedByName ?: "the telecaller"} for ${clientName(task)} is closed. No site visit is created.")
+            .setTitle("Reject site visit for ${clientName(task)}?")
             .setNegativeButton("Keep", null)
             .setPositiveButton("Reject") { _, _ -> decide(task, "cancelled", button) }
             .show()
@@ -231,10 +390,12 @@ class SvApprovalQueueFragment : Fragment() {
             if (!isAdded) return@launch
             val resp = result.getOrNull()
             if (resp?.success == true) {
-                Floater.success(if (status == "completed") "Site visit approved and created" else "Site visit rejected")
+                Floater.success(if (status == "completed") "Site visit approved" else "Site visit rejected")
                 markDecided(task.id)
                 parentFragmentManager.setFragmentResult(RESULT_KEY, bundleOf("changed" to true))
-                load()
+                queue = queue?.without(task.id)
+                renderTabs()
+                render()
             } else {
                 Floater.error(
                     resp?.error?.takeIf { it.isNotBlank() }
@@ -259,14 +420,19 @@ class SvApprovalQueueFragment : Fragment() {
         else -> task.title?.removeSuffix(" Approval") ?: "Site visit"
     }
 
+    /** Text and fill per route. */
+    private fun routeColors(task: DailyTaskData): Pair<String, String> = when (task.label) {
+        "immediate_pickup" -> "#B42318" to "#FEF3F2"
+        "direct_sv" -> "#175CD3" to "#EFF8FF"
+        else -> "#B54708" to "#FFFAEB"
+    }
+
     private fun visitDate(ymd: String?): String? = ymd?.let {
         runCatching {
             SimpleDateFormat("EEE, d MMM yyyy", Locale.ENGLISH)
                 .format(SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(it.take(10))!!)
         }.getOrDefault(it)
     }
-
-    private fun stamp(ms: Long) = SimpleDateFormat("d MMM, h:mm a", Locale.ENGLISH).format(Date(ms))
 
     private fun text(value: String, size: Float, color: String, fontRes: Int) = TextView(requireContext()).apply {
         text = value
@@ -276,19 +442,20 @@ class SvApprovalQueueFragment : Fragment() {
         typeface = font(fontRes) ?: typeface
     }
 
-    private fun button(label: String, fg: String, bg: String, onClick: () -> Unit) = TextView(requireContext()).apply {
-        text = label
-        gravity = Gravity.CENTER
-        textSize = 14f
-        setTextColor(Color.parseColor(fg))
-        includeFontPadding = false
-        typeface = font(R.font.inter_semibold) ?: typeface
-        setPadding(dp(12), dp(13), dp(12), dp(13))
-        background = rounded(bg, bg, 12)
-        isClickable = true
-        setOnClickListener { onClick() }
-        layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT).apply { weight = 1f }
-    }
+    private fun button(label: String, fg: String, bg: String, stroke: String, onClick: () -> Unit) =
+        TextView(requireContext()).apply {
+            text = label
+            gravity = Gravity.CENTER
+            textSize = 14f
+            setTextColor(Color.parseColor(fg))
+            includeFontPadding = false
+            typeface = font(R.font.inter_semibold) ?: typeface
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            background = rounded(bg, stroke, 12)
+            isClickable = true
+            setOnClickListener { onClick() }
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT).apply { weight = 1f }
+        }
 
     private fun rounded(fill: String, stroke: String, radiusDp: Int) = GradientDrawable().apply {
         cornerRadius = dp(radiusDp).toFloat()
@@ -300,6 +467,22 @@ class SvApprovalQueueFragment : Fragment() {
         val tv = android.util.TypedValue()
         requireContext().theme.resolveAttribute(attr, tv, true)
         return if (tv.resourceId != 0) requireContext().getColor(tv.resourceId) else tv.data
+    }
+
+    /** Open SV approvals by tab; showTeam / showAll follow the task list scope. */
+    data class Queue(
+        val mine: List<DailyTaskData>,
+        val team: List<DailyTaskData>,
+        val all: List<DailyTaskData>,
+        val scope: String?,
+        val showTeam: Boolean,
+        val showAll: Boolean,
+    ) {
+        fun without(id: String) = copy(
+            mine = mine.filterNot { it.id == id },
+            team = team.filterNot { it.id == id },
+            all = all.filterNot { it.id == id },
+        )
     }
 
     companion object {
@@ -324,18 +507,36 @@ class SvApprovalQueueFragment : Fragment() {
             return decidedAt.containsKey(id)
         }
 
-        /** Open SV approvals assigned to the signed-in GM, oldest visit first. */
+        private fun isOpenHandoff(task: DailyTaskData) =
+            task.sourceReferenceType == "out_of_station_handoff" &&
+                (task.status == "pending" || task.status == "in-progress") &&
+                !isRecentlyDecided(task.id)
+
+        /** Mine / Team / All from one task-list call, earliest visit first. */
+        suspend fun loadQueue(api: ApiService, session: SessionManager): Queue {
+            val me = session.staffId.orEmpty()
+            val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+            val resp = api.getTaskManagerTasks(session.bearerToken, today)
+            val open = resp.tasks.filter(::isOpenHandoff).sortedBy { it.deadline ?: "" }
+            val teamIds = resp.teamIds.toSet()
+            val isAll = resp.scope == "all"
+            return Queue(
+                mine = open.filter { it.assignedTo == me },
+                team = open.filter { it.assignedTo != me && it.assignedTo in teamIds },
+                all = if (isAll) open else emptyList(),
+                scope = resp.scope,
+                showTeam = teamIds.isNotEmpty(),
+                showAll = isAll,
+            )
+        }
+
+        /** Open SV approvals assigned to the signed-in GM (Apps tab badge). */
         suspend fun loadPending(api: ApiService, session: SessionManager): List<DailyTaskData> {
             val me = session.staffId ?: return emptyList()
             val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
             val resp = api.getTaskManagerTasks(session.bearerToken, today)
             return resp.tasks
-                .filter {
-                    it.sourceReferenceType == "out_of_station_handoff" &&
-                        it.assignedTo == me &&
-                        (it.status == "pending" || it.status == "in-progress") &&
-                        !isRecentlyDecided(it.id)
-                }
+                .filter { isOpenHandoff(it) && it.assignedTo == me }
                 .sortedBy { it.deadline ?: "" }
         }
     }
