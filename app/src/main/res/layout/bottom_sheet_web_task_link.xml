@@ -86,29 +86,20 @@
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btnWebTaskOpen"
         android:layout_width="match_parent"
-        android:layout_height="54dp"
+        android:layout_height="@dimen/button_height"
         android:layout_marginTop="20dp"
-        app:backgroundTint="?attr/colorAccentPrimary"
-        android:fontFamily="@font/inter_medium"
         android:text="Open Link"
-        android:textAllCaps="false"
-        android:textColor="#FFFFFF"
         android:textSize="15sp"
-        app:cornerRadius="27dp"
-        app:elevation="0dp" />
+        app:elevation="0dp"
+        style="@style/Widget.Mconnect.Button" />
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btnWebTaskCopy"
-        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        style="@style/Widget.Mconnect.Button.Secondary"
         android:layout_width="match_parent"
-        android:layout_height="54dp"
+        android:layout_height="@dimen/button_height"
         android:layout_marginTop="10dp"
-        android:fontFamily="@font/inter_medium"
         android:text="Copy Link"
-        android:textAllCaps="false"
-        android:textColor="#344054"
-        android:textSize="15sp"
-        app:cornerRadius="27dp"
-        app:strokeColor="#D0D5DD" />
+        android:textSize="15sp" />
 
 </LinearLayout>

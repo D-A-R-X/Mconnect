@@ -204,7 +204,7 @@
         android:gravity="center"
         android:includeFontPadding="false"
         android:text="Close Message"
-        android:textColor="#1BCA0B"
+        android:textColor="?attr/colorForegroundPrimary"
         android:textSize="14sp" />
 
 </LinearLayout>

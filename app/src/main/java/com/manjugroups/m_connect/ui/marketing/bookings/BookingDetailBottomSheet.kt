@@ -1219,27 +1219,21 @@ class BookingDetailBottomSheet : BottomSheetDialogFragment() {
         footer.visibility = View.GONE
     }
 
-    private fun actionButton(text: String, bg: String, fg: String): TextView =
-        TextView(requireContext()).apply {
-            this.text = text
-            textSize = 13f
-            gravity = Gravity.CENTER
-            includeFontPadding = false
-            typeface = interFont(R.font.inter_semibold)
-            setTextColor(Color.parseColor(fg))
-            // Rounded pill background to match the New Booking form's
-            // button language instead of the old flat rectangles.
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = dp(10).toFloat()
-                setColor(Color.parseColor(bg))
-            }
-            setPadding(dp(16), dp(8), dp(16), dp(8))
+    /** Header / footer / row action: the Mconnect button component (compact). */
+    private fun actionButton(text: String, bg: String, fg: String): TextView {
+        val kind = when {
+            bg.equals("#0B61CA", ignoreCase = true) -> com.manjugroups.m_connect.ui.common.MconnectButtons.Kind.PRIMARY
+            fg.equals("#067647", ignoreCase = true) -> com.manjugroups.m_connect.ui.common.MconnectButtons.Kind.SUCCESS
+            fg.equals("#B42318", ignoreCase = true) -> com.manjugroups.m_connect.ui.common.MconnectButtons.Kind.DANGER_OUTLINE
+            else -> com.manjugroups.m_connect.ui.common.MconnectButtons.Kind.SECONDARY
+        }
+        return com.manjugroups.m_connect.ui.common.MconnectButtons.create(requireContext(), kind, text, compact = true).apply {
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 dp(38),
-            ).apply { marginStart = dp(8) }
+            )
         }
+    }
 
     /** Load a bundled Inter typeface; null-safe fallback to default. */
     private fun interFont(resId: Int): Typeface? =

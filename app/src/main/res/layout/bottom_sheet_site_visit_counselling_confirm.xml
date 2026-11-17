@@ -240,22 +240,20 @@
                 android:gravity="end"
                 android:orientation="horizontal">
 
-                <Button
+                <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnCancelCounselling"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    style="@style/Widget.Mconnect.Button.Secondary"
                     android:layout_width="wrap_content"
-                    android:layout_height="48dp"
-                    android:text="Close"
-                    android:textAllCaps="false" />
+                    android:layout_height="@dimen/button_height"
+                    android:text="Close" />
 
-                <Button
+                <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnStartCounselling"
-                    style="@style/Widget.MaterialComponents.Button"
+                    style="@style/Widget.Mconnect.Button"
                     android:layout_width="wrap_content"
-                    android:layout_height="48dp"
+                    android:layout_height="@dimen/button_height"
                     android:layout_marginStart="10dp"
-                    android:text="Start counselling"
-                    android:textAllCaps="false" />
+                    android:text="Start counselling" />
             </LinearLayout>
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>

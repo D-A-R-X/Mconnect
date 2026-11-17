@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Mconnect button component (success). Pairs with @style/Widget.Mconnect.Button.Success. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="#30FFFFFF">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="?attr/colorSuccess" />
+            <corners android:radius="@dimen/button_corner" />
+        </shape>
+    </item>
+</ripple>

@@ -50,22 +50,20 @@
         <!-- Edit button kept in the tree (GONE) for ViewBinding compatibility.
              Tapping any field edits directly, so no explicit Edit action is
              shown; a Save bar appears at the bottom once something changes. -->
-        <androidx.appcompat.widget.AppCompatButton
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnEditVehicle"
             android:layout_width="wrap_content"
             android:layout_height="32dp"
             android:layout_alignParentEnd="true"
             android:layout_centerVertical="true"
             android:background="@drawable/bg_btn_edit_outline_green"
-            android:fontFamily="@font/inter_semibold"
             android:text="Edit"
-            android:textAllCaps="false"
-            android:textColor="#22C55E"
             android:textSize="13sp"
             android:visibility="gone"
             android:drawableStart="@drawable/ic_edit_gradient"
             android:drawablePadding="6dp"
-            android:paddingHorizontal="12dp" />
+            android:paddingHorizontal="12dp"
+            style="@style/Widget.Mconnect.Button.Secondary" />
     </RelativeLayout>
 
     <!-- Scrolling field area — keeps the footer Save pinned to the bottom. -->
@@ -382,17 +380,15 @@
     <!-- Fixed footer: primary action pinned to the bottom of the sheet. In
          create mode it's the always-on "Submit"; in edit mode it's hidden
          until a field changes, then shows "Save Changes". -->
-    <androidx.appcompat.widget.AppCompatButton
+    <com.google.android.material.button.MaterialButton
         android:id="@+id/btnSubmitCreate"
         android:layout_width="match_parent"
-        android:layout_height="48dp"
+        android:layout_height="@dimen/button_height"
         android:layout_marginTop="12dp"
         android:background="@drawable/bg_allocate_button_green"
-        android:fontFamily="@font/inter_semibold"
         android:text="Submit"
-        android:textAllCaps="false"
-        android:textColor="#FFFFFF"
-        android:textSize="14sp" />
+        android:textSize="14sp"
+        style="@style/Widget.Mconnect.Button.Success" />
 
     <!-- Legacy edit-button row, kept (GONE) for ViewBinding compatibility. -->
     <LinearLayout
@@ -403,31 +399,27 @@
         android:orientation="horizontal"
         android:visibility="gone">
 
-        <androidx.appcompat.widget.AppCompatButton
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnDeactivate"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:layout_marginEnd="8dp"
             android:background="@drawable/bg_btn_deactivate_outline_red"
-            android:fontFamily="@font/inter_semibold"
             android:text="Deactivate"
-            android:textAllCaps="false"
-            android:textColor="#EF4444"
-            android:textSize="14sp" />
+            android:textSize="14sp"
+            style="@style/Widget.Mconnect.Button.Danger.Outline" />
 
-        <androidx.appcompat.widget.AppCompatButton
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnSave"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:layout_marginStart="8dp"
             android:background="@drawable/bg_allocate_button_green"
-            android:fontFamily="@font/inter_semibold"
             android:text="Save"
-            android:textAllCaps="false"
-            android:textColor="#FFFFFF"
-            android:textSize="14sp" />
+            android:textSize="14sp"
+            style="@style/Widget.Mconnect.Button.Success" />
     </LinearLayout>
 
 </LinearLayout>

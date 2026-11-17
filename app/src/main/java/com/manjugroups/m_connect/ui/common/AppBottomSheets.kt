@@ -351,33 +351,23 @@ object AppBottomSheets {
         dialog.show()
     }
 
+    /** Primary action (red = destructive): the Mconnect button component. */
     private fun actionButton(ctx: Context, label: String, colorHex: String, onTap: () -> Unit) =
-        TextView(ctx).apply {
-            text = label
-            gravity = Gravity.CENTER
-            textSize = 15f
-            setTextColor(Color.WHITE)
-            typeface = font(ctx, R.font.inter_semibold, Typeface.DEFAULT_BOLD)
-            background = GradientDrawable().apply {
-                setColor(Color.parseColor(colorHex))
-                cornerRadius = dp(ctx, 14).toFloat()
-            }
+        com.manjugroups.m_connect.ui.common.MconnectButtons.create(
+            ctx,
+            if (colorHex.equals("#D92D20", ignoreCase = true)) com.manjugroups.m_connect.ui.common.MconnectButtons.Kind.DANGER
+            else com.manjugroups.m_connect.ui.common.MconnectButtons.Kind.PRIMARY,
+            label,
+        ) { onTap() }.apply {
             layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(ctx, 48),
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
             ).apply { topMargin = dp(ctx, 4) }
-            setOnClickListener { onTap() }
         }
 
     private fun cancelButton(ctx: Context, onTap: () -> Unit) =
-        TextView(ctx).apply {
-            text = "Cancel"
-            gravity = Gravity.CENTER
-            textSize = 15f
-            setTextColor(Color.parseColor("#475467"))
-            typeface = font(ctx, R.font.inter_semibold, Typeface.DEFAULT)
+        com.manjugroups.m_connect.ui.common.MconnectButtons.create(ctx, com.manjugroups.m_connect.ui.common.MconnectButtons.Kind.SECONDARY, "Cancel") { onTap() }.apply {
             layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(ctx, 46),
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
             ).apply { topMargin = dp(ctx, 6) }
-            setOnClickListener { onTap() }
         }
 }

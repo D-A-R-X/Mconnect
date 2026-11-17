@@ -67,21 +67,19 @@
         android:gravity="end"
         android:orientation="horizontal">
 
-        <Button
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnKeepSiteVisit"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            style="@style/Widget.Mconnect.Button.Secondary"
             android:layout_width="wrap_content"
-            android:layout_height="48dp"
-            android:text="Keep visit"
-            android:textAllCaps="false" />
+            android:layout_height="@dimen/button_height"
+            android:text="Keep visit" />
 
-        <Button
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnConfirmCancelSv"
-            style="@style/Widget.MaterialComponents.Button"
+            style="@style/Widget.Mconnect.Button.Danger"
             android:layout_width="wrap_content"
-            android:layout_height="48dp"
+            android:layout_height="@dimen/button_height"
             android:layout_marginStart="10dp"
-            android:text="Cancel visit"
-            android:textAllCaps="false" />
+            android:text="Cancel visit" />
     </LinearLayout>
 </LinearLayout>

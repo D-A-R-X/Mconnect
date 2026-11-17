@@ -442,18 +442,14 @@ class SvApprovalQueueFragment : Fragment() {
         typeface = font(fontRes) ?: typeface
     }
 
-    private fun button(label: String, fg: String, bg: String, stroke: String, onClick: () -> Unit) =
-        TextView(requireContext()).apply {
-            text = label
-            gravity = Gravity.CENTER
-            textSize = 14f
-            setTextColor(Color.parseColor(fg))
-            includeFontPadding = false
-            typeface = font(R.font.inter_semibold) ?: typeface
-            setPadding(dp(12), dp(12), dp(12), dp(12))
-            background = rounded(bg, stroke, 12)
-            isClickable = true
-            setOnClickListener { onClick() }
+    /** Approve / Reject: the Mconnect button component. */
+    private fun button(label: String, fg: String, bg: String, stroke: String, onClick: () -> Unit): TextView =
+        com.manjugroups.m_connect.ui.common.MconnectButtons.create(
+            requireContext(),
+            if (bg.equals("#169B2F", ignoreCase = true)) com.manjugroups.m_connect.ui.common.MconnectButtons.Kind.SUCCESS
+            else com.manjugroups.m_connect.ui.common.MconnectButtons.Kind.DANGER_OUTLINE,
+            label,
+        ) { onClick() }.apply {
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT).apply { weight = 1f }
         }
 

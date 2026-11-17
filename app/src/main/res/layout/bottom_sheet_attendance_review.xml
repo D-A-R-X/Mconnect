@@ -1217,7 +1217,7 @@
             android:fontFamily="@font/inter_semibold"
             android:gravity="center"
             android:text="Hold"
-            android:textColor="#B54708"
+            android:textColor="?attr/colorForegroundPrimary"
             android:textSize="14sp" />
     </LinearLayout>
 </LinearLayout>

@@ -234,17 +234,15 @@
             android:layout_height="1dp"
             android:background="#D0D5DD" />
 
-        <androidx.appcompat.widget.AppCompatButton
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnClockInAction"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
+            android:layout_height="@dimen/button_height"
             android:layout_marginTop="13dp"
             android:background="@drawable/bg_attendance_btn_primary"
-            android:fontFamily="@font/inter_medium"
             android:text="Clock In"
-            android:textAllCaps="false"
-            android:textColor="#FFFFFF"
-            android:textSize="14sp" />
+            android:textSize="14sp"
+            style="@style/Widget.Mconnect.Button.Success" />
     </LinearLayout>
 
 </FrameLayout>

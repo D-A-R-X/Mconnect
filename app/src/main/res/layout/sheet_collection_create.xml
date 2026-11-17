@@ -490,15 +490,11 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnSubmit"
             android:layout_width="match_parent"
-            android:layout_height="54dp"
-            android:backgroundTint="#1BCA0B"
-            android:fontFamily="@font/inter_bold"
+            android:layout_height="@dimen/button_height"
             android:text="Submit"
-            android:textAllCaps="false"
-            android:textColor="#FFFFFF"
             android:textSize="15sp"
-            app:cornerRadius="27dp"
-            app:elevation="0dp" />
+            app:elevation="0dp"
+            style="@style/Widget.Mconnect.Button.Success" />
     </LinearLayout>
 
 </LinearLayout>

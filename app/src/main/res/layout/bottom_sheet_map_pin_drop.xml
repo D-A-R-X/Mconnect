@@ -183,11 +183,11 @@
             android:layout_width="match_parent"
             android:layout_height="48dp"
             android:layout_marginTop="12dp"
-            android:background="@drawable/bg_chat_primary_button"
+            android:background="@drawable/bg_button_primary"
             android:fontFamily="@font/inter_semibold"
             android:gravity="center"
             android:text="Use this location"
-            android:textColor="#FFFFFF"
+            android:textColor="@android:color/white"
             android:textSize="15sp" />
     </LinearLayout>
 </FrameLayout>

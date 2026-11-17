@@ -768,31 +768,20 @@ class StaffSecurityBottomSheet : BottomSheetDialogFragment() {
      * gives no press feedback. Same 54dp / 27dp geometry as every other footer
      * action in the app.
      */
-    private fun pillButton(text: String, style: Style, onClick: () -> Unit): View {
-        val (fg, fill, stroke) = when (style) {
-            Style.PRIMARY -> Triple("#FFFFFF", "#0B61CA", "#0B61CA")
-            Style.WARN -> Triple("#B54708", "#FFFAEB", "#FEC84B")
-            Style.DANGER -> Triple("#B42318", "#FEF3F2", "#FDA29B")
-        }
-        return TextView(requireContext()).apply {
-            this.text = text
-            textSize = 15f
-            gravity = Gravity.CENTER
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(Color.parseColor(fg))
-            background = GradientDrawable().apply {
-                cornerRadius = dp(27).toFloat()
-                setColor(Color.parseColor(fill))
-                setStroke(dp(1), Color.parseColor(stroke))
-            }
+    private fun pillButton(text: String, style: Style, onClick: () -> Unit): View =
+        com.manjugroups.m_connect.ui.common.MconnectButtons.create(
+            requireContext(),
+            when (style) {
+                Style.PRIMARY -> com.manjugroups.m_connect.ui.common.MconnectButtons.Kind.PRIMARY
+                Style.WARN -> com.manjugroups.m_connect.ui.common.MconnectButtons.Kind.SECONDARY
+                Style.DANGER -> com.manjugroups.m_connect.ui.common.MconnectButtons.Kind.DANGER_OUTLINE
+            },
+            text,
+        ) { onClick() }.apply {
             layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(54),
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
             ).apply { topMargin = dp(12) }
-            isClickable = true
-            isFocusable = true
-            setOnClickListener { onClick() }
         }
-    }
 
     /** Small status pill (Locked / Password set / …). */
     private fun chip(text: String, fg: String, fill: String): View =

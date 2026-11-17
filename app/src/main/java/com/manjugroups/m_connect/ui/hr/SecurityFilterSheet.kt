@@ -194,24 +194,16 @@ class SecurityFilterSheet : BottomSheetDialogFragment() {
     }
 
     private fun pillButton(label: String, filled: Boolean, onClick: () -> Unit) =
-        TextView(requireContext()).apply {
-            text = label
-            textSize = 15f
-            setTypeface(typeface, Typeface.BOLD)
-            gravity = Gravity.CENTER
-            setTextColor(Color.parseColor(if (filled) "#FFFFFF" else "#475467"))
-            background = GradientDrawable().apply {
-                cornerRadius = dp(27).toFloat()
-                setColor(Color.parseColor(if (filled) "#0B61CA" else "#FFFFFF"))
-                if (!filled) setStroke(dp(1), Color.parseColor("#D0D5DD"))
-            }
-            layoutParams = LinearLayout.LayoutParams(0, dp(50)).apply {
+        com.manjugroups.m_connect.ui.common.MconnectButtons.create(
+            requireContext(),
+            if (filled) com.manjugroups.m_connect.ui.common.MconnectButtons.Kind.PRIMARY else com.manjugroups.m_connect.ui.common.MconnectButtons.Kind.SECONDARY,
+            label,
+        ) { onClick() }.apply {
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 weight = 1f
                 marginStart = if (filled) dp(8) else 0
                 marginEnd = if (filled) 0 else dp(8)
             }
-            isClickable = true
-            setOnClickListener { onClick() }
         }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()

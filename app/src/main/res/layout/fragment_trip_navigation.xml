@@ -1109,17 +1109,15 @@
             android:layout_height="48dp"
             android:visibility="gone" />
 
-        <androidx.appcompat.widget.AppCompatButton
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnCompleteCpDetails"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
+            android:layout_height="@dimen/button_height"
             android:background="@drawable/bg_home_trip_action_ready"
-            android:fontFamily="@font/inter_semibold"
             android:text="Complete CP details"
-            android:textAllCaps="false"
-            android:textColor="@android:color/white"
             android:textSize="14sp"
-            android:visibility="gone" />
+            android:visibility="gone"
+            style="@style/Widget.Mconnect.Button.Success" />
     </LinearLayout>
 
     <!-- Full-screen map overlay. Hidden by default; the map preview's expand

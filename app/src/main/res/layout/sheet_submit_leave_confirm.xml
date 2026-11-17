@@ -72,7 +72,7 @@
             android:gravity="center"
             android:includeFontPadding="false"
             android:text="No, Let me check"
-            android:textColor="#1BCA0B"
+            android:textColor="?attr/colorForegroundPrimary"
             android:textSize="14sp" />
     </LinearLayout>
 

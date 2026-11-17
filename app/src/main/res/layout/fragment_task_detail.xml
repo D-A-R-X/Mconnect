@@ -610,16 +610,12 @@
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btnUpdateTask"
         android:layout_width="match_parent"
-        android:layout_height="56dp"
+        android:layout_height="@dimen/button_height"
         android:layout_margin="16dp"
-        android:backgroundTint="#1BCA0B"
-        android:fontFamily="@font/inter_bold"
         android:text="Today's Update"
-        android:textAllCaps="false"
-        android:textColor="#FFFFFF"
         android:textSize="15sp"
-        app:cornerRadius="28dp"
-        app:elevation="0dp" />
+        app:elevation="0dp"
+        style="@style/Widget.Mconnect.Button.Success" />
 
     <LinearLayout
         android:id="@+id/detailSkeletonContainer"

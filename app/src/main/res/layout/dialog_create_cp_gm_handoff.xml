@@ -271,7 +271,7 @@
                     android:layout_gravity="center"
                     android:fontFamily="@font/inter_semibold"
                     android:text="Cancel"
-                    android:textColor="#1BCA0B"
+                    android:textColor="?attr/colorForegroundPrimary"
                     android:textSize="13sp" />
             </FrameLayout>
 

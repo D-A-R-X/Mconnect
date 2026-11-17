@@ -233,17 +233,14 @@
     </androidx.cardview.widget.CardView>
 
     <!-- Share Button -->
-    <Button
+    <com.google.android.material.button.MaterialButton
         android:id="@+id/btnLocationShareSend"
         android:layout_width="match_parent"
-        android:layout_height="48dp"
+        android:layout_height="@dimen/button_height"
         android:layout_marginHorizontal="20dp"
         android:layout_marginTop="20dp"
-        android:backgroundTint="#38A612"
-        android:fontFamily="@font/inter_bold"
         android:text="Share Location"
-        android:textColor="#FFFFFF"
         android:textSize="12sp"
-        app:cornerRadius="100dp" />
+        style="@style/Widget.Mconnect.Button.Success" />
 
 </LinearLayout>

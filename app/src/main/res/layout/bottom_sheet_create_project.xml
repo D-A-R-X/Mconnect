@@ -98,15 +98,11 @@
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btnCreateProject"
         android:layout_width="match_parent"
-        android:layout_height="54dp"
+        android:layout_height="@dimen/button_height"
         android:layout_marginTop="16dp"
-        android:backgroundTint="#16A34A"
-        android:fontFamily="@font/inter_semibold"
         android:text="Create Project"
-        android:textAllCaps="false"
-        android:textColor="#FFFFFF"
         android:textSize="15sp"
-        app:cornerRadius="27dp"
-        app:elevation="0dp" />
+        app:elevation="0dp"
+        style="@style/Widget.Mconnect.Button.Success" />
 
 </LinearLayout>

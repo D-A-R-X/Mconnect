@@ -8,6 +8,12 @@
     style="@style/Widget.Mconnect.Button.Secondary"  cancel / secondary (outline)
     style="@style/Widget.Mconnect.Button.Success"    approve / confirm positive
     style="@style/Widget.Mconnect.Button.Danger"     reject / destructive
+    style="@style/Widget.Mconnect.Button.Danger.Outline"  reject beside a positive action
+
+  Views that can't take a style (a LinearLayout / FrameLayout / TextView used
+  as a button, or a background swapped in code) use the matching drawables:
+  bg_button_primary, bg_mc_button_secondary, bg_mc_button_success,
+  bg_mc_button_danger, bg_mc_button_danger_outline, bg_mc_button_disabled.
 
   Height is @dimen/button_height via android:minHeight; set the layout height to
   wrap_content (or @dimen/button_height).
@@ -52,6 +58,13 @@
 
     <style name="Widget.Mconnect.Button.Danger">
         <item name="backgroundTint">?attr/colorError</item>
+    </style>
+
+    <!-- Reject / remove next to a positive action: red outline, red text. -->
+    <style name="Widget.Mconnect.Button.Danger.Outline" parent="Widget.Mconnect.Button.Secondary">
+        <item name="strokeColor">?attr/colorError</item>
+        <item name="android:textColor">?attr/colorError</item>
+        <item name="rippleColor">?attr/colorErrorLight</item>
     </style>
 
 </resources>

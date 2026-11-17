@@ -467,11 +467,10 @@
                 android:layout_height="match_parent"
                 android:layout_marginEnd="6dp"
                 android:layout_weight="1"
-                android:background="@drawable/bg_btn_reject_outline_red"
-                android:backgroundTint="#F2F4F7"
+                android:background="@drawable/bg_mc_button_secondary"
                 android:gravity="center"
                 android:text="Cancel"
-                android:textColor="#344054"
+                android:textColor="?attr/colorForegroundPrimary"
                 android:textSize="13sp"
                 android:fontFamily="@font/inter_semibold" />
 
@@ -490,7 +489,7 @@
                     android:layout_width="14dp"
                     android:layout_height="14dp"
                     android:src="@drawable/ic_leave_action_x"
-                    app:tint="#B42318" />
+                    app:tint="?attr/colorError" />
 
                 <TextView
                     android:layout_width="wrap_content"
@@ -498,7 +497,7 @@
                     android:layout_marginStart="6dp"
                     android:fontFamily="@font/inter_semibold"
                     android:text="Reject"
-                    android:textColor="#B42318"
+                    android:textColor="?attr/colorError"
                     android:textSize="13sp" />
             </LinearLayout>
 
@@ -508,11 +507,10 @@
                 android:layout_height="match_parent"
                 android:layout_marginStart="6dp"
                 android:layout_weight="1.2"
-                android:background="@drawable/bg_btn_reject_outline_red"
-                android:backgroundTint="#F2F4F7"
+                android:background="@drawable/bg_mc_button_secondary"
                 android:gravity="center"
                 android:text="Time Correction"
-                android:textColor="#344054"
+                android:textColor="?attr/colorForegroundPrimary"
                 android:textSize="13sp"
                 android:fontFamily="@font/inter_semibold" />
         </LinearLayout>
@@ -530,11 +528,10 @@
                 android:layout_height="match_parent"
                 android:layout_marginEnd="6dp"
                 android:layout_weight="1"
-                android:background="@drawable/bg_btn_reject_outline_red"
-                android:backgroundTint="#F2F4F7"
+                android:background="@drawable/bg_mc_button_secondary"
                 android:gravity="center"
                 android:text="Absent"
-                android:textColor="#344054"
+                android:textColor="?attr/colorForegroundPrimary"
                 android:textSize="13sp"
                 android:fontFamily="@font/inter_semibold" />
 

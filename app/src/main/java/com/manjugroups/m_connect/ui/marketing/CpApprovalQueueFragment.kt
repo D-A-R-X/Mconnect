@@ -559,22 +559,21 @@ class CpApprovalQueueFragment : Fragment() {
             .format(Date(value.toLong()))
     }
 
+    /** Card action: the Mconnect button component. */
     private fun actionButton(
         label: String,
         fg: String,
         bg: String,
         onClick: () -> Unit,
-    ): TextView = TextView(requireContext()).apply {
-        text = label
-        gravity = Gravity.CENTER
-        textSize = 14f
-        setTextColor(Color.parseColor(fg))
-        includeFontPadding = false
-        typeface = font(R.font.inter_semibold) ?: typeface
-        setPadding(dp(12), dp(13), dp(12), dp(13))
-        background = roundedBg(bg, bg)
-        isClickable = true
-        setOnClickListener { onClick() }
+    ): TextView = com.manjugroups.m_connect.ui.common.MconnectButtons.create(
+        requireContext(),
+        when {
+            bg.equals("#169B2F", ignoreCase = true) -> com.manjugroups.m_connect.ui.common.MconnectButtons.Kind.SUCCESS
+            fg.equals("#B42318", ignoreCase = true) -> com.manjugroups.m_connect.ui.common.MconnectButtons.Kind.DANGER_OUTLINE
+            else -> com.manjugroups.m_connect.ui.common.MconnectButtons.Kind.SECONDARY
+        },
+        label,
+    ) { onClick() }.apply {
         layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT)
     }
 

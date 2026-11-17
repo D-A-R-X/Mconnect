@@ -273,16 +273,14 @@
         android:textSize="14sp" />
 
     <!-- Allocate Button -->
-    <androidx.appcompat.widget.AppCompatButton
+    <com.google.android.material.button.MaterialButton
         android:id="@+id/btnSubmitAllocate"
         android:layout_width="match_parent"
-        android:layout_height="48dp"
+        android:layout_height="@dimen/button_height"
         android:layout_marginTop="24dp"
         android:background="@drawable/bg_allocate_button_green"
-        android:fontFamily="@font/inter_semibold"
         android:text="Allocate"
-        android:textAllCaps="false"
-        android:textColor="#FFFFFF"
-        android:textSize="14sp" />
+        android:textSize="14sp"
+        style="@style/Widget.Mconnect.Button.Success" />
 
 </LinearLayout>

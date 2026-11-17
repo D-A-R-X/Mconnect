@@ -205,7 +205,7 @@
                 android:layout_width="16dp"
                 android:layout_height="16dp"
                 android:src="@drawable/ic_sheet_close"
-                app:tint="#D92D20" />
+                app:tint="?attr/colorError" />
 
             <TextView
                 android:layout_width="wrap_content"
@@ -213,7 +213,7 @@
                 android:layout_marginStart="8dp"
                 android:fontFamily="@font/inter_semibold"
                 android:text="Reject"
-                android:textColor="#D92D20"
+                android:textColor="?attr/colorError"
                 android:textSize="14sp" />
         </LinearLayout>
 

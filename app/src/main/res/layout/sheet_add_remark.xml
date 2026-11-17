@@ -108,13 +108,13 @@
         android:layout_width="match_parent"
         android:layout_height="52dp"
         android:layout_marginTop="22dp"
-        android:background="@drawable/bg_inspection_next_button"
+        android:background="@drawable/bg_mc_button_success"
         android:clickable="true"
         android:focusable="true"
         android:fontFamily="@font/inter_bold"
         android:gravity="center"
         android:includeFontPadding="false"
         android:text="Submit"
-        android:textColor="#FFFFFF"
+        android:textColor="@android:color/white"
         android:textSize="15sp" />
 </LinearLayout>

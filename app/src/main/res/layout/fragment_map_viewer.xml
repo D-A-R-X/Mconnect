@@ -78,17 +78,14 @@
                     android:textColor="#667085"
                     android:textSize="12sp" />
 
-                <Button
+                <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnMapViewerExternal"
                     android:layout_width="match_parent"
                     android:layout_height="40dp"
                     android:layout_marginTop="12dp"
-                    android:backgroundTint="#38A612"
-                    android:fontFamily="@font/inter_bold"
                     android:text="Open in Google Maps"
-                    android:textColor="#FFFFFF"
                     android:textSize="12sp"
-                    app:cornerRadius="8dp" />
+                    style="@style/Widget.Mconnect.Button.Success" />
             </LinearLayout>
         </androidx.cardview.widget.CardView>
     </FrameLayout>

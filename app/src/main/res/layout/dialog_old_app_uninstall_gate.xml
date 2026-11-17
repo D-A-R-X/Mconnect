@@ -66,27 +66,18 @@
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btnUninstallOldApp"
         android:layout_width="match_parent"
-        android:layout_height="54dp"
+        android:layout_height="@dimen/button_height"
         android:layout_marginTop="20dp"
-        android:backgroundTint="#1BCA0B"
-        android:fontFamily="@font/inter_bold"
         android:text="Uninstall old app"
-        android:textAllCaps="false"
-        android:textColor="#FFFFFF"
-        app:cornerRadius="27dp" />
+        style="@style/Widget.Mconnect.Button.Success" />
 
     <!-- After a failed attempt, when Settings → Mobile allows it. -->
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btnContinueWithOldApp"
-        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        style="@style/Widget.Mconnect.Button.Secondary"
         android:layout_width="match_parent"
-        android:layout_height="54dp"
+        android:layout_height="@dimen/button_height"
         android:layout_marginTop="10dp"
-        android:fontFamily="@font/inter_bold"
         android:text="Can't uninstall? Continue"
-        android:textAllCaps="false"
-        android:textColor="#344054"
-        android:visibility="gone"
-        app:cornerRadius="27dp"
-        app:strokeColor="#D0D5DD" />
+        android:visibility="gone" />
 </LinearLayout>

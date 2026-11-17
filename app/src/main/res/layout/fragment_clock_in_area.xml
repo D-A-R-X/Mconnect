@@ -347,16 +347,14 @@
                 android:textSize="12sp"
                 android:visibility="gone" />
 
-            <androidx.appcompat.widget.AppCompatButton
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnSelfieClockIn"
                 android:layout_width="match_parent"
-                android:layout_height="48dp"
+                android:layout_height="@dimen/button_height"
                 android:background="@drawable/bg_attendance_btn_primary"
-                android:fontFamily="@font/inter_medium"
                 android:text="Selfie To Clock In"
-                android:textAllCaps="false"
-                android:textColor="#FFFFFF"
-                android:textSize="14sp" />
+                android:textSize="14sp"
+                style="@style/Widget.Mconnect.Button.Success" />
         </LinearLayout>
     </LinearLayout>
 

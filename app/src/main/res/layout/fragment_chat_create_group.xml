@@ -202,17 +202,13 @@
         </LinearLayout>
     </ScrollView>
 
-    <Button
+    <com.google.android.material.button.MaterialButton
         android:id="@+id/btnStartGroup"
         android:layout_width="match_parent"
-        android:layout_height="56dp"
+        android:layout_height="@dimen/button_height"
         android:layout_margin="20dp"
-        android:backgroundTint="#19B900"
-        android:fontFamily="@font/inter_semibold"
         android:text="Start Group"
-        android:textAllCaps="false"
-        android:textColor="#FFFFFF"
         android:textSize="16sp"
-        app:cornerRadius="12dp" />
+        style="@style/Widget.Mconnect.Button.Success" />
 
 </LinearLayout>

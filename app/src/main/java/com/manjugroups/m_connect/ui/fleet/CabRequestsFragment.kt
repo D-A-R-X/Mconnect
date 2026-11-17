@@ -555,23 +555,21 @@ class CabRequestsFragment : Fragment() {
         })
     }
 
-    private fun actionButton(label: String, color: String, onClick: () -> Unit) = TextView(requireContext()).apply {
-        text = label
-        textSize = 13f
-        setTypeface(typeface, Typeface.BOLD)
-        setTextColor(Color.parseColor(color))
-        setPadding(dp(12), dp(7), dp(12), dp(7))
-        background = GradientDrawable().apply {
-            cornerRadius = dp(16).toFloat()
-            setColor(Color.WHITE)
-            setStroke(dp(1), Color.parseColor(color))
-        }
+    /** Small row action: the Mconnect button component (compact). Red = destructive. */
+    private fun actionButton(label: String, color: String, onClick: () -> Unit) = com.manjugroups.m_connect.ui.common.MconnectButtons.create(
+        requireContext(),
+        if (color.uppercase() in setOf("#D92D20", "#B42318", "#F04438", "#DC2626", "#EF4444")) {
+            com.manjugroups.m_connect.ui.common.MconnectButtons.Kind.DANGER_OUTLINE
+        } else {
+            com.manjugroups.m_connect.ui.common.MconnectButtons.Kind.SECONDARY
+        },
+        label,
+        compact = true,
+    ) { onClick() }.apply {
         layoutParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT,
             LinearLayout.LayoutParams.WRAP_CONTENT,
         ).apply { marginStart = dp(8) }
-        isClickable = true
-        setOnClickListener { onClick() }
     }
 
     /** The web's outline badge colours per status. */

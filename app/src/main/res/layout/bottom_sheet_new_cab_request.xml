@@ -59,31 +59,21 @@
                 <EditText android:id="@+id/etCabFrom" style="@style/SvCreateInput" android:gravity="top|start" android:hint="Pickup address" android:inputType="textMultiLine|textCapSentences" android:minHeight="76dp" android:paddingTop="14dp" android:paddingBottom="14dp" android:layout_height="wrap_content" />
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnCabFromPin"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    style="@style/Widget.Mconnect.Button.Secondary"
                     android:layout_width="match_parent"
-                    android:layout_height="46dp"
+                    android:layout_height="@dimen/button_height"
                     android:layout_marginTop="10dp"
-                    android:fontFamily="@font/inter_semibold"
-                    android:text="Pick pickup on map"
-                    android:textAllCaps="false"
-                    android:textColor="#0B61CA"
-                    app:cornerRadius="8dp"
-                    app:strokeColor="#0B61CA" />
+                    android:text="Pick pickup on map" />
 
                 <TextView style="@style/SvCreateLabel" android:layout_marginTop="16dp" android:text="To location (drop) *" />
                 <EditText android:id="@+id/etCabTo" style="@style/SvCreateInput" android:gravity="top|start" android:hint="Drop address" android:inputType="textMultiLine|textCapSentences" android:minHeight="76dp" android:paddingTop="14dp" android:paddingBottom="14dp" android:layout_height="wrap_content" />
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnCabToPin"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    style="@style/Widget.Mconnect.Button.Secondary"
                     android:layout_width="match_parent"
-                    android:layout_height="46dp"
+                    android:layout_height="@dimen/button_height"
                     android:layout_marginTop="10dp"
-                    android:fontFamily="@font/inter_semibold"
-                    android:text="Pick drop on map"
-                    android:textAllCaps="false"
-                    android:textColor="#0B61CA"
-                    app:cornerRadius="8dp"
-                    app:strokeColor="#0B61CA" />
+                    android:text="Pick drop on map" />
             </LinearLayout>
 
             <TextView style="@style/SvCreateSection" android:text="Schedule" />
@@ -115,27 +105,19 @@
         android:paddingBottom="16dp">
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnCabCancel"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            style="@style/Widget.Mconnect.Button.Secondary"
             android:layout_width="0dp"
-            android:layout_height="54dp"
+            android:layout_height="@dimen/button_height"
             android:layout_marginEnd="8dp"
             android:layout_weight="1"
-            android:fontFamily="@font/inter_bold"
-            android:text="Cancel"
-            android:textAllCaps="false"
-            app:cornerRadius="27dp"
-            app:strokeColor="#D0D5DD" />
+            android:text="Cancel" />
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnCabSubmit"
             android:layout_width="0dp"
-            android:layout_height="54dp"
+            android:layout_height="@dimen/button_height"
             android:layout_marginStart="8dp"
             android:layout_weight="1"
-            android:backgroundTint="#1BCA0B"
-            android:fontFamily="@font/inter_bold"
             android:text="Submit request"
-            android:textAllCaps="false"
-            android:textColor="#FFFFFF"
-            app:cornerRadius="27dp" />
+            style="@style/Widget.Mconnect.Button.Success" />
     </LinearLayout>
 </LinearLayout>

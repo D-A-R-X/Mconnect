@@ -109,21 +109,19 @@
         android:gravity="end"
         android:orientation="horizontal">
 
-        <Button
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnCancelPostponeSv"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            style="@style/Widget.Mconnect.Button.Secondary"
             android:layout_width="wrap_content"
-            android:layout_height="48dp"
-            android:text="Cancel"
-            android:textAllCaps="false" />
+            android:layout_height="@dimen/button_height"
+            android:text="Cancel" />
 
-        <Button
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnConfirmPostponeSv"
-            style="@style/Widget.MaterialComponents.Button"
+            style="@style/Widget.Mconnect.Button"
             android:layout_width="wrap_content"
-            android:layout_height="48dp"
+            android:layout_height="@dimen/button_height"
             android:layout_marginStart="10dp"
-            android:text="Postpone SV"
-            android:textAllCaps="false" />
+            android:text="Postpone SV" />
     </LinearLayout>
 </LinearLayout>

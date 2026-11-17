@@ -222,15 +222,13 @@
     </LinearLayout>
 
     <!-- Submit Button -->
-    <Button
+    <com.google.android.material.button.MaterialButton
         android:id="@+id/btnSubmitIssue"
         android:layout_width="match_parent"
-        android:layout_height="48dp"
+        android:layout_height="@dimen/button_height"
         android:background="@drawable/bg_btn_submit_green_gradient"
-        android:fontFamily="@font/inter_bold"
         android:text="Submit Issue"
-        android:textColor="#FFFFFF"
         android:textSize="14sp"
-        app:backgroundTint="@null" />
+        style="@style/Widget.Mconnect.Button.Success" />
 
 </LinearLayout>

@@ -165,7 +165,7 @@
                     android:layout_gravity="center"
                     android:fontFamily="@font/inter_semibold"
                     android:text="Open in Maps"
-                    android:textColor="#B54708"
+                    android:textColor="?attr/colorForegroundPrimary"
                     android:textSize="14sp" />
             </FrameLayout>
 

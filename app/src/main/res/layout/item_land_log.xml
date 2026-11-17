@@ -201,7 +201,7 @@
                 android:layout_width="0dp"
                 android:layout_height="48dp"
                 android:layout_weight="1"
-                android:background="@drawable/bg_inspection_reschedule_button"
+                android:background="@drawable/bg_mc_button_secondary"
                 android:clickable="true"
                 android:focusable="true"
                 android:gravity="center"
@@ -215,7 +215,7 @@
                     android:layout_marginEnd="8dp"
                     android:contentDescription="Reschedule"
                     android:src="@drawable/ic_calendar_edit"
-                    app:tint="#16A34A" />
+                    app:tint="?attr/colorForegroundPrimary" />
 
                 <TextView
                     android:layout_width="wrap_content"
@@ -223,7 +223,7 @@
                     android:fontFamily="@font/inter_bold"
                     android:includeFontPadding="false"
                     android:text="Reschedule"
-                    android:textColor="#16A34A"
+                    android:textColor="?attr/colorForegroundPrimary"
                     android:textSize="14sp" />
             </LinearLayout>
 

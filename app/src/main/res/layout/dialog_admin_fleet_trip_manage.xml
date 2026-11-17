@@ -464,17 +464,14 @@
                 </com.google.android.material.textfield.TextInputLayout>
             </LinearLayout>
 
-            <androidx.appcompat.widget.AppCompatButton
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnProgressAction"
                 android:layout_width="match_parent"
-                android:layout_height="46dp"
+                android:layout_height="@dimen/button_height"
                 android:layout_marginTop="12dp"
                 android:background="@drawable/bg_button_primary"
-                android:backgroundTint="#0B61CA"
-                android:fontFamily="@font/inter_semibold"
-                android:textAllCaps="false"
-                android:textColor="@android:color/white"
-                android:textSize="14sp" />
+                android:textSize="14sp"
+                style="@style/Widget.Mconnect.Button" />
 
             <TextView
                 android:id="@+id/tvProgressActionError"
@@ -487,18 +484,16 @@
                 android:visibility="gone" />
         </LinearLayout>
 
-        <androidx.appcompat.widget.AppCompatButton
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnUpdateTripStatus"
             android:layout_width="match_parent"
-            android:layout_height="44dp"
+            android:layout_height="@dimen/button_height"
             android:layout_marginTop="10dp"
             android:background="@drawable/bg_trip_button_outline"
-            android:fontFamily="@font/inter_semibold"
             android:text="Report an issue or postpone"
-            android:textAllCaps="false"
-            android:textColor="#0B61CA"
             android:textSize="13sp"
-            android:visibility="gone" />
+            android:visibility="gone"
+            style="@style/Widget.Mconnect.Button.Secondary" />
 
         <LinearLayout
             android:id="@+id/driverLinkActions"
@@ -508,19 +503,17 @@
             android:orientation="horizontal"
             android:visibility="gone">
 
-            <androidx.appcompat.widget.AppCompatButton
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnOpenDriverLink"
                 android:layout_width="0dp"
                 android:layout_height="42dp"
                 android:layout_weight="1"
                 android:background="@drawable/bg_button_primary"
-                android:backgroundTint="#0B61CA"
                 android:text="Open link"
-                android:textAllCaps="false"
-                android:textColor="#FFFFFF"
-                android:textSize="12sp" />
+                android:textSize="12sp"
+                style="@style/Widget.Mconnect.Button" />
 
-            <androidx.appcompat.widget.AppCompatButton
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnCopyDriverLink"
                 android:layout_width="0dp"
                 android:layout_height="42dp"
@@ -528,11 +521,10 @@
                 android:layout_weight="1"
                 android:background="@drawable/bg_trip_button_outline"
                 android:text="Copy"
-                android:textAllCaps="false"
-                android:textColor="#0B61CA"
-                android:textSize="12sp" />
+                android:textSize="12sp"
+                style="@style/Widget.Mconnect.Button.Secondary" />
 
-            <androidx.appcompat.widget.AppCompatButton
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnResendDriverWhatsapp"
                 android:layout_width="0dp"
                 android:layout_height="42dp"
@@ -540,9 +532,8 @@
                 android:layout_weight="1"
                 android:background="@drawable/bg_trip_button_outline"
                 android:text="Resend"
-                android:textAllCaps="false"
-                android:textColor="#0B61CA"
-                android:textSize="12sp" />
+                android:textSize="12sp"
+                style="@style/Widget.Mconnect.Button.Secondary" />
         </LinearLayout>
 
         <TextView
@@ -562,32 +553,27 @@
             android:layout_marginTop="18dp"
             android:orientation="horizontal">
 
-            <androidx.appcompat.widget.AppCompatButton
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnManageReassign"
                 android:layout_width="0dp"
-                android:layout_height="46dp"
+                android:layout_height="@dimen/button_height"
                 android:layout_weight="1"
                 android:layout_marginEnd="6dp"
                 android:background="@drawable/bg_button_primary"
-                android:backgroundTint="#0B61CA"
-                android:fontFamily="@font/inter_semibold"
                 android:text="Reassign"
-                android:textAllCaps="false"
-                android:textColor="@android:color/white"
-                android:textSize="14sp" />
+                android:textSize="14sp"
+                style="@style/Widget.Mconnect.Button" />
 
-            <androidx.appcompat.widget.AppCompatButton
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnManageRemove"
                 android:layout_width="0dp"
-                android:layout_height="46dp"
+                android:layout_height="@dimen/button_height"
                 android:layout_weight="1"
                 android:layout_marginStart="6dp"
                 android:background="@drawable/bg_btn_reject_outline_red"
-                android:fontFamily="@font/inter_semibold"
                 android:text="Remove driver"
-                android:textAllCaps="false"
-                android:textColor="#B42318"
-                android:textSize="14sp" />
+                android:textSize="14sp"
+                style="@style/Widget.Mconnect.Button.Danger.Outline" />
         </LinearLayout>
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>

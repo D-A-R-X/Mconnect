@@ -172,7 +172,7 @@
         android:fontFamily="@font/inter_semibold"
         android:gravity="center"
         android:text="Close Message"
-        android:textColor="#1BCA0B"
+        android:textColor="?attr/colorForegroundPrimary"
         android:textSize="13sp" />
 
 </LinearLayout>

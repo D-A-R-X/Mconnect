@@ -361,18 +361,15 @@
                         android:textSize="12sp" />
                 </LinearLayout>
 
-                <Button
+                <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnRemoveProof"
                     android:layout_width="wrap_content"
                     android:layout_height="36dp"
-                    android:background="@drawable/bg_edit_btn_outline"
-                    android:fontFamily="@font/inter_semibold"
                     android:minWidth="0dp"
                     android:paddingHorizontal="12dp"
                     android:text="Remove"
-                    android:textAllCaps="false"
-                    android:textColor="#475467"
-                    android:textSize="13sp" />
+                    android:textSize="13sp"
+                    style="@style/Widget.Mconnect.Button.Danger.Outline" />
             </LinearLayout>
         </FrameLayout>
 
@@ -425,20 +422,13 @@
          visually secondary to Submit. -->
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btnNotCollected"
-        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        style="@style/Widget.Mconnect.Button.Secondary"
         android:layout_width="match_parent"
-        android:layout_height="54dp"
+        android:layout_height="@dimen/button_height"
         android:layout_marginHorizontal="20dp"
         android:layout_marginTop="12dp"
-        android:fontFamily="@font/inter_bold"
         android:text="Nothing collected — mark Not Collected"
-        android:textAllCaps="false"
-        android:textColor="#B54708"
-        android:textSize="14sp"
-        app:backgroundTint="#FFFAEB"
-        app:cornerRadius="27dp"
-        app:strokeColor="#FEC84B"
-        app:strokeWidth="1dp" />
+        android:textSize="14sp" />
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -455,32 +445,23 @@
              1:1 so the layout matches the rest of the app. -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnCancelCollection"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            style="@style/Widget.Mconnect.Button.Secondary"
             android:layout_width="0dp"
-            android:layout_height="54dp"
+            android:layout_height="@dimen/button_height"
             android:layout_marginEnd="8dp"
             android:layout_weight="1"
-            android:fontFamily="@font/inter_bold"
             android:text="Cancel"
-            android:textAllCaps="false"
-            android:textColor="#475467"
-            android:textSize="15sp"
-            app:cornerRadius="27dp"
-            app:strokeColor="#D0D5DD" />
+            android:textSize="15sp" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnSubmitCollection"
             android:layout_width="0dp"
-            android:layout_height="54dp"
+            android:layout_height="@dimen/button_height"
             android:layout_marginStart="8dp"
             android:layout_weight="1"
-            android:backgroundTint="#1BCA0B"
-            android:fontFamily="@font/inter_bold"
             android:text="Submit"
-            android:textAllCaps="false"
-            android:textColor="#FFFFFF"
             android:textSize="15sp"
-            app:cornerRadius="27dp"
-            app:elevation="0dp" />
+            app:elevation="0dp"
+            style="@style/Widget.Mconnect.Button.Success" />
     </LinearLayout>
 </LinearLayout>

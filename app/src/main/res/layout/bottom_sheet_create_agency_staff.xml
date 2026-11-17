@@ -120,7 +120,7 @@
         android:layout_marginTop="20dp"
         android:orientation="horizontal">
 
-        <androidx.appcompat.widget.AppCompatButton
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnStaffStatus"
             android:layout_width="0dp"
             android:layout_height="match_parent"
@@ -128,18 +128,16 @@
             android:layout_weight="1"
             android:background="@drawable/bg_btn_deactivate_outline_red"
             android:text="Deactivate"
-            android:textAllCaps="false"
-            android:textColor="#EF4444"
-            android:visibility="gone" />
+            android:visibility="gone"
+            style="@style/Widget.Mconnect.Button.Danger.Outline" />
 
-        <androidx.appcompat.widget.AppCompatButton
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnSaveStaff"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:background="@drawable/bg_allocate_button_green"
             android:text="Save"
-            android:textAllCaps="false"
-            android:textColor="#FFFFFF" />
+            style="@style/Widget.Mconnect.Button.Success" />
     </LinearLayout>
 </LinearLayout>

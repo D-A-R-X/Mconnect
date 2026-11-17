@@ -673,31 +673,25 @@
         android:paddingTop="10dp"
         android:paddingBottom="18dp">
 
-        <androidx.appcompat.widget.AppCompatButton
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnCancelComplete"
             android:layout_width="0dp"
-            android:layout_height="46dp"
+            android:layout_height="@dimen/button_height"
             android:layout_marginEnd="6dp"
             android:layout_weight="1"
-            android:background="@drawable/bg_btn_reject_outline_red"
-            android:fontFamily="@font/inter_semibold"
             android:text="Cancel"
-            android:textAllCaps="false"
-            android:textColor="#B42318"
-            android:textSize="14sp" />
+            android:textSize="14sp"
+            style="@style/Widget.Mconnect.Button.Secondary" />
 
-        <androidx.appcompat.widget.AppCompatButton
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnSubmitComplete"
             android:layout_width="0dp"
-            android:layout_height="46dp"
+            android:layout_height="@dimen/button_height"
             android:layout_marginStart="6dp"
             android:layout_weight="1"
             android:background="@drawable/bg_button_primary"
-            android:backgroundTint="#0B61CA"
-            android:fontFamily="@font/inter_semibold"
             android:text="Save"
-            android:textAllCaps="false"
-            android:textColor="@android:color/white"
-            android:textSize="14sp" />
+            android:textSize="14sp"
+            style="@style/Widget.Mconnect.Button" />
     </LinearLayout>
 </LinearLayout>

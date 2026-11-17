@@ -139,6 +139,6 @@
         android:fontFamily="@font/inter_semibold"
         android:gravity="center"
         android:text="Close"
-        android:textColor="#344054"
+        android:textColor="?attr/colorForegroundPrimary"
         android:textSize="14sp" />
 </LinearLayout>

@@ -180,7 +180,7 @@
         android:fontFamily="@font/inter_semibold"
         android:gravity="center"
         android:text="Search address and drop pin"
-        android:textColor="#0B61CA"
+        android:textColor="?attr/colorForegroundPrimary"
         android:textSize="13sp" />
 
     <TextView

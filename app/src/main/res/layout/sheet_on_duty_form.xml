@@ -454,31 +454,27 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp">
 
-        <androidx.appcompat.widget.AppCompatButton
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnOnDutyNext"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
+            android:layout_height="@dimen/button_height"
             android:background="@drawable/bg_on_duty_btn_disabled"
             android:enabled="false"
-            android:fontFamily="@font/inter_semibold"
             android:text="Next"
-            android:textAllCaps="false"
-            android:textColor="#FFFFFF"
             android:textSize="14sp"
-            android:visibility="gone" />
+            android:visibility="gone"
+            style="@style/Widget.Mconnect.Button" />
 
-        <androidx.appcompat.widget.AppCompatButton
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnOnDutySubmit"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
+            android:layout_height="@dimen/button_height"
             android:background="@drawable/bg_on_duty_btn_disabled"
             android:enabled="false"
-            android:fontFamily="@font/inter_semibold"
             android:text="Start Now"
-            android:textAllCaps="false"
-            android:textColor="#FFFFFF"
             android:textSize="14sp"
-            android:visibility="gone" />
+            android:visibility="gone"
+            style="@style/Widget.Mconnect.Button" />
     </FrameLayout>
 
 </LinearLayout>

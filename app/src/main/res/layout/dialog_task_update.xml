@@ -335,17 +335,15 @@
             android:textSize="12sp"
             android:visibility="gone" />
 
-        <androidx.appcompat.widget.AppCompatButton
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnSubmitUpdate"
             android:layout_width="match_parent"
             android:layout_height="@dimen/button_height"
             android:layout_marginTop="20dp"
             android:background="@drawable/bg_button_primary"
-            android:fontFamily="@font/inter_semibold"
             android:text="Update It"
-            android:textAllCaps="false"
-            android:textColor="@android:color/white"
-            android:textSize="14sp" />
+            android:textSize="14sp"
+            style="@style/Widget.Mconnect.Button" />
 
         <TextView
             android:id="@+id/btnCancelUpdate"

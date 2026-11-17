@@ -145,17 +145,14 @@
         android:textColor="#B45309"
         android:textSize="12sp" />
 
-    <androidx.appcompat.widget.AppCompatButton
+    <com.google.android.material.button.MaterialButton
         android:id="@+id/btnArrivalOtpVerify"
         android:layout_width="match_parent"
         android:layout_height="@dimen/button_height"
         android:layout_marginTop="18dp"
-        android:background="@drawable/bg_chat_primary_button"
-        android:fontFamily="@font/inter_semibold"
         android:text="Submit"
-        android:textAllCaps="false"
-        android:textColor="@android:color/white"
-        android:textSize="14sp" />
+        android:textSize="14sp"
+        style="@style/Widget.Mconnect.Button" />
 </LinearLayout>
 
 </androidx.core.widget.NestedScrollView>

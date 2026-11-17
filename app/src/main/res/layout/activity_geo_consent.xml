@@ -48,26 +48,23 @@
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btnConsent"
         android:layout_width="match_parent"
-        android:layout_height="56dp"
+        android:layout_height="@dimen/button_height"
         android:text="I Understand and Agree"
-        android:textAllCaps="false"
         android:textSize="16sp"
         android:layout_marginBottom="16dp"
-        app:cornerRadius="12dp"
         app:layout_constraintBottom_toTopOf="@id/btnDecline"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+        app:layout_constraintEnd_toEndOf="parent"
+        style="@style/Widget.Mconnect.Button" />
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btnDecline"
-        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        style="@style/Widget.Mconnect.Button.Secondary"
         android:layout_width="match_parent"
-        android:layout_height="48dp"
+        android:layout_height="@dimen/button_height"
         android:text="Decline"
-        android:textAllCaps="false"
         android:textSize="14sp"
         android:layout_marginBottom="24dp"
-        app:cornerRadius="12dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />

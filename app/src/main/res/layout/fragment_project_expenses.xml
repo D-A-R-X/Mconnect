@@ -372,15 +372,11 @@
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btnAddExpense"
         android:layout_width="match_parent"
-        android:layout_height="56dp"
+        android:layout_height="@dimen/button_height"
         android:layout_margin="16dp"
-        android:fontFamily="@font/inter_bold"
         android:text="Add Expense"
-        android:textColor="@android:color/white"
         android:textSize="16sp"
-        android:textAllCaps="false"
-        app:backgroundTint="#1BCA0B"
-        app:cornerRadius="28dp"
-        app:elevation="0dp" />
+        app:elevation="0dp"
+        style="@style/Widget.Mconnect.Button.Success" />
 
 </LinearLayout>

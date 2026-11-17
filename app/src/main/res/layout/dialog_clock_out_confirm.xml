@@ -163,31 +163,25 @@
             android:textColor="#B54708"
             android:textSize="12.5sp" />
 
-        <androidx.appcompat.widget.AppCompatButton
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnConfirmClockOut"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
+            android:layout_height="@dimen/button_height"
             android:layout_marginTop="16dp"
             android:background="@drawable/bg_attendance_btn_primary"
-            android:fontFamily="@font/inter_medium"
-            android:letterSpacing="0.007"
             android:text="Yes, Clock Out"
-            android:textAllCaps="false"
-            android:textColor="#FFFFFF"
-            android:textSize="14sp" />
+            android:textSize="14sp"
+            style="@style/Widget.Mconnect.Button.Success" />
 
-        <androidx.appcompat.widget.AppCompatButton
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnCancelClockOut"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
+            android:layout_height="@dimen/button_height"
             android:layout_marginTop="12dp"
             android:background="@drawable/bg_attendance_btn_secondary"
-            android:fontFamily="@font/inter_medium"
-            android:letterSpacing="0.007"
             android:text="No, Let me check"
-            android:textAllCaps="false"
-            android:textColor="#1BCA0B"
-            android:textSize="14sp" />
+            android:textSize="14sp"
+            style="@style/Widget.Mconnect.Button.Secondary" />
     </LinearLayout>
 
     <!-- Floating blue clock badge — sibling of the card, anchored

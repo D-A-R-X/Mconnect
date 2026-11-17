@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="rectangle">
-    <solid android:color="#FF8A83" />
-    <corners android:radius="100dp" />
-</shape>
+<!-- Alias: the Mconnect primary button component (values/buttons.xml). -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@drawable/bg_button_primary" />
+</layer-list>

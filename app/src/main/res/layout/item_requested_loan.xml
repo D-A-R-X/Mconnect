@@ -217,58 +217,41 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnReject"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            style="@style/Widget.Mconnect.Button.Danger.Outline"
             android:layout_width="0dp"
             android:layout_weight="1"
-            android:layout_height="48dp"
+            android:layout_height="@dimen/button_height"
             android:layout_marginEnd="8dp"
-            android:fontFamily="@font/inter_medium"
             android:text="Reject"
-            android:textAllCaps="false"
-            android:textColor="#F04438"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
-            app:cornerRadius="8dp"
             app:icon="@drawable/ic_sheet_close"
-            app:iconTint="#F04438"
-            app:strokeColor="#F04438" />
+            app:iconTint="#F04438" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnAccept"
             android:layout_width="0dp"
             android:layout_weight="1"
-            android:layout_height="48dp"
+            android:layout_height="@dimen/button_height"
             android:layout_marginStart="8dp"
-            android:fontFamily="@font/inter_medium"
             android:text="Accept"
-            android:textAllCaps="false"
-            android:textColor="@color/white"
             android:background="@drawable/bg_btn_gradient_green_8dp"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
-            app:backgroundTint="@null"
             app:icon="@drawable/ic_check_white"
-            app:iconTint="@color/white" />
+            app:iconTint="@color/white"
+            style="@style/Widget.Mconnect.Button.Success" />
     </LinearLayout>
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btnAccepted"
         android:layout_width="match_parent"
-        android:layout_height="48dp"
+        android:layout_height="@dimen/button_height"
         android:layout_marginTop="16dp"
-        android:fontFamily="@font/inter_medium"
         android:text="Accepted"
-        android:textAllCaps="false"
-        android:textColor="@color/white"
         android:background="@drawable/bg_btn_gradient_green_8dp"
-        android:insetTop="0dp"
-        android:insetBottom="0dp"
-        app:backgroundTint="@null"
         app:icon="@drawable/ic_check_white"
         app:iconTint="@color/white"
         android:alpha="0.6"
         android:enabled="false"
-        android:visibility="gone" />
+        android:visibility="gone"
+        style="@style/Widget.Mconnect.Button.Success" />
 
     </LinearLayout>
 </FrameLayout>

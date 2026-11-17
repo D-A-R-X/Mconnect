@@ -69,17 +69,15 @@
             android:textColor="#475467"
             android:textSize="14sp" />
 
-        <androidx.appcompat.widget.AppCompatButton
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnHomeFenceGotIt"
             android:layout_width="match_parent"
-            android:layout_height="50dp"
+            android:layout_height="@dimen/button_height"
             android:layout_marginTop="22dp"
             android:background="@drawable/bg_home_fence_got_it_btn"
-            android:fontFamily="@font/inter_semibold"
             android:text="Got It"
-            android:textAllCaps="false"
-            android:textColor="#FFFFFF"
-            android:textSize="15sp" />
+            android:textSize="15sp"
+            style="@style/Widget.Mconnect.Button.Success" />
     </LinearLayout>
 
 </FrameLayout>

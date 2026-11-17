@@ -135,13 +135,9 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnMobileAlertClose"
             android:layout_width="match_parent"
-            android:layout_height="54dp"
-            android:backgroundTint="#1BCA0B"
+            android:layout_height="@dimen/button_height"
             android:enabled="false"
-            android:fontFamily="@font/inter_bold"
             android:text="Close"
-            android:textAllCaps="false"
-            android:textColor="#FFFFFF"
-            app:cornerRadius="27dp" />
+            style="@style/Widget.Mconnect.Button.Success" />
     </LinearLayout>
 </LinearLayout>
