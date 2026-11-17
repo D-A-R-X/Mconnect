@@ -66,6 +66,30 @@ object IssueReporter {
 
     private lateinit var app: Application
     private val io = Executors.newSingleThreadExecutor { Thread(it, "issue-reporter").apply { isDaemon = true } }
+
+    /**
+     * "Unable to resolve host" is almost always the phone being offline: Wi-Fi
+     * that lost its upstream (Android keeps calling it validated until it
+     * re-checks), a captive portal, or background network limits. That filed
+     * 1,868 issues from 93 staff while our DNS was healthy. Before reporting
+     * one, resolve a host that is always up: if that fails too the phone is
+     * offline and only the breadcrumb is kept; if it resolves, our own host is
+     * the problem and it is reported. One probe per minute at most, on its own
+     * thread so a slow lookup never holds the report queue.
+     */
+    private const val DNS_PROBE_HOST = "connectivitycheck.gstatic.com"
+    private const val DNS_PROBE_TTL_MS = 60_000L
+    private val probe = Executors.newSingleThreadExecutor { Thread(it, "issue-dns-probe").apply { isDaemon = true } }
+    @Volatile private var probeAt = 0L
+    @Volatile private var probeOnline = false
+
+    private fun internetResolves(): Boolean {
+        val now = SystemClock.elapsedRealtime()
+        if (now - probeAt < DNS_PROBE_TTL_MS) return probeOnline
+        probeOnline = runCatching { java.net.InetAddress.getByName(DNS_PROBE_HOST) != null }.getOrDefault(false)
+        probeAt = SystemClock.elapsedRealtime()
+        return probeOnline
+    }
     private val main = Handler(Looper.getMainLooper())
     private val lock = Any()
 
@@ -165,7 +189,14 @@ object IssueReporter {
         } catch (error: IOException) {
             val took = SystemClock.elapsedRealtime() - started
             crumb("${request.method} $path → ${error.javaClass.simpleName} (${took} ms)")
-            if (!isCanceled(error) && hasInternet()) reportNetwork(request, error, took)
+            if (!isCanceled(error) && hasInternet()) {
+                if (error is java.net.UnknownHostException) {
+                    val screen = currentScreen()
+                    probe.execute { if (internetResolves()) reportNetwork(request, error, took, screen) }
+                } else {
+                    reportNetwork(request, error, took)
+                }
+            }
             throw error
         }
         val took = SystemClock.elapsedRealtime() - started
@@ -178,14 +209,30 @@ object IssueReporter {
             (response.code == 504 && response.message.contains("only-if-cached", ignoreCase = true))
         if (!response.isSuccessful && response.code != 401 && !response.isRedirect && !offlineCacheMiss) {
             val body = runCatching { response.peekBody(4_096).string() }.getOrNull()
-            reportHttp(request, response.code, response.message, body, took)
+            if (!isHandledHandshake(response.code, body)) {
+                reportHttp(request, response.code, response.message, body, took)
+            }
         }
         response
     }
 
+    /**
+     * Replies that are a designed step the app handles, not a failure:
+     * 422 OVERRIDE_REASON_REQUIRED asks the approver for a reason, the app
+     * prompts and retries. Filing it made a "Server error" for every approval
+     * that needed a reason.
+     */
+    private fun isHandledHandshake(code: Int, body: String?): Boolean =
+        code == 422 && body?.contains("\"OVERRIDE_REASON_REQUIRED\"") == true
+
     private fun isCanceled(error: IOException) =
         error.message?.contains("Canceled", ignoreCase = true) == true ||
-            error.javaClass.simpleName.contains("Cancel")
+            error.javaClass.simpleName.contains("Cancel") ||
+            // HTTP/2 "stream was reset: CANCEL" is our own call being cancelled
+            // (screen rebuilt). R8 renames the class (it arrived as "b0"), so
+            // the name check above never caught it.
+            (error is okhttp3.internal.http2.StreamResetException &&
+                error.errorCode == okhttp3.internal.http2.ErrorCode.CANCEL)
 
     private fun reportHttp(request: Request, code: Int, reason: String, body: String?, took: Long) {
         val endpoint = "${request.method} ${normalizedPath(request.url.encodedPath)}"
@@ -209,7 +256,12 @@ object IssueReporter {
         )
     }
 
-    private fun reportNetwork(request: Request, error: IOException, took: Long) {
+    private fun reportNetwork(
+        request: Request,
+        error: IOException,
+        took: Long,
+        screen: String = currentScreen(),
+    ) {
         val endpoint = "${request.method} ${normalizedPath(request.url.encodedPath)}"
         val type = error.javaClass.simpleName.ifBlank { "IOException" }
         enqueue(
@@ -220,7 +272,7 @@ object IssueReporter {
                 .put("message", "$type: ${error.message.orEmpty()}".take(2_000))
                 .put("errorCode", type)
                 .put("endpoint", endpoint)
-                .put("screen", currentScreen())
+                .put("screen", screen)
                 .put("requestMethod", request.method)
                 .put("requestUrl", safeUrl(request))
                 .put("durationMs", took)
