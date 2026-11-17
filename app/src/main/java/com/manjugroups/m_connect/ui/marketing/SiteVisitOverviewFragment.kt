@@ -788,6 +788,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
                     }
                 }
                 label?.text = labelText
+                label?.let(::fitStepLabel)
             }
 
             val ownTerminal = currentTerminalLabel
@@ -943,6 +944,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
                     }
                 }
                 label?.text = labelText
+                label?.let(::fitStepLabel)
             }
 
             val terminal = currentTerminalLabel
@@ -1199,8 +1201,37 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
             else -> "Outcome recorded" to Color.parseColor("#344054")
         }
 
-    private fun callLabel(role: String, name: String?): String =
-        name?.takeIf { it.isNotBlank() && it != "—" }?.let { "Call $it" } ?: "Call $role"
+    /** "Call Client" / "Call Driver": the name is already on the card above. */
+    @Suppress("UNUSED_PARAMETER")
+    private fun callLabel(role: String, name: String?): String = "Call $role"
+
+    /**
+     * Step labels sit in ~36dp columns; long words ("SCHEDULED", "CONSULTING")
+     * were split mid-word. Centre the label and shrink it only as far as needed
+     * for its longest word to fit on one line, so lines break between words.
+     */
+    private fun fitStepLabel(label: TextView) {
+        (label.layoutParams as? LinearLayout.LayoutParams)?.let {
+            if (it.width != ViewGroup.LayoutParams.MATCH_PARENT) {
+                it.width = ViewGroup.LayoutParams.MATCH_PARENT
+                label.layoutParams = it
+            }
+        }
+        label.gravity = android.view.Gravity.CENTER_HORIZONTAL
+        label.maxLines = 3
+        label.includeFontPadding = false
+        label.post {
+            val available = label.width - label.paddingLeft - label.paddingRight
+            if (available <= 0) return@post
+            val words = label.text.toString().split(' ').filter { it.isNotEmpty() }
+            var sp = 8f
+            while (sp > 5.5f) {
+                label.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, sp)
+                if (words.all { label.paint.measureText(it) <= available }) break
+                sp -= 0.5f
+            }
+        }
+    }
 
     private fun setCallButtonEnabled(button: View?, enabled: Boolean) {
         button?.isEnabled = enabled
