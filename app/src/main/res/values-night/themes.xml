@@ -19,6 +19,7 @@
 
         <!-- Custom semantic attributes -->
         <item name="colorAccentPrimary">@color/dk_accent_primary</item>
+        <item name="colorButtonPrimary">@color/button_primary_blue</item>
         <item name="colorAccentPrimaryHover">@color/dk_accent_primary_hover</item>
         <item name="colorAccentSecondary">@color/dk_accent_secondary</item>
         <item name="colorSurfacePrimary">@color/dk_surface_primary</item>

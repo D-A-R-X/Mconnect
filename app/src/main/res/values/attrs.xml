@@ -3,6 +3,8 @@
     <!-- Accent -->
     <attr name="colorAccentPrimary" format="color" />
     <attr name="colorAccentPrimaryHover" format="color" />
+    <!-- Primary action button fill (brand blue; iOS uses the same) -->
+    <attr name="colorButtonPrimary" format="color" />
     <attr name="colorAccentSecondary" format="color" />
 
     <!-- Surface -->

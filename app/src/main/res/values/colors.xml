@@ -60,6 +60,7 @@
 
     <!-- Chat / Figma palette -->
     <color name="chat_blue_top">#FF0B61CA</color>
+    <color name="button_primary_blue">#FF0B61CA</color>
     <color name="chat_blue_bottom">#FF02499D</color>
     <color name="chat_green_top">#FF1BCA0B</color>
     <color name="chat_green_bottom">#FF3D9D02</color>

@@ -21,6 +21,7 @@
 
         <!-- Custom semantic attributes -->
         <item name="colorAccentPrimary">@color/lt_accent_primary</item>
+        <item name="colorButtonPrimary">@color/button_primary_blue</item>
         <item name="colorAccentPrimaryHover">@color/lt_accent_primary_hover</item>
         <item name="colorAccentSecondary">@color/lt_accent_secondary</item>
         <item name="colorSurfacePrimary">@color/lt_surface_primary</item>
