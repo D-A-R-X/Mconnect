@@ -64,6 +64,16 @@ class ChatListFragment : Fragment() {
 
     private var refreshJob: Job? = null
     private var activeStaffCache: List<StaffData> = emptyList()
+
+    /**
+     * The 5 s refresh used to re-download the whole active staff directory
+     * every time, beside conversations and channels. The production Convex
+     * backend runs at most 16 requests at once ("TooManyConcurrentRequests",
+     * 4,855 reports in two days), and the roster barely changes, so it is now
+     * fetched at most every [STAFF_REFRESH_MS], or on pull-to-refresh.
+     */
+    private var staffFetchedAt = 0L
+    private val STAFF_REFRESH_MS = 5 * 60 * 1000L
     private val staffPhotoMap = mutableMapOf<String, String>()
     private var allChannels: List<ChannelData> = emptyList()
     private var allConversations: List<ConversationData> = emptyList()
@@ -138,7 +148,7 @@ class ChatListFragment : Fragment() {
         renderFilterState()
         // Pull-to-refresh — re-runs loadData() which the existing polling
         // loop also calls every 5s. dismissRefresh is wired below.
-        binding.chatRefresh.setupPullToRefresh { loadData() }
+        binding.chatRefresh.setupPullToRefresh { loadData(refreshStaff = true) }
         loadData()
     }
 
@@ -466,9 +476,11 @@ class ChatListFragment : Fragment() {
 
     private fun chatCacheKey(): String = "chatlist:${session.staffId.orEmpty()}"
 
-    private fun loadData() {
+    private fun loadData(refreshStaff: Boolean = false) {
         if (isLoadingChats) return
         isLoadingChats = true
+        val fetchStaff = refreshStaff || activeStaffCache.isEmpty() ||
+            System.currentTimeMillis() - staffFetchedAt >= STAFF_REFRESH_MS
         viewLifecycleOwner.lifecycleScope.launch {
             if (!hasLoadedOnce) {
                 // Cache-first: paint the last-known chat list INSTANTLY (no
@@ -505,10 +517,13 @@ class ChatListFragment : Fragment() {
                         api.getChannels(session.bearerToken).channels
                     }
                     val staffListDeferred = async(kotlinx.coroutines.Dispatchers.IO) {
+                        if (!fetchStaff) return@async activeStaffCache
                         try {
                             api.getStaff(session.bearerToken, status = "active").staff
+                                .also { if (it.isNotEmpty()) staffFetchedAt = System.currentTimeMillis() }
                         } catch (e: Exception) {
-                            emptyList()
+                            // Keep the roster we have rather than blanking photos/names.
+                            activeStaffCache
                         }
                     }
                     conversations = conversationsDeferred.await()
