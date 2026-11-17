@@ -174,12 +174,49 @@ class CreateSiteVisitBottomSheet : BottomSheetDialogFragment() {
         root.findViewById<EditText>(R.id.etSvPickupTime).setOnClickListener { pickTime(it as EditText, isPickup = true) }
         bindStaffPicker(root, R.id.etSvLmo, "Select LMO", ::eligibleLmo) { lmo = it }
         bindStaffPicker(root, R.id.etSvBdo, "Select BDO", ::eligibleLmo) { bdo = it }
-        bindStaffPicker(root, R.id.etSvIncharge, "Select site incharge", ::salesMarketing) { incharge = it }
+        bindStaffPicker(root, R.id.etSvIncharge, "Select site incharge", ::salesMarketing) { incharge = it; dropBrokenChain(root) }
         bindStaffPicker(root, R.id.etSvFieldStaff, "Select field staff", ::salesMarketing) { fieldStaff = it }
-        bindStaffPicker(root, R.id.etSvHod, "Select HOD", { true }) { hod = it }
-        bindStaffPicker(root, R.id.etSvAvp, "Select AVP", ::salesMarketing) { avp = it }
-        bindStaffPicker(root, R.id.etSvGm, "Select GM", ::salesMarketing) { gm = it }
-        bindStaffPicker(root, R.id.etSvSeniorManager, "Select senior manager", ::salesMarketing) { seniorManager = it }
+        // Each level must sit above the one before it (server: incharge → HOD →
+        // senior manager → GM → AVP, else 403 "X is not reporting to selected
+        // Y"). The pickers used to offer everyone, so a hierarchy that could
+        // never be accepted was built and refused on submit (7 tries by one
+        // staff member). Offer only people on the line, as the server walks it.
+        bindStaffPicker(root, R.id.etSvHod, "Select HOD", { reportsUpTo(incharge, it) }) { hod = it; dropBrokenChain(root) }
+        bindStaffPicker(root, R.id.etSvSeniorManager, "Select senior manager", { salesMarketing(it) && reportsUpTo(hod, it) }) { seniorManager = it; dropBrokenChain(root) }
+        bindStaffPicker(root, R.id.etSvGm, "Select GM", { salesMarketing(it) && reportsUpTo(seniorManager, it) }) { gm = it; dropBrokenChain(root) }
+        bindStaffPicker(root, R.id.etSvAvp, "Select AVP", { salesMarketing(it) && reportsUpTo(gm, it) }) { avp = it }
+    }
+
+    /**
+     * Ids above [from] on its reporting line, walked like the server's
+     * assertReportingChain. Null when the line can't be followed from here (no
+     * manager recorded, which the server accepts as anything, or it passes
+     * through someone outside the active list): then nobody is filtered out.
+     */
+    private fun managersAbove(from: StaffData?): Set<String>? {
+        var cursor = from?.reportingToId?.takeIf { it.isNotBlank() } ?: return null
+        val byId = staffCache.associateBy { it.id }
+        val above = LinkedHashSet<String>()
+        while (above.add(cursor)) {
+            val manager = byId[cursor] ?: return null
+            cursor = manager.reportingToId?.takeIf { it.isNotBlank() } ?: break
+        }
+        return above
+    }
+
+    /** True when [candidate] may be picked above [from] (or [from] isn't chosen yet). */
+    private fun reportsUpTo(from: StaffData?, candidate: StaffData): Boolean {
+        if (from == null) return true
+        return managersAbove(from)?.contains(candidate.id) ?: true
+    }
+
+    /** A changed level can strand the ones above it: clear those so the form never submits a refused chain. */
+    private fun dropBrokenChain(root: View) {
+        fun clear(id: Int) { root.findViewById<EditText>(id)?.setText("") }
+        hod?.let { if (!reportsUpTo(incharge, it)) { hod = null; clear(R.id.etSvHod) } }
+        seniorManager?.let { if (!reportsUpTo(hod, it)) { seniorManager = null; clear(R.id.etSvSeniorManager) } }
+        gm?.let { if (!reportsUpTo(seniorManager, it)) { gm = null; clear(R.id.etSvGm) } }
+        avp?.let { if (!reportsUpTo(gm, it)) { avp = null; clear(R.id.etSvAvp) } }
     }
 
     private fun bindPhoneLookup(root: View) {
