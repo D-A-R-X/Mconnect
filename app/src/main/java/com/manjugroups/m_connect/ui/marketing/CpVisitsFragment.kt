@@ -758,6 +758,10 @@ class CpVisitsFragment : Fragment() {
                 // collapse to a no-op render call below.
                 renderList()
             } catch (e: Exception) {
+                // A load cancelled because the screen went away (or was rebuilt)
+                // is not a failed refresh: it showed "Couldn't refresh" while the
+                // next load was already succeeding.
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 if (requestGeneration != loadGeneration) return@launch
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 if (allVisits.isNotEmpty()) {
