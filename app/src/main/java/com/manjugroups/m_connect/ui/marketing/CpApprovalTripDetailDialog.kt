@@ -160,10 +160,14 @@ class CpApprovalTripDetailDialog : DialogFragment() {
         dialog.setContentView(ScrollView(requireContext()).apply { addView(content) })
         dialog.setOnShowListener {
             dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+            // Wrap the card and float it in the middle. A fixed 84% height left
+            // the card pinned to the top with empty space under it; a card
+            // taller than the screen is still capped there and scrolls.
             dialog.window?.setLayout(
                 (resources.displayMetrics.widthPixels * 0.92).roundToInt(),
-                (resources.displayMetrics.heightPixels * 0.84).roundToInt(),
+                ViewGroup.LayoutParams.WRAP_CONTENT,
             )
+            dialog.window?.setGravity(Gravity.CENTER)
         }
         loadRoute()
         return dialog
