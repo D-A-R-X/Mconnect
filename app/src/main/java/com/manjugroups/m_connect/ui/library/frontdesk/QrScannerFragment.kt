@@ -447,10 +447,15 @@ class QrScannerFragment : Fragment() {
                 // → can't record outcome" (setOutcome accepts on_counselling →
                 // picked_from_site → dropped).
                 val myStaffId = session.staffId
+                // Same identity rule as the server's isQrOutcomeAuthorized: the
+                // BDO (the telecaller counts only when no BDO is set) or the
+                // Site Incharge. Counting the telecaller always let an LMO with
+                // a BDO on the visit start counselling, and the server refused
+                // it (403 "only the assigned BDO, Site Incharge…", 4 tries).
+                val assignedBdoId = visit.bdoStaff?.id ?: visit.telecallerStaff?.id
                 val assignedToMe = !myStaffId.isNullOrBlank() && (
                     myStaffId == visit.inchargeStaff?.id ||
-                        myStaffId == visit.bdoStaff?.id ||
-                        myStaffId == visit.telecallerStaff?.id
+                        myStaffId == assignedBdoId
                 )
                 val scanAuthorized = assignedToMe ||
                     session.hasPermission("marketing.siteVisits.scanConsulting")
