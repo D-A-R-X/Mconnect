@@ -31,6 +31,15 @@ class HrApplicationErrorTest {
         assertTrue(HrApplicationError.message(http(409, ""), "Leave").contains("request history"))
     }
 
+    @Test fun cloudflarePlainTextOutageIsNotAReasonAndStaysAmbiguous() {
+        // Cloudflare's body for an unreachable origin (KUMAR. K, build 104).
+        val error = http(502, "error code: 502")
+        assertTrue(HrApplicationError.message(error, "Permission").startsWith("Permission service"))
+        assertTrue(HrApplicationError.isAmbiguous(http(502, "error code: 502")))
+        assertNull(HrApplicationError.clean("Bad Gateway"))
+        assertEquals("Permission must start at 09:30", HrApplicationError.clean("Permission must start at 09:30"))
+    }
+
     @Test fun ambiguousTimeoutWarnsAgainstBlindResubmission() {
         assertTrue(HrApplicationError.message(SocketTimeoutException(), "Leave").contains("history before submitting"))
     }

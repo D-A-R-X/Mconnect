@@ -59,8 +59,17 @@ internal object HrApplicationError {
             .trim()
         if (text.startsWith("Error:")) text = text.removePrefix("Error:").trim()
         if (text.isEmpty() || text.equals("Server Error", ignoreCase = true)) return null
+        // A proxy's own page, not the server's reason: Cloudflare answers an
+        // unreachable origin with the plain text "error code: 502". Showing it
+        // read as "Error code: 502" and, worse, counted as a real reason, so
+        // the "was it saved anyway?" history check never ran.
+        if (GATEWAY_TEXT.matches(text)) return null
         return text
     }
+
+    private val GATEWAY_TEXT = Regex(
+        """(?i)(error code:?\s*\d{3,4}|bad gateway|service unavailable|gateway time-?out|no healthy upstream|upstream connect error.*|upstream request timeout)""",
+    )
 
     private val WRAPPERS = listOf("Uncaught ConvexError:", "Uncaught Error:", "ConvexError:", "Uncaught:")
     private val REQUEST_TAGS = Regex("""\[(CONVEX [^\]]*|Request ID: [^\]]*)\]""")
