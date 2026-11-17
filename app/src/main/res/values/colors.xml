@@ -94,4 +94,8 @@
     <color name="notif_priority_read">#FFF7ED</color>
     <color name="notif_priority_unread_dark">#3D2A17</color>
     <color name="notif_priority_read_dark">#2E2116</color>
+    <!-- Lens enrollment camera overlay: text/strokes over the live camera,
+         the same in light and dark mode (the preview is always dark-dimmed). -->
+    <color name="lens_overlay_text_secondary">#CCFFFFFF</color>
+    <color name="lens_overlay_stroke">#80FFFFFF</color>
 </resources>

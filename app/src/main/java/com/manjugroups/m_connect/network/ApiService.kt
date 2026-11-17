@@ -67,6 +67,22 @@ interface ApiService {
     @POST("api/auth/logout")
     suspend fun logout(@Header("Authorization") token: String): LogoutResponse
 
+    // Lens face enrollment (super admin / lens.enroll). The server holds the
+    // Lens key and forwards the photos; the app never talks to Lens directly.
+    @GET("api/lens/staff")
+    suspend fun getLensStaff(
+        @Header("Authorization") token: String,
+        @Query("search") search: String? = null,
+        @Query("cursor") cursor: String? = null,
+        @Query("limit") limit: Int = 30,
+    ): LensStaffResponse
+
+    @POST("api/lens/enroll")
+    suspend fun enrollLensFaces(
+        @Header("Authorization") token: String,
+        @Body body: LensEnrollRequest,
+    ): Response<LensEnrollResponse>
+
     // Staff
     @GET("api/hr/staff")
     suspend fun getStaff(
@@ -1546,6 +1562,12 @@ interface ApiService {
             val storageUploadTimeout = okhttp3.Interceptor { chain ->
                 if (chain.request().url.encodedPath == "/api/storage/upload") {
                     chain.withReadTimeout(90, TimeUnit.SECONDS).proceed(chain.request())
+                } else if (chain.request().url.encodedPath == "/api/lens/enroll") {
+                    // 3-5 photos (a few MB) go to the server, which forwards
+                    // them to Lens and waits for the face embeddings.
+                    chain.withReadTimeout(120, TimeUnit.SECONDS)
+                        .withWriteTimeout(120, TimeUnit.SECONDS)
+                        .proceed(chain.request())
                 } else {
                     chain.proceed(chain.request())
                 }
@@ -1583,6 +1605,61 @@ interface ApiService {
 
     }
 }
+
+// Lens face enrollment models. Every field is nullable: one odd value must
+// never fail the whole parse (see gson-parse-traps).
+data class LensStaffResponse(
+    val items: List<LensStaffItem>? = null,
+    val nextCursor: String? = null,
+)
+
+data class LensStaffItem(
+    val staffId: String? = null,
+    val employeeCode: String? = null,
+    val name: String? = null,
+    val department: String? = null,
+    val designation: String? = null,
+    val photoUrl: String? = null,
+    val enrollment: LensEnrollmentInfo? = null,
+)
+
+data class LensEnrollmentInfo(
+    val faceSamples: Int? = null,
+    val enrolledAt: Double? = null,
+    val enrolledByName: String? = null,
+    val lastAddedSamples: Int? = null,
+)
+
+data class LensEnrollRequest(
+    val staffId: String,
+    val replace: Boolean,
+    val photos: List<LensEnrollPhoto>,
+)
+
+data class LensEnrollPhoto(
+    val pose: String,
+    val mimeType: String,
+    val dataBase64: String,
+)
+
+data class LensEnrollResponse(
+    val success: Boolean? = null,
+    val ok: Boolean? = null,
+    val employeeCode: String? = null,
+    val addedSamples: Int? = null,
+    val faceSamples: Int? = null,
+    val enrolledAt: Double? = null,
+    val failed: List<LensFailedPhoto>? = null,
+    val needsRetake: Boolean? = null,
+    val error: String? = null,
+    val code: String? = null,
+)
+
+data class LensFailedPhoto(
+    val pose: String? = null,
+    val code: String? = null,
+    val message: String? = null,
+)
 
 // Auth models
 data class SendOtpRequest(

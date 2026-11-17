@@ -1,0 +1,387 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Lens face enrollment for one staff member: a guided, auto-capturing camera
+  (capture mode) and the photo check + upload (review mode) in one screen so
+  retaking a single pose is instant.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/black">
+
+    <!-- ── CAPTURE MODE ─────────────────────────────────────────────── -->
+    <FrameLayout
+        android:id="@+id/lensCapture"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <androidx.camera.view.PreviewView
+            android:id="@+id/lensPreview"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            app:scaleType="fillCenter" />
+
+        <com.manjugroups.m_connect.ui.lens.LensFaceGuideView
+            android:id="@+id/lensGuide"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <!-- Turn arrows beside the oval (screen-left = the person's left). -->
+        <ImageView
+            android:id="@+id/ivLensArrowLeft"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_gravity="start|center_vertical"
+            android:layout_marginStart="10dp"
+            android:alpha="0"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_lens_arrow" />
+
+        <ImageView
+            android:id="@+id/ivLensArrowRight"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_gravity="end|center_vertical"
+            android:layout_marginEnd="10dp"
+            android:alpha="0"
+            android:contentDescription="@null"
+            android:scaleX="-1"
+            android:src="@drawable/ic_lens_arrow" />
+
+        <!-- Top bar -->
+        <LinearLayout
+            android:id="@+id/lensCaptureTop"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="8dp"
+            android:paddingTop="12dp"
+            android:paddingEnd="16dp">
+
+            <ImageView
+                android:id="@+id/btnLensClose"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/lens_close"
+                android:padding="10dp"
+                android:src="@drawable/ic_close"
+                app:tint="@android:color/white" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/tvLensCaptureName"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:fontFamily="@font/inter_semibold"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:textColor="@android:color/white"
+                    android:textSize="16sp" />
+
+                <TextView
+                    android:id="@+id/tvLensCaptureStep"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:fontFamily="@font/inter_regular"
+                    android:includeFontPadding="false"
+                    android:textColor="@color/lens_overlay_text_secondary"
+                    android:textSize="12sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Prompt + live hint + actions at the bottom -->
+        <LinearLayout
+            android:id="@+id/lensCaptureBottom"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:paddingStart="@dimen/screen_padding_horizontal"
+            android:paddingEnd="@dimen/screen_padding_horizontal"
+            android:paddingBottom="24dp">
+
+            <TextView
+                android:id="@+id/tvLensPrompt"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_semibold"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:textColor="@android:color/white"
+                android:textSize="20sp" />
+
+            <TextView
+                android:id="@+id/tvLensHint"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/bg_lens_hint_chip"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:paddingStart="16dp"
+                android:paddingTop="9dp"
+                android:paddingEnd="16dp"
+                android:paddingBottom="9dp"
+                android:textColor="@android:color/white"
+                android:textSize="13sp"
+                android:visibility="invisible" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnLensSkip"
+                    style="@style/Widget.Mconnect.Button.Secondary"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="10dp"
+                    android:layout_weight="1"
+                    android:text="@string/lens_skip"
+                    android:textColor="@android:color/white"
+                    android:visibility="gone"
+                    app:strokeColor="@color/lens_overlay_stroke" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnLensReview"
+                    style="@style/Widget.Mconnect.Button"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:enabled="false"
+                    android:text="@string/lens_review" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Shutter flash on each auto-capture -->
+        <View
+            android:id="@+id/lensFlash"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:alpha="0"
+            android:background="@android:color/white"
+            android:clickable="false"
+            android:focusable="false" />
+    </FrameLayout>
+
+    <!-- ── REVIEW MODE ──────────────────────────────────────────────── -->
+    <LinearLayout
+        android:id="@+id/lensReview"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="?attr/colorSurfaceSecondary"
+        android:clickable="true"
+        android:focusable="true"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:background="?attr/colorSurfacePrimary"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="8dp"
+            android:paddingEnd="16dp">
+
+            <ImageView
+                android:id="@+id/btnLensReviewClose"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/lens_close"
+                android:padding="10dp"
+                android:src="@drawable/ic_close"
+                app:tint="?attr/colorForegroundPrimary" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/inter_semibold"
+                    android:includeFontPadding="false"
+                    android:text="@string/lens_review_title"
+                    android:textColor="?attr/colorForegroundPrimary"
+                    android:textSize="17sp" />
+
+                <TextView
+                    android:id="@+id/tvLensReviewName"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:ellipsize="end"
+                    android:fontFamily="@font/inter_regular"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:textColor="?attr/colorForegroundSecondary"
+                    android:textSize="12sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:fillViewport="true">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="@dimen/screen_padding_horizontal">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/inter_regular"
+                    android:text="@string/lens_review_subtitle"
+                    android:textColor="?attr/colorForegroundSecondary"
+                    android:textSize="13sp" />
+
+                <!-- Result of the last upload (success / retake / failure) -->
+                <LinearLayout
+                    android:id="@+id/lensResultCard"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:background="@drawable/bg_lens_card"
+                    android:orientation="vertical"
+                    android:padding="16dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:id="@+id/tvLensResultTitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/inter_semibold"
+                        android:includeFontPadding="false"
+                        android:textSize="16sp" />
+
+                    <TextView
+                        android:id="@+id/tvLensResultBody"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:fontFamily="@font/inter_regular"
+                        android:lineSpacingExtra="2dp"
+                        android:textColor="?attr/colorForegroundSecondary"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <GridLayout
+                    android:id="@+id/lensPoseGrid"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:columnCount="2"
+                    android:useDefaultMargins="false" />
+
+                <!-- Replace earlier photos (only when already enrolled) -->
+                <LinearLayout
+                    android:id="@+id/lensReplaceRow"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:background="@drawable/bg_lens_card"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:padding="16dp"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="@font/inter_semibold"
+                            android:includeFontPadding="false"
+                            android:text="@string/lens_replace_title"
+                            android:textColor="?attr/colorForegroundPrimary"
+                            android:textSize="14sp" />
+
+                        <TextView
+                            android:id="@+id/tvLensReplaceBody"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:fontFamily="@font/inter_regular"
+                            android:textColor="?attr/colorForegroundSecondary"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/swLensReplace"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="12dp" />
+                </LinearLayout>
+            </LinearLayout>
+        </ScrollView>
+
+        <!-- Footer actions -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="?attr/colorSurfacePrimary"
+            android:orientation="vertical"
+            android:padding="@dimen/screen_padding_horizontal">
+
+            <com.google.android.material.progressindicator.LinearProgressIndicator
+                android:id="@+id/lensUploadProgress"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:indeterminate="true"
+                android:visibility="gone"
+                app:indicatorColor="?attr/colorButtonPrimary"
+                app:trackCornerRadius="2dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnLensRecordAgain"
+                    style="@style/Widget.Mconnect.Button.Secondary"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="10dp"
+                    android:layout_weight="1"
+                    android:text="@string/lens_record_again" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnLensUpload"
+                    style="@style/Widget.Mconnect.Button"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1.4" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>

@@ -1,0 +1,277 @@
+package com.manjugroups.m_connect.ui.lens
+
+import android.graphics.Bitmap
+import android.graphics.Matrix
+import android.graphics.Rect
+import android.os.SystemClock
+import androidx.annotation.OptIn
+import androidx.camera.core.ExperimentalGetImage
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.ImageProxy
+import com.google.android.gms.tasks.Tasks
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.face.Face
+import com.google.mlkit.vision.face.FaceDetection
+import com.google.mlkit.vision.face.FaceDetector
+import com.google.mlkit.vision.face.FaceDetectorOptions
+import com.google.mlkit.vision.face.FaceLandmark
+import java.io.ByteArrayOutputStream
+import java.util.concurrent.TimeUnit
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.roundToInt
+
+/** A final, encoded picture for one pose. */
+class LensCapturedPhoto(
+    val pose: LensPose,
+    val jpeg: ByteArray,
+    val score: Double,
+    val width: Int,
+    val height: Int,
+    val faceWidthPx: Int,
+)
+
+/** What the live screen shows for the latest frame. */
+data class LensLiveState(
+    val hint: LensHint?,
+    /** Pose the head is in right now (null between buckets / no face). */
+    val poseNow: LensPose?,
+    val yaw: Float,
+    val faceFound: Boolean,
+    val still: Boolean,
+    /** A good frame for this pose is being held (ring segment fills). */
+    val holding: LensPose?,
+)
+
+/**
+ * The on-device capture pipeline (camera analysis thread):
+ * ML Kit face detection → geometry/expression checks → motion detector →
+ * light and sharpness on the face pixels → best still frame per pose → JPEG.
+ */
+class LensCaptureEngine(
+    private val listener: Listener,
+) : ImageAnalysis.Analyzer {
+
+    interface Listener {
+        fun onLiveState(state: LensLiveState)
+        fun onCaptured(photo: LensCapturedPhoto)
+    }
+
+    private val detector: FaceDetector = FaceDetection.getClient(
+        FaceDetectorOptions.Builder()
+            .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
+            .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)
+            .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_ALL)
+            .setMinFaceSize(0.15f)
+            .enableTracking()
+            .build(),
+    )
+
+    private class Frame(val bitmap: Bitmap, val faceWidth: Int)
+
+    private val motion = LensMotionTracker()
+    private val selector = LensBestFrameSelector<Frame>()
+    /** When a pose first had a still, well-framed face (relaxes sharpness later). */
+    private val goodSince = mutableMapOf<LensPose, Long>()
+
+    /** Poses still wanted; set from the UI thread. */
+    @Volatile var pending: Set<LensPose> = emptySet()
+
+    /** Paused while the review screen is up or the camera is closing. */
+    @Volatile var paused: Boolean = false
+
+    @Volatile private var closed = false
+
+    fun resetPose(pose: LensPose) {
+        selector.clear(pose)
+        goodSince.remove(pose)
+    }
+
+    fun close() {
+        closed = true
+        runCatching { detector.close() }
+    }
+
+    @OptIn(ExperimentalGetImage::class)
+    override fun analyze(image: ImageProxy) {
+        try {
+            if (paused || closed) return
+            val media = image.image ?: return
+            val rotation = image.imageInfo.rotationDegrees
+            val faces = try {
+                Tasks.await(detector.process(InputImage.fromMediaImage(media, rotation)), 2, TimeUnit.SECONDS)
+            } catch (e: Exception) {
+                return
+            }
+            if (paused || closed) return
+            val now = SystemClock.elapsedRealtime()
+            val upright = rotation % 180 == 0
+            val w = if (upright) image.width else image.height
+            val h = if (upright) image.height else image.width
+            val sample = toSample(faces, w, h, now)
+            val still = motion.update(sample)
+            val geometry = LensCapturePolicy.geometryHint(sample)
+            val pose = if (geometry == null) LensCapturePolicy.poseFor(sample.yaw) else null
+            val wanted = pending
+
+            var hint: LensHint? = geometry
+            if (hint == null && pose != null && pose in wanted) {
+                if (!still) {
+                    hint = LensHint.HOLD_STILL
+                } else {
+                    val since = goodSince.getOrPut(pose) { now }
+                    val relaxed = now - since > RELAX_AFTER_MS
+                    val face = faces.first()
+                    val bitmap = uprightBitmap(image, rotation)
+                    if (bitmap != null) {
+                        val stats = pixelStats(bitmap, face.boundingBox)
+                        hint = LensCapturePolicy.pixelHint(pose, stats, relaxed)
+                        if (hint == null) {
+                            val score = LensCapturePolicy.score(pose, sample, stats)
+                            selector.offer(pose, score, now, Frame(bitmap, face.boundingBox.width()))
+                        }
+                    }
+                }
+            }
+
+            // Poses whose hold window ended: encode and hand over.
+            for (candidate in selector.ripe(now)) {
+                selector.take(candidate.pose) ?: continue
+                goodSince.remove(candidate.pose)
+                if (candidate.pose !in pending) continue
+                val jpeg = encode(candidate.frame.bitmap)
+                listener.onCaptured(
+                    LensCapturedPhoto(
+                        pose = candidate.pose,
+                        jpeg = jpeg,
+                        score = candidate.score,
+                        width = candidate.frame.bitmap.width,
+                        height = candidate.frame.bitmap.height,
+                        faceWidthPx = candidate.frame.faceWidth,
+                    ),
+                )
+            }
+
+            val holding = LensPose.guidedOrder.firstOrNull { it in pending && selector.candidate(it) != null }
+            listener.onLiveState(
+                LensLiveState(
+                    hint = hint,
+                    poseNow = pose,
+                    yaw = sample.yaw,
+                    faceFound = sample.faceCount > 0,
+                    still = still,
+                    holding = holding,
+                ),
+            )
+        } finally {
+            image.close()
+        }
+    }
+
+    private fun toSample(faces: List<Face>, w: Int, h: Int, now: Long): LensFaceSample {
+        val face = faces.firstOrNull()
+        if (face == null || faces.size != 1) {
+            return LensFaceSample(
+                faceCount = faces.size, yaw = 0f, pitch = 0f, roll = 0f,
+                leftEyeOpen = null, rightEyeOpen = null, smiling = null,
+                hasAllLandmarks = false, noseBetweenEyes = false,
+                faceLeft = 0f, faceTop = 0f, faceWidth = 0f, faceHeight = 0f,
+                imageWidth = w, imageHeight = h, timestampMs = now,
+            )
+        }
+        val box = face.boundingBox
+        val leftEye = face.getLandmark(FaceLandmark.LEFT_EYE)?.position
+        val rightEye = face.getLandmark(FaceLandmark.RIGHT_EYE)?.position
+        val nose = face.getLandmark(FaceLandmark.NOSE_BASE)?.position
+        val mouthL = face.getLandmark(FaceLandmark.MOUTH_LEFT)?.position
+        val mouthR = face.getLandmark(FaceLandmark.MOUTH_RIGHT)?.position
+        val all = leftEye != null && rightEye != null && nose != null && mouthL != null && mouthR != null
+        val between = all && nose!!.x > min(leftEye!!.x, rightEye!!.x) && nose.x < max(leftEye.x, rightEye.x)
+        return LensFaceSample(
+            faceCount = 1,
+            yaw = face.headEulerAngleY,
+            pitch = face.headEulerAngleX,
+            roll = face.headEulerAngleZ,
+            leftEyeOpen = face.leftEyeOpenProbability,
+            rightEyeOpen = face.rightEyeOpenProbability,
+            smiling = face.smilingProbability,
+            hasAllLandmarks = all,
+            noseBetweenEyes = between,
+            faceLeft = box.left.toFloat(),
+            faceTop = box.top.toFloat(),
+            faceWidth = box.width().toFloat(),
+            faceHeight = box.height().toFloat(),
+            imageWidth = w,
+            imageHeight = h,
+            timestampMs = now,
+        )
+    }
+
+    /** Upright pixels (rotation applied, never mirrored): what Lens receives. */
+    private fun uprightBitmap(image: ImageProxy, rotation: Int): Bitmap? = try {
+        val raw = image.toBitmap()
+        if (rotation == 0) {
+            raw
+        } else {
+            val m = Matrix().apply { postRotate(rotation.toFloat()) }
+            Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, m, true).also {
+                if (it !== raw) raw.recycle()
+            }
+        }
+    } catch (e: Exception) {
+        null
+    } catch (e: OutOfMemoryError) {
+        null
+    }
+
+    /** Light and sharpness on a ~128 px crop of the inner face. */
+    private fun pixelStats(bitmap: Bitmap, box: Rect): LensPixelStats {
+        // Inner face: trims hair/background edges that would inflate sharpness.
+        val insetX = (box.width() * 0.15f).roundToInt()
+        val insetY = (box.height() * 0.15f).roundToInt()
+        val left = (box.left + insetX).coerceIn(0, bitmap.width - 2)
+        val top = (box.top + insetY).coerceIn(0, bitmap.height - 2)
+        val right = (box.right - insetX).coerceIn(left + 2, bitmap.width)
+        val bottom = (box.bottom - insetY).coerceIn(top + 2, bitmap.height)
+        val cw = right - left
+        val ch = bottom - top
+        val scale = min(1f, CROP_PX / cw.toFloat())
+        val sw = max(3, (cw * scale).roundToInt())
+        val sh = max(3, (ch * scale).roundToInt())
+        val crop = Bitmap.createBitmap(bitmap, left, top, cw, ch)
+        val small = if (sw == cw && sh == ch) crop else Bitmap.createScaledBitmap(crop, sw, sh, true)
+        val px = IntArray(sw * sh)
+        small.getPixels(px, 0, sw, 0, 0, sw, sh)
+        if (small !== crop) small.recycle()
+        if (crop !== bitmap) crop.recycle()
+        val gray = LensImageMath.toLuma(px)
+        val (l, r) = LensImageMath.halves(gray, sw, sh)
+
+        // Whole-frame light (backlight check) on a tiny thumbnail.
+        val thumb = Bitmap.createScaledBitmap(bitmap, 48, max(1, 48 * bitmap.height / bitmap.width), true)
+        val tp = IntArray(thumb.width * thumb.height)
+        thumb.getPixels(tp, 0, thumb.width, 0, 0, thumb.width, thumb.height)
+        if (thumb !== bitmap) thumb.recycle()
+
+        return LensPixelStats(
+            faceLuma = LensImageMath.mean(gray),
+            frameLuma = LensImageMath.mean(LensImageMath.toLuma(tp)),
+            leftHalfLuma = l,
+            rightHalfLuma = r,
+            sharpness = LensImageMath.laplacianVariance(gray, sw, sh),
+        )
+    }
+
+    private fun encode(bitmap: Bitmap): ByteArray {
+        val out = ByteArrayOutputStream(512 * 1024)
+        bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
+        return out.toByteArray()
+    }
+
+    companion object {
+        private const val CROP_PX = 128f
+        private const val JPEG_QUALITY = 92
+        /** After this long in a good still pose, accept a slightly softer frame. */
+        private const val RELAX_AFTER_MS = 3_000L
+    }
+}

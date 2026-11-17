@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="lens_title">Lens Enrollment</string>
+    <string name="lens_subtitle">Enroll staff faces for the Lens cameras</string>
+    <string name="lens_search_hint">Search name, employee code or phone</string>
+    <string name="lens_clear_search">Clear search</string>
+    <string name="lens_retry">Try again</string>
+    <string name="lens_empty_all">No staff found.</string>
+    <string name="lens_empty_search">No staff match \"%1$s\".</string>
+    <string name="lens_not_enrolled">Not enrolled</string>
+    <string name="lens_enrolled_samples">Enrolled · %1$d photos · %2$s</string>
+    <string name="lens_enrolled_samples_no_date">Enrolled · %1$d photos</string>
+    <string name="lens_no_code">No employee code. Can\'t enroll</string>
+
+    <string name="lens_camera_permission_needed">Camera access is needed to capture the face photos.</string>
+    <string name="lens_camera_failed">Couldn\'t start the camera. Close other camera apps and try again.</string>
+    <string name="lens_close">Close</string>
+    <string name="lens_skip">Skip</string>
+    <string name="lens_review">Review photos</string>
+    <string name="lens_step_count">%1$d of %2$d photos</string>
+
+    <string name="lens_prompt_straight">Look straight at the camera</string>
+    <string name="lens_prompt_slight_left">Turn your head slowly to your left</string>
+    <string name="lens_prompt_more_left">A little more to your left</string>
+    <string name="lens_prompt_slight_right">Now slowly to your right</string>
+    <string name="lens_prompt_more_right">A little more to your right</string>
+    <string name="lens_prompt_done">All photos captured</string>
+    <string name="lens_prompt_back_to_centre">Back to the centre, then keep turning</string>
+
+    <string name="lens_review_title">Check the photos</string>
+    <string name="lens_review_subtitle">Each photo needs a clear, sharp face with both eyes visible.</string>
+    <string name="lens_retake">Retake</string>
+    <string name="lens_capture_pose">Capture</string>
+    <string name="lens_record_again">Record again</string>
+    <string name="lens_replace_title">Replace earlier photos</string>
+    <string name="lens_replace_body">Already enrolled with %1$d photos. Turn on to remove them first.</string>
+    <string name="lens_upload">Enroll %1$d photos</string>
+    <string name="lens_uploading">Enrolling…</string>
+    <string name="lens_optional">Optional</string>
+    <string name="lens_pose_missing">Not captured</string>
+
+    <string name="lens_result_success_title">Enrolled</string>
+    <string name="lens_result_success_body">%1$d photos saved. %2$s now has %3$d photos for the cameras.</string>
+    <string name="lens_result_retake_title">Record again</string>
+    <string name="lens_result_retake_body">Only %1$d photos could be used. At least 3 are needed.</string>
+    <string name="lens_result_failed_title">Not enrolled</string>
+    <string name="lens_done">Done</string>
+</resources>

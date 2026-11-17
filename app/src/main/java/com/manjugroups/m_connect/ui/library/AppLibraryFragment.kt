@@ -446,6 +446,13 @@ class AppLibraryFragment : Fragment() {
             row = binding.itemHrSecurity,
             allowed = com.manjugroups.m_connect.ui.hr.SecurityFragment.isAvailable(session),
         ) { openScreen(com.manjugroups.m_connect.ui.hr.SecurityFragment.newInstance()) }
+        // Lens Enrollment - capture staff faces for the Lens CCTV cameras.
+        // Super admins + an explicit lens.enroll grant only (not the broad
+        // isAdmin flag); the server enforces the same rule.
+        bindIamEntry(
+            row = binding.itemHrLensEnrollment,
+            allowed = com.manjugroups.m_connect.ui.lens.LensStaffFragment.isAvailable(session),
+        ) { openScreen(com.manjugroups.m_connect.ui.lens.LensStaffFragment()) }
 
         // ── Marketing ─────────────────────────────────────────────────────
         bindIamEntry(
@@ -852,6 +859,7 @@ class AppLibraryFragment : Fragment() {
                     R.id.itemHrPermissions,
                     R.id.itemHrLoans,
                     R.id.itemHrSecurity,
+                    R.id.itemHrLensEnrollment,
                 ),
             ),
             Triple(

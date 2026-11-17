@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  HR > Lens Enrollment: pick a staff member to enroll their face for the Lens
+  CCTV cameras. Super admins and lens.enroll holders only.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/colorSurfaceSecondary"
+    android:orientation="vertical">
+
+    <!-- TOP BAR -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:background="?attr/colorSurfacePrimary"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="8dp"
+        android:paddingEnd="16dp">
+
+        <com.manjugroups.m_connect.ui.common.BackButton
+            android:id="@+id/btnLensBack"
+            android:layout_width="32dp"
+            android:layout_height="32dp" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_semibold"
+                android:includeFontPadding="false"
+                android:text="@string/lens_title"
+                android:textColor="?attr/colorForegroundPrimary"
+                android:textSize="17sp" />
+
+            <TextView
+                android:id="@+id/tvLensSubtitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:fontFamily="@font/inter_regular"
+                android:includeFontPadding="false"
+                android:text="@string/lens_subtitle"
+                android:textColor="?attr/colorForegroundSecondary"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- SEARCH -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="46dp"
+        android:layout_marginStart="@dimen/screen_padding_horizontal"
+        android:layout_marginTop="14dp"
+        android:layout_marginEnd="@dimen/screen_padding_horizontal"
+        android:layout_marginBottom="6dp"
+        android:background="@drawable/bg_lens_search"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="14dp"
+        android:paddingEnd="8dp">
+
+        <ImageView
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_cpv_search"
+            app:tint="?attr/colorForegroundMuted" />
+
+        <EditText
+            android:id="@+id/etLensSearch"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:background="@null"
+            android:fontFamily="@font/inter_regular"
+            android:hint="@string/lens_search_hint"
+            android:imeOptions="actionSearch"
+            android:importantForAutofill="no"
+            android:inputType="text"
+            android:maxLines="1"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textColorHint="?attr/colorForegroundMuted"
+            android:textSize="14sp" />
+
+        <ImageView
+            android:id="@+id/btnLensClearSearch"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/lens_clear_search"
+            android:padding="8dp"
+            android:src="@drawable/ic_close"
+            android:visibility="gone"
+            app:tint="?attr/colorForegroundMuted" />
+    </LinearLayout>
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+            android:id="@+id/lensSwipe"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvLensStaff"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingStart="@dimen/screen_padding_horizontal"
+                android:paddingTop="4dp"
+                android:paddingEnd="@dimen/screen_padding_horizontal"
+                android:paddingBottom="24dp" />
+        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+        <!-- Empty / error state -->
+        <LinearLayout
+            android:id="@+id/lensEmpty"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:padding="32dp"
+            android:visibility="gone">
+
+            <ImageView
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_apps_lens" />
+
+            <TextView
+                android:id="@+id/tvLensEmpty"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:textColor="?attr/colorForegroundSecondary"
+                android:textSize="14sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnLensRetry"
+                style="@style/Widget.Mconnect.Button.Secondary"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="@string/lens_retry"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <!-- Skeleton: opaque and clickable so nothing shows or reacts through it. -->
+        <ScrollView
+            android:id="@+id/lensSkeletonScroll"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="?attr/colorSurfaceSecondary"
+            android:clickable="true"
+            android:focusable="true"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/lensSkeleton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingStart="@dimen/screen_padding_horizontal"
+                android:paddingEnd="@dimen/screen_padding_horizontal" />
+        </ScrollView>
+    </FrameLayout>
+</LinearLayout>

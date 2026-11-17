@@ -210,6 +210,7 @@ dependencies {
     implementation(libs.app.update.ktx)
     // ML Kit barcode scanning — powers the Front Desk QR scanner.
     implementation(libs.mlkit.barcode.scanning)
+    implementation(libs.mlkit.face.detection)
     // Full Loan Desk scanner UI: edge detection, crop, filters, page review,
     // reordering and native multi-page PDF output.
     implementation(libs.mlkit.document.scanner)
