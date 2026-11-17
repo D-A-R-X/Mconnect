@@ -85,6 +85,9 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var isJointCp = false
     // SV cum CP for a client who is out of station: routed to the GM.
     private var isOutOfStation = false
+    // Out-of-station SV details (sent with the GM handoff; server requires them).
+    private var oosTravelMode: String? = null
+    private var oosPickupTime: String = ""
     private var selectedJointPartner: StaffData? = null
     private var selectedReferralSource: ReferralSourceOption? = null
     private var selectedReferringClient: ReferralClientCandidate? = null
@@ -276,6 +279,35 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                 isOutOfStation = checked
                 applyCpConditionalVisibility()
             }
+        view.findViewById<android.widget.RadioGroup>(R.id.rgOosTravelMode)
+            ?.setOnCheckedChangeListener { _, checkedId ->
+                oosTravelMode = when (checkedId) {
+                    R.id.rbOosOwnVehicle -> "own_vehicle"
+                    R.id.rbOosCab -> "cab"
+                    else -> null
+                }
+                view.findViewById<View>(R.id.blockOosPickupTime)?.visibility =
+                    if (oosTravelMode == "cab") View.VISIBLE else View.GONE
+            }
+        view.findViewById<EditText>(R.id.etOosPickupTime)?.setOnClickListener { field ->
+            val cal = java.util.Calendar.getInstance()
+            android.app.TimePickerDialog(
+                requireContext(),
+                { _, hour, minute ->
+                    oosPickupTime = String.format(java.util.Locale.US, "%02d:%02d", hour, minute)
+                    val display = java.util.Calendar.getInstance().apply {
+                        set(java.util.Calendar.HOUR_OF_DAY, hour)
+                        set(java.util.Calendar.MINUTE, minute)
+                    }
+                    (field as EditText).setText(
+                        java.text.SimpleDateFormat("h:mm a", java.util.Locale.ENGLISH).format(display.time),
+                    )
+                },
+                cal.get(java.util.Calendar.HOUR_OF_DAY),
+                cal.get(java.util.Calendar.MINUTE),
+                false,
+            ).show()
+        }
         etReferralSource.setOnClickListener { pickReferralSource(etReferralSource) }
         etReferringClient.setOnClickListener {
             pickReferringClient(etReferringClient, etPhone.text?.toString().orEmpty())
@@ -1332,6 +1364,28 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             view.findViewById<EditText>(id)?.text?.toString()?.trim()?.takeIf { it.isNotBlank() }
         }
         val notes = view.findViewById<EditText>(R.id.etNotes)?.text?.toString()?.trim()
+        // Same rules as the server (convex/lib/siteVisitDetails.ts).
+        val visitorName = view.findViewById<EditText>(R.id.etOosVisitorName)?.text?.toString()?.trim().orEmpty()
+        if (visitorName.isEmpty()) {
+            toast("Enter the visitor's name")
+            return
+        }
+        val travelMode = oosTravelMode
+        if (travelMode == null) {
+            toast("Choose Own Vehicle or Cab Vehicle under Pickup From")
+            return
+        }
+        val pickupTime = oosPickupTime.takeIf { travelMode == "cab" && it.isNotBlank() }
+        if (travelMode == "cab") {
+            if (pickupTime == null) {
+                toast("Select the cab pickup time")
+                return
+            }
+            if (selectedTime.isNotBlank() && pickupTime > selectedTime.take(5)) {
+                toast("Cab pickup time must be before the visit time")
+                return
+            }
+        }
         val request = com.manjugroups.m_connect.network.OutOfStationHandoffRequest(
             clientName = clientName,
             mobileNumber = phone,
@@ -1345,6 +1399,10 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             visitLng = pinLng,
             googleMapsLink = pinMapsLink.takeIf { it.isNotBlank() },
             notes = notes?.takeIf { it.isNotBlank() },
+            attendees = listOf(com.manjugroups.m_connect.network.SiteVisitAttendeeRequest(name = visitorName)),
+            expectedAttendeeCount = 1,
+            travelMode = travelMode,
+            pickupTime = pickupTime,
         )
         btnSubmit.isEnabled = false
         viewLifecycleOwner.lifecycleScope.launch {
@@ -1374,6 +1432,17 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             if (canBeOutOfStation) View.VISIBLE else View.GONE
         root.findViewById<View>(R.id.tvOutOfStationHint)?.visibility =
             if (canBeOutOfStation && isOutOfStation) View.VISIBLE else View.GONE
+        val showOosSv = canBeOutOfStation && isOutOfStation
+        root.findViewById<View>(R.id.blockOutOfStationSv)?.visibility =
+            if (showOosSv) View.VISIBLE else View.GONE
+        if (showOosSv) {
+            // The client is usually the visitor; prefill, editable.
+            val visitor = root.findViewById<EditText>(R.id.etOosVisitorName)
+            if (visitor != null && visitor.text.isNullOrBlank()) {
+                root.findViewById<EditText>(R.id.etClientName)?.text?.toString()?.trim()
+                    ?.takeIf { it.isNotEmpty() }?.let(visitor::setText)
+            }
+        }
         root.findViewById<View>(R.id.btnSubmit)?.let { btn ->
             if (btn is android.widget.TextView) {
                 btn.text = if (canBeOutOfStation && isOutOfStation) {

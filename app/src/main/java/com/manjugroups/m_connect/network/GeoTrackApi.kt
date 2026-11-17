@@ -1262,6 +1262,12 @@ data class OutOfStationHandoffRequest(
     val visitLng: Double? = null,
     val googleMapsLink: String? = null,
     val notes: String? = null,
+    // SV details the GM's approval puts on the site visit (server requires
+    // a named visitor, travel mode, and a cab pickup time).
+    val attendees: List<SiteVisitAttendeeRequest>? = null,
+    val expectedAttendeeCount: Int? = null,
+    val travelMode: String? = null,
+    val pickupTime: String? = null,
 )
 
 data class OutOfStationHandoffResponse(
@@ -2376,6 +2382,7 @@ data class ProposedSiteVisit(
     val outcome: String? = null,
     val convertedBookingId: String? = null,
     val cancelledAt: Long? = null,
+    val pickupTime: String? = null,
     val travelMode: String? = null,
     val vehicleId: String? = null,
     val travelAgencyId: String? = null,

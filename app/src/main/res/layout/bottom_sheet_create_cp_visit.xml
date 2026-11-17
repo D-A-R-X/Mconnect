@@ -163,6 +163,109 @@
                 android:textColor="?attr/colorForegroundSecondary"
                 android:textSize="11sp"
                 android:visibility="gone" />
+
+            <!-- Site visit details the GM's approval puts on the SV (server
+                 requires them): a visitor, travel mode, cab pickup time. -->
+            <LinearLayout
+                android:id="@+id/blockOutOfStationSv"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/inter_medium"
+                    android:text="Visitor Name *"
+                    android:textColor="?attr/colorForegroundPrimary"
+                    android:textSize="13sp" />
+
+                <EditText
+                    android:id="@+id/etOosVisitorName"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/bg_cp_creation_input_box"
+                    android:fontFamily="@font/inter_medium"
+                    android:hint="Who is visiting"
+                    android:inputType="textPersonName|textCapWords"
+                    android:paddingHorizontal="14dp"
+                    android:textColor="?attr/colorForegroundPrimary"
+                    android:textColorHint="?attr/colorForegroundMuted"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:fontFamily="@font/inter_medium"
+                    android:text="Pickup From *"
+                    android:textColor="?attr/colorForegroundPrimary"
+                    android:textSize="13sp" />
+
+                <RadioGroup
+                    android:id="@+id/rgOosTravelMode"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.radiobutton.MaterialRadioButton
+                        android:id="@+id/rbOosOwnVehicle"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:fontFamily="@font/inter_medium"
+                        android:text="Own Vehicle"
+                        android:textColor="?attr/colorForegroundPrimary"
+                        android:textSize="14sp" />
+
+                    <com.google.android.material.radiobutton.MaterialRadioButton
+                        android:id="@+id/rbOosCab"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:fontFamily="@font/inter_medium"
+                        android:text="Cab Vehicle"
+                        android:textColor="?attr/colorForegroundPrimary"
+                        android:textSize="14sp" />
+                </RadioGroup>
+
+                <LinearLayout
+                    android:id="@+id/blockOosPickupTime"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:fontFamily="@font/inter_medium"
+                        android:text="Cab Pickup Time *"
+                        android:textColor="?attr/colorForegroundPrimary"
+                        android:textSize="13sp" />
+
+                    <EditText
+                        android:id="@+id/etOosPickupTime"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:layout_marginTop="6dp"
+                        android:background="@drawable/bg_cp_creation_input_box"
+                        android:clickable="true"
+                        android:focusable="false"
+                        android:fontFamily="@font/inter_medium"
+                        android:hint="Select pickup time"
+                        android:inputType="none"
+                        android:paddingHorizontal="14dp"
+                        android:textColor="?attr/colorForegroundPrimary"
+                        android:textColorHint="?attr/colorForegroundMuted"
+                        android:textSize="14sp" />
+                </LinearLayout>
+            </LinearLayout>
         </LinearLayout>
 
         <LinearLayout

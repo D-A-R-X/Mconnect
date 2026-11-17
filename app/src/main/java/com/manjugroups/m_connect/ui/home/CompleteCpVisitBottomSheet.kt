@@ -583,6 +583,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var tvSvProject: TextView? = null
     private var tvSvDate: TextView? = null
     private var tvSvTime: TextView? = null
+    private var tvSvPickupTime: TextView? = null
+    private var groupSvPickupTime: View? = null
     private var btnSvTravelOwn: TextView? = null
     private var btnSvTravelCab: TextView? = null
     private var etSvPickupAddress: EditText? = null
@@ -1766,6 +1768,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         tvSvProject = view.findViewById(R.id.tvSvProject)
         tvSvDate = view.findViewById(R.id.tvSvDate)
         tvSvTime = view.findViewById(R.id.tvSvTime)
+        tvSvPickupTime = view.findViewById(R.id.tvSvPickupTime)
+        groupSvPickupTime = view.findViewById(R.id.groupSvPickupTime)
         btnSvTravelOwn = view.findViewById(R.id.btnSvTravelOwn)
         btnSvTravelCab = view.findViewById(R.id.btnSvTravelCab)
         etSvPickupAddress = view.findViewById(R.id.etSvPickupAddress)
@@ -2222,6 +2226,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         view?.findViewById<View>(R.id.rowSvProject)?.setOnClickListener { pickSvProject() }
         view?.findViewById<View>(R.id.rowSvDate)?.setOnClickListener { pickDate(tvSvDate, minDateMillis = System.currentTimeMillis()) }
         view?.findViewById<View>(R.id.rowSvTime)?.setOnClickListener { pickTime(tvSvTime) }
+        view?.findViewById<View>(R.id.rowSvPickupTime)?.setOnClickListener { pickTime(tvSvPickupTime) }
 
         view?.findViewById<View>(R.id.rowSvIncharge)?.setOnClickListener {
             pickSvStaff("Select Site Incharge") {
@@ -4724,6 +4729,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     // ---- Site Visit helpers -----------------------------------------
     private fun setTravelMode(mode: String) {
         svTravelMode = mode
+        groupSvPickupTime?.visibility = if (mode == "cab") View.VISIBLE else View.GONE
         // Active button gets the gradient blue + white text; the other goes
         // back to outlined.
         val ctx = context ?: return
@@ -5055,6 +5061,36 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         return out
     }
 
+    /** Cab pickup time as "HH:mm", or null. */
+    private fun svPickupTimeForStorage(): String? =
+        tvSvPickupTime?.text?.toString()?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?.let(EditableTimeFormat::toStorage)
+
+    /**
+     * Same rules as the server (convex/lib/siteVisitDetails.ts): a named
+     * visitor, a travel mode, and for a company cab the pickup time no later
+     * than the visit time. Null when complete.
+     */
+    private fun svDetailError(visitTime: String?, visitors: List<SiteVisitAttendeeRequest>): String? {
+        if (visitors.none { !it.name.isNullOrBlank() }) {
+            return "Add at least one visitor (name) before fixing this Site Visit"
+        }
+        val mode = svTravelMode
+        if (mode != "own_vehicle" && mode != "cab") {
+            return "Choose Own Vehicle or Cab Vehicle under Pickup From"
+        }
+        if (mode == "cab") {
+            val pickup = svPickupTimeForStorage() ?: return "Enter the cab pickup time"
+            fun minutes(v: String?) = v?.split(":")?.takeIf { it.size >= 2 }
+                ?.let { (it[0].toIntOrNull() ?: return@let null) * 60 + (it[1].take(2).toIntOrNull() ?: return@let null) }
+            val p = minutes(pickup)
+            val t = minutes(visitTime)
+            if (p != null && t != null && p > t) return "Cab pickup time must be before the visit time"
+        }
+        return null
+    }
+
     private fun persistSiteVisit() {
         val cpVisitId = arguments?.getString(ARG_CP_VISIT_ID)
             ?: return showError("Missing CP visit id")
@@ -5083,9 +5119,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         // CP→SV convert). collectVisitors() emits a row per card incl. blank ones,
         // so check for a real name rather than a non-empty list.
         val svVisitors = collectVisitors()
-        if (svVisitors.none { !it.name.isNullOrBlank() }) {
-            return showError("Add at least one visitor (name) before fixing this Site Visit")
-        }
+        svDetailError(time, svVisitors)?.let { return showError(it) }
         // The SV inherits the CP's client identity — block the conversion when
         // there's no client name (it renders as "—" everywhere). The backend
         // enforces this too; this is the immediate, in-form feedback.
@@ -5146,6 +5180,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                         pickupLat = svPickupLat,
                         pickupLng = svPickupLng,
                         pickupGoogleMapsLink = svPickupMapsLink,
+                        pickupTime = if (svTravelMode == "cab") svPickupTimeForStorage() else null,
                         travelMode = svTravelMode,
                         notes = "Created from mobile CP visit",
                     ),
@@ -7091,6 +7126,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         tvSvTime?.text = EditableTimeFormat.toDisplay(
             proposed.scheduledTime ?: visit.scheduledTime
         )
+        proposed.travelMode?.takeIf { it == "own_vehicle" || it == "cab" }?.let(::setTravelMode)
+        proposed.pickupTime?.takeIf { it.isNotBlank() }?.let {
+            tvSvPickupTime?.text = EditableTimeFormat.toDisplay(it)
+        }
 
         // Cache lead + attendee context for the visitor-row auto-fill.
         // Order: visit lead → lead manual profile → reconciled client → place.
@@ -7317,24 +7356,80 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
      * when convertedSiteVisitId is already set.
      */
     private fun persistSvCumCpConfirm(cpVisitId: String, expectedSiteVisitId: String) {
-        btnCpLockedConfirm?.let { ButtonLoader.start(it, "Saving") }
-        btnCpLockedReject?.isClickable = false
         if (cpVisitId.isBlank() || expectedSiteVisitId.isBlank()) {
             finishCtaLockedConfirm("Site visit details are incomplete. Refresh and retry.")
             return
         }
-        // Do not call setOutcome here. The verified arrival flow forwards this
-        // payload to /api/geotrack/visit/complete, which persists clientMet,
-        // CP outcome, linked-SV confirmation and field-trip completion in order.
-        setFragmentResult(
-            RESULT_KEY,
-            bundleOf(
-                KEY_CLIENT_MET to true,
-                KEY_OUTCOME to OUTCOME_SITE_VISIT,
-                KEY_OUTCOME_NOTES to "Confirmed by field staff",
-            ),
-        )
-        dismissAllowingStateLoss()
+        // The pre-created SV often lacks visitors / travel mode / pickup time /
+        // staff. The server refuses to confirm an incomplete SV, so send what
+        // the form shows through convert first: on an existing SV it fills the
+        // details instead of creating a new one.
+        val project = svProject?.id ?: lockedCpVisit?.projectId ?: lockedCpVisit?.proposedSiteVisit?.projectId
+        if (project.isNullOrBlank()) return showError("Please select a project")
+        val date = tvSvDate?.text?.toString()?.trim().orEmpty()
+        if (date.isEmpty()) return showError("Please pick a date")
+        val time = tvSvTime?.text?.toString()?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?.let(EditableTimeFormat::toStorage)
+        val visitors = collectVisitors()
+        svDetailError(time, visitors)?.let { return showError(it) }
+        val inchargeId = svIncharge?.id ?: cpAssignedStaff?.id
+
+        btnCpLockedConfirm?.let { ButtonLoader.start(it, "Saving") }
+        btnCpLockedReject?.isClickable = false
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val resp = geoApi.convertCpVisitToSiteVisit(
+                    session.bearerToken,
+                    ConvertCpVisitToSiteVisitRequest(
+                        id = cpVisitId,
+                        projectId = project,
+                        scheduledDate = date,
+                        scheduledTime = time,
+                        telecallerId = session.staffId,
+                        convertedByStaffId = session.staffId,
+                        inchargeStaffId = inchargeId,
+                        hodStaffId = svHod?.id,
+                        avpStaffId = svAvp?.id,
+                        gmStaffId = svGm?.id,
+                        seniorManagerStaffId = svSm?.id,
+                        expectedAttendeeCount = etSvVisitorCount?.text?.toString()?.toIntOrNull()
+                            ?.takeIf { it > 0 },
+                        attendees = visitors.takeIf { it.isNotEmpty() },
+                        pickupAddress = etSvPickupAddress?.text?.toString()?.trim()
+                            ?.takeIf { it.isNotEmpty() },
+                        pickupLat = svPickupLat,
+                        pickupLng = svPickupLng,
+                        pickupGoogleMapsLink = svPickupMapsLink,
+                        pickupTime = if (svTravelMode == "cab") svPickupTimeForStorage() else null,
+                        travelMode = svTravelMode,
+                    ),
+                )
+                if (!isAdded) return@launch
+                if (!resp.success) {
+                    finishCtaLockedConfirm(resp.error ?: "Could not save the site visit details")
+                    return@launch
+                }
+                // Do not call setOutcome here. The verified arrival flow
+                // forwards this payload to /api/geotrack/visit/complete, which
+                // persists clientMet, CP outcome, linked-SV confirmation and
+                // field-trip completion in order.
+                setFragmentResult(
+                    RESULT_KEY,
+                    bundleOf(
+                        KEY_CLIENT_MET to true,
+                        KEY_OUTCOME to OUTCOME_SITE_VISIT,
+                        KEY_OUTCOME_NOTES to "Confirmed by field staff",
+                    ),
+                )
+                dismissAllowingStateLoss()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (!isAdded) return@launch
+                finishCtaLockedConfirm(extractHttpErrorMessage(e) ?: e.message ?: "Network error")
+            }
+        }
     }
 
     private fun finishCtaLockedConfirm(error: String) {

@@ -122,6 +122,30 @@
             android:textSize="13sp" />
     </LinearLayout>
 
+    <!-- Cab pickup time: required for a company cab (server enforces it too). -->
+    <LinearLayout
+        android:id="@+id/groupSvPickupTime"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <TextView
+            style="@style/OutcomeFieldLabel"
+            android:layout_marginTop="14dp"
+            android:text="Cab Pickup Time *" />
+
+        <LinearLayout android:id="@+id/rowSvPickupTime" style="@style/OutcomeFieldPillClickable">
+            <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_clock" />
+            <TextView android:id="@+id/tvSvPickupTime" style="@style/OutcomeFieldValue" android:hint="hh:mm" />
+            <ImageView
+                android:layout_width="14dp"
+                android:layout_height="14dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_outcome_chevron_right" />
+        </LinearLayout>
+    </LinearLayout>
+
     <!-- Pickup Address (If Needed) -->
     <TextView
         style="@style/OutcomeFieldLabel"
