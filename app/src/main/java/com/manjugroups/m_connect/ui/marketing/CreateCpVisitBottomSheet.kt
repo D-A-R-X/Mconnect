@@ -776,6 +776,10 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                         blockNewClientCpForExistingClient(view)
                         return@launch
                     }
+                    sameDayVisitFromException(e)?.let { existing ->
+                        showSameDayVisit(existing, serverErrorMessage(e))
+                        return@launch
+                    }
                     val recovered = if (isAmbiguousCreateFailure(e)) {
                         findCreatedVisitByRequestId(createRequestId, selectedDate)
                     } else null
@@ -1737,6 +1741,62 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                 ?.let(::cleanServerErrorMessage)
                 ?.takeIf { it.isNotBlank() }
         }.getOrNull()
+    }
+
+    /** The visit that blocked a same-day create (server code DUPLICATE_CP_VISIT). */
+    private data class SameDayCpVisit(
+        val visitId: String,
+        val ownerStaffId: String?,
+        val ownerName: String?,
+    )
+
+    /**
+     * One CP visit per client per day. Staff used to get only the sentence
+     * "Open the existing visit…" with no way to find it (it is often someone
+     * else's, e.g. the lead owner's), and retried ~3 times each. Newer servers
+     * name the visit and its owner; older ones return null here and the plain
+     * message is shown as before.
+     */
+    private fun sameDayVisitFromException(e: Throwable): SameDayCpVisit? {
+        val httpEx = e as? retrofit2.HttpException ?: return null
+        if (httpEx.code() != 400) return null
+        val raw = httpErrorBody(e) ?: return null
+        return runCatching {
+            val obj = com.google.gson.JsonParser.parseString(raw).asJsonObject
+            if (obj.get("code")?.asString != "DUPLICATE_CP_VISIT") return@runCatching null
+            val existing = obj.getAsJsonObject("existingVisit") ?: return@runCatching null
+            fun field(name: String) = existing.get(name)
+                ?.takeUnless { it.isJsonNull }?.asString?.trim()?.takeIf { it.isNotEmpty() }
+            val visitId = field("visitId") ?: return@runCatching null
+            SameDayCpVisit(visitId, field("ownerStaffId"), field("ownerName"))
+        }.getOrNull()
+    }
+
+    /** Own visit: offer to open it. Someone else's: say whose, so they can coordinate. */
+    private fun showSameDayVisit(existing: SameDayCpVisit, message: String?) {
+        if (!isAdded) return
+        val mine = !existing.ownerStaffId.isNullOrBlank() && existing.ownerStaffId == session.staffId
+        val text = when {
+            mine -> "You already have a CP visit with this client on this day. Only one CP visit per client is allowed per day."
+            else -> message ?: "${existing.ownerName ?: "Someone"} already has a CP visit with this client on this day. Only one CP visit per client is allowed per day."
+        }
+        val builder = AlertDialog.Builder(requireContext())
+            .setTitle("CP visit already exists")
+            .setMessage(text)
+        if (mine) {
+            builder
+                .setPositiveButton("Open visit") { _, _ ->
+                    setFragmentResult(
+                        RESULT_KEY_CREATED,
+                        bundleOf("success" to false, "openVisitId" to existing.visitId),
+                    )
+                    dismissAllowingStateLoss()
+                }
+                .setNegativeButton("Change date", null)
+        } else {
+            builder.setPositiveButton("OK", null)
+        }
+        builder.show()
     }
 
     /** Handles the authoritative create-time duplicate guard. The pre-submit

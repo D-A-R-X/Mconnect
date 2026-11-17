@@ -1894,7 +1894,13 @@ class CpVisitsFragment : Fragment() {
     private fun showCreateDialog() {
         setFragmentResultListener(CreateCpVisitBottomSheet.RESULT_KEY_CREATED) { _, bundle ->
             val success = bundle.getBoolean("success", false)
-            if (success) {
+            // "CP visit already exists" → Open visit: focus it once the list has it.
+            val openVisitId = bundle.getString("openVisitId")?.takeIf { it.isNotBlank() }
+            if (openVisitId != null) {
+                focusCpVisitId = openVisitId
+                if (allVisits.isNotEmpty()) consumeFocusVisit()
+                if (focusCpVisitId != null) loadVisits()
+            } else if (success) {
                 loadVisits()
             }
         }
