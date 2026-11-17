@@ -646,6 +646,7 @@ class SiteVisitsFragment : Fragment() {
             } catch (e: Exception) {
                 if (generation != svLoadGeneration) return@launch
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
+                hasLoadedOnce = true
                 showLoadError("Network error: ${e.message ?: "unknown"}")
             } finally {
                 // Same id correction as the setup site — fragment_cp_visits's
@@ -737,6 +738,13 @@ class SiteVisitsFragment : Fragment() {
         val emptyTitle = root.findViewById<TextView>(R.id.tvCpvEmptyTitle)
         val emptySubtitle = root.findViewById<TextView>(R.id.tvCpvEmptySubtitle)
         list.removeAllViews()
+        // First load still running (skeleton up): search, scope pills and the
+        // team list arriving all call here with no visits yet, which painted
+        // "No Site Visits Yet" under the skeleton. Wait for the real list.
+        if (!hasLoadedOnce) {
+            empty.visibility = View.GONE
+            return
+        }
 
         val visible = allVisits
             .filter { visit ->
