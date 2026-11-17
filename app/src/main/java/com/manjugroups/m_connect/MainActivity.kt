@@ -248,7 +248,11 @@ class MainActivity : AppCompatActivity() {
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 while (true) {
                     if (session.isLoggedIn) {
-                        com.manjugroups.m_connect.notifications.MobileAlerts.refreshAndShow(this@MainActivity)
+                        // fromPoll: backs off while the server is failing (429/5xx/offline).
+                        com.manjugroups.m_connect.notifications.MobileAlerts.refreshAndShow(
+                            this@MainActivity,
+                            fromPoll = true,
+                        )
                     }
                     kotlinx.coroutines.delay(5_000)
                 }

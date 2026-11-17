@@ -53,6 +53,29 @@ object MobileAlerts {
     private val refreshLock = Mutex()
     private val receiptLock = Mutex()
 
+    /**
+     * Back-off for the 5 s foreground poll only. When the server is refusing
+     * or failing (429 under load, 5xx, offline), every open phone kept asking
+     * every 5 s, adding to the overload that caused it (seen: 429s with 5 s
+     * waits on alerts/pending and notifications). Each failed poll doubles the
+     * wait up to [MAX_POLL_BACKOFF_MS]; a success resets it. Push-triggered and
+     * app-resume refreshes are never held back.
+     */
+    @Volatile private var pollBackoffMs = 0L
+    @Volatile private var nextPollAt = 0L
+    private const val FIRST_POLL_BACKOFF_MS = 5_000L
+    private const val MAX_POLL_BACKOFF_MS = 60_000L
+
+    private fun onPollResult(ok: Boolean, now: Long = System.currentTimeMillis()) {
+        if (ok) {
+            pollBackoffMs = 0L
+            nextPollAt = 0L
+        } else {
+            pollBackoffMs = (pollBackoffMs * 2).coerceIn(FIRST_POLL_BACKOFF_MS, MAX_POLL_BACKOFF_MS)
+            nextPollAt = now + pollBackoffMs
+        }
+    }
+
     private val _pushArrived = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     /** A mobile_alert push arrived; a screen in the foreground shows it now. */
     val pushArrived: SharedFlow<Unit> = _pushArrived
@@ -103,14 +126,17 @@ object MobileAlerts {
         }
 
     /** Fetches pending alerts, pins their notifications and opens the screen. */
-    fun refreshAndShow(activity: Activity) {
+    fun refreshAndShow(activity: Activity, fromPoll: Boolean = false) {
         val appContext = activity.applicationContext
+        if (fromPoll && System.currentTimeMillis() < nextPollAt) return
         scope.launch {
             // Drop duplicate triggers instead of queuing polls behind slow HTTP.
             if (!refreshLock.tryLock()) return@launch
             try {
                 val bearer = SessionManager(appContext).bearerToken
-                val pending = fetchPending(appContext) ?: return@launch
+                val pending = fetchPending(appContext)
+                onPollResult(ok = pending != null)
+                if (pending == null) return@launch
                 if (SessionManager(appContext).bearerToken != bearer) return@launch
                 pending.forEach { postNotification(appContext, it) }
                 clearDeletedNotifications(appContext, pending, bearer)

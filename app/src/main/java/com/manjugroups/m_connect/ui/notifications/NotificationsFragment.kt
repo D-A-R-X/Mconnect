@@ -32,6 +32,7 @@ import com.manjugroups.m_connect.databinding.ItemNotificationBinding
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.NotificationData
 import com.manjugroups.m_connect.network.IdRequest
+import com.manjugroups.m_connect.network.userMessage
 import com.manjugroups.m_connect.ui.chat.ChatMessagesFragment
 import com.manjugroups.m_connect.ui.common.SkeletonUtils
 import com.manjugroups.m_connect.ui.hr.AttendanceHistoryFragment
@@ -275,7 +276,8 @@ class NotificationsFragment : Fragment() {
                 }
                 renderNotifications()
             }.onFailure {
-                toast("Unable to load notifications")
+                // The real reason (busy server, offline, session) instead of a bare failure.
+                toast(it.userMessage("Unable to load notifications"))
                 allNotifications = emptyList()
                 renderNotifications()
             }
