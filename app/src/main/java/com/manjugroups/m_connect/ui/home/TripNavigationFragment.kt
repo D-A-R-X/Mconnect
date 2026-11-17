@@ -77,6 +77,7 @@ import com.manjugroups.m_connect.ui.marketing.cpTypeSupportsOtherOutcome
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -4034,6 +4035,8 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 showClientNotSeenCompletion = true
                 finalizeCompleteVisit()
             } catch (e: Exception) {
+                // Leaving the screen is not a failure: never show it as one.
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 arrivalInProgress = false
                 cpNoPathPhotoCapture = false
                 swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
@@ -4123,7 +4126,12 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 // (arrivalPhotoStorageId, arrivalVerifiedAt). `remarks` stays
                 // human-readable so it can carry future free-text notes
                 // without us having to parse it again.
-                val completion = geoApi.completeVisit(
+                // Once sent, the completion must finish even if this screen is torn
+                // down (activity recreate, back). Cancelling it mid-flight left the
+                // server possibly done while the staff member was told "Failed to
+                // complete: Job was cancelled" and invited to submit again.
+                val completion = withContext(kotlinx.coroutines.NonCancellable) {
+                    geoApi.completeVisit(
                     session.bearerToken,
                     CompleteVisitRequest(
                         visitId = id,
@@ -4138,7 +4146,11 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                         followUpDate = cpFollowUpDate?.takeIf { !cpVisitId.isNullOrBlank() },
                         followUpTime = cpFollowUpTime?.takeIf { !cpVisitId.isNullOrBlank() },
                     ),
-                )
+                    )
+                }
+                // Screen gone while the request ran: the result is on the server and
+                // the trip list reloads it; there is no view left to update.
+                ensureActive()
                 check(completion.success) {
                     completion.error ?: "Visit completion was rejected"
                 }
@@ -4191,6 +4203,8 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     navigateUp()
                 }
             } catch (e: Exception) {
+                // Leaving the screen is not a failure: never show it as one.
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 arrivalInProgress = false
                 if (hasPersistedCpOutcome) {
                     arrivalConfirmedForProgress = true
