@@ -45,8 +45,9 @@ import kotlin.math.roundToInt
  * (sourceReferenceType out_of_station_handoff). Approve completes it, which
  * creates the site visit on the server; Reject cancels it.
  *
- * Mine = assigned to me; Team = my team's GMs (task list teamIds); All = every
- * open one (task list scope "all", super admins). The server lets the GM, their
+ * Super admins get tabs: Mine = assigned to me; Team = my team's GMs (task list
+ * teamIds); All = every open one (scope "all"). Everyone else gets one list of
+ * their own + their team's approvals with no tab row. The server lets the GM, their
  * supervisor, the requester or a super admin decide; anyone else sees whose
  * turn it is.
  */
@@ -306,7 +307,8 @@ class SvApprovalQueueFragment : Fragment() {
         val requester = listOfNotNull(task.assignedByName, task.assignedByDesignation)
             .joinToString(" · ").ifBlank { null }
         if (requester != null) card.addView(line(R.drawable.ic_user_outline, requester, "#344054"))
-        if (tab != Tab.MINE && !task.assignedToName.isNullOrBlank()) {
+        // Name the GM whenever it isn't me (Team / All tabs, or the single team list).
+        if (task.assignedTo != session.staffId && !task.assignedToName.isNullOrBlank()) {
             card.addView(line(R.drawable.ic_profile_office, "GM ${task.assignedToName}", "#344054"))
         }
         task.description?.trim()?.takeIf { it.isNotEmpty() }?.let { notes ->
@@ -508,21 +510,39 @@ class SvApprovalQueueFragment : Fragment() {
                 (task.status == "pending" || task.status == "in-progress") &&
                 !isRecentlyDecided(task.id)
 
-        /** Mine / Team / All from one task-list call, earliest visit first. */
+        /**
+         * Super admins: Mine / Team / All tabs. Everyone else: one list of their
+         * own + their team's SV approvals and no tab row (user rule, 17 Nov).
+         * Earliest visit first.
+         */
         suspend fun loadQueue(api: ApiService, session: SessionManager): Queue {
             val me = session.staffId.orEmpty()
             val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
             val resp = api.getTaskManagerTasks(session.bearerToken, today)
             val open = resp.tasks.filter(::isOpenHandoff).sortedBy { it.deadline ?: "" }
             val teamIds = resp.teamIds.toSet()
-            val isAll = resp.scope == "all"
+            val superAdmin = resp.scope == "all" ||
+                (session.role ?: "").trim().equals("super-admin", ignoreCase = true)
+            val mine = open.filter { it.assignedTo == me }
+            val team = open.filter { it.assignedTo != me && it.assignedTo in teamIds }
+            if (!superAdmin) {
+                // Single list, no tabs: rendered through the MINE slot.
+                return Queue(
+                    mine = (mine + team).sortedBy { it.deadline ?: "" },
+                    team = emptyList(),
+                    all = emptyList(),
+                    scope = resp.scope,
+                    showTeam = false,
+                    showAll = false,
+                )
+            }
             return Queue(
-                mine = open.filter { it.assignedTo == me },
-                team = open.filter { it.assignedTo != me && it.assignedTo in teamIds },
-                all = if (isAll) open else emptyList(),
+                mine = mine,
+                team = team,
+                all = if (resp.scope == "all") open else emptyList(),
                 scope = resp.scope,
-                showTeam = teamIds.isNotEmpty(),
-                showAll = isAll,
+                showTeam = true,
+                showAll = resp.scope == "all",
             )
         }
 
