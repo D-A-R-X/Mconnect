@@ -494,6 +494,11 @@ class CreateSiteVisitBottomSheet : BottomSheetDialogFragment() {
                         422 -> "Some visit details are invalid. Check the form."
                         500 -> correlationId?.let { "Couldn't schedule site visit. Reference: $it" }
                             ?: "Couldn't schedule site visit. Please try again."
+                        // Peak-time overload (seen 14-15 Nov ~6:30 pm: every call 429
+                        // after ~5 s). Retrying is safe: the request carries its
+                        // idempotency key, so it can't create a second visit.
+                        429, 502, 503, 504 ->
+                            "The server is busy right now. Wait a moment, then schedule the site visit again."
                         else -> "Couldn't schedule site visit (${error.code()})."
                     }
                 }
