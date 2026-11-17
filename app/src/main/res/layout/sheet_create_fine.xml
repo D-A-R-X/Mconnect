@@ -253,15 +253,17 @@
         </LinearLayout>
 
         <!-- Create Button -->
-        <com.google.android.material.button.MaterialButton
+        <android.widget.Button
             android:id="@+id/btnSubmitFine"
             android:layout_width="match_parent"
-            android:layout_height="@dimen/button_height"
+            android:layout_height="52dp"
             android:layout_marginTop="24dp"
             android:background="@drawable/bg_attendance_btn_primary"
+            android:fontFamily="@font/inter_semibold"
             android:text="Create It"
-            android:textSize="16sp"
-            style="@style/Widget.Mconnect.Button.Success" />
+            android:textAllCaps="false"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp" />
 
     </LinearLayout>
 
@@ -366,15 +368,17 @@
         </ScrollView>
 
         <!-- Add button -->
-        <com.google.android.material.button.MaterialButton
+        <android.widget.Button
             android:id="@+id/btnPickerAdd"
             android:layout_width="match_parent"
-            android:layout_height="@dimen/button_height"
+            android:layout_height="52dp"
             android:layout_marginTop="12dp"
             android:background="@drawable/bg_attendance_btn_primary"
+            android:fontFamily="@font/inter_semibold"
             android:text="Add"
-            android:textSize="16sp"
-            style="@style/Widget.Mconnect.Button.Success" />
+            android:textAllCaps="false"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp" />
     </LinearLayout>
 
 </FrameLayout>

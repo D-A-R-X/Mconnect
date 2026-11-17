@@ -1113,6 +1113,7 @@
             android:id="@+id/btnCompleteCpDetails"
             android:layout_width="match_parent"
             android:layout_height="@dimen/button_height"
+            app:backgroundTint="@null"
             android:background="@drawable/bg_home_trip_action_ready"
             android:text="Complete CP details"
             android:textSize="14sp"

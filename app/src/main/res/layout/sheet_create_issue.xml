@@ -226,6 +226,7 @@
         android:id="@+id/btnSubmitIssue"
         android:layout_width="match_parent"
         android:layout_height="@dimen/button_height"
+        app:backgroundTint="@null"
         android:background="@drawable/bg_btn_submit_green_gradient"
         android:text="Submit Issue"
         android:textSize="14sp"

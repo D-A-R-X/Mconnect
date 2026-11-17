@@ -342,16 +342,18 @@
     </androidx.core.widget.NestedScrollView>
 
     <!-- Save It Button (Floating/Fixed at bottom) -->
-    <com.google.android.material.button.MaterialButton
+    <androidx.appcompat.widget.AppCompatButton
         android:id="@+id/btnSaveProfile"
         android:layout_width="match_parent"
-        android:layout_height="@dimen/button_height"
+        android:layout_height="52dp"
         android:layout_marginHorizontal="24dp"
         android:layout_marginTop="16dp"
         android:layout_marginBottom="12dp"
         android:background="@drawable/bg_attendance_btn_primary"
+        android:fontFamily="@font/inter_regular"
         android:text="Save It"
-        android:textSize="16sp"
-        style="@style/Widget.Mconnect.Button.Success" />
+        android:textAllCaps="false"
+        android:textColor="#FFFFFF"
+        android:textSize="16sp" />
 
 </LinearLayout>

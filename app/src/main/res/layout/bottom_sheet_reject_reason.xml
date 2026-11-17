@@ -95,6 +95,7 @@
         android:layout_width="match_parent"
         android:layout_height="@dimen/button_height"
         android:layout_marginTop="24dp"
+        app:backgroundTint="@null"
         android:background="@drawable/bg_btn_reject_red_fill"
         android:text="Reject"
         android:textSize="15sp"
