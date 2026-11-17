@@ -2,6 +2,8 @@ package com.manjugroups.m_connect.network
 
 import com.manjugroups.m_connect.network.ApiErrors.NoticeKind
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import retrofit2.HttpException
 import retrofit2.Response
@@ -66,6 +68,15 @@ class NoticeTextTest {
         assertEquals(NoticeKind.OFFLINE, ApiErrors.noticeFor(UnknownHostException("x")).kind)
         assertEquals(NoticeKind.OFFLINE, ApiErrors.noticeFor(SocketTimeoutException("timeout")).kind)
         val http = HttpException(Response.error<Any>(429, "".toResponseBody(null)))
-        assertEquals("Too many requests. Wait a moment and try again.", ApiErrors.noticeFor(http).text)
+        assertEquals("The server is busy right now. Wait a moment and try again.", ApiErrors.noticeFor(http).text)
+    }
+
+    @Test
+    fun backendCapacityTextIsRecognised() {
+        assertTrue(ApiErrors.isInfrastructureText(
+            "Too many concurrent requests. Your backend is limited to 16 concurrent actions. To get more resources, upgrade to Convex Pro.",
+        ))
+        assertTrue(ApiErrors.isInfrastructureText("Function execution timed out (maximum duration: 1s)"))
+        assertFalse(ApiErrors.isInfrastructureText("Permission must start at 09:30"))
     }
 }

@@ -486,7 +486,12 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         isOutcomeLocked = isOutcomeRecordedStatus(rawStatus)
         recordedOutcome = rawStatus.takeIf { isOutcomeLocked }
         recordedOutcomeDetail = null
-        outcomeStatusEligible = isOutcomeStatusEligible(rawStatus)
+        // Never unlock the outcome from the list row: its status is the merged
+        // (travel-desk) one, e.g. "dropped" while the SV is still "scheduled".
+        // bindEnriched() unlocks it from the SV's own status. When that load
+        // failed (429 under load) the first-frame unlock stuck and the server
+        // refused the submit.
+        outcomeStatusEligible = false
         currentTerminalLabel = terminalStepLabelFor(rawStatus)
         updatePostponeVisibility(rawStatus)
         updateCancelVisibility(rawStatus)
@@ -1434,10 +1439,15 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         val outcomeStepIndex = if (effStatus.isNotEmpty()) {
             computeWebParityStepIndex(status = effStatus, snapshot = proposed)
         } else 0
-        outcomeStatusEligible =
-            isOutcomeStatusEligible(effStatus) ||
-            isOutcomeStatusEligible(visit.status)
-        isFleetOutcomePending = visit.completedOffline == true && visit.outcome.isNullOrBlank()
+        // Only the SV's own status unlocks the outcome: it is what setOutcome
+        // checks. effStatus merges the travel-desk timestamps, so an agency
+        // trip that was dropped back read "dropped" while the SV was still
+        // "scheduled" (no client QR scan): the form opened and the server
+        // refused it ("cannot set outcome from status scheduled"), 4 tries.
+        val serverAcceptsOutcome = isOutcomeStatusEligible(visit.status)
+        outcomeStatusEligible = serverAcceptsOutcome
+        isFleetOutcomePending = serverAcceptsOutcome &&
+            visit.completedOffline == true && visit.outcome.isNullOrBlank()
         updatePostponeVisibility(effStatus)
         updateCancelVisibility(effStatus)
 

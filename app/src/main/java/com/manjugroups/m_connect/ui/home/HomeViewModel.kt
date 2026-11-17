@@ -502,9 +502,6 @@ class HomeViewModel : ViewModel() {
             // long. The merging below is purely local, so only the network
             // calls need to overlap; wall-clock now ≈ the slowest single
             // call instead of their sum.
-            val placesDeferred = async {
-                runCatching { geoApi.getAssignedPlaces(bearerToken) }.getOrNull()
-            }
             val visitsDeferred = async {
                 runCatching { geoApi.getTodayVisits(bearerToken, todayStr) }.getOrNull()
             }
@@ -522,9 +519,11 @@ class HomeViewModel : ViewModel() {
                 runCatching { geoApi.getMmsFleetDriverTrips(bearerToken) }
             } else null
 
-            // Load assigned places
-            val places = placesDeferred.await()?.data ?: emptyList()
-            Log.d(TAG, "Assigned places: ${places.size}")
+            // Assigned places are no longer fetched here: no Home view reads
+            // them, and the query (last 200 field visits + each place) cost the
+            // server up to ~400 reads per refresh, failing under load with "too
+            // many system operations" (HTTP 500, 15 s).
+            val places = emptyList<AssignedPlace>()
 
             // Load today's scheduled visits from the legacy fieldVisits
             // pipeline (rows that already have a fieldVisits child).

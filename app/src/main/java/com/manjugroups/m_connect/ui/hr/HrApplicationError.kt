@@ -17,6 +17,7 @@ internal object HrApplicationError {
                 401 -> "Your session expired. Please sign in again."
                 403 -> "You are not allowed to submit this ${application.lowercase()} request."
                 409 -> "A conflicting request already exists. Please check your request history."
+                429 -> "$application service is busy right now. Please try again in a moment."
                 in 500..599 -> "$application service is temporarily unavailable. Please try again shortly."
                 else -> "Could not submit the ${application.lowercase()} request. Please try again."
             }
@@ -64,6 +65,9 @@ internal object HrApplicationError {
         // read as "Error code: 502" and, worse, counted as a real reason, so
         // the "was it saved anyway?" history check never ran.
         if (GATEWAY_TEXT.matches(text)) return null
+        // Convex describing its own limits ("Too many concurrent requests …
+        // upgrade to Convex Pro") was shown word for word on the permission form.
+        if (com.manjugroups.m_connect.network.ApiErrors.isInfrastructureText(text)) return null
         return text
     }
 

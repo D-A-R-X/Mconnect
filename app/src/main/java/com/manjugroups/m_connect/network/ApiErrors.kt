@@ -27,8 +27,21 @@ object ApiErrors {
         val response = chain.proceed(chain.request())
         if (response.isSuccessful) return@Interceptor response
         val text = runCatching { extract(response.peekBody(PEEK_BYTES).string()) }.getOrNull()
+            // Convex's own capacity/timeout texts are not for staff (one read
+            // "…upgrade to Convex Pro…" on the permission form): use our
+            // wording for the status. The Issues report keeps the raw body.
+            ?.let { if (isInfrastructureText(it)) forStatus(response.code).text else it }
         if (text.isNullOrBlank()) response else response.newBuilder().message(text).build()
     }
+
+    private val infrastructureText = Regex(
+        "(?i)too many concurrent requests|upgrade to convex|function execution timed out|" +
+            "too many system operations|your request couldn'?t be completed",
+    )
+
+    /** The backend platform describing its own limits, never a reason to show a person. */
+    fun isInfrastructureText(text: String?): Boolean =
+        !text.isNullOrBlank() && infrastructureText.containsMatchIn(text)
 
     /** The `error` / `message` text of a JSON error body, cleaned of Convex noise. */
     fun extract(body: String?): String? {
@@ -61,7 +74,8 @@ object ApiErrors {
         415 -> Notice("That file type isn't supported.", NoticeKind.WARNING)
         422 -> Notice("Some details are missing or invalid. Check the form and try again.", NoticeKind.WARNING)
         426 -> Notice("Update the app to keep using this feature.", NoticeKind.WARNING)
-        429 -> Notice("Too many requests. Wait a moment and try again.", NoticeKind.WARNING)
+        // In practice the backend at capacity, not the person tapping too fast.
+        429 -> Notice("The server is busy right now. Wait a moment and try again.", NoticeKind.WARNING)
         500 -> Notice("Something went wrong on the server. Try again.", NoticeKind.ERROR)
         502, 503 -> Notice("The server is busy right now. Try again shortly.", NoticeKind.ERROR)
         504 -> Notice("The server took too long to respond. Try again.", NoticeKind.OFFLINE)
@@ -173,6 +187,8 @@ object ApiErrors {
     )
     private val errorWords = listOf(
         "fail", "error", "couldn't", "could not", "unable", "went wrong", "not saved", "crash", "exception",
+        // Checked before the success words, which hold "rejected" (a decision).
+        "rejected the request", "server rejected",
     )
     private val warningWords = listOf(
         "please", "required", "select ", "enter ", "must", "invalid", "not allowed", "denied", "permission",
@@ -214,6 +230,9 @@ object ApiErrors {
         // Drop the stack trace ("    at handler (...)") and anything after it.
         text = text.split(Regex("""\n|\s+at\s+\S+\s+\(""")).first()
         text = text.replace(Regex("""^(Uncaught\s+)?(Convex)?Error:\s*"""), "").trim()
+        // A machine code label in front of the sentence ("FORBIDDEN:: only the
+        // assigned BDO…") was shown to staff as-is.
+        text = text.replace(Regex("""^[A-Z][A-Z_]{2,}:+\s*"""), "").trim()
         if (text.isEmpty()) return null
         return if (text.length > MAX_LENGTH) text.take(MAX_LENGTH - 1).trimEnd() + "…" else text
     }

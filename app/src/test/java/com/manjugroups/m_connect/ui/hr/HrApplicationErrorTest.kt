@@ -40,6 +40,16 @@ class HrApplicationErrorTest {
         assertEquals("Permission must start at 09:30", HrApplicationError.clean("Permission must start at 09:30"))
     }
 
+    @Test fun convexCapacityTextIsNeverShownToStaff() {
+        // THARANI. S, build 104: the raw Convex sentence reached the permission form.
+        val body = """{"code":"TooManyConcurrentRequests","message":"Too many concurrent requests. Your backend is limited to 16 concurrent actions. To get more resources, upgrade to Convex Pro. If you are already on Convex Pro, please contact support."}"""
+        assertEquals(
+            "Permission service is busy right now. Please try again in a moment.",
+            HrApplicationError.message(http(429, body), "Permission"),
+        )
+        assertNull(HrApplicationError.clean("Function execution timed out (maximum duration: 1s)"))
+    }
+
     @Test fun ambiguousTimeoutWarnsAgainstBlindResubmission() {
         assertTrue(HrApplicationError.message(SocketTimeoutException(), "Leave").contains("history before submitting"))
     }

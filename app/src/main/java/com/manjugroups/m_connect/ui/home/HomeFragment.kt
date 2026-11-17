@@ -3389,8 +3389,13 @@ class HomeFragment : Fragment() {
                         .asJsonObject.get("error")?.asString
                 }.getOrNull()
             }
-            (parsed?.takeIf { it.isNotBlank() }
-                ?: "Server rejected the request (${t.code()}).")
+            // The backend's own capacity/timeout text, or no reason at all, gets
+            // the shared wording for the status ("The server is busy right now…"
+            // for 429). "Server rejected the request (429)." used to be shown,
+            // and as a SUCCESS notice, because "rejected" reads as a decision.
+            parsed?.takeIf {
+                it.isNotBlank() && !com.manjugroups.m_connect.network.ApiErrors.isInfrastructureText(it)
+            } ?: com.manjugroups.m_connect.network.ApiErrors.forStatus(t.code()).text
         }
         is java.io.IOException -> "Network error — check your connection."
         else -> null

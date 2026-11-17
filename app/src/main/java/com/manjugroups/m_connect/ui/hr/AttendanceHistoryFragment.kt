@@ -565,7 +565,14 @@ class AttendanceHistoryFragment : Fragment() {
                     if (cachedHrReview.isNotEmpty() || !canHrReview) null
                     else runCatching { api.getHrReview(token, ALL_TAB_FROM_DATE, ALL_TAB_TO_DATE) }.getOrNull()
                 }
+                // Same gates as the server (and the All tab itself): without them
+                // these were fetched for everyone and refused with 403, 252x from
+                // 50 staff ("Not permitted to view all attendance"), plus fines.
+                val canViewAllAttendance = session.hasPermission("attendance.viewAll")
+                val canViewFines = session.hasPermission("fines.view") ||
+                    session.hasPermission("fines.viewTeam")
                 val allDeferred = async {
+                    if (!canViewAllAttendance) return@async null
                     // Honor the date filter (e.g. "Last month") AND any active
                     // search — search bypasses the backend's ~750-row cap and
                     // returns the full range for that person.
@@ -581,6 +588,7 @@ class AttendanceHistoryFragment : Fragment() {
                     }.getOrNull()
                 }
                 val finesDeferred = async {
+                    if (!canViewFines) return@async null
                     runCatching { api.listFines(token, status = "active") }.getOrNull()
                 }
 
@@ -1691,7 +1699,40 @@ class AttendanceHistoryFragment : Fragment() {
         isRequest: Boolean = false,
         overrideReason: String? = null,
     ) {
+        // After a reporting officer approves, the day moves to HR and stays in
+        // the list ("waiting for HR"). Re-approving it was refused with "Only
+        // HR can complete the final attendance approval." (a GM did exactly
+        // that 2 s after his first approval). Don't send it; say where it is.
+        // Someone who is also an HR reviewer may finish the same day at the HR
+        // step, so only people without HR review access are held back here.
+        val canFinishAtHr = session.hasPermission("attendance.hrReview") ||
+            session.hasPermission("attendance.approve") ||
+            session.hasPermission("attendance.viewAllApprovals")
+        val approvedAt = recentlyApproved[id]
+        if (!canFinishAtHr && approvedAt != null &&
+            System.currentTimeMillis() - approvedAt < RECENT_APPROVAL_MS
+        ) {
+            toastSafe("You already approved this. It's waiting for HR's final approval.")
+            return
+        }
+        // A second tap while the first approve is still on its way.
+        if (!approvingIds.add(id)) return
         viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                approveRecordNow(id, approvedAttendance, isRequest, overrideReason)
+            } finally {
+                approvingIds.remove(id)
+            }
+        }
+    }
+
+    private suspend fun approveRecordNow(
+        id: String,
+        approvedAttendance: String,
+        isRequest: Boolean,
+        overrideReason: String?,
+    ) {
+        run {
             val failure: String = try {
                 val resp = api.approveAttendance(
                     session.bearerToken,
@@ -1703,12 +1744,14 @@ class AttendanceHistoryFragment : Fragment() {
                     )
                 )
                 if (resp.success) {
+                    recentlyApproved[id] = System.currentTimeMillis()
                     toastSafe("Approved as ${ApprovalOverrideReason.label(approvedAttendance)}")
                     refreshAllData(showSkeleton = false, forceRefresh = true)
-                    return@launch
+                    return
                 }
                 resp.error ?: "Failed to approve"
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 e.userMessage("Failed to approve")
             }
             val system = ApprovalOverrideReason.systemResultIn(failure)
@@ -2078,6 +2121,11 @@ class AttendanceHistoryFragment : Fragment() {
     }
 
     companion object {
+        /** Records this phone approved recently (id → time); outlives a rebuilt screen. */
+        private val recentlyApproved = java.util.concurrent.ConcurrentHashMap<String, Long>()
+        /** Approves currently on their way, so a double tap sends one. */
+        private val approvingIds: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+        private const val RECENT_APPROVAL_MS = 10 * 60 * 1000L
         private const val ATTENDANCE_FILTER_KEY = "attendance_advanced_filter_result"
         private const val KEY_DATE = "date"
         private const val KEY_STATUS = "status"
