@@ -112,6 +112,8 @@ class CreateSiteVisitBottomSheet : BottomSheetDialogFragment() {
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val dialog = BottomSheetDialog(requireContext(), theme)
+        // Cancel / outside tap slide the sheet down instead of cutting it.
+        dialog.dismissWithAnimation = true
         dialog.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         dialog.setOnShowListener { shown ->
             (shown as BottomSheetDialog)

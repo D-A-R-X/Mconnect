@@ -43,6 +43,7 @@
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
 
     <application
+        android:enableOnBackInvokedCallback="false"
         android:name=".MconnectApp"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
