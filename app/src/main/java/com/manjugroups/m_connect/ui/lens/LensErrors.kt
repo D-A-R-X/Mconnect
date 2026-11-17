@@ -16,6 +16,10 @@ object LensErrors {
 
     data class FailedPhoto(val pose: LensPose?, val code: String, val message: String)
 
+    /** A bare 404 (no JSON code) means the Lens routes aren't deployed on the server yet. */
+    const val NOT_DEPLOYED_MESSAGE =
+        "Lens enrollment isn't set up on the server yet. Ask the admin to deploy it."
+
     fun messageFor(code: String?): String = when (code?.uppercase()) {
         "FACE_MATCHES_ANOTHER_PERSON" -> "This face is already enrolled for another staff member. Contact admin."
         "FACE_DOES_NOT_MATCH_EXISTING_ENROLLMENT" ->
@@ -28,6 +32,7 @@ object LensErrors {
         "FORBIDDEN" -> "You don't have permission to enroll faces."
         "INVALID_REQUEST" -> "The photos couldn't be sent. Record again."
         "LENS_NOT_CONFIGURED" -> "Lens enrollment is not configured yet. Contact admin."
+        "LENS_NOT_DEPLOYED" -> NOT_DEPLOYED_MESSAGE
         "LENS_REJECTED" -> "Lens rejected the request. Contact admin."
         "LENS_NOT_READY" -> "The face service is starting up. Try again in a few seconds."
         else -> "Enrollment failed. Try again."
@@ -46,7 +51,7 @@ object LensErrors {
 
     fun actionFor(httpStatus: Int, code: String?): Action = when (code?.uppercase()) {
         "FACE_MATCHES_ANOTHER_PERSON", "FACE_DOES_NOT_MATCH_EXISTING_ENROLLMENT",
-        "LENS_NOT_CONFIGURED", "LENS_REJECTED", "FORBIDDEN", "NO_EMPLOYEE_CODE" -> Action.CONTACT_ADMIN
+        "LENS_NOT_CONFIGURED", "LENS_NOT_DEPLOYED", "LENS_REJECTED", "FORBIDDEN", "NO_EMPLOYEE_CODE" -> Action.CONTACT_ADMIN
         "NO_USABLE_FACE", "PHOTOS_SHOW_DIFFERENT_PEOPLE", "INVALID_REQUEST" -> Action.RETAKE
         "LENS_NOT_READY" -> Action.RETRY
         "STAFF_NOT_FOUND" -> Action.FIX
@@ -72,7 +77,7 @@ object LensErrors {
         val code = str("code") ?: when (httpStatus) {
             503 -> "LENS_NOT_READY"
             403 -> "FORBIDDEN"
-            404 -> "STAFF_NOT_FOUND"
+            404 -> "LENS_NOT_DEPLOYED"
             else -> "UNKNOWN"
         }
         val serverText = str("error")

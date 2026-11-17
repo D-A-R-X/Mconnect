@@ -115,7 +115,12 @@ class LensStaffViewModel : ViewModel() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                val text = ApiErrors.noticeFor(e, "Couldn't load staff.").text
+                val text = if ((e as? retrofit2.HttpException)?.code() == 404) {
+                    // The route itself is missing: the server hasn't been deployed with Lens yet.
+                    LensErrors.NOT_DEPLOYED_MESSAGE
+                } else {
+                    ApiErrors.noticeFor(e, "Couldn't load staff.").text
+                }
                 _state.update {
                     it.copy(
                         loading = false,

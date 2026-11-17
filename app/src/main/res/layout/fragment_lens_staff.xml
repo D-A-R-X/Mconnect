@@ -12,6 +12,7 @@
 
     <!-- TOP BAR -->
     <LinearLayout
+        android:id="@+id/lensStaffHeader"
         android:layout_width="match_parent"
         android:layout_height="56dp"
         android:background="?attr/colorSurfacePrimary"

@@ -95,6 +95,22 @@ class LensEnrollFragment : Fragment() {
         return binding.root
     }
 
+    /** Status bar follows the visible mode: dark camera vs white review. */
+    private var topBarReviewing: Boolean? = null
+
+    private fun applyTopBar(reviewing: Boolean, force: Boolean = false) {
+        if (!force && topBarReviewing == reviewing) return
+        topBarReviewing = reviewing
+        val main = activity as? com.manjugroups.m_connect.MainActivity ?: return
+        if (reviewing) main.setTopBarAppearance(android.graphics.Color.WHITE, true, fullBleed = true)
+        else main.setTopBarAppearance(android.graphics.Color.BLACK, false, fullBleed = true)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        applyTopBar(topBarReviewing ?: false, force = true)
+    }
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
@@ -102,6 +118,9 @@ class LensEnrollFragment : Fragment() {
             parentFragmentManager.popBackStack()
             return
         }
+        // Both top bars pad themselves by the status-bar inset (full-bleed).
+        com.manjugroups.m_connect.ui.common.StatusBarInsets.padHeader(binding.lensCaptureTop)
+        com.manjugroups.m_connect.ui.common.StatusBarInsets.padHeader(binding.lensReviewHeader, fixedHeight = true)
         viewModel.initReplace(existingSamples)
 
         val title = if (employeeCode.isNotBlank()) "$staffName · $employeeCode" else staffName
@@ -203,6 +222,7 @@ class LensEnrollFragment : Fragment() {
         engine?.pending = state.pending
         b.lensCapture.isVisible = !state.reviewing
         b.lensReview.isVisible = state.reviewing
+        applyTopBar(state.reviewing)
         b.root.keepScreenOn = !state.reviewing
         if (state.reviewing) {
             stopCamera()

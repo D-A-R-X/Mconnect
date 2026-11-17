@@ -191,6 +191,7 @@
         android:visibility="gone">
 
         <LinearLayout
+            android:id="@+id/lensReviewHeader"
             android:layout_width="match_parent"
             android:layout_height="56dp"
             android:background="?attr/colorSurfacePrimary"

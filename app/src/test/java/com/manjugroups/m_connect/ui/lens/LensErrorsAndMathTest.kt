@@ -7,6 +7,17 @@ import org.junit.Test
 
 class LensErrorsAndMathTest {
 
+    @Test
+    fun bareNotFoundMeansLensRoutesNotDeployed() {
+        // Convex answers an unknown route with a plain-text 404 and no JSON code.
+        val out = LensErrors.parse(404, "No matching routes found")
+        assertEquals("LENS_NOT_DEPLOYED", out.code)
+        assertEquals(LensErrors.NOT_DEPLOYED_MESSAGE, out.message)
+        assertEquals(LensErrors.Action.CONTACT_ADMIN, out.action)
+        // A real STAFF_NOT_FOUND from our route still keeps its own code.
+        assertEquals("STAFF_NOT_FOUND", LensErrors.parse(404, "{\"code\":\"STAFF_NOT_FOUND\"}").code)
+    }
+
     // ── Error mapping ──
 
     @Test

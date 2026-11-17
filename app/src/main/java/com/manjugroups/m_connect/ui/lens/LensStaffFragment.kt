@@ -53,6 +53,12 @@ class LensStaffFragment : Fragment() {
         return binding.root
     }
 
+    override fun onResume() {
+        super.onResume()
+        (activity as? com.manjugroups.m_connect.MainActivity)
+            ?.setTopBarAppearance(android.graphics.Color.WHITE, true, fullBleed = true)
+    }
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
@@ -61,6 +67,9 @@ class LensStaffFragment : Fragment() {
             parentFragmentManager.popBackStack()
             return
         }
+        // Full-bleed like the other detail screens: the header pads itself by
+        // the status-bar inset instead of sliding under the status bar.
+        com.manjugroups.m_connect.ui.common.StatusBarInsets.padHeader(binding.lensStaffHeader, fixedHeight = true)
 
         val layoutManager = LinearLayoutManager(requireContext())
         binding.rvLensStaff.layoutManager = layoutManager
