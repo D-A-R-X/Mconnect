@@ -25,6 +25,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.geotrack.AttendanceTrackingGate
 import com.manjugroups.m_connect.geotrack.GeoTrackBootstrapSync
 import com.manjugroups.m_connect.geotrack.GeoTrackEventQueue
+import com.manjugroups.m_connect.geotrack.GeoTrackFlightMode
 import com.manjugroups.m_connect.geotrack.AttendanceDayBoundary
 import com.manjugroups.m_connect.geotrack.GeoTrackFlushWorker
 import com.manjugroups.m_connect.geotrack.GeoTrackPointFlusher
