@@ -938,14 +938,10 @@ class HrDashboardFragment : Fragment() {
             isLaunchingCamera = false
             return
         }
-        val copied = runCatching {
-            requireContext().contentResolver.openInputStream(uri)?.use { input ->
-                target.outputStream().use { output -> input.copyTo(output) }
-            } != null
-        }.getOrDefault(false)
+        val copied = SelfieFiles.copyCaptured(requireContext(), uri, target)
         if (!copied || !target.exists() || target.length() <= 0L) {
             isLaunchingCamera = false
-            toastSafe("Failed to read captured selfie.")
+            toastSafe("Couldn't save the selfie. Please take it again.")
             return
         }
 
