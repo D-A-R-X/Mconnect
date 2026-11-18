@@ -25,9 +25,9 @@ enum class LensPose(
 ) {
     STRAIGHT("straight", "Straight", true, 0f),
     SLIGHT_LEFT("slight_left", "Slight left", true, 15f),
-    MORE_LEFT("more_left", "More left", false, 33f),
+    MORE_LEFT("more_left", "More left", false, 38f),
     SLIGHT_RIGHT("slight_right", "Slight right", true, -15f),
-    MORE_RIGHT("more_right", "More right", false, -33f);
+    MORE_RIGHT("more_right", "More right", false, -38f);
 
     companion object {
         /** Guided order: straight, left side, back through centre, right side. */
@@ -116,9 +116,10 @@ object LensCapturePolicy {
     const val SLIGHT_MAX = 20f
     /**
      * "More" poses are real side turns (user, 18 Nov: slight and more looked the
-     * same at 22..30). Past ~40 the nose leaves the eyes and Lens can't align it.
+     * same at 22..30). The test phone's log showed people settle at 35..45 for a
+     * side turn; past ~45 the nose crosses the far eye and Lens can't align it.
      */
-    const val MORE_MAX = 40f
+    const val MORE_MAX = 45f
     /** Head tilt toward a shoulder. ML Kit's angles jitter a few degrees per frame. */
     const val LEVEL_MAX = 12f
     /**
@@ -127,9 +128,14 @@ object LensCapturePolicy {
      */
     const val SLIGHT_CAPTURE_MIN = 11f
     const val SLIGHT_CAPTURE_MAX = 19f
-    const val MORE_CAPTURE_MIN = 26f
+    /**
+     * People stop turning the moment the ring fills, so "more" must start well
+     * past "slight" or the two photos look the same (user, 18 Nov). The phone's
+     * log showed people settle at 35..45 for a side turn when left to it.
+     */
+    const val MORE_CAPTURE_MIN = 32f
     /** Every photo must differ from the ones already taken by at least this much yaw. */
-    const val MIN_POSE_SEPARATION = 10f
+    const val MIN_POSE_SEPARATION = 15f
     /** Up/down: a phone held a little low reads ~10 degrees; Lens tolerates mild pitch. */
     const val PITCH_MAX = 15f
 
