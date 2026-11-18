@@ -47,6 +47,13 @@ import kotlinx.coroutines.launch
  * IMMEDIATE remains the fallback and is resumed if already in progress.
  * Only updates offered to this Play account are requested; a tester-only
  * latest build is not treated as a company-wide minimum.
+ *
+ * The requirement is saved on the device ([RequiredUpdateStore]) and shown
+ * synchronously when the activity starts and resumes, before any network or
+ * Play answer, so closing/reopening the app, starting offline or Play's check
+ * briefly saying "no update" can't make the page disappear. It clears only
+ * when the installed build reaches the required one, or the server drops its
+ * minimum ([RequiredUpdatePolicy]).
  */
 class InAppUpdateManager(
     private val activity: AppCompatActivity,
@@ -90,12 +97,14 @@ class InAppUpdateManager(
     private var listenerRegistered = false
     private var availabilityJob: Job? = null
     private var updateAction: UpdateAction? = null
-    private var remotePolicy: RequiredRemoteUpdate? = restoreRemotePolicy()
+    private var required: RequiredUpdate? = RequiredUpdateStore.load(activity, BuildConfig.VERSION_CODE)
     private var lastRemoteCheckMs = 0L
     private var checkingPlay = false
     private var updateFlowRunning = false
     private var completingUpdate = false
     private var destroyed = false
+    /** Play's last check said there is no update for this account. */
+    private var playSaysNoUpdate = false
 
     /** Register callbacks in onCreate; availability is checked in onResume. */
     fun start() {
@@ -103,9 +112,12 @@ class InAppUpdateManager(
             manager.registerListener(installListener)
             listenerRegistered = true
         }
+        // A saved requirement shows on the very first frame, before any check.
+        showStoredRequirement()
     }
 
     fun onResume() {
+        showStoredRequirement()
         checkForUpdate()
         availabilityJob?.cancel()
         availabilityJob = activity.lifecycleScope.launch {
@@ -176,6 +188,20 @@ class InAppUpdateManager(
                 return
             }
         }
+        if (availability == UpdateAvailability.UPDATE_AVAILABLE ||
+            availability == UpdateAvailability.DEVELOPER_TRIGGERED_UPDATE_IN_PROGRESS
+        ) {
+            playSaysNoUpdate = false
+            rememberRequirement(
+                RequiredUpdatePolicy.withPlayOffer(
+                    required,
+                    info.availableVersionCode(),
+                    PLAY_STORE_URL,
+                    BuildConfig.VERSION_CODE,
+                    System.currentTimeMillis(),
+                ),
+            )
+        }
         when (preferredPlayUpdateType(
             availability,
             info.isUpdateTypeAllowed(AppUpdateType.FLEXIBLE),
@@ -197,8 +223,14 @@ class InAppUpdateManager(
                 if (availability == UpdateAvailability.UPDATE_AVAILABLE) {
                     showPlayStoreFallback(info)
                 } else {
-                    updateAction = null
-                    emit(InAppUpdateUiState.Hidden)
+                    // Play's check often says "no update" for a while after a
+                    // reopen (cached / staged rollout). A saved requirement
+                    // still stands; only a satisfied or dropped one hides.
+                    playSaysNoUpdate = true
+                    if (!showStoredRequirement()) {
+                        updateAction = null
+                        emit(InAppUpdateUiState.Hidden)
+                    }
                     checkRemotePolicy()
                 }
             }
@@ -206,7 +238,7 @@ class InAppUpdateManager(
     }
 
     private fun checkRemotePolicy() {
-        remotePolicy?.let(::showRemotePolicy)
+        showStoredRequirement()
         val now = android.os.SystemClock.elapsedRealtime()
         if (lastRemoteCheckMs != 0L && now - lastRemoteCheckMs < REMOTE_CHECK_INTERVAL_MS) return
         lastRemoteCheckMs = now
@@ -220,48 +252,43 @@ class InAppUpdateManager(
                     appBuildHeader = BuildConfig.VERSION_CODE,
                 )
             }.getOrNull() ?: return@launch
-            remotePolicy = response.toRequiredUpdate()
-            persistRemotePolicy(remotePolicy)
-            remotePolicy?.let(::showRemotePolicy)
-        }
-    }
-
-    private fun showRemotePolicy(policy: RequiredRemoteUpdate) {
-        updateAction = UpdateAction.External(policy.updateUrl)
-        emit(InAppUpdateUiState.ExternalRequired(policy.version))
-    }
-
-    private fun MobileAppVersionResponse.toRequiredUpdate(): RequiredRemoteUpdate? {
-        if (!requiresMandatoryMobileUpdate(this, BuildConfig.VERSION_CODE)) return null
-        val candidateVersion = minimumSupportedVersion ?: latestVersion ?: "new version"
-        val candidateBuild = minimumSupportedBuildNumber ?: latestBuildNumber ?: return null
-        val url = updateUrl?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-        return RequiredRemoteUpdate(candidateVersion, candidateBuild, url)
-    }
-
-    private fun restoreRemotePolicy(): RequiredRemoteUpdate? {
-        val prefs = activity.getSharedPreferences(REMOTE_PREFS, Activity.MODE_PRIVATE)
-        val version = prefs.getString(KEY_REMOTE_VERSION, null) ?: return null
-        val build = prefs.getInt(KEY_REMOTE_BUILD, 0).takeIf { it > 0 }
-        val url = prefs.getString(KEY_REMOTE_URL, null) ?: return null
-        if (build == null || build <= BuildConfig.VERSION_CODE) {
-            prefs.edit().clear().apply()
-            return null
-        }
-        return RequiredRemoteUpdate(version, build, url)
-    }
-
-    private fun persistRemotePolicy(policy: RequiredRemoteUpdate?) {
-        activity.getSharedPreferences(REMOTE_PREFS, Activity.MODE_PRIVATE).edit().apply {
-            if (policy == null) {
-                clear()
-            } else {
-                putString(KEY_REMOTE_VERSION, policy.version)
-                if (policy.buildNumber == null) remove(KEY_REMOTE_BUILD)
-                else putInt(KEY_REMOTE_BUILD, policy.buildNumber)
-                putString(KEY_REMOTE_URL, policy.updateUrl)
+            // Offline / failed answer: nothing changes, the saved requirement stands.
+            if (!response.success || destroyed) return@launch
+            val server = serverRequirement(response, BuildConfig.VERSION_CODE, System.currentTimeMillis())
+            var next = RequiredUpdatePolicy.withServer(required, server, BuildConfig.VERSION_CODE)
+            if (playSaysNoUpdate) {
+                next = RequiredUpdatePolicy.withPlayNoUpdate(
+                    next,
+                    serverHasNoMinimum = server == null,
+                    installedBuild = BuildConfig.VERSION_CODE,
+                    nowMs = System.currentTimeMillis(),
+                )
             }
-        }.apply()
+            rememberRequirement(next)
+            if (!showStoredRequirement() && updateAction is UpdateAction.External) {
+                // The server dropped its minimum and Play has nothing: release the page.
+                updateAction = null
+                emit(InAppUpdateUiState.Hidden)
+            }
+        }
+    }
+
+    private fun rememberRequirement(next: RequiredUpdate?) {
+        if (next == required) return
+        required = next
+        RequiredUpdateStore.save(activity, next)
+    }
+
+    /** Shows the saved requirement (if any); true when the page is up because of it. */
+    private fun showStoredRequirement(): Boolean {
+        val active = RequiredUpdatePolicy.enforce(required, BuildConfig.VERSION_CODE) ?: return false
+        // A live Play flow (download / install / Play button) keeps its own state.
+        if (updateAction is UpdateAction.PlayFlexible || updateAction is UpdateAction.PlayImmediate ||
+            updateAction == UpdateAction.Restart || updateFlowRunning || completingUpdate
+        ) return true
+        updateAction = UpdateAction.External(active.url)
+        emit(InAppUpdateUiState.ExternalRequired(active.version))
+        return true
     }
 
     /** The page's green button. */
@@ -326,18 +353,8 @@ class InAppUpdateManager(
         private const val TAG = "InAppUpdate"
         private const val FOREGROUND_CHECK_INTERVAL_MS = 60 * 1000L
         private const val REMOTE_CHECK_INTERVAL_MS = 5 * 60 * 1000L
-        private const val PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.manjugroups.mconnect"
-        private const val REMOTE_PREFS = "mandatory_app_update"
-        private const val KEY_REMOTE_VERSION = "version"
-        private const val KEY_REMOTE_BUILD = "build"
-        private const val KEY_REMOTE_URL = "url"
+        internal const val PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.manjugroups.mconnect"
     }
-
-    private data class RequiredRemoteUpdate(
-        val version: String,
-        val buildNumber: Int?,
-        val updateUrl: String,
-    )
 
     private sealed interface UpdateAction {
         data class PlayFlexible(val info: AppUpdateInfo) : UpdateAction
@@ -371,6 +388,31 @@ internal fun requiresMandatoryMobileUpdate(
         ?: policy.latestBuildNumber?.takeIf { policy.updateRequired == true }
         ?: return false
     return installedBuildNumber < minimumBuild
+}
+
+/**
+ * The server's forced minimum as a [RequiredUpdate], or null when this build is
+ * allowed. A minimum without a store link still forces the update (Play page).
+ */
+internal fun serverRequirement(
+    policy: MobileAppVersionResponse,
+    installedBuildNumber: Int,
+    nowMs: Long,
+): RequiredUpdate? {
+    if (!requiresMandatoryMobileUpdate(policy, installedBuildNumber)) return null
+    val build = policy.minimumSupportedBuildNumber ?: policy.latestBuildNumber ?: return null
+    val version = (policy.minimumSupportedVersion ?: policy.latestVersion)
+        ?.trim()?.takeIf { it.isNotEmpty() }
+        ?.let { "$it ($build)" }
+        ?: "build $build"
+    return RequiredUpdate(
+        build = build,
+        version = version,
+        url = policy.updateUrl?.trim()?.takeIf { it.isNotEmpty() } ?: InAppUpdateManager.PLAY_STORE_URL,
+        fromServer = true,
+        fromPlay = false,
+        savedAtMs = nowMs,
+    )
 }
 
 internal fun preferredPlayUpdateType(

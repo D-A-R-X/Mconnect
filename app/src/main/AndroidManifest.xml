@@ -89,6 +89,14 @@
             android:exported="false"
             android:theme="@style/Theme.Mconnect" />
 
+        <!-- Forced update page for screens outside MainActivity (update/UpdateGate). -->
+        <activity
+            android:name=".update.UpdateRequiredActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.Mconnect" />
+
         <activity
             android:name=".auth.LoginActivity"
             android:exported="false"
