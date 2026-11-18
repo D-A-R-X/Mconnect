@@ -25,6 +25,7 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.geotrack.AttendanceTrackingGate
 import com.manjugroups.m_connect.geotrack.GeoTrackBootstrapSync
 import com.manjugroups.m_connect.geotrack.GeoTrackEventQueue
+import com.manjugroups.m_connect.geotrack.GeoTrackFlightMode
 import com.manjugroups.m_connect.geotrack.AttendanceDayBoundary
 import com.manjugroups.m_connect.geotrack.GeoTrackFlushWorker
 import com.manjugroups.m_connect.geotrack.GeoTrackPointFlusher
@@ -56,6 +57,8 @@ class GeoTrackService : Service() {
         private const val TRACKING_VERIFY_INTERVAL_MS = 10L * 60 * 1000
         private const val SYNC_INTERVAL_MS = 30_000L
         private const val HEARTBEAT_INTERVAL_MS = 75_000L
+        /** Re-read Settings.Global after an airplane broadcast (OEMs write it late). */
+        private const val AIRPLANE_RECHECK_MS = 1_500L
         /** A tick this close to due is sent rather than waited out. */
         private const val HEARTBEAT_EARLY_SLACK_MS = 5_000L
         /** Keeps the CPU up between the alarm firing and the heartbeat send. */
@@ -297,11 +300,45 @@ class GeoTrackService : Service() {
 
     private val airplaneReceiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context?, intent: Intent?) {
-            val isOn = Settings.Global.getInt(contentResolver, Settings.Global.AIRPLANE_MODE_ON, 0) != 0
+            // The broadcast carries the new state ("state" extra); some OEMs
+            // write Settings.Global a moment later, so read the extra first and
+            // re-check the setting (the source of truth) shortly after.
+            val stamped = System.currentTimeMillis()
+            val isOn = intent?.takeIf { it.hasExtra("state") }?.getBooleanExtra("state", false)
+                ?: isAirplaneModeOn()
             Log.i(TAG, "Airplane mode changed: $isOn")
             serviceScope.launch {
-                reportTamper(if (isOn) "AIRPLANE_MODE_ON" else "AIRPLANE_MODE_OFF")
+                onAirplaneModeState(isOn, stamped)
+                delay(AIRPLANE_RECHECK_MS)
+                val settled = isAirplaneModeOn()
+                if (settled != isOn) onAirplaneModeState(settled, System.currentTimeMillis())
             }
+        }
+    }
+
+    private val airplaneStateLock = kotlinx.coroutines.sync.Mutex()
+
+    /**
+     * The one place flight mode is reported (broadcast, start-up and heartbeat
+     * checks all come here), so each real change is reported exactly once,
+     * stamped with when it happened. The phone is usually offline right after
+     * turning flight mode on, so the event waits in the store-and-forward queue
+     * with that time and is sent first when the network returns.
+     */
+    private suspend fun onAirplaneModeState(isOn: Boolean, occurredAt: Long, firstCheck: Boolean = false) {
+        airplaneStateLock.withLock {
+            if (!GeoTrackFlightMode.shouldReport(lastAirplaneReported, isOn, firstCheck)) {
+                lastAirplaneReported = isOn
+                return
+            }
+            lastAirplaneReported = isOn
+            if (isOn) {
+                // Flight mode explains the outage that follows: don't also
+                // report a separate "network offline".
+                offlineStartedAt.set(0L)
+                offlineReported.set(false)
+            }
+            reportTamper(if (isOn) "AIRPLANE_MODE_ON" else "AIRPLANE_MODE_OFF", occurredAt)
         }
     }
 
@@ -1017,6 +1054,10 @@ class GeoTrackService : Service() {
                     consecutiveSyncFailures = 0
                     serviceScope.launch {
                         try { markNetworkOnlineIfNeeded() } catch (_: Exception) {}
+                        // Events first: a flight-mode / location change queued
+                        // offline reaches the web in seconds instead of waiting
+                        // behind the location-point backlog.
+                        try { syncEvents() } catch (_: Exception) {}
                         try { syncPoints() } catch (e: Exception) {
                             Log.w(TAG, "Immediate sync on reconnect failed: ${e.message}")
                         }
@@ -1502,13 +1543,7 @@ class GeoTrackService : Service() {
      * normal start doesn't spam "airplane off".
      */
     private suspend fun emitTamperOnStateChange(airplane: Boolean, locationEnabled: Boolean) {
-        val firstAirplane = lastAirplaneReported == null
-        if (lastAirplaneReported != airplane) {
-            lastAirplaneReported = airplane
-            if (!firstAirplane || airplane) {
-                reportTamper(if (airplane) "AIRPLANE_MODE_ON" else "AIRPLANE_MODE_OFF")
-            }
-        }
+        onAirplaneModeState(airplane, System.currentTimeMillis(), firstCheck = lastAirplaneReported == null)
         val firstLoc = lastLocationEnabledReported == null
         if (lastLocationEnabledReported != locationEnabled) {
             lastLocationEnabledReported = locationEnabled
@@ -1518,7 +1553,7 @@ class GeoTrackService : Service() {
         }
     }
 
-    private suspend fun reportTamper(eventType: String) {
+    private suspend fun reportTamper(eventType: String, occurredAt: Long = System.currentTimeMillis()) {
         try {
             val throttled = eventType == "GPS_DISABLED" ||
                 eventType == "AIRPLANE_MODE_ON" ||
@@ -1539,9 +1574,10 @@ class GeoTrackService : Service() {
                     // a real repeat later in the shift is NOT suppressed. (Was
                     // 6h, which is why the RO wasn't being told.)
                     minIntervalMs = 15 * 1000L,
+                    occurredAt = occurredAt,
                 )
             } else {
-                GeoTrackEventQueue.enqueue(this, eventType, buildEventMetadata())
+                GeoTrackEventQueue.enqueue(this, eventType, buildEventMetadata(), occurredAt)
                 true
             }
             Log.i(TAG, "Tamper queued=$queued: $eventType")
@@ -1644,6 +1680,11 @@ class GeoTrackService : Service() {
         serviceScope.launch {
             delay(NETWORK_OFFLINE_CONFIRM_MS)
             if (offlineStartedAt.get() != now || hasNetwork()) return@launch
+            // Flight mode is the reason; it is reported as such.
+            if (isAirplaneModeOn()) {
+                offlineStartedAt.compareAndSet(now, 0L)
+                return@launch
+            }
             try { reportNetworkOffline(now) } catch (_: Exception) {}
         }
     }
