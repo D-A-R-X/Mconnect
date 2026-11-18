@@ -25,9 +25,9 @@ enum class LensPose(
 ) {
     STRAIGHT("straight", "Straight", true, 0f),
     SLIGHT_LEFT("slight_left", "Slight left", true, 15f),
-    MORE_LEFT("more_left", "More left", false, 25f),
+    MORE_LEFT("more_left", "More left", false, 33f),
     SLIGHT_RIGHT("slight_right", "Slight right", true, -15f),
-    MORE_RIGHT("more_right", "More right", false, -25f);
+    MORE_RIGHT("more_right", "More right", false, -33f);
 
     companion object {
         /** Guided order: straight, left side, back through centre, right side. */
@@ -114,7 +114,11 @@ object LensCapturePolicy {
     const val STRAIGHT_MAX = 5f
     const val SLIGHT_MIN = 10f
     const val SLIGHT_MAX = 20f
-    const val MORE_MAX = 30f
+    /**
+     * "More" poses are real side turns (user, 18 Nov: slight and more looked the
+     * same at 22..30). Past ~40 the nose leaves the eyes and Lens can't align it.
+     */
+    const val MORE_MAX = 40f
     /** Head tilt toward a shoulder. ML Kit's angles jitter a few degrees per frame. */
     const val LEVEL_MAX = 12f
     /**
@@ -123,9 +127,9 @@ object LensCapturePolicy {
      */
     const val SLIGHT_CAPTURE_MIN = 11f
     const val SLIGHT_CAPTURE_MAX = 19f
-    const val MORE_CAPTURE_MIN = 22f
+    const val MORE_CAPTURE_MIN = 26f
     /** Every photo must differ from the ones already taken by at least this much yaw. */
-    const val MIN_POSE_SEPARATION = 8f
+    const val MIN_POSE_SEPARATION = 10f
     /** Up/down: a phone held a little low reads ~10 degrees; Lens tolerates mild pitch. */
     const val PITCH_MAX = 15f
 
@@ -201,20 +205,28 @@ object LensCapturePolicy {
             return LensHint.CENTER_FACE
         }
         if (s.faceWidth < MIN_FACE_PX) return LensHint.MOVE_CLOSER
-        if (abs(s.yaw) < SLIGHT_MIN) {
-            // Straight: every landmark must show; a covered face hides some.
-            if (!s.hasAllLandmarks || !s.noseBetweenEyes) return LensHint.COVERED
-        } else {
-            // Turned: the detector often drops the far mouth corner or eye on a
-            // turned face, so only the Lens alignment rule decides: when the
-            // eyes and nose are found, the nose must sit between the eyes.
-            if (s.hasEyesAndNose && !s.noseBetweenEyes) return LensHint.TURN_LESS
+        val a = abs(s.yaw)
+        when {
+            a < SLIGHT_MIN -> {
+                // Straight: every landmark must show; a covered face hides some.
+                if (!s.hasAllLandmarks || !s.noseBetweenEyes) return LensHint.COVERED
+            }
+            a < MORE_CAPTURE_MIN -> {
+                // Slight turn: when the eyes and nose are found, the nose must
+                // sit between the eyes (the Lens alignment rule).
+                if (s.hasEyesAndNose && !s.noseBetweenEyes) return LensHint.TURN_LESS
+            }
+            // Side turn (more left/right): the far eye is hidden or foreshortened,
+            // so no eye or landmark rule; one clear, still, sharp face is enough.
         }
-        val eyesMin = if (abs(s.yaw) >= SLIGHT_MIN) EYES_OPEN_MIN_TURNED else EYES_OPEN_MIN
-        // The detector often can't classify the eyes of a turned head (null):
-        // that is "unknown", not "closed", so it never blocks a capture.
-        val eyes = listOfNotNull(s.leftEyeOpen, s.rightEyeOpen)
-        if (eyes.isNotEmpty() && eyes.min() < eyesMin) return LensHint.OPEN_EYES
+        if (a < MORE_CAPTURE_MIN) {
+            val eyesMin = if (a >= SLIGHT_MIN) EYES_OPEN_MIN_TURNED else EYES_OPEN_MIN
+            // Unclassified eyes (null) are unknown, not closed. A turned head
+            // reads its far eye low, so a slight turn judges the nearer eye.
+            val eyes = listOfNotNull(s.leftEyeOpen, s.rightEyeOpen)
+            val judged = if (a >= SLIGHT_MIN) eyes.maxOrNull() else eyes.minOrNull()
+            if (judged != null && judged < eyesMin) return LensHint.OPEN_EYES
+        }
         if ((s.smiling ?: 0f) > SMILE_MAX) return LensHint.NEUTRAL_FACE
         return null
     }

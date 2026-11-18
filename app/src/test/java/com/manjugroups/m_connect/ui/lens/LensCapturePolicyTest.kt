@@ -43,9 +43,10 @@ class LensCapturePolicyTest {
         assertNull("between straight and slight", LensCapturePolicy.poseFor(7f))
         assertEquals(LensPose.SLIGHT_LEFT, LensCapturePolicy.poseFor(15f))
         assertEquals(LensPose.SLIGHT_RIGHT, LensCapturePolicy.poseFor(-12f))
-        assertEquals(LensPose.MORE_LEFT, LensCapturePolicy.poseFor(25f))
-        assertEquals(LensPose.MORE_RIGHT, LensCapturePolicy.poseFor(-30f))
-        assertNull("past 30 degrees is never used", LensCapturePolicy.poseFor(31f))
+        assertEquals(LensPose.MORE_LEFT, LensCapturePolicy.poseFor(30f))
+        assertEquals(LensPose.MORE_RIGHT, LensCapturePolicy.poseFor(-38f))
+        assertNull("between slight and a real side turn", LensCapturePolicy.poseFor(24f))
+        assertNull("past 40 degrees is never used", LensCapturePolicy.poseFor(41f))
         assertNull("gap between slight and more: no double capture at 20", LensCapturePolicy.poseFor(20.5f))
         assertNull(LensCapturePolicy.poseFor(-45f))
     }
@@ -53,8 +54,8 @@ class LensCapturePolicyTest {
     @Test
     fun aPoseMustDifferFromPhotosAlreadyTaken() {
         val taken = mapOf(LensPose.SLIGHT_LEFT to 18f)
-        assertFalse("too close to slight left", LensCapturePolicy.distinctEnough(23f, taken, LensPose.MORE_LEFT))
-        assertTrue(LensCapturePolicy.distinctEnough(27f, taken, LensPose.MORE_LEFT))
+        assertFalse("too close to slight left", LensCapturePolicy.distinctEnough(26f, taken, LensPose.MORE_LEFT))
+        assertTrue(LensCapturePolicy.distinctEnough(30f, taken, LensPose.MORE_LEFT))
         assertTrue("its own retake is fine", LensCapturePolicy.distinctEnough(18f, taken, LensPose.SLIGHT_LEFT))
     }
 
@@ -85,7 +86,7 @@ class LensCapturePolicyTest {
 
     @Test
     fun headMustBeLevelAndNotTurnedTooFar() {
-        assertEquals(LensHint.TURN_LESS, LensCapturePolicy.geometryHint(sample(yaw = 35f)))
+        assertEquals(LensHint.TURN_LESS, LensCapturePolicy.geometryHint(sample(yaw = 45f)))
         assertEquals(LensHint.HEAD_LEVEL, LensCapturePolicy.geometryHint(sample(roll = 14f)))
         assertEquals(LensHint.LOOK_AHEAD, LensCapturePolicy.geometryHint(sample(pitch = -18f)))
     }
@@ -101,7 +102,9 @@ class LensCapturePolicyTest {
     fun coveredFaceAndExpression() {
         assertEquals(LensHint.COVERED, LensCapturePolicy.geometryHint(sample(landmarks = false)))
         // A strongly turned head that hides the nose/eye alignment is told to turn less.
-        assertEquals(LensHint.TURN_LESS, LensCapturePolicy.geometryHint(sample(yaw = 26f, noseBetween = false)))
+        assertEquals(LensHint.TURN_LESS, LensCapturePolicy.geometryHint(sample(yaw = 15f, noseBetween = false)))
+        // A real side turn (more left/right) doesn't need both eyes or the nose rule.
+        assertNull(LensCapturePolicy.geometryHint(sample(yaw = 33f, noseBetween = false, eyes = 0.05f)))
         assertEquals(LensHint.OPEN_EYES, LensCapturePolicy.geometryHint(sample(eyes = 0.2f)))
         // Unclassified eyes (common on a turned head) are unknown, not closed.
         assertNull(LensCapturePolicy.geometryHint(sample(eyes = null)))
