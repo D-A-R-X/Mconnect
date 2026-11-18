@@ -225,6 +225,7 @@ object GeoTrackEventQueue {
             } else {
                 runCatching {
                     val body = TamperReportRequest(
+                        staffId = session.staffId?.takeIf { it.isNotBlank() },
                         sessionId = (metadata["sessionId"] as? String)
                             ?: session.activeTrackingSessionId,
                         eventType = event.eventType,

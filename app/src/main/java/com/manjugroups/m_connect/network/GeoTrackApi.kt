@@ -902,6 +902,10 @@ data class HeartbeatRequest(
 )
 
 data class TamperReportRequest(
+    // Fallback identity when the bearer token no longer resolves on the geo
+    // service and no session id is known (400 "staffId and eventType are
+    // required"). A valid token still wins server-side.
+    val staffId: String? = null,
     val sessionId: String? = null,
     val eventType: String,
     val metadata: Map<String, Any?> = emptyMap(),
