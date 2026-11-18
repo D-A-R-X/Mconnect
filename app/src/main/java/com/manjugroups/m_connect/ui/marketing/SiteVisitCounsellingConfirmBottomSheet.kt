@@ -239,7 +239,7 @@ class SiteVisitCounsellingConfirmBottomSheet : BottomSheetDialogFragment() {
     private fun outcomeLabel(outcome: String?): String = when (outcome) {
         "converted_to_booking" -> "Converted as Booking"
         "not_interested" -> "Client Not Interested"
-        "follow_up", "postponed" -> "Follow up"
+        "follow_up", "postponed" -> "Booking Follow Up"
         "interested" -> "Interested"
         "other" -> "Other"
         else -> "Outcome not recorded"

@@ -1,9 +1,7 @@
 package com.manjugroups.m_connect.auth
 
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
@@ -18,10 +16,7 @@ import android.view.View
 import android.widget.EditText
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.core.content.ContextCompat
 import com.google.android.gms.auth.api.phone.SmsRetriever
-import com.google.android.gms.common.api.CommonStatusCodes
-import com.google.android.gms.common.api.Status
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -59,7 +54,6 @@ class OtpActivity : AppCompatActivity() {
     // does not re-distribute or move focus mid-fill.
     private var fillingOtp = false
     private var isVerifying = false
-    private var smsReceiverRegistered = false
 
     // Copied-code pickup (WhatsApp "Copy code"): only a clip copied after this
     // screen opened, and each clip once.
@@ -79,32 +73,6 @@ class OtpActivity : AppCompatActivity() {
         if (result.resultCode != RESULT_OK) return@registerForActivityResult
         val message = result.data?.getStringExtra(SmsRetriever.EXTRA_SMS_MESSAGE)
         OtpCodeParser.extract(message)?.let { fillOtp(it, autoVerify = true) }
-    }
-
-    private val smsConsentReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action != SmsRetriever.SMS_RETRIEVED_ACTION) return
-            val extras = intent.extras ?: return
-            @Suppress("DEPRECATION")
-            val status = extras.get(SmsRetriever.EXTRA_STATUS) as? Status ?: return
-            if (status.statusCode != CommonStatusCodes.SUCCESS) return
-            // Zero-tap (SMS Retriever): an SMS ending in this app's hash comes
-            // with its text, no prompt.
-            extras.getString(SmsRetriever.EXTRA_SMS_MESSAGE)?.let { message ->
-                OtpCodeParser.extract(message)?.let { fillOtp(it, autoVerify = true) }
-                return
-            }
-            // Code already in (zero-tap, WhatsApp, typed): no consent prompt.
-            if (isVerifying || getOtp().length == OtpCodeParser.OTP_LENGTH) return
-            @Suppress("DEPRECATION")
-            val consentIntent = extras.getParcelable<Intent>(SmsRetriever.EXTRA_CONSENT_INTENT) ?: return
-            // Only launch Google Play services' own consent screen, and never
-            // with URI grants attached (intent-redirection hardening).
-            val target = consentIntent.resolveActivity(packageManager)
-            val grants = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-            if (target?.packageName != "com.google.android.gms" || consentIntent.flags and grants != 0) return
-            runCatching { smsConsentLauncher.launch(consentIntent) }
-        }
     }
 
     companion object {
@@ -290,21 +258,9 @@ class OtpActivity : AppCompatActivity() {
      * prompt, any OTP SMS).
      */
     private fun startSmsConsent() {
-        runCatching { SmsRetriever.getClient(this).startSmsRetriever() }
-        runCatching {
-            SmsRetriever.getClient(this).startSmsUserConsent(null)
-            if (!smsReceiverRegistered) {
-                ContextCompat.registerReceiver(
-                    this,
-                    smsConsentReceiver,
-                    IntentFilter(SmsRetriever.SMS_RETRIEVED_ACTION),
-                    SmsRetriever.SEND_PERMISSION,
-                    null,
-                    ContextCompat.RECEIVER_EXPORTED,
-                )
-                smsReceiverRegistered = true
-            }
-        }
+        // Already started on the login screen (before the send); starting again
+        // is harmless and covers an OTP screen reopened without it.
+        OtpSmsListener.start(this)
     }
 
     private fun setupListeners() {
@@ -326,8 +282,10 @@ class OtpActivity : AppCompatActivity() {
                     if (agencyDriver) null else LoginDeviceInfo.capture(applicationContext),
                 )
                 startTimer()
-                // A resent code is a new SMS: listen again.
+                // A resent code is a new SMS: listen again, and drop any old code.
+                OtpCodeInbox.take()
                 startSmsConsent()
+                watchOtpDelivery()
             }
         }
     }
@@ -345,12 +303,67 @@ class OtpActivity : AppCompatActivity() {
     /** WhatsApp one-tap / zero-tap codes, delivered through [OtpCodeInbox]. */
     private fun collectExternalCodes() {
         OtpCodeInbox.otpScreenOpen = true
-        OtpCodeInbox.take() // nothing from an earlier sign-in
+        // The login screen cleared the inbox when it sent the OTP, so whatever
+        // is here now (zero-tap SMS / WhatsApp that arrived during the send)
+        // belongs to this sign-in: fill it straight away.
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 OtpCodeInbox.latest.collect { delivery ->
                     if (delivery == null) return@collect
                     OtpCodeInbox.take()?.let { fillOtp(it, autoVerify = true) }
+                }
+            }
+        }
+        // SMS User Consent prompt, also possibly waiting from the login screen.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                OtpSmsListener.pendingConsent.collect { consent ->
+                    if (consent == null) return@collect
+                    OtpSmsListener.takeConsent()?.let(::launchSmsConsent)
+                }
+            }
+        }
+        watchOtpDelivery()
+    }
+
+    private fun launchSmsConsent(consentIntent: Intent) {
+        // Code already in (zero-tap, WhatsApp, typed): no consent prompt.
+        if (isVerifying || getOtp().length == OtpCodeParser.OTP_LENGTH) return
+        // Only launch Google Play services' own consent screen, and never
+        // with URI grants attached (intent-redirection hardening).
+        val target = consentIntent.resolveActivity(packageManager)
+        val grants = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        if (target?.packageName != "com.google.android.gms" || consentIntent.flags and grants != 0) return
+        runCatching { smsConsentLauncher.launch(consentIntent) }
+    }
+
+    private var deliveryWatch: kotlinx.coroutines.Job? = null
+
+    /**
+     * send-otp now answers before SMS / WhatsApp do. Check the delivery a few
+     * times; if both channels failed, say so and allow Resend right away
+     * instead of waiting out the 30 s timer for a code that isn't coming.
+     */
+    private fun watchOtpDelivery() {
+        if (agencyDriver) return
+        deliveryWatch?.cancel()
+        deliveryWatch = lifecycleScope.launch {
+            for (waitMs in longArrayOf(1_500, 2_500, 3_000, 4_000, 6_000)) {
+                kotlinx.coroutines.delay(waitMs)
+                if (isVerifying || getOtp().length == OtpCodeParser.OTP_LENGTH) return@launch
+                val status = runCatching {
+                    api.otpDeliveryStatus(com.manjugroups.m_connect.network.OtpStatusRequest(phone))
+                }.getOrNull() ?: continue
+                when (status.status) {
+                    "failed" -> {
+                        binding.tvOtpError.text = status.error?.takeIf { it.isNotBlank() }
+                            ?: "We couldn't send the OTP. Tap Resend."
+                        binding.tvOtpError.visibility = View.VISIBLE
+                        countDownTimer?.cancel()
+                        countDownTimer?.onFinish()
+                        return@launch
+                    }
+                    "sent", "none" -> return@launch
                 }
             }
         }
@@ -867,9 +880,6 @@ class OtpActivity : AppCompatActivity() {
         super.onDestroy()
         OtpCodeInbox.otpScreenOpen = false
         countDownTimer?.cancel()
-        if (smsReceiverRegistered) {
-            runCatching { unregisterReceiver(smsConsentReceiver) }
-            smsReceiverRegistered = false
-        }
+        deliveryWatch?.cancel()
     }
 }

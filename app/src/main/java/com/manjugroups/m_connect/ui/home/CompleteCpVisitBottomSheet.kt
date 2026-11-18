@@ -609,6 +609,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     private var bodyPostpone: View? = null
     private var tvPostNextDate: TextView? = null
     private var etPostNotes: EditText? = null
+    /** SV mode: "Booking Follow Up" reasons inside the follow-up card. */
+    private var svFollowUpForm: SvFollowUpForm? = null
 
     // Not Interested body — mirrors the web's SV "Mark not interested"
     // dialog (NOT_INTERESTED_REASONS in app/marketing/site-visits/[id]/page.tsx):
@@ -1035,6 +1037,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         list.add(opt("POSTPONE",
             when {
                 isSvCumCp -> "Follow-up"
+                isSiteVisitMode -> "Booking Follow Up"
                 svStyle -> "Follow-up"
                 else -> "Follow-up"
             },
@@ -1279,15 +1282,16 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         // already a site visit — fade + disable it.
         tabSiteVisit.cell?.isClickable = false
         tabSiteVisit.cell?.alpha = 0.35f
-        tabPostpone.label?.text = "Follow-up"
+        tabPostpone.label?.text = "Booking Follow Up"
         view?.findViewById<TextView>(R.id.tvPostDateLabel)?.text = "Follow-up date"
         view?.findViewById<TextView>(R.id.tvPostDateHelp)?.text =
             "When should the client be followed up."
-        view?.findViewById<TextView>(R.id.tvPostReasonHelp)?.text =
-            "Why does this client need a follow up."
+        // The ticked reasons (below) carry the why; the typed box is extra notes.
+        view?.findViewById<TextView>(R.id.tvPostReasonHelp)?.text = "Notes (optional)"
         view?.findViewById<TextView>(R.id.tvPostReasonSubtitle)?.text =
-            "Note the client's decision so the telecaller can follow up."
-        etPostNotes?.hint = "Reason for follow up"
+            "Anything else the telecaller should know."
+        etPostNotes?.hint = "Notes for the telecaller"
+        svFollowUpForm?.setVisible(true)
 
         // When launched from a specific SV outcome button, keep the
         // same shared form UI but remove the outcome switcher so the
@@ -1297,7 +1301,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             view?.findViewById<View>(R.id.outcomeTopTabs)?.visibility = View.GONE
             view?.findViewById<TextView>(R.id.tvOutcomeTitle)?.text = when (lockedOutcome) {
                 Outcome.BOOKING -> "Converted as Booking"
-                Outcome.POSTPONE -> "Follow-up"
+                Outcome.POSTPONE -> if (isSiteVisitMode) "Booking Follow Up" else "Follow-up"
                 Outcome.NOT_INTERESTED -> "Client Not Interested"
                 Outcome.SITE_VISIT -> "Site Visit"
             }
@@ -1656,6 +1660,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         bodyPostpone = view.findViewById(R.id.bodyPostpone)
         tvPostNextDate = view.findViewById(R.id.tvPostNextDate)
         etPostNotes = view.findViewById(R.id.etPostNotes)
+        svFollowUpForm = SvFollowUpForm(view, viewLifecycleOwner.lifecycleScope)
         // Next-visit date can't be in the past — a postpone always moves
         // the visit forward.
         view.findViewById<View>(R.id.rowPostNextDate)?.setOnClickListener {
@@ -2749,7 +2754,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             Outcome.BOOKING -> "Booking" to "Converted to booking"
             Outcome.SITE_VISIT -> "Site Visit" to "Site visit details"
             Outcome.POSTPONE ->
-                "Follow-up" to "Follow-up details"
+                if (isSiteVisitMode) "Booking Follow Up" to "Follow-up date and the reasons"
+                else "Follow-up" to "Follow-up details"
             Outcome.NOT_INTERESTED -> "Not Interested" to "Client not interested"
         }
         view?.findViewById<TextView>(R.id.tvOutcomeTitle)?.text = title
@@ -5269,7 +5275,13 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             return
         }
         val reason = etPostNotes?.text?.toString()?.trim().orEmpty()
-        if (reason.isBlank()) {
+        if (isSiteVisitMode && svFollowUpForm?.isVisible == true) {
+            // Booking Follow Up: the ticked reasons are required; notes optional.
+            SvFollowUpRules.validate(svFollowUpForm!!.draft())?.let {
+                showError(it)
+                return
+            }
+        } else if (reason.isBlank()) {
             showError(
                 if (isSiteVisitMode) "Enter a reason for follow up"
                 else "Enter a reason for follow-up",
@@ -5313,6 +5325,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             showError("Pick a valid next visit date")
             return
         }
+        val followUpDraft = svFollowUpForm?.takeIf { it.isVisible }?.draft()
         btnSubmit?.let { ButtonLoader.start(it, "Saving") }
         viewLifecycleOwner.lifecycleScope.launch {
             try {
@@ -5326,7 +5339,9 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                         id = svId,
                         outcome = OUTCOME_FOLLOW_UP,
                         followupDueDate = apiDate,
-                        notes = reason,
+                        notes = reason.ifBlank { null },
+                        followUpReasons = followUpDraft?.reasons,
+                        followUpDetails = followUpDraft?.let { SvFollowUpRules.details(it) },
                     ),
                 )
                 if (!resp.success) {
