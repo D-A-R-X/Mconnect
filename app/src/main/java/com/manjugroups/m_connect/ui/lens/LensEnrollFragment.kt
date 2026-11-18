@@ -68,6 +68,8 @@ class LensEnrollFragment : Fragment() {
     private val existingSamples by lazy { requireArguments().getInt(ARG_EXISTING, 0) }
     /** Lens Test build only: capture + review, photos saved on the phone, nothing uploaded. */
     private val dryRun by lazy { requireArguments().getBoolean(ARG_DRY_RUN, false) }
+    /** Back camera by default: an admin photographs the staff member. */
+    private var useFrontCamera = false
 
     private var cameraExecutor: ExecutorService? = null
     private var engine: LensCaptureEngine? = null
@@ -135,6 +137,8 @@ class LensEnrollFragment : Fragment() {
         binding.btnLensRecordAgain.setOnClickListener { viewModel.recordAgain() }
         binding.swLensReplace.setOnCheckedChangeListener { _, checked -> viewModel.setReplace(checked) }
         binding.btnLensUpload.setOnClickListener { onUploadClicked() }
+        binding.btnLensSwitchCamera.setOnClickListener { switchCamera() }
+        binding.lensGuide.mirroredPreview = useFrontCamera
         requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() = confirmLeave()
         })
@@ -200,7 +204,14 @@ class LensEnrollFragment : Fragment() {
                 val eng = engine ?: return@addListener
                 analysis.setAnalyzer(exec, eng)
                 provider.unbindAll()
-                provider.bindToLifecycle(viewLifecycleOwner, CameraSelector.DEFAULT_FRONT_CAMERA, preview, analysis)
+                var selector = if (useFrontCamera) CameraSelector.DEFAULT_FRONT_CAMERA else CameraSelector.DEFAULT_BACK_CAMERA
+                if (!provider.hasCamera(selector)) {
+                    // Phone without that camera: fall back to the other one.
+                    useFrontCamera = !useFrontCamera
+                    selector = if (useFrontCamera) CameraSelector.DEFAULT_FRONT_CAMERA else CameraSelector.DEFAULT_BACK_CAMERA
+                }
+                b.lensGuide.mirroredPreview = useFrontCamera
+                provider.bindToLifecycle(viewLifecycleOwner, selector, preview, analysis)
                 eng.pending = viewModel.state.value.pending
                 eng.paused = false
                 cameraBound = true
@@ -208,6 +219,16 @@ class LensEnrollFragment : Fragment() {
                 Floater.error(getString(R.string.lens_camera_failed))
             }
         }, ContextCompat.getMainExecutor(requireContext()))
+    }
+
+    private fun switchCamera() {
+        if (cameraStarting) return
+        useFrontCamera = !useFrontCamera
+        arrowSide = Int.MIN_VALUE // re-point the arrow for the new preview
+        engine?.resetPoseState()
+        runCatching { cameraProvider?.unbindAll() }
+        cameraBound = false
+        maybeStartCamera()
     }
 
     private fun stopCamera() {
@@ -354,8 +375,10 @@ class LensEnrollFragment : Fragment() {
         val side = when {
             target == null || target == LensPose.STRAIGHT -> 0
             live?.poseNow == target -> 0
-            target.targetYaw > 0 -> -1 // person's left = screen left (mirrored preview)
-            else -> 1
+            // Front preview is mirrored (person's left = screen left); the back
+            // camera's isn't (person's left = screen right).
+            target.targetYaw > 0 -> if (useFrontCamera) -1 else 1
+            else -> if (useFrontCamera) 1 else -1
         }
         setArrow(side)
     }

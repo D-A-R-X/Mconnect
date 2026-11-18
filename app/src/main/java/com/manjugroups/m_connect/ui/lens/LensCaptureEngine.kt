@@ -81,6 +81,7 @@ class LensCaptureEngine(
     private var lastFrameAt = 0L
     private var fps = 0f
     private var lastStats: LensPixelStats? = null
+    private var lastLogAt = 0L
 
     /** Poses still wanted; set from the UI thread. */
     @Volatile var pending: Set<LensPose> = emptySet()
@@ -89,6 +90,13 @@ class LensCaptureEngine(
     @Volatile var paused: Boolean = false
 
     @Volatile private var closed = false
+
+    /** Camera switched: drop the stillness history and any half-held frames. */
+    fun resetPoseState() {
+        motion.reset()
+        selector.reset()
+        goodSince.clear()
+    }
 
     fun resetPose(pose: LensPose) {
         selector.clear(pose)
@@ -167,6 +175,10 @@ class LensCaptureEngine(
             }
 
             val holding = LensPose.guidedOrder.firstOrNull { it in pending && selector.candidate(it) != null }
+            if (com.manjugroups.m_connect.BuildConfig.DEBUG && now - lastLogAt >= 300) {
+                lastLogAt = now
+                android.util.Log.d("LensCapture", "hint=${hint ?: "ok"} pose=${pose ?: "-"} ${debugLine(sample, still, lastStats).replace('\n', ' ')}")
+            }
             listener.onLiveState(
                 LensLiveState(
                     hint = hint,
@@ -201,7 +213,8 @@ class LensCaptureEngine(
         val mouthL = face.getLandmark(FaceLandmark.MOUTH_LEFT)?.position
         val mouthR = face.getLandmark(FaceLandmark.MOUTH_RIGHT)?.position
         val all = leftEye != null && rightEye != null && nose != null && mouthL != null && mouthR != null
-        val between = all && nose!!.x > min(leftEye!!.x, rightEye!!.x) && nose.x < max(leftEye.x, rightEye.x)
+        val eyesAndNose = leftEye != null && rightEye != null && nose != null
+        val between = eyesAndNose && nose!!.x > min(leftEye!!.x, rightEye!!.x) && nose.x < max(leftEye.x, rightEye.x)
         return LensFaceSample(
             faceCount = 1,
             yaw = face.headEulerAngleY,
@@ -212,6 +225,7 @@ class LensCaptureEngine(
             smiling = face.smilingProbability,
             hasAllLandmarks = all,
             noseBetweenEyes = between,
+            hasEyesAndNose = eyesAndNose,
             faceLeft = box.left.toFloat(),
             faceTop = box.top.toFloat(),
             faceWidth = box.width().toFloat(),

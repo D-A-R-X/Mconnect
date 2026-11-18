@@ -98,6 +98,17 @@
                     android:textColor="@color/lens_overlay_text_secondary"
                     android:textSize="12sp" />
             </LinearLayout>
+
+            <!-- Back camera by default (an admin photographs the staff member); flips to the front. -->
+            <ImageView
+                android:id="@+id/btnLensSwitchCamera"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Switch camera"
+                android:padding="9dp"
+                android:src="@drawable/ic_camera_switch"
+                app:tint="@android:color/white" />
         </LinearLayout>
 
         <!-- Prompt + live hint + actions at the bottom -->

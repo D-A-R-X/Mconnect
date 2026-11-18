@@ -121,13 +121,33 @@ class LensFaceGuideView @JvmOverloads constructor(
         }
     }
 
-    /** Canvas angles: 0 = 3 o'clock, clockwise. Screen-left = person's left. */
-    private fun arcFor(pose: LensPose): Pair<Float, Float> = when (pose) {
+    /**
+     * True for the front camera (selfie preview: screen-left = person's left).
+     * The back camera's preview isn't mirrored, so the side arcs swap.
+     */
+    var mirroredPreview: Boolean = true
+        set(value) {
+            if (field != value) {
+                field = value
+                invalidate()
+            }
+        }
+
+    /** Canvas angles: 0 = 3 o'clock, clockwise. Screen-left = person's left on a mirrored preview. */
+    private fun arcFor(pose: LensPose): Pair<Float, Float> = when (if (mirroredPreview) pose else pose.mirrored()) {
         LensPose.STRAIGHT -> 245f to 50f
         LensPose.SLIGHT_LEFT -> 185f to 50f
         LensPose.MORE_LEFT -> 125f to 50f
         LensPose.SLIGHT_RIGHT -> 305f to 50f
         LensPose.MORE_RIGHT -> 5f to 50f
+    }
+
+    private fun LensPose.mirrored(): LensPose = when (this) {
+        LensPose.SLIGHT_LEFT -> LensPose.SLIGHT_RIGHT
+        LensPose.MORE_LEFT -> LensPose.MORE_RIGHT
+        LensPose.SLIGHT_RIGHT -> LensPose.SLIGHT_LEFT
+        LensPose.MORE_RIGHT -> LensPose.MORE_LEFT
+        LensPose.STRAIGHT -> LensPose.STRAIGHT
     }
 
     private fun withAlpha(color: Int, alpha: Int) =

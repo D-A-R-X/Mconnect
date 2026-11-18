@@ -57,6 +57,8 @@ data class LensFaceSample(
     val imageWidth: Int,
     val imageHeight: Int,
     val timestampMs: Long,
+    /** Both eyes and the nose base were found (a turned head often loses a mouth corner). */
+    val hasEyesAndNose: Boolean = hasAllLandmarks,
 ) {
     val centerX: Float get() = faceLeft + faceWidth / 2f
     val centerY: Float get() = faceTop + faceHeight / 2f
@@ -172,9 +174,14 @@ object LensCapturePolicy {
             return LensHint.CENTER_FACE
         }
         if (s.faceWidth < MIN_FACE_PX) return LensHint.MOVE_CLOSER
-        if (!s.hasAllLandmarks || !s.noseBetweenEyes) {
-            // A turned head hides the nose/eye alignment; a covered face hides landmarks.
-            return if (abs(s.yaw) >= SLIGHT_MAX) LensHint.TURN_LESS else LensHint.COVERED
+        if (abs(s.yaw) < SLIGHT_MIN) {
+            // Straight: every landmark must show; a covered face hides some.
+            if (!s.hasAllLandmarks || !s.noseBetweenEyes) return LensHint.COVERED
+        } else {
+            // Turned: the detector often drops the far mouth corner or eye on a
+            // turned face, so only the Lens alignment rule decides: when the
+            // eyes and nose are found, the nose must sit between the eyes.
+            if (s.hasEyesAndNose && !s.noseBetweenEyes) return LensHint.TURN_LESS
         }
         val eyesMin = if (abs(s.yaw) >= SLIGHT_MIN) EYES_OPEN_MIN_TURNED else EYES_OPEN_MIN
         // The detector often can't classify the eyes of a turned head (null):

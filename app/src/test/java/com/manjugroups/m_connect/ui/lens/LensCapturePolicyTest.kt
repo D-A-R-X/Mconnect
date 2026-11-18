@@ -97,6 +97,8 @@ class LensCapturePolicyTest {
         // Unclassified eyes (common on a turned head) are unknown, not closed.
         assertNull(LensCapturePolicy.geometryHint(sample(eyes = null)))
         assertEquals(LensHint.NEUTRAL_FACE, LensCapturePolicy.geometryHint(sample(smile = 0.8f)))
+        // A turned head that loses a mouth corner / far eye in the detector is still usable.
+        assertNull(LensCapturePolicy.geometryHint(sample(yaw = 15f, landmarks = false)))
         // The far eye of a turned head may read lower and is still accepted.
         assertNull(LensCapturePolicy.geometryHint(sample(yaw = 15f, eyes = 0.5f)))
     }
