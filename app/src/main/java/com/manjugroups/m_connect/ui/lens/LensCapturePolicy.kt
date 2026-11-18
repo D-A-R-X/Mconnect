@@ -35,6 +35,15 @@ enum class LensPose(
         val required: List<LensPose> = entries.filter { it.required }
         fun fromKey(key: String?): LensPose? = entries.firstOrNull { it.key == key }
     }
+
+    /** Same angle on the other side (straight stays straight). */
+    fun mirror(): LensPose = when (this) {
+        SLIGHT_LEFT -> SLIGHT_RIGHT
+        MORE_LEFT -> MORE_RIGHT
+        SLIGHT_RIGHT -> SLIGHT_LEFT
+        MORE_RIGHT -> MORE_LEFT
+        STRAIGHT -> STRAIGHT
+    }
 }
 
 /** What the detector saw in one frame (all pixel values in the upright image). */
@@ -96,6 +105,7 @@ enum class LensHint(val text: String) {
     BACKLIGHT("Light is behind you. Turn to face the light"),
     UNEVEN_LIGHT("Light is uneven on your face"),
     BLURRY("Hold the phone steady"),
+    TURN_OTHER_WAY("Turn the other way"),
 }
 
 object LensCapturePolicy {
@@ -107,6 +117,15 @@ object LensCapturePolicy {
     const val MORE_MAX = 30f
     /** Head tilt toward a shoulder. ML Kit's angles jitter a few degrees per frame. */
     const val LEVEL_MAX = 12f
+    /**
+     * Capture windows sit inside the doc's ranges with gaps between them, so a
+     * head held near a boundary (e.g. 20 degrees) can't fill two poses at once.
+     */
+    const val SLIGHT_CAPTURE_MIN = 11f
+    const val SLIGHT_CAPTURE_MAX = 19f
+    const val MORE_CAPTURE_MIN = 22f
+    /** Every photo must differ from the ones already taken by at least this much yaw. */
+    const val MIN_POSE_SEPARATION = 8f
     /** Up/down: a phone held a little low reads ~10 degrees; Lens tolerates mild pitch. */
     const val PITCH_MAX = 15f
 
@@ -141,12 +160,20 @@ object LensCapturePolicy {
         val a = abs(yaw)
         return when {
             a <= STRAIGHT_MAX -> LensPose.STRAIGHT
-            a < SLIGHT_MIN -> null
-            a < SLIGHT_MAX -> if (yaw > 0) LensPose.SLIGHT_LEFT else LensPose.SLIGHT_RIGHT
+            a < SLIGHT_CAPTURE_MIN -> null
+            a <= SLIGHT_CAPTURE_MAX -> if (yaw > 0) LensPose.SLIGHT_LEFT else LensPose.SLIGHT_RIGHT
+            a < MORE_CAPTURE_MIN -> null
             a <= MORE_MAX -> if (yaw > 0) LensPose.MORE_LEFT else LensPose.MORE_RIGHT
             else -> null
         }
     }
+
+    /**
+     * Whether a frame at [yaw] may fill [pose]: it must be the pose being asked
+     * for and differ enough from every photo already taken (yaw by pose).
+     */
+    fun distinctEnough(yaw: Float, taken: Map<LensPose, Float>, pose: LensPose): Boolean =
+        taken.none { (p, y) -> p != pose && abs(yaw - y) < MIN_POSE_SEPARATION }
 
     /**
      * Geometry + expression checks that need no pixels. Returns the first

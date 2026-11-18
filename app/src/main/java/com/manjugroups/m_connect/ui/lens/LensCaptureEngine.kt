@@ -72,7 +72,7 @@ class LensCaptureEngine(
             .build(),
     )
 
-    private class Frame(val bitmap: Bitmap, val faceWidth: Int)
+    private class Frame(val bitmap: Bitmap, val faceWidth: Int, val yaw: Float)
 
     private val motion = LensMotionTracker()
     private val selector = LensBestFrameSelector<Frame>()
@@ -82,6 +82,8 @@ class LensCaptureEngine(
     private var fps = 0f
     private var lastStats: LensPixelStats? = null
     private var lastLogAt = 0L
+    /** Yaw each captured pose was taken at (separation check). */
+    private val takenYaw = java.util.concurrent.ConcurrentHashMap<LensPose, Float>()
 
     /** Poses still wanted; set from the UI thread. */
     @Volatile var pending: Set<LensPose> = emptySet()
@@ -135,8 +137,19 @@ class LensCaptureEngine(
             val pose = if (geometry == null) LensCapturePolicy.poseFor(sample.yaw) else null
             val wanted = pending
 
+            // Only the pose being asked for (guided order) can capture, and only
+            // from a head angle clearly different from the photos already taken.
+            val target = LensPose.guidedOrder.firstOrNull { it in wanted }
+            val taken = takenYaw.filterKeys { it !in wanted }
             var hint: LensHint? = geometry
-            if (hint == null && pose != null && pose in wanted) {
+            if (hint == null && pose != null && target != null && pose != target &&
+                target != LensPose.STRAIGHT && pose == target.mirror()
+            ) {
+                hint = LensHint.TURN_OTHER_WAY
+            }
+            if (hint == null && pose != null && pose == target &&
+                LensCapturePolicy.distinctEnough(sample.yaw, taken, pose)
+            ) {
                 if (!still) {
                     hint = LensHint.HOLD_STILL
                 } else {
@@ -150,7 +163,7 @@ class LensCaptureEngine(
                         hint = LensCapturePolicy.pixelHint(pose, stats, relaxed)
                         if (hint == null) {
                             val score = LensCapturePolicy.score(pose, sample, stats)
-                            selector.offer(pose, score, now, Frame(bitmap, face.boundingBox.width()))
+                            selector.offer(pose, score, now, Frame(bitmap, face.boundingBox.width(), sample.yaw))
                         }
                     }
                 }
@@ -161,6 +174,7 @@ class LensCaptureEngine(
                 selector.take(candidate.pose) ?: continue
                 goodSince.remove(candidate.pose)
                 if (candidate.pose !in pending) continue
+                takenYaw[candidate.pose] = candidate.frame.yaw
                 val jpeg = encode(candidate.frame.bitmap)
                 listener.onCaptured(
                     LensCapturedPhoto(

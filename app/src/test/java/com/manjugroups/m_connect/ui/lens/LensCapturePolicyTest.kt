@@ -46,7 +46,16 @@ class LensCapturePolicyTest {
         assertEquals(LensPose.MORE_LEFT, LensCapturePolicy.poseFor(25f))
         assertEquals(LensPose.MORE_RIGHT, LensCapturePolicy.poseFor(-30f))
         assertNull("past 30 degrees is never used", LensCapturePolicy.poseFor(31f))
+        assertNull("gap between slight and more: no double capture at 20", LensCapturePolicy.poseFor(20.5f))
         assertNull(LensCapturePolicy.poseFor(-45f))
+    }
+
+    @Test
+    fun aPoseMustDifferFromPhotosAlreadyTaken() {
+        val taken = mapOf(LensPose.SLIGHT_LEFT to 18f)
+        assertFalse("too close to slight left", LensCapturePolicy.distinctEnough(23f, taken, LensPose.MORE_LEFT))
+        assertTrue(LensCapturePolicy.distinctEnough(27f, taken, LensPose.MORE_LEFT))
+        assertTrue("its own retake is fine", LensCapturePolicy.distinctEnough(18f, taken, LensPose.SLIGHT_LEFT))
     }
 
     @Test
