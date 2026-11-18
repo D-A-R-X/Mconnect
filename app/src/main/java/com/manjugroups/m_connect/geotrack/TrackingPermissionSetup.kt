@@ -15,7 +15,6 @@ import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.core.content.PackageManagerCompat
-import androidx.core.content.UnusedAppRestrictionsConstants
 import com.google.android.gms.common.api.ResolvableApiException
 import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationServices
@@ -218,18 +217,13 @@ class TrackingPermissionSetup(
         future.addListener(
             {
                 if (!isRunning) return@addListener
-                val restrictionOn = when (runCatching { future.get() }.getOrNull()) {
-                    UnusedAppRestrictionsConstants.API_30_BACKPORT,
-                    UnusedAppRestrictionsConstants.API_30,
-                    UnusedAppRestrictionsConstants.API_31 -> true
-                    else -> false
-                }
+                val restrictionOn = UnusedAppRestrictions.isRestrictionOn(runCatching { future.get() }.getOrNull())
                 if (!restrictionOn) {
                     advance()
                 } else {
                     Toast.makeText(
                         host,
-                        "Turn OFF \"Pause app activity if unused\", then go back",
+                        "Turn OFF \"Manage app if unused\" (leave it OFF), then go back",
                         Toast.LENGTH_LONG,
                     ).show()
                     launchScreenOrSkip(intent)

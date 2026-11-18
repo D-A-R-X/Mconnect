@@ -488,15 +488,19 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="@font/inter_semibold"
-                android:text="Manage app if unused"
+                android:text="Keep app active"
                 android:textColor="#101828"
                 android:textSize="16sp" />
+            <!-- The switch reads ON when done (like the other rows); the subtitle
+                 states the real system setting, which must be OFF. Titling the row
+                 with the system label made staff flip an already-off toggle ON. -->
             <TextView
+                android:id="@+id/tvManageAppUnusedSubtitle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
                 android:fontFamily="@font/inter_regular"
-                android:text="Turn OFF so the app isn't paused and its permissions removed when unused"
+                android:text="Tap, then turn OFF &quot;Manage app if unused&quot; for Mconnect"
                 android:textColor="#475467"
                 android:textSize="13sp" />
         </LinearLayout>
