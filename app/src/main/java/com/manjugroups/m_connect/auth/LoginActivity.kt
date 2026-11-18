@@ -136,6 +136,11 @@ class LoginActivity : AppCompatActivity() {
                     // WhatsApp one-tap / zero-tap autofill needs this before the
                     // OTP is sent; harmless when WhatsApp isn't installed.
                     WhatsAppOtp.sendHandshake(this)
+                    // Listen for the SMS before sending: it often lands before
+                    // the OTP screen opens, and a code from an earlier sign-in
+                    // must not be filled.
+                    OtpCodeInbox.take()
+                    OtpSmsListener.start(this)
                     viewModel.sendOtp(phone, LoginDeviceInfo.capture(applicationContext))
                 }
             }

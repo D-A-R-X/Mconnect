@@ -27,6 +27,10 @@ interface ApiService {
     @POST("api/auth/send-otp")
     suspend fun sendOtp(@Body body: SendOtpRequest): SendOtpResponse
 
+    /** Where the login OTP is (send-otp answers before SMS / WhatsApp do). */
+    @POST("api/auth/otp-status")
+    suspend fun otpDeliveryStatus(@Body body: OtpStatusRequest): OtpStatusResponse
+
     @POST("api/auth/verify-otp")
     suspend fun verifyOtp(@Body body: VerifyOtpRequest): VerifyOtpResponse
 
@@ -1677,6 +1681,15 @@ data class SendOtpResponse(
     val error: String? = null,
     val code: String? = null,
     val boundAccountName: String? = null,
+    /** True when SMS / WhatsApp are still being sent in the background. */
+    val deliveryPending: Boolean? = null,
+)
+data class OtpStatusRequest(val phone: String)
+data class OtpStatusResponse(
+    val success: Boolean? = null,
+    /** pending | sent | failed | none */
+    val status: String? = null,
+    val error: String? = null,
 )
 data class VerifyOtpRequest(
     val phone: String,
