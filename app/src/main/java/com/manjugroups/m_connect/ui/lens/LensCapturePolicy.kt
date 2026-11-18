@@ -219,6 +219,34 @@ object LensCapturePolicy {
         return null
     }
 
+    /** Head-angle window (|yaw|, degrees) a pose captures in. */
+    fun windowFor(pose: LensPose): ClosedFloatingPointRange<Float> = when (pose) {
+        LensPose.STRAIGHT -> 0f..STRAIGHT_MAX
+        LensPose.SLIGHT_LEFT, LensPose.SLIGHT_RIGHT -> SLIGHT_CAPTURE_MIN..SLIGHT_CAPTURE_MAX
+        LensPose.MORE_LEFT, LensPose.MORE_RIGHT -> MORE_CAPTURE_MIN..MORE_MAX
+    }
+
+    /**
+     * How far the head has turned toward [target], 0..1 (1 = inside its window).
+     * Turning the wrong way reads 0; overshooting falls back so the bar tells
+     * the person to turn back a little. Drives the ring's progress arc.
+     */
+    fun turnProgress(target: LensPose, yaw: Float): Float {
+        val w = windowFor(target)
+        if (target == LensPose.STRAIGHT) {
+            val a = abs(yaw)
+            return if (a <= w.endInclusive) 1f else (1f - (a - w.endInclusive) / 20f).coerceIn(0f, 1f)
+        }
+        // Positive toward the target's side (person's left = positive yaw).
+        val toward = if (target.targetYaw > 0) yaw else -yaw
+        return when {
+            toward <= 0f -> 0f
+            toward < w.start -> toward / w.start
+            toward <= w.endInclusive -> 1f
+            else -> (1f - (toward - w.endInclusive) / 12f).coerceIn(0.4f, 1f)
+        }
+    }
+
     /** Light and sharpness checks for a frame that passed [geometryHint]. */
     fun pixelHint(pose: LensPose, p: LensPixelStats, relaxedSharpness: Boolean): LensHint? {
         if (p.faceLuma < LUMA_MIN) return LensHint.TOO_DARK
@@ -307,7 +335,7 @@ class LensMotionTracker(
  * short hold window; better frames inside it replace the candidate; when the
  * window ends the pose is captured.
  */
-class LensBestFrameSelector<T>(private val holdMs: Long = 500L) {
+class LensBestFrameSelector<T>(val holdMs: Long = 500L) {
     data class Candidate<T>(val pose: LensPose, val score: Double, val openedAt: Long, val frame: T)
 
     private val candidates = mutableMapOf<LensPose, Candidate<T>>()

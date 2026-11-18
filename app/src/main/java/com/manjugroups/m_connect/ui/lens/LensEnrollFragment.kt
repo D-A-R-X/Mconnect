@@ -213,6 +213,13 @@ class LensEnrollFragment : Fragment() {
                 b.lensGuide.mirroredPreview = useFrontCamera
                 provider.bindToLifecycle(viewLifecycleOwner, selector, preview, analysis)
                 eng.pending = viewModel.state.value.pending
+                if (dryRun && eng.frameLog == null) {
+                    // Lens Test: per-frame log for tuning (adb pull .../files/lens-test/frames.log).
+                    eng.frameLog = java.io.File(requireContext().getExternalFilesDir(null), "lens-test/frames.log").also {
+                        it.parentFile?.mkdirs()
+                        it.writeText("")
+                    }
+                }
                 eng.paused = false
                 cameraBound = true
             } catch (e: Exception) {
@@ -334,8 +341,8 @@ class LensEnrollFragment : Fragment() {
         } else {
             b.tvLensHint.visibility = View.INVISIBLE
         }
-        b.lensGuide.setFaceOk(state?.faceFound == true && hint == null)
         paintSegments(vm, state)
+        b.lensGuide.setProgress(state?.target, state?.progress ?: 0f)
         renderPrompt(vm.target, state)
     }
 

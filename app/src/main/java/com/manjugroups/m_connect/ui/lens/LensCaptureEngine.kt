@@ -43,6 +43,9 @@ data class LensLiveState(
     val holding: LensPose?,
     /** One-line readout of what the detector sees (shown in the Lens Test build). */
     val debug: String? = null,
+    /** Pose being asked for and its progress 0..1: turning (0..0.75) then the still hold (0.75..1). */
+    val target: LensPose? = null,
+    val progress: Float = 0f,
 )
 
 /**
@@ -61,10 +64,10 @@ class LensCaptureEngine(
 
     private val detector: FaceDetector = FaceDetection.getClient(
         FaceDetectorOptions.Builder()
-            // FAST keeps the live loop at several frames a second on mid-range
-            // phones (ACCURATE ran too slowly for the stillness check); Lens
-            // runs its own detector on the photos we send.
-            .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
+            // ACCURATE: its head angles are steadier and its landmarks hold on a
+            // turned face. The stillness check is time-based, so the slower
+            // frame rate no longer blocks capture; yaw is smoothed below.
+            .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
             .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)
             .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_ALL)
             .setMinFaceSize(0.15f)
@@ -82,6 +85,12 @@ class LensCaptureEngine(
     private var fps = 0f
     private var lastStats: LensPixelStats? = null
     private var lastLogAt = 0L
+    /** Smoothed yaw (exponential average) for pose choice and the progress arc. */
+    private var smoothYaw: Float? = null
+
+    /** Lens Test build: one line per frame appended here for tuning. */
+    @Volatile var frameLog: java.io.File? = null
+
     /** Yaw each captured pose was taken at (separation check). */
     private val takenYaw = java.util.concurrent.ConcurrentHashMap<LensPose, Float>()
 
@@ -131,8 +140,12 @@ class LensCaptureEngine(
             val upright = rotation % 180 == 0
             val w = if (upright) image.width else image.height
             val h = if (upright) image.height else image.width
-            val sample = toSample(faces, w, h, now)
-            val still = motion.update(sample)
+            val raw = toSample(faces, w, h, now)
+            val still = motion.update(raw)
+            // Smooth only the yaw used for buckets/progress; jitter of a few
+            // degrees per frame otherwise flips a head between poses.
+            smoothYaw = if (raw.faceCount != 1) null else smoothYaw?.let { it * 0.5f + raw.yaw * 0.5f } ?: raw.yaw
+            val sample = if (raw.faceCount == 1) raw.copy(yaw = smoothYaw ?: raw.yaw) else raw
             val geometry = LensCapturePolicy.geometryHint(sample)
             val pose = if (geometry == null) LensCapturePolicy.poseFor(sample.yaw) else null
             val wanted = pending
@@ -189,6 +202,16 @@ class LensCaptureEngine(
             }
 
             val holding = LensPose.guidedOrder.firstOrNull { it in pending && selector.candidate(it) != null }
+            val turn = if (target != null && sample.faceCount == 1) LensCapturePolicy.turnProgress(target, sample.yaw) else 0f
+            val held = target?.let { selector.candidate(it) }?.let {
+                ((now - it.openedAt).toFloat() / selector.holdMs).coerceIn(0f, 1f)
+            }
+            val progress = if (held != null) 0.75f + 0.25f * held else 0.75f * turn
+            frameLog?.let { f ->
+                runCatching {
+                    f.appendText("${now} target=${target?.key} hint=${hint ?: "ok"} pose=${pose?.key} rawYaw=${"%.1f".format(raw.yaw)} prog=${"%.2f".format(progress)} ${debugLine(sample, still, lastStats).replace('\n', ' ')}\n")
+                }
+            }
             if (com.manjugroups.m_connect.BuildConfig.DEBUG && now - lastLogAt >= 300) {
                 lastLogAt = now
                 android.util.Log.d("LensCapture", "hint=${hint ?: "ok"} pose=${pose ?: "-"} ${debugLine(sample, still, lastStats).replace('\n', ' ')}")
@@ -202,6 +225,8 @@ class LensCaptureEngine(
                     still = still,
                     holding = holding,
                     debug = debugLine(sample, still, lastStats),
+                    target = target,
+                    progress = progress,
                 ),
             )
         } finally {

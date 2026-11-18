@@ -72,6 +72,23 @@ class LensFaceGuideView @JvmOverloads constructor(
         invalidate()
     }
 
+    /**
+     * Live progress of the pose being asked for: the segment fills like a
+     * progress bar as the head turns toward it (0..0.75) and through the still
+     * hold (0.75..1). Replaces the old green/grey outline switching.
+     */
+    private var progressPose: LensPose? = null
+    private var progressValue = 0f
+    private var shownProgress = 0f
+
+    fun setProgress(pose: LensPose?, value: Float) {
+        val v = value.coerceIn(0f, 1f)
+        if (pose != progressPose) shownProgress = 0f
+        progressPose = pose
+        progressValue = v
+        invalidate()
+    }
+
     fun setFaceOk(ok: Boolean) {
         if (faceOk == ok) return
         faceOk = ok
@@ -106,18 +123,36 @@ class LensFaceGuideView @JvmOverloads constructor(
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         canvas.drawPath(cutout, dimPaint)
-        outlinePaint.color = if (faceOk) Color.argb(230, 255, 255, 255) else Color.argb(110, 255, 255, 255)
+        outlinePaint.color = Color.argb(170, 255, 255, 255)
         canvas.drawOval(oval, outlinePaint)
         for ((pose, state) in segments) {
             val (start, sweep) = arcFor(pose)
             segmentPaint.color = when (state) {
                 Segment.DONE -> successColor
-                Segment.HOLDING -> blend(accentColor, successColor, pulse)
-                Segment.ACTIVE -> withAlpha(Color.WHITE, (140 + 115 * pulse).toInt())
+                // The asked-for pose: a soft track the progress arc fills over.
+                Segment.HOLDING, Segment.ACTIVE -> withAlpha(Color.WHITE, (70 + 50 * pulse).toInt())
                 Segment.SKIPPED -> Color.argb(45, 255, 255, 255)
                 Segment.PENDING -> Color.argb(80, 255, 255, 255)
             }
             canvas.drawArc(ring, start, sweep, false, segmentPaint)
+        }
+        val pose = progressPose
+        if (pose != null && segments[pose] != Segment.DONE && segments[pose] != Segment.SKIPPED) {
+            // Ease toward the live value so the bar moves smoothly between frames.
+            shownProgress += (progressValue - shownProgress) * 0.35f
+            if (kotlin.math.abs(progressValue - shownProgress) > 0.005f) postInvalidateOnAnimation()
+            val (start, sweep) = arcFor(pose)
+            val filled = sweep * shownProgress
+            segmentPaint.color = if (shownProgress >= 0.75f) blend(accentColor, successColor, (shownProgress - 0.75f) / 0.25f) else accentColor
+            val mid = ((start + sweep / 2f) % 360f + 360f) % 360f
+            when {
+                // Top (straight): grow out from the middle.
+                mid in 240f..300f -> canvas.drawArc(ring, start + (sweep - filled) / 2f, filled, false, segmentPaint)
+                // Left half of the ring: fill downward from the end nearest the top.
+                mid in 90f..270f -> canvas.drawArc(ring, start + sweep, -filled, false, segmentPaint)
+                // Right half: fill downward from the start nearest the top.
+                else -> canvas.drawArc(ring, start, filled, false, segmentPaint)
+            }
         }
     }
 
