@@ -45,6 +45,9 @@ class MconnectApp : Application(), ImageLoaderFactory {
 
     override fun onCreate() {
         super.onCreate()
+        // Forced update: any screen resumed while a saved requirement stands
+        // shows the Update page (survives closing / reopening, even offline).
+        registerActivityLifecycleCallbacks(com.manjugroups.m_connect.update.UpdateGate)
         // Publish the app context before anything builds an HTTP client — the
         // shared offline response cache needs it to open its cache directory.
         com.manjugroups.m_connect.network.MconnectAppContext.set(this)

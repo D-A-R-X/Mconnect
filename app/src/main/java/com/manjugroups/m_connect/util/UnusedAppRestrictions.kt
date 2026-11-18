@@ -48,15 +48,10 @@ object UnusedAppRestrictions {
             {
                 if (activity.isFinishing || activity.isDestroyed) return@addListener
                 val status = runCatching { future.get() }.getOrNull() ?: return@addListener
-                when (status) {
-                    // Nothing to do — feature absent, errored, or already off.
-                    UnusedAppRestrictionsConstants.ERROR,
-                    UnusedAppRestrictionsConstants.FEATURE_NOT_AVAILABLE,
-                    UnusedAppRestrictionsConstants.DISABLED -> Unit
-                    // Restrictions are ENABLED (any API-level variant) — prompt.
-                    else -> settingsIntent(activity)?.let { intent ->
-                        showDialog(activity, prefs, intent)
-                    }
+                // Only when the OS says it's ON (already off / absent / error /
+                // unknown: nothing to do, and never send them to the toggle).
+                if (isRestrictionOn(status)) {
+                    settingsIntent(activity)?.let { intent -> showDialog(activity, prefs, intent) }
                 }
             },
             ContextCompat.getMainExecutor(activity),
@@ -87,7 +82,8 @@ object UnusedAppRestrictions {
                     "notifications from working in the background.\n\n" +
                     "On the next screen, turn OFF \"Manage app if unused\" " +
                     "(also called \"Pause app activity if unused\" or " +
-                    "\"Remove permissions if unused\") for Mconnect.",
+                    "\"Remove permissions if unused\") for Mconnect. " +
+                    "If it already shows OFF, leave it and go back.",
             )
             .setPositiveButton("Open settings") { _, _ ->
                 runCatching { activity.startActivity(settingsIntent) }
@@ -118,10 +114,27 @@ object UnusedAppRestrictions {
         return intent.takeIf { it.resolveActivity(context.packageManager) != null }
     }
 
-    internal fun uiState(status: Int?, canOpenSettings: Boolean): UiState {
-        val enabled = status == UnusedAppRestrictionsConstants.API_30_BACKPORT ||
+    /**
+     * True only when the OS reports the restriction is ON for Mconnect.
+     * DISABLED (already off), FEATURE_NOT_AVAILABLE, ERROR and an unknown
+     * status are never "on": we must not send staff to the system toggle
+     * unless we know it's on, or they flip an already-off switch back ON.
+     */
+    fun isRestrictionOn(status: Int?): Boolean =
+        status == UnusedAppRestrictionsConstants.API_30_BACKPORT ||
             status == UnusedAppRestrictionsConstants.API_30 ||
             status == UnusedAppRestrictionsConstants.API_31
+
+    /** Gate-row subtitle: states the real system setting, never the row switch. */
+    internal fun rowSubtitle(satisfied: Boolean): String =
+        if (satisfied) {
+            "Done: \"Manage app if unused\" is OFF. Leave it off."
+        } else {
+            "Tap, then turn OFF \"Manage app if unused\" for Mconnect"
+        }
+
+    internal fun uiState(status: Int?, canOpenSettings: Boolean): UiState {
+        val enabled = isRestrictionOn(status)
         val disabled = status == UnusedAppRestrictionsConstants.DISABLED
         val supported = enabled || disabled
         val visible = supported && canOpenSettings

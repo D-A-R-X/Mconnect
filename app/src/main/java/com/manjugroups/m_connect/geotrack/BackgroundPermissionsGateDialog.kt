@@ -178,12 +178,7 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
                 .getUnusedAppRestrictionsStatus(ctx)
             future.addListener(
                 {
-                    val restrictionOn = when (runCatching { future.get() }.getOrNull()) {
-                        androidx.core.content.UnusedAppRestrictionsConstants.API_30_BACKPORT,
-                        androidx.core.content.UnusedAppRestrictionsConstants.API_30,
-                        androidx.core.content.UnusedAppRestrictionsConstants.API_31 -> true
-                        else -> false
-                    }
+                    val restrictionOn = UnusedAppRestrictions.isRestrictionOn(runCatching { future.get() }.getOrNull())
                     if (
                         restrictionOn &&
                         UnusedAppRestrictions.settingsIntent(ctx) != null &&
@@ -342,7 +337,26 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
                 refreshStatus(view)
                 return@setOnClickListener
             }
-            SettingsGuide.unusedApp(ctx, intent)
+            // Re-check first: when it's already OFF there is nothing to do, and
+            // opening the system toggle only invited staff to flip it back ON.
+            val future = androidx.core.content.PackageManagerCompat.getUnusedAppRestrictionsStatus(ctx)
+            future.addListener(
+                {
+                    if (!isAdded) return@addListener
+                    val status = runCatching { future.get() }.getOrNull()
+                    if (UnusedAppRestrictions.isRestrictionOn(status)) {
+                        SettingsGuide.unusedApp(ctx, intent)
+                    } else {
+                        Toast.makeText(
+                            ctx,
+                            "Already done: \"Manage app if unused\" is OFF. Leave it off.",
+                            Toast.LENGTH_LONG,
+                        ).show()
+                        refreshStatus(view)
+                    }
+                },
+                ContextCompat.getMainExecutor(ctx),
+            )
         }
 
         refreshStatus(view)
@@ -392,6 +406,8 @@ class BackgroundPermissionsGateDialog : BottomSheetDialogFragment() {
                 )
                 row.visibility = if (uiState.visible) View.VISIBLE else View.GONE
                 sw.isChecked = uiState.restrictionDisabled
+                root.findViewById<android.widget.TextView>(R.id.tvManageAppUnusedSubtitle)?.text =
+                    UnusedAppRestrictions.rowSubtitle(uiState.satisfied)
                 unusedAppSatisfied = uiState.satisfied
                 if (unusedAppSatisfied && allGranted(ctx)) {
                     com.manjugroups.m_connect.notifications.PermissionAlertNotification.clear(ctx)
