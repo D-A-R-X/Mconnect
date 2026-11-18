@@ -106,6 +106,40 @@
             android:textSize="14sp" />
     </LinearLayout>
 
+    <!-- Alternate to the camera: pick a QR image someone shared (photo picker, no permission). -->
+    <LinearLayout
+        android:id="@+id/btnScanFromGallery"
+        android:layout_width="wrap_content"
+        android:layout_height="44dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginBottom="32dp"
+        android:background="@drawable/bg_verification_screen"
+        android:clickable="true"
+        android:contentDescription="Scan a QR from the gallery"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <ImageView
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_gallery"
+            app:tint="@android:color/white" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:fontFamily="@font/inter_semibold"
+            android:text="From gallery"
+            android:textColor="@android:color/white"
+            android:textSize="14sp" />
+    </LinearLayout>
+
     <!-- Floating Header Container (Vertical) -->
     <LinearLayout
         android:id="@+id/headerContainer"

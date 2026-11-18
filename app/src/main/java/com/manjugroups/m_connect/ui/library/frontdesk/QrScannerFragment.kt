@@ -76,6 +76,11 @@ class QrScannerFragment : Fragment() {
     private lateinit var cameraExecutor: ExecutorService
     private var cameraProvider: ProcessCameraProvider? = null
     private var isScanningActive = true
+
+    /** "From gallery": a QR picture someone shared, decoded like a camera frame. */
+    private val pickQrImage = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) decodeQrFromImage(uri)
+    }
     private var laserAnimator: ObjectAnimator? = null
     private val barcodeScanner: BarcodeScanner by lazy {
         BarcodeScanning.getClient(
@@ -121,6 +126,13 @@ class QrScannerFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         cameraExecutor = Executors.newSingleThreadExecutor()
+
+        binding.btnScanFromGallery.setOnClickListener {
+            if (!isScanningActive) return@setOnClickListener
+            pickQrImage.launch(
+                androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+            )
+        }
 
         setFragmentResultListener(SiteVisitCounsellingConfirmBottomSheet.RESULT_KEY) { _, result ->
             val siteVisitId =
@@ -340,6 +352,25 @@ class QrScannerFragment : Fragment() {
         }
     }
 
+    private fun decodeQrFromImage(uri: android.net.Uri) {
+        val image = runCatching { InputImage.fromFilePath(requireContext(), uri) }.getOrNull()
+        if (image == null) {
+            toastSafe("Couldn't open that picture. Pick another one.")
+            return
+        }
+        barcodeScanner.process(image)
+            .addOnSuccessListener { barcodes ->
+                if (!isAdded || _binding == null) return@addOnSuccessListener
+                val raw = barcodes.firstNotNullOfOrNull { it.rawValue?.takeIf { v -> v.isNotBlank() } }
+                if (raw == null) {
+                    toastSafe("No QR code found in that picture. Pick a clearer one.")
+                } else if (isScanningActive) {
+                    onQrCodeScanned(raw)
+                }
+            }
+            .addOnFailureListener { toastSafe("Couldn't read that picture. Pick another one.") }
+    }
+
     private fun onQrCodeScanned(value: String) {
         isScanningActive = false
         // Trigger a light haptic feel
@@ -468,6 +499,16 @@ class QrScannerFragment : Fragment() {
                         statusLc,
                         visit.outcome,
                     )
+                // QR already scanned before (counselling started or later): skip
+                // the details sheet and open the SV page straight away for
+                // whoever may record / see its outcome.
+                val counsellingStarted = statusLc.replace('-', '_') in setOf(
+                    "on_counselling", "picked_from_site", "dropped", "completed",
+                )
+                if (counsellingStarted && (visit.canRecordOutcome || scanAuthorized)) {
+                    openSiteVisitOutcome(visit._id, visit.lead?.temperature)
+                    return@launch
+                }
                 SiteVisitCounsellingConfirmBottomSheet.newInstance(
                     siteVisitId = visit._id,
                     projectName = projectName,
