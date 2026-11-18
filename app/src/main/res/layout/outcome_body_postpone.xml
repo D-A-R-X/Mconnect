@@ -101,6 +101,420 @@
             android:textSize="13sp" />
     </LinearLayout>
 
+
+    <!-- SV mode only: "Booking Follow Up" reasons. Tick the ones that apply;
+         each ticked reason shows its own required fields (rules in
+         ui/home/SvFollowUpRules.kt, same as the server's convex/lib/svFollowUp.ts). -->
+    <LinearLayout
+        android:id="@+id/groupSvFollowUpReasons"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <TextView style="@style/OutcomeFieldLabel" android:text="Reasons" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:fontFamily="@font/inter_regular"
+            android:includeFontPadding="false"
+            android:text="Tick everything that applies. Each one asks for its details."
+            android:textColor="#94A3B8"
+            android:textSize="11sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_outcome_field_pill"
+            android:orientation="vertical"
+            android:paddingHorizontal="14dp"
+            android:paddingVertical="6dp">
+
+        <CheckBox
+            android:id="@+id/cbFuLocation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:minHeight="44dp"
+            android:paddingStart="6dp"
+            android:text="Location"
+            android:textColor="#101828"
+            android:textSize="13sp" />
+
+        <LinearLayout
+            android:id="@+id/fuDetailLocation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="34dp"
+            android:layout_marginBottom="10dp"
+            android:orientation="vertical"
+            android:visibility="gone">
+            <TextView
+                style="@style/OutcomeFieldLabel"
+                android:layout_marginTop="0dp"
+                android:text="Preferred location" />
+            <LinearLayout
+                android:id="@+id/rowFuLocation"
+                style="@style/OutcomeFieldPillClickable">
+                <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_pin" />
+                <TextView
+                    android:id="@+id/tvFuLocation"
+                    style="@style/OutcomeFieldValue"
+                    android:hint="Pincode or area name" />
+                <ImageView
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_outcome_chevron_right" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <CheckBox
+            android:id="@+id/cbFuDistance"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:minHeight="44dp"
+            android:paddingStart="6dp"
+            android:text="Distance"
+            android:textColor="#101828"
+            android:textSize="13sp" />
+
+        <LinearLayout
+            android:id="@+id/fuDetailDistance"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="34dp"
+            android:layout_marginBottom="10dp"
+            android:orientation="vertical"
+            android:visibility="gone">
+            <TextView
+                style="@style/OutcomeFieldLabel"
+                android:layout_marginTop="0dp"
+                android:text="Expected distance (km)" />
+            <LinearLayout style="@style/OutcomeFieldPill">
+                <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_doc" />
+                <EditText
+                    android:id="@+id/etFuDistance"
+                    style="@style/OutcomeFieldEdit"
+                    android:hint="e.g. 15"
+                    android:inputType="numberDecimal"
+                    android:maxLines="1" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <CheckBox
+            android:id="@+id/cbFuBudget"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:minHeight="44dp"
+            android:paddingStart="6dp"
+            android:text="Preferred Budget"
+            android:textColor="#101828"
+            android:textSize="13sp" />
+
+        <LinearLayout
+            android:id="@+id/fuDetailBudget"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="34dp"
+            android:layout_marginBottom="10dp"
+            android:orientation="vertical"
+            android:visibility="gone">
+            <TextView
+                style="@style/OutcomeFieldLabel"
+                android:layout_marginTop="0dp"
+                android:text="Preferred budget" />
+            <LinearLayout
+                android:id="@+id/rowFuBudget"
+                style="@style/OutcomeFieldPillClickable">
+                <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_rupee" />
+                <TextView
+                    android:id="@+id/tvFuBudget"
+                    style="@style/OutcomeFieldValue"
+                    android:hint="Choose a budget" />
+                <ImageView
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_outcome_chevron_right" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <CheckBox
+            android:id="@+id/cbFuLoan"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:minHeight="44dp"
+            android:paddingStart="6dp"
+            android:text="Loan Eligibility issue"
+            android:textColor="#101828"
+            android:textSize="13sp" />
+
+        <LinearLayout
+            android:id="@+id/fuDetailLoan"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="34dp"
+            android:layout_marginBottom="10dp"
+            android:orientation="vertical"
+            android:visibility="gone">
+            <TextView
+                style="@style/OutcomeFieldLabel"
+                android:layout_marginTop="0dp"
+                android:text="How much can the client afford as hand cash? (₹)" />
+            <LinearLayout style="@style/OutcomeFieldPill">
+                <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_rupee" />
+                <EditText
+                    android:id="@+id/etFuHandCash"
+                    style="@style/OutcomeFieldEdit"
+                    android:hint="e.g. 300000"
+                    android:inputType="number"
+                    android:maxLines="1" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <CheckBox
+            android:id="@+id/cbFuPlot"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:minHeight="44dp"
+            android:paddingStart="6dp"
+            android:text="Preferred Plot Not Available"
+            android:textColor="#101828"
+            android:textSize="13sp" />
+
+        <LinearLayout
+            android:id="@+id/fuDetailPlot"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="34dp"
+            android:layout_marginBottom="10dp"
+            android:orientation="vertical"
+            android:visibility="gone">
+            <TextView
+                style="@style/OutcomeFieldLabel"
+                android:layout_marginTop="0dp"
+                android:text="Expected facing" />
+            <GridLayout
+                android:id="@+id/gridFuFacing"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:columnCount="3">
+                <RadioButton
+                    android:id="@+id/rbFuEast"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_columnWeight="1"
+                    android:fontFamily="@font/inter_medium"
+                    android:minHeight="40dp"
+                    android:text="East"
+                    android:textColor="#101828"
+                    android:textSize="13sp" />
+                <RadioButton
+                    android:id="@+id/rbFuWest"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_columnWeight="1"
+                    android:fontFamily="@font/inter_medium"
+                    android:minHeight="40dp"
+                    android:text="West"
+                    android:textColor="#101828"
+                    android:textSize="13sp" />
+                <RadioButton
+                    android:id="@+id/rbFuNorth"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_columnWeight="1"
+                    android:fontFamily="@font/inter_medium"
+                    android:minHeight="40dp"
+                    android:text="North"
+                    android:textColor="#101828"
+                    android:textSize="13sp" />
+                <RadioButton
+                    android:id="@+id/rbFuSouth"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_columnWeight="1"
+                    android:fontFamily="@font/inter_medium"
+                    android:minHeight="40dp"
+                    android:text="South"
+                    android:textColor="#101828"
+                    android:textSize="13sp" />
+                <RadioButton
+                    android:id="@+id/rbFuCorner"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_columnWeight="1"
+                    android:fontFamily="@font/inter_medium"
+                    android:minHeight="40dp"
+                    android:text="Corner"
+                    android:textColor="#101828"
+                    android:textSize="13sp" />
+                <RadioButton
+                    android:id="@+id/rbFuParkview"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_columnWeight="1"
+                    android:fontFamily="@font/inter_medium"
+                    android:minHeight="40dp"
+                    android:text="Parkview"
+                    android:textColor="#101828"
+                    android:textSize="13sp" />
+            </GridLayout>
+            <TextView
+                style="@style/OutcomeFieldLabel"
+                android:layout_marginTop="8dp"
+                android:text="Expected plot area (sq.ft)" />
+            <LinearLayout style="@style/OutcomeFieldPill">
+                <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_doc" />
+                <EditText
+                    android:id="@+id/etFuPlotArea"
+                    style="@style/OutcomeFieldEdit"
+                    android:hint="e.g. 1200"
+                    android:inputType="number"
+                    android:maxLines="1" />
+            </LinearLayout>
+            <TextView
+                style="@style/OutcomeFieldLabel"
+                android:layout_marginTop="8dp"
+                android:text="Budget" />
+            <LinearLayout
+                android:id="@+id/rowFuPlotBudget"
+                style="@style/OutcomeFieldPillClickable">
+                <ImageView style="@style/OutcomeFieldIcon" android:src="@drawable/ic_outcome_rupee" />
+                <TextView
+                    android:id="@+id/tvFuPlotBudget"
+                    style="@style/OutcomeFieldValue"
+                    android:hint="Choose a budget" />
+                <ImageView
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_outcome_chevron_right" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <CheckBox
+            android:id="@+id/cbFuMisguided"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:minHeight="44dp"
+            android:paddingStart="6dp"
+            android:text="Mis-guided Site Visit"
+            android:textColor="#101828"
+            android:textSize="13sp" />
+
+        <LinearLayout
+            android:id="@+id/fuDetailMisguided"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="34dp"
+            android:layout_marginBottom="10dp"
+            android:orientation="vertical"
+            android:visibility="gone">
+            <TextView
+                style="@style/OutcomeFieldLabel"
+                android:layout_marginTop="0dp"
+                android:text="Remarks" />
+            <EditText
+                android:id="@+id/etFuMisguided"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_outcome_field_pill"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="top"
+                android:hint="What happened? 250 to 500 characters."
+                android:includeFontPadding="false"
+                android:inputType="textMultiLine|textCapSentences"
+                android:maxLength="550"
+                android:minLines="5"
+                android:padding="12dp"
+                android:textColor="#101828"
+                android:textColorHint="#94A3B8"
+                android:textSize="13sp" />
+            <TextView
+                android:id="@+id/tvFuMisguidedCount"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:fontFamily="@font/inter_regular"
+                android:includeFontPadding="false"
+                android:text="0/500"
+                android:textColor="#94A3B8"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <CheckBox
+            android:id="@+id/cbFuHospitality"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/inter_medium"
+            android:includeFontPadding="false"
+            android:minHeight="44dp"
+            android:paddingStart="6dp"
+            android:text="Hospitality &amp; Service Issue"
+            android:textColor="#101828"
+            android:textSize="13sp" />
+
+        <LinearLayout
+            android:id="@+id/fuDetailHospitality"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="34dp"
+            android:layout_marginBottom="10dp"
+            android:orientation="vertical"
+            android:visibility="gone">
+            <TextView
+                style="@style/OutcomeFieldLabel"
+                android:layout_marginTop="0dp"
+                android:text="Remarks" />
+            <EditText
+                android:id="@+id/etFuHospitality"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_outcome_field_pill"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="top"
+                android:hint="What happened? 250 to 500 characters."
+                android:includeFontPadding="false"
+                android:inputType="textMultiLine|textCapSentences"
+                android:maxLength="550"
+                android:minLines="5"
+                android:padding="12dp"
+                android:textColor="#101828"
+                android:textColorHint="#94A3B8"
+                android:textSize="13sp" />
+            <TextView
+                android:id="@+id/tvFuHospitalityCount"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:fontFamily="@font/inter_regular"
+                android:includeFontPadding="false"
+                android:text="0/500"
+                android:textColor="#94A3B8"
+                android:textSize="11sp" />
+        </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+
     <!-- Booking CP only: instead of postponing, offer the client a site visit.
          Switches this sheet to the Site Visit outcome (convertToSiteVisit).
          Kept hidden by default and revealed in code for cpType=booking_cp. -->

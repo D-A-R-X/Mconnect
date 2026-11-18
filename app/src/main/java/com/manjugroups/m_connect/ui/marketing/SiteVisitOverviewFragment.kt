@@ -1095,7 +1095,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
             val label = when (outcome) {
                 "converted_to_booking" -> "Converted as Booking"
                 "not_interested" -> "Client Not Interested"
-                "postponed", "follow_up" -> "Follow up"
+                "postponed", "follow_up" -> "Booking Follow Up"
                 "other" -> "Others"
                 else -> return@setFragmentResultListener
             }
@@ -1205,7 +1205,7 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         when (value?.trim()?.lowercase(Locale.US)) {
             "converted_to_booking", "converted", "booked" -> "Converted as Booking" to Color.parseColor("#067647")
             "not_interested" -> "Client Not Interested" to Color.parseColor("#B42318")
-            "follow_up", "followup", "postponed" -> "Follow up" to Color.parseColor("#B54708")
+            "follow_up", "followup", "postponed" -> "Booking Follow Up" to Color.parseColor("#B54708")
             "cancelled", "canceled" -> "Site Visit Cancelled" to Color.parseColor("#475467")
             "no_show" -> "Client No-show" to Color.parseColor("#475467")
             "other" -> "Other" to Color.parseColor("#344054")

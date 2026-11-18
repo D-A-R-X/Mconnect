@@ -1540,7 +1540,7 @@
                             android:textSize="13sp" />
                     </LinearLayout>
 
-                    <!-- Follow up outcome -->
+                    <!-- Booking Follow Up outcome (stored follow_up) -->
                     <LinearLayout
                         android:id="@+id/btnOutcomePostponed"
                         android:layout_width="match_parent"
@@ -1564,7 +1564,7 @@
                             android:layout_height="wrap_content"
                             android:layout_marginStart="8dp"
                             android:fontFamily="@font/inter_semibold"
-                            android:text="Follow up"
+                            android:text="Booking Follow Up"
                             android:textColor="@android:color/white"
                             android:textSize="13sp" />
                     </LinearLayout>
