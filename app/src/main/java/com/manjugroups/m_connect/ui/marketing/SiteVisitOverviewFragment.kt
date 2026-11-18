@@ -371,6 +371,12 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
         btnCancelSiteVisit = view.findViewById(R.id.btnCancelSiteVisit)
         btnCancelSiteVisit?.visibility = View.GONE
         btnCancelSiteVisit?.setOnClickListener {
+            if (cancelBlockedOnSite) {
+                com.manjugroups.m_connect.ui.common.Floater.warning(
+                    "The client is already on site, so this site visit can't be cancelled.",
+                )
+                return@setOnClickListener
+            }
             visitId?.takeIf { it.isNotBlank() }?.let { id ->
                 CancelSiteVisitBottomSheet
                     .newInstance(id)
@@ -1761,7 +1767,13 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
             if (canEdit && !isOutcomeLocked && !arrivedOrLater) View.VISIBLE else View.GONE
     }
 
+    /** Client reached the site (on site or later): Cancel shows but is disabled. */
+    private var cancelBlockedOnSite = false
+
     private fun updateCancelVisibility(status: String?) {
+        val normalized = status?.trim()?.lowercase(Locale.US)?.replace('-', '_')?.replace(' ', '_').orEmpty()
+        cancelBlockedOnSite = normalized in SITE_VISIT_ON_SITE_OR_LATER
+        btnCancelSiteVisit?.alpha = if (cancelBlockedOnSite) 0.45f else 1f
         val terminal = status?.trim()?.lowercase(Locale.US).orEmpty() in setOf(
             "completed",
             "complete",
@@ -1787,6 +1799,11 @@ class SiteVisitOverviewFragment : BottomSheetDialogFragment() {
     }
 
     companion object {
+        /** Statuses from the client's arrival onward: a site visit can't be cancelled there. */
+        private val SITE_VISIT_ON_SITE_OR_LATER = setOf(
+            "on_site", "consulting", "on_counselling", "picked_from_site", "dropped",
+        )
+
         // Cab web-parity stepper index for "On Site" (Scheduled 0 · Assigned 1 ·
         // Reached CP 2 · Picked from CP 3 · On Site 4 · Consulting 5 · Picked
         // from Site 6 · Dropped 7 · Done 8). Outcome opens at this step or later.
