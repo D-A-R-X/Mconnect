@@ -250,22 +250,70 @@ class LensEnrollFragment : Fragment() {
         renderPrompt(target, live.value)
     }
 
+    // Hint hysteresis: a new hint shows only after it has held for HINT_HOLD_MS,
+    // so the line doesn't flicker between reasons frame to frame.
+    private var shownHint: LensHint? = null
+    private var candidateHint: LensHint? = null
+    private var candidateSince = 0L
+    private var hintShownOnce = false
+    private var debugView: android.widget.TextView? = null
+
+    private fun stableHint(hint: LensHint?): LensHint? {
+        val now = android.os.SystemClock.uptimeMillis()
+        if (hint != candidateHint) {
+            candidateHint = hint
+            candidateSince = now
+        }
+        if (!hintShownOnce || hint == shownHint || now - candidateSince >= HINT_HOLD_MS) {
+            shownHint = hint
+            hintShownOnce = true
+        }
+        return shownHint
+    }
+
+    /** Lens Test build only: a live line of what the detector sees. */
+    private fun renderDebug(state: LensLiveState?) {
+        if (!dryRun) return
+        val b = _binding ?: return
+        val tv = debugView ?: android.widget.TextView(requireContext()).also { v ->
+            v.setTextColor(android.graphics.Color.WHITE)
+            v.textSize = 11f
+            v.typeface = android.graphics.Typeface.MONOSPACE
+            v.setBackgroundColor(0x99000000.toInt())
+            val pad = (6 * resources.displayMetrics.density).toInt()
+            v.setPadding(pad, pad / 2, pad, pad / 2)
+            b.lensCapture.addView(
+                v,
+                android.widget.FrameLayout.LayoutParams(
+                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
+                    android.view.Gravity.TOP,
+                ).apply { topMargin = (110 * resources.displayMetrics.density).toInt() },
+            )
+            debugView = v
+        }
+        tv.text = state?.debug ?: "no frames yet"
+    }
+
     private fun renderLive(state: LensLiveState?) {
         val b = _binding ?: return
         val vm = viewModel.state.value
         if (vm.reviewing) return
-        val hint = when {
-            state == null -> null
-            !state.faceFound -> LensHint.NO_FACE
-            else -> state.hint
-        }
+        renderDebug(state)
+        val hint = stableHint(
+            when {
+                state == null -> null
+                !state.faceFound -> LensHint.NO_FACE
+                else -> state.hint
+            },
+        )
         if (hint != null) {
-            b.tvLensHint.text = hint.text
+            if (b.tvLensHint.text != hint.text) b.tvLensHint.text = hint.text
             b.tvLensHint.visibility = View.VISIBLE
         } else {
             b.tvLensHint.visibility = View.INVISIBLE
         }
-        b.lensGuide.setFaceOk(state?.faceFound == true && state.hint == null)
+        b.lensGuide.setFaceOk(state?.faceFound == true && hint == null)
         paintSegments(vm, state)
         renderPrompt(vm.target, state)
     }
@@ -598,6 +646,7 @@ class LensEnrollFragment : Fragment() {
         private const val ARG_EXISTING = "existingSamples"
         private const val ARG_DRY_RUN = "dryRun"
         private const val OPTIONAL_TIMEOUT_MS = 10_000L
+        private const val HINT_HOLD_MS = 450L
 
         fun newInstance(staffId: String, name: String, employeeCode: String?, existingSamples: Int) =
             LensEnrollFragment().apply {

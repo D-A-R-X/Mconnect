@@ -78,7 +78,7 @@ class LensCapturePolicyTest {
     fun headMustBeLevelAndNotTurnedTooFar() {
         assertEquals(LensHint.TURN_LESS, LensCapturePolicy.geometryHint(sample(yaw = 35f)))
         assertEquals(LensHint.HEAD_LEVEL, LensCapturePolicy.geometryHint(sample(roll = 14f)))
-        assertEquals(LensHint.LOOK_AHEAD, LensCapturePolicy.geometryHint(sample(pitch = -12f)))
+        assertEquals(LensHint.LOOK_AHEAD, LensCapturePolicy.geometryHint(sample(pitch = -18f)))
     }
 
     @Test
@@ -94,7 +94,8 @@ class LensCapturePolicyTest {
         // A strongly turned head that hides the nose/eye alignment is told to turn less.
         assertEquals(LensHint.TURN_LESS, LensCapturePolicy.geometryHint(sample(yaw = 26f, noseBetween = false)))
         assertEquals(LensHint.OPEN_EYES, LensCapturePolicy.geometryHint(sample(eyes = 0.2f)))
-        assertEquals(LensHint.OPEN_EYES, LensCapturePolicy.geometryHint(sample(eyes = null)))
+        // Unclassified eyes (common on a turned head) are unknown, not closed.
+        assertNull(LensCapturePolicy.geometryHint(sample(eyes = null)))
         assertEquals(LensHint.NEUTRAL_FACE, LensCapturePolicy.geometryHint(sample(smile = 0.8f)))
         // The far eye of a turned head may read lower and is still accepted.
         assertNull(LensCapturePolicy.geometryHint(sample(yaw = 15f, eyes = 0.5f)))
@@ -120,7 +121,7 @@ class LensCapturePolicyTest {
         val uneven = goodPixels.copy(leftHalfLuma = 70.0, rightHalfLuma = 170.0)
         assertEquals(LensHint.UNEVEN_LIGHT, LensCapturePolicy.pixelHint(LensPose.STRAIGHT, uneven, false))
         assertNull("a turned head is naturally uneven", LensCapturePolicy.pixelHint(LensPose.SLIGHT_LEFT, uneven, false))
-        val soft = goodPixels.copy(sharpness = 30.0)
+        val soft = goodPixels.copy(sharpness = 18.0)
         assertEquals(LensHint.BLURRY, LensCapturePolicy.pixelHint(LensPose.STRAIGHT, soft, false))
         assertNull("relaxed floor after a long good hold", LensCapturePolicy.pixelHint(LensPose.STRAIGHT, soft, true))
     }
@@ -145,6 +146,15 @@ class LensCapturePolicyTest {
         assertFalse(m.update(sample(t = 200)))
         assertTrue(m.update(sample(t = 320)))
         assertTrue(m.update(sample(t = 420)))
+    }
+
+    @Test
+    fun slowDetectorStillReachesStill() {
+        // A few frames a second (mid-range phone): two samples spanning the window are enough.
+        val m = LensMotionTracker(windowMs = 400)
+        assertFalse(m.update(sample(t = 0)))
+        assertTrue(m.update(sample(t = 450, yaw = 2f)))
+        assertTrue(m.update(sample(t = 900, yaw = -1f)))
     }
 
     @Test

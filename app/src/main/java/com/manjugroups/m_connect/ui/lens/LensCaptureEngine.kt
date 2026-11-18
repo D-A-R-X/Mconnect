@@ -41,6 +41,8 @@ data class LensLiveState(
     val still: Boolean,
     /** A good frame for this pose is being held (ring segment fills). */
     val holding: LensPose?,
+    /** One-line readout of what the detector sees (shown in the Lens Test build). */
+    val debug: String? = null,
 )
 
 /**
@@ -59,7 +61,10 @@ class LensCaptureEngine(
 
     private val detector: FaceDetector = FaceDetection.getClient(
         FaceDetectorOptions.Builder()
-            .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
+            // FAST keeps the live loop at several frames a second on mid-range
+            // phones (ACCURATE ran too slowly for the stillness check); Lens
+            // runs its own detector on the photos we send.
+            .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
             .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)
             .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_ALL)
             .setMinFaceSize(0.15f)
@@ -73,6 +78,9 @@ class LensCaptureEngine(
     private val selector = LensBestFrameSelector<Frame>()
     /** When a pose first had a still, well-framed face (relaxes sharpness later). */
     private val goodSince = mutableMapOf<LensPose, Long>()
+    private var lastFrameAt = 0L
+    private var fps = 0f
+    private var lastStats: LensPixelStats? = null
 
     /** Poses still wanted; set from the UI thread. */
     @Volatile var pending: Set<LensPose> = emptySet()
@@ -105,6 +113,11 @@ class LensCaptureEngine(
             }
             if (paused || closed) return
             val now = SystemClock.elapsedRealtime()
+            if (lastFrameAt > 0) {
+                val inst = 1000f / (now - lastFrameAt).coerceAtLeast(1)
+                fps = if (fps == 0f) inst else fps * 0.8f + inst * 0.2f
+            }
+            lastFrameAt = now
             val upright = rotation % 180 == 0
             val w = if (upright) image.width else image.height
             val h = if (upright) image.height else image.width
@@ -125,6 +138,7 @@ class LensCaptureEngine(
                     val bitmap = uprightBitmap(image, rotation)
                     if (bitmap != null) {
                         val stats = pixelStats(bitmap, face.boundingBox)
+                        lastStats = stats
                         hint = LensCapturePolicy.pixelHint(pose, stats, relaxed)
                         if (hint == null) {
                             val score = LensCapturePolicy.score(pose, sample, stats)
@@ -161,6 +175,7 @@ class LensCaptureEngine(
                     faceFound = sample.faceCount > 0,
                     still = still,
                     holding = holding,
+                    debug = debugLine(sample, still, lastStats),
                 ),
             )
         } finally {
@@ -262,6 +277,15 @@ class LensCaptureEngine(
         )
     }
 
+    private fun debugLine(s: LensFaceSample, still: Boolean, p: LensPixelStats?): String {
+        fun f(v: Float?) = if (v == null) "-" else "%.2f".format(v)
+        val px = p?.let { "sharp %.0f  light %.0f/%.0f".format(it.sharpness, it.faceLuma, it.frameLuma) } ?: "sharp -  light -"
+        return "yaw %.0f  pitch %.0f  roll %.0f  face %.0fpx  eyes %s/%s  smile %s\n%s  %s  %.1f fps".format(
+            s.yaw, s.pitch, s.roll, s.faceWidth, f(s.leftEyeOpen), f(s.rightEyeOpen), f(s.smiling),
+            px, if (still) "still" else "moving", fps,
+        )
+    }
+
     private fun encode(bitmap: Bitmap): ByteArray {
         val out = ByteArrayOutputStream(512 * 1024)
         bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
@@ -272,6 +296,6 @@ class LensCaptureEngine(
         private const val CROP_PX = 128f
         private const val JPEG_QUALITY = 92
         /** After this long in a good still pose, accept a slightly softer frame. */
-        private const val RELAX_AFTER_MS = 3_000L
+        private const val RELAX_AFTER_MS = 1_500L
     }
 }

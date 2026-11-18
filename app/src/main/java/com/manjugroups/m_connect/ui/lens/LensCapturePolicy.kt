@@ -103,7 +103,10 @@ object LensCapturePolicy {
     const val SLIGHT_MIN = 10f
     const val SLIGHT_MAX = 20f
     const val MORE_MAX = 30f
-    const val LEVEL_MAX = 10f
+    /** Head tilt toward a shoulder. ML Kit's angles jitter a few degrees per frame. */
+    const val LEVEL_MAX = 12f
+    /** Up/down: a phone held a little low reads ~10 degrees; Lens tolerates mild pitch. */
+    const val PITCH_MAX = 15f
 
     // ── Face size in the sent (upright) image ──
     /** Below this the face embedding is weak: ask the person to come closer. */
@@ -114,21 +117,22 @@ object LensCapturePolicy {
     const val MAX_FACE_SHARE = 0.72f
 
     // ── Expression ──
-    const val EYES_OPEN_MIN = 0.6f
+    /** ML Kit reads relaxed open eyes as low as ~0.4; closed eyes are ~0.1. */
+    const val EYES_OPEN_MIN = 0.4f
     /** The far eye of a turned head reads lower; still clearly open. */
-    const val EYES_OPEN_MIN_TURNED = 0.45f
+    const val EYES_OPEN_MIN_TURNED = 0.3f
     const val SMILE_MAX = 0.5f
 
     // ── Light (0..255 luma) ──
-    const val LUMA_MIN = 70.0
-    const val LUMA_MAX = 205.0
-    const val BACKLIGHT_GAP = 60.0
-    const val UNEVEN_GAP = 55.0
+    const val LUMA_MIN = 60.0
+    const val LUMA_MAX = 210.0
+    const val BACKLIGHT_GAP = 70.0
+    const val UNEVEN_GAP = 65.0
 
     // ── Sharpness (Laplacian variance on a ~128 px face crop) ──
-    const val SHARP_MIN = 40.0
+    const val SHARP_MIN = 25.0
     /** Floor used after the person has held a good pose for a while on a soft camera. */
-    const val SHARP_MIN_RELAXED = 22.0
+    const val SHARP_MIN_RELAXED = 12.0
 
     /** The pose a yaw belongs to, or null between buckets / past the limit. */
     fun poseFor(yaw: Float): LensPose? {
@@ -151,7 +155,7 @@ object LensCapturePolicy {
         if (s.faceCount > 1) return LensHint.MULTIPLE_FACES
         if (abs(s.yaw) > MORE_MAX) return LensHint.TURN_LESS
         if (abs(s.roll) > LEVEL_MAX) return LensHint.HEAD_LEVEL
-        if (abs(s.pitch) > LEVEL_MAX) return LensHint.LOOK_AHEAD
+        if (abs(s.pitch) > PITCH_MAX) return LensHint.LOOK_AHEAD
         // Whole head inside the frame with some space around it.
         val w = s.imageWidth.toFloat()
         val h = s.imageHeight.toFloat()
@@ -173,9 +177,10 @@ object LensCapturePolicy {
             return if (abs(s.yaw) >= SLIGHT_MAX) LensHint.TURN_LESS else LensHint.COVERED
         }
         val eyesMin = if (abs(s.yaw) >= SLIGHT_MIN) EYES_OPEN_MIN_TURNED else EYES_OPEN_MIN
-        val left = s.leftEyeOpen ?: return LensHint.OPEN_EYES
-        val right = s.rightEyeOpen ?: return LensHint.OPEN_EYES
-        if (min(left, right) < eyesMin) return LensHint.OPEN_EYES
+        // The detector often can't classify the eyes of a turned head (null):
+        // that is "unknown", not "closed", so it never blocks a capture.
+        val eyes = listOfNotNull(s.leftEyeOpen, s.rightEyeOpen)
+        if (eyes.isNotEmpty() && eyes.min() < eyesMin) return LensHint.OPEN_EYES
         if ((s.smiling ?: 0f) > SMILE_MAX) return LensHint.NEUTRAL_FACE
         return null
     }
@@ -205,8 +210,8 @@ object LensCapturePolicy {
         val size = ((s.faceWidth - MIN_FACE_PX) / (GOOD_FACE_PX * 1.6f - MIN_FACE_PX)).toDouble().coerceIn(0.0, 1.0)
         val yawErr = abs(s.yaw - pose.targetYaw).toDouble()
         val angle = (1.0 - yawErr / 10.0).coerceIn(0.0, 1.0)
-        val level = (1.0 - (abs(s.pitch) + abs(s.roll)) / (2 * LEVEL_MAX)).toDouble().coerceIn(0.0, 1.0)
-        val eyes = min(s.leftEyeOpen ?: 0f, s.rightEyeOpen ?: 0f).toDouble().coerceIn(0.0, 1.0)
+        val level = (1.0 - (abs(s.pitch) / PITCH_MAX + abs(s.roll) / LEVEL_MAX) / 2.0).coerceIn(0.0, 1.0)
+        val eyes = min(s.leftEyeOpen ?: 0.7f, s.rightEyeOpen ?: 0.7f).toDouble().coerceIn(0.0, 1.0)
         val light = (1.0 - abs(p.faceLuma - 135.0) / 90.0).coerceIn(0.0, 1.0)
         return 0.34 * sharp + 0.16 * size + 0.18 * angle + 0.12 * level + 0.10 * eyes + 0.10 * light
     }
@@ -216,11 +221,15 @@ object LensCapturePolicy {
  * Motion detector: a frame counts only when the head has been still for
  * [windowMs] (angles and face centre barely moved), so frames grabbed while
  * the head is turning, which come out blurred and between angles, are never kept.
+ *
+ * Time-based, not frame-count based: a slow detector (a few frames a second on
+ * mid-range phones) still reaches "still" once two samples span the window.
+ * The limits sit above ML Kit's normal frame-to-frame jitter (2-4 degrees).
  */
 class LensMotionTracker(
-    private val windowMs: Long = 300L,
-    private val maxAngleDelta: Float = 3f,
-    private val maxCenterDrift: Float = 0.03f,
+    private val windowMs: Long = 400L,
+    private val maxAngleDelta: Float = 6f,
+    private val maxCenterDrift: Float = 0.05f,
 ) {
     private data class Point(val t: Long, val yaw: Float, val pitch: Float, val roll: Float, val cx: Float, val cy: Float)
 
@@ -236,9 +245,10 @@ class LensMotionTracker(
         }
         val w = s.imageWidth.toFloat().coerceAtLeast(1f)
         points.addLast(Point(s.timestampMs, s.yaw, s.pitch, s.roll, s.centerX / w, s.centerY / w))
-        // Keep a little more than the window so its oldest point spans it.
-        while (points.size > 2 && s.timestampMs - points[1].t >= windowMs) points.removeFirst()
-        if (points.size < 3) return false
+        // Keep exactly one anchor at or before the window start, so the oldest
+        // point always spans the window however slow the detector is.
+        while (points.size >= 2 && s.timestampMs - points[1].t >= windowMs) points.removeFirst()
+        if (points.size < 2) return false
         if (s.timestampMs - points.first().t < windowMs) return false
         fun spread(sel: (Point) -> Float): Float {
             var lo = Float.MAX_VALUE
@@ -263,7 +273,7 @@ class LensMotionTracker(
  * short hold window; better frames inside it replace the candidate; when the
  * window ends the pose is captured.
  */
-class LensBestFrameSelector<T>(private val holdMs: Long = 700L) {
+class LensBestFrameSelector<T>(private val holdMs: Long = 500L) {
     data class Candidate<T>(val pose: LensPose, val score: Double, val openedAt: Long, val frame: T)
 
     private val candidates = mutableMapOf<LensPose, Candidate<T>>()
