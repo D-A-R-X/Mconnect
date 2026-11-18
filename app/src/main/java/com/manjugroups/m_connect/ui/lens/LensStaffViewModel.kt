@@ -69,7 +69,7 @@ class LensStaffViewModel : ViewModel() {
         val query = s.query
         moreJob = viewModelScope.launch {
             try {
-                val page = api.getLensStaff(token, query.ifBlank { null }, cursor)
+                val page = LensBusyRetry.call { api.getLensStaff(token, query.ifBlank { null }, cursor) }
                 if (_state.value.query != query) return@launch
                 val seen = _state.value.items.mapNotNull { it.staffId }.toHashSet()
                 val fresh = page.items.orEmpty().filter { it.staffId != null && seen.add(it.staffId) }
@@ -100,7 +100,7 @@ class LensStaffViewModel : ViewModel() {
         firstPageJob = viewModelScope.launch {
             if (debounceMs > 0) delay(debounceMs)
             try {
-                val page = api.getLensStaff(token, query.ifBlank { null }, null)
+                val page = LensBusyRetry.call { api.getLensStaff(token, query.ifBlank { null }, null) }
                 if (_state.value.query != query) return@launch
                 val items = page.items.orEmpty().filter { !it.staffId.isNullOrBlank() }.distinctBy { it.staffId }
                 _state.update {

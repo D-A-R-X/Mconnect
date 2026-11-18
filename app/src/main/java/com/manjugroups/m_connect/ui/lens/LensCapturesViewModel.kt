@@ -40,7 +40,7 @@ class LensCapturesViewModel : ViewModel() {
         if (!silent) _state.update { it.copy(loading = !it.loaded, error = null) }
         viewModelScope.launch {
             try {
-                val res = api.getLensCaptures(token, staffId)
+                val res = LensBusyRetry.response { api.getLensCaptures(token, staffId) }
                 val body = res.body()
                 if (res.isSuccessful && body != null && body.success != false) {
                     _state.update {

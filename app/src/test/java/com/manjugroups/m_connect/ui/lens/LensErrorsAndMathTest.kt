@@ -8,6 +8,21 @@ import org.junit.Test
 class LensErrorsAndMathTest {
 
     @Test
+    fun busyAnswersAreRetriedQuietly() = kotlinx.coroutines.runBlocking {
+        var calls = 0
+        val busy = retrofit2.Response.error<String>(429, okhttp3.ResponseBody.create(null, "{}"))
+        val ok = retrofit2.Response.success("done")
+        val res = LensBusyRetry.response(listOf(0L, 0L)) { calls++; if (calls < 3) busy else ok }
+        assertEquals(3, calls)
+        assertEquals("done", res.body())
+        // A real refusal (403) is returned at once, never retried.
+        calls = 0
+        val forbidden = retrofit2.Response.error<String>(403, okhttp3.ResponseBody.create(null, "{}"))
+        assertEquals(403, LensBusyRetry.response(listOf(0L, 0L)) { calls++; forbidden }.code())
+        assertEquals(1, calls)
+    }
+
+    @Test
     fun photosSavedWhileLensIsDownAreNotAFailure() {
         val saved = LensErrors.parse(503, "{\"code\":\"LENS_NOT_CONFIGURED\",\"error\":\"Photos saved on the staff profile. Lens enrollment is not configured yet.\"}")
         assertTrue(LensErrors.savedForLater(saved))

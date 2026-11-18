@@ -108,3 +108,43 @@ object LensErrors {
         return Outcome(code, message, actionFor(httpStatus, code), failed)
     }
 }
+
+/**
+ * Production Convex answers 429 TooManyConcurrentRequests (and the edge 502/503/504)
+ * for a moment under load. Lens list/load calls retry those quietly before any
+ * "server is busy" message reaches the screen.
+ */
+object LensBusyRetry {
+    private val BUSY = setOf(429, 502, 503, 504)
+
+    fun isBusy(code: Int): Boolean = code in BUSY
+
+    /** For calls that return the body (non-2xx throws HttpException). */
+    suspend fun <T> call(delaysMs: List<Long> = listOf(800L, 2_000L), block: suspend () -> T): T {
+        var attempt = 0
+        while (true) {
+            try {
+                return block()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                val busy = (e is retrofit2.HttpException && isBusy(e.code())) || e is java.io.IOException
+                if (!busy || attempt >= delaysMs.size) throw e
+                kotlinx.coroutines.delay(delaysMs[attempt++])
+            }
+        }
+    }
+
+    /** For calls that return a Response (busy codes come back as a Response). */
+    suspend fun <T> response(
+        delaysMs: List<Long> = listOf(800L, 2_000L),
+        block: suspend () -> retrofit2.Response<T>,
+    ): retrofit2.Response<T> {
+        var attempt = 0
+        while (true) {
+            val res = call(delaysMs) { block() }
+            if (!isBusy(res.code()) || attempt >= delaysMs.size) return res
+            kotlinx.coroutines.delay(delaysMs[attempt++])
+        }
+    }
+}
