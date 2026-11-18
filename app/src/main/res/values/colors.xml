@@ -98,4 +98,6 @@
          the same in light and dark mode (the preview is always dark-dimmed). -->
     <color name="lens_overlay_text_secondary">#CCFFFFFF</color>
     <color name="lens_overlay_stroke">#80FFFFFF</color>
+    <!-- Round frosted actions on camera overlays (QR scanner gallery button). -->
+    <color name="scanner_action_fill">#33FFFFFF</color>
 </resources>

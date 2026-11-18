@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Round frosted button on a camera overlay (QR scanner "Upload QR"). -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="@color/lens_overlay_stroke">
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="@color/scanner_action_fill" />
+            <stroke
+                android:width="1dp"
+                android:color="@color/lens_overlay_stroke" />
+        </shape>
+    </item>
+</ripple>

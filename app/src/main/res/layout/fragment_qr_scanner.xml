@@ -106,38 +106,62 @@
             android:textSize="14sp" />
     </LinearLayout>
 
-    <!-- Alternate to the camera: pick a QR image someone shared (photo picker, no permission). -->
+    <!-- Hint under the scan window, pointing at the gallery alternative. -->
+    <TextView
+        android:id="@+id/tvScanHint"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="32dp"
+        android:layout_marginTop="20dp"
+        android:fontFamily="@font/inter_medium"
+        android:gravity="center"
+        android:text="Point the camera at the QR code"
+        android:textColor="@color/lens_overlay_text_secondary"
+        android:textSize="13sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/scanWindow" />
+
+    <!-- Alternate to the camera: pick a QR picture someone shared (photo picker, no permission).
+         Round frosted button + caption, bottom-left, in the scanner overlay style. -->
     <LinearLayout
         android:id="@+id/btnScanFromGallery"
         android:layout_width="wrap_content"
-        android:layout_height="44dp"
-        android:layout_marginStart="16dp"
-        android:layout_marginBottom="32dp"
-        android:background="@drawable/bg_verification_screen"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="28dp"
+        android:layout_marginBottom="40dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
         android:clickable="true"
-        android:contentDescription="Scan a QR from the gallery"
+        android:contentDescription="Upload a QR picture from the gallery"
         android:focusable="true"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingHorizontal="16dp"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:padding="4dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent">
 
-        <ImageView
-            android:layout_width="20dp"
-            android:layout_height="20dp"
-            android:importantForAccessibility="no"
-            android:src="@drawable/ic_gallery"
-            app:tint="@android:color/white" />
+        <FrameLayout
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:background="@drawable/bg_scanner_round_action">
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_gallery"
+                app:tint="@android:color/white" />
+        </FrameLayout>
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
+            android:layout_marginTop="8dp"
             android:fontFamily="@font/inter_semibold"
-            android:text="From gallery"
+            android:text="Upload QR"
             android:textColor="@android:color/white"
-            android:textSize="14sp" />
+            android:textSize="12sp" />
     </LinearLayout>
 
     <!-- Floating Header Container (Vertical) -->
