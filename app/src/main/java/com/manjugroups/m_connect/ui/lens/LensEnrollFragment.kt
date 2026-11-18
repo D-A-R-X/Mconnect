@@ -68,6 +68,10 @@ class LensEnrollFragment : Fragment() {
     private val existingSamples by lazy { requireArguments().getInt(ARG_EXISTING, 0) }
     /** Lens Test build only: capture + review, photos saved on the phone, nothing uploaded. */
     private val dryRun by lazy { requireArguments().getBoolean(ARG_DRY_RUN, false) }
+    /** Retake of one saved photo (from the Saved photos screen). */
+    private val singlePose by lazy { LensPose.fromKey(requireArguments().getString(ARG_SINGLE_POSE)) }
+    private val startReplace by lazy { requireArguments().getBoolean(ARG_REPLACE, false) }
+    private val resultKey by lazy { requireArguments().getString(ARG_RESULT_KEY) ?: RESULT_KEY }
     /** Back camera by default: an admin photographs the staff member. */
     private var useFrontCamera = false
 
@@ -125,7 +129,7 @@ class LensEnrollFragment : Fragment() {
         // Both top bars pad themselves by the status-bar inset (full-bleed).
         com.manjugroups.m_connect.ui.common.StatusBarInsets.padHeader(binding.lensCaptureTop)
         com.manjugroups.m_connect.ui.common.StatusBarInsets.padHeader(binding.lensReviewHeader, fixedHeight = true)
-        viewModel.initReplace(existingSamples)
+        viewModel.init(existingSamples, startReplace, singlePose)
 
         val title = if (employeeCode.isNotBlank()) "$staffName · $employeeCode" else staffName
         binding.tvLensCaptureName.text = title
@@ -266,14 +270,14 @@ class LensEnrollFragment : Fragment() {
         val total = LensPose.entries.count { it !in state.skipped }
         b.tvLensCaptureStep.text = getString(R.string.lens_step_count, state.photos.size, total)
         b.btnLensReview.isEnabled = state.requiredDone && state.retakeOnly == null
-        b.btnLensReview.isVisible = state.retakeOnly == null
+        b.btnLensReview.isVisible = state.retakeOnly == null && state.single == null
         val target = state.target
-        b.btnLensSkip.isVisible = target != null && !target.required && state.retakeOnly == null
+        b.btnLensSkip.isVisible = target != null && !target.required && state.retakeOnly == null && state.single == null
 
         paintSegments(state, live.value)
         if (target != lastTarget) {
             lastTarget = target
-            scheduleOptionalSkip(target, state.retakeOnly != null)
+            scheduleOptionalSkip(target, state.retakeOnly != null || state.single != null)
         }
         renderPrompt(target, live.value)
     }
@@ -442,24 +446,51 @@ class LensEnrollFragment : Fragment() {
 
     // ── Review ────────────────────────────────────────────────────────────
 
+    /** Poses shown on the review screen: all of them, or the one being retaken. */
+    private fun gridPoses(state: LensEnrollUiState): List<LensPose> =
+        state.single?.let { listOf(it) } ?: LensPose.guidedOrder
+
+    private fun succeeded(state: LensEnrollUiState): Boolean {
+        val done = state.upload as? LensUploadState.Done ?: return false
+        if (state.single != null) {
+            return done.response.lensStatus == "lens_pending" || (done.response.addedSamples ?: 0) > 0
+        }
+        return done.response.needsRetake != true && (done.response.addedSamples ?: 0) >= 3
+    }
+
     private fun renderReview(state: LensEnrollUiState) {
         val b = _binding ?: return
         val uploading = state.upload is LensUploadState.Uploading
         val done = state.upload as? LensUploadState.Done
         val failed = state.upload as? LensUploadState.Failed
-        val succeeded = done != null && done.response.needsRetake != true && (done.response.addedSamples ?: 0) >= 3
+        val succeeded = succeeded(state)
         // Lens down / not configured, but the server kept the photos on the profile.
         val savedPending = failed != null && LensErrors.savedForLater(failed.outcome)
+        val single = state.single
 
         renderPoseGrid(state, locked = uploading || succeeded || savedPending)
 
-        b.lensReplaceRow.isVisible = existingSamples > 0 && !succeeded
+        b.lensReplaceRow.isVisible = (existingSamples > 0 || startReplace) && !succeeded && single == null
         b.tvLensReplaceBody.text = getString(R.string.lens_replace_body, existingSamples)
         if (b.swLensReplace.isChecked != state.replace) b.swLensReplace.isChecked = state.replace
         b.swLensReplace.isEnabled = !uploading
 
         // Result card.
         when {
+            done != null && single != null -> {
+                val pose = single.label.lowercase()
+                if (done.response.lensStatus == "lens_pending") {
+                    showResult(
+                        getString(R.string.lens_result_saved_title), R.attr.colorWarning,
+                        done.response.message ?: getString(R.string.lens_retake_saved_body, pose),
+                    )
+                } else {
+                    showResult(
+                        getString(R.string.lens_retake_added_title), R.attr.colorSuccess,
+                        done.response.message ?: getString(R.string.lens_retake_added_body, pose),
+                    )
+                }
+            }
             done != null -> {
                 val added = done.response.addedSamples ?: 0
                 val total = done.response.faceSamples ?: added
@@ -492,12 +523,14 @@ class LensEnrollFragment : Fragment() {
             failed?.outcome?.action == LensErrors.Action.RETRY -> getString(R.string.lens_retry)
             failed?.outcome?.action == LensErrors.Action.CONTACT_ADMIN -> getString(R.string.lens_done)
             dryRun -> "Save ${state.photos.size} test photos"
+            single != null -> getString(R.string.lens_retake_upload)
             else -> getString(R.string.lens_upload, state.photos.size)
         }
-        if (((done != null && (done.response.addedSamples ?: 0) > 0) || savedPending) && !enrolled) {
+        val changed = (done != null && ((done.response.addedSamples ?: 0) > 0 || (single != null && succeeded))) || savedPending
+        if (changed && !enrolled) {
             enrolled = true
-            // The list behind refreshes its badge even if the person closes now.
-            setFragmentResult(RESULT_KEY, Bundle().apply { putString(ARG_STAFF_ID, staffId) })
+            // The screen behind refreshes even if the person closes now.
+            setFragmentResult(resultKey, Bundle().apply { putString(ARG_STAFF_ID, staffId) })
         }
     }
 
@@ -517,7 +550,7 @@ class LensEnrollFragment : Fragment() {
     private fun renderPoseGrid(state: LensEnrollUiState, locked: Boolean) {
         val b = _binding ?: return
         val grid = b.lensPoseGrid
-        val poses = LensPose.guidedOrder
+        val poses = gridPoses(state)
         if (grid.childCount != poses.size) {
             grid.removeAllViews()
             val gap = (8 * resources.displayMetrics.density).toInt()
@@ -578,13 +611,20 @@ class LensEnrollFragment : Fragment() {
         item.ivLensPose.setImageDrawable(null)
         viewLifecycleOwner.lifecycleScope.launch {
             val bitmap = withContext(Dispatchers.Default) {
-                val opts = BitmapFactory.Options().apply { inSampleSize = 4 }
+                // Face crops are smaller than the full frame: sample less.
+                val sample = when {
+                    photo.width > 1000 -> 4
+                    photo.width > 500 -> 2
+                    else -> 1
+                }
+                val opts = BitmapFactory.Options().apply { inSampleSize = sample }
                 BitmapFactory.decodeByteArray(photo.jpeg, 0, photo.jpeg.size, opts)
             } ?: return@launch
             thumbs[pose] = photo to bitmap
             if (viewModel.state.value.photos[pose] === photo) {
                 val b = _binding ?: return@launch
-                val index = LensPose.guidedOrder.indexOf(pose)
+                val index = gridPoses(viewModel.state.value).indexOf(pose)
+                if (index < 0) return@launch
                 ItemLensPoseBinding.bind(b.lensPoseGrid.getChildAt(index) ?: return@launch).ivLensPose.setImageBitmap(bitmap)
             }
         }
@@ -599,7 +639,7 @@ class LensEnrollFragment : Fragment() {
         val done = s.upload as? LensUploadState.Done
         val failed = s.upload as? LensUploadState.Failed
         when {
-            done != null && done.response.needsRetake != true && (done.response.addedSamples ?: 0) >= 3 -> finish()
+            succeeded(s) -> finish()
             done != null -> viewModel.recordAgain()
             failed != null && LensErrors.savedForLater(failed.outcome) -> finish()
             failed?.outcome?.action == LensErrors.Action.CONTACT_ADMIN -> finish()
@@ -682,16 +722,44 @@ class LensEnrollFragment : Fragment() {
         private const val ARG_CODE = "employeeCode"
         private const val ARG_EXISTING = "existingSamples"
         private const val ARG_DRY_RUN = "dryRun"
+        private const val ARG_SINGLE_POSE = "singlePose"
+        private const val ARG_REPLACE = "replace"
+        private const val ARG_RESULT_KEY = "resultKey"
         private const val OPTIONAL_TIMEOUT_MS = 10_000L
         private const val HINT_HOLD_MS = 450L
 
-        fun newInstance(staffId: String, name: String, employeeCode: String?, existingSamples: Int) =
+        /**
+         * Full head turn. [replace] starts with "Replace earlier photos" on
+         * ("Retake all"). [resultKey]: fragment-result key sent when photos changed.
+         */
+        fun newInstance(
+            staffId: String,
+            name: String,
+            employeeCode: String?,
+            existingSamples: Int,
+            replace: Boolean = false,
+            resultKey: String = RESULT_KEY,
+        ) = LensEnrollFragment().apply {
+            arguments = Bundle().apply {
+                putString(ARG_STAFF_ID, staffId)
+                putString(ARG_NAME, name)
+                putString(ARG_CODE, employeeCode)
+                putInt(ARG_EXISTING, existingSamples)
+                putBoolean(ARG_REPLACE, replace)
+                putString(ARG_RESULT_KEY, resultKey)
+            }
+        }
+
+        /** Retake of one saved photo: the camera asks for just [pose]. */
+        fun newSinglePose(staffId: String, name: String, employeeCode: String?, pose: LensPose, resultKey: String) =
             LensEnrollFragment().apply {
                 arguments = Bundle().apply {
                     putString(ARG_STAFF_ID, staffId)
                     putString(ARG_NAME, name)
                     putString(ARG_CODE, employeeCode)
-                    putInt(ARG_EXISTING, existingSamples)
+                    putInt(ARG_EXISTING, 0)
+                    putString(ARG_SINGLE_POSE, pose.key)
+                    putString(ARG_RESULT_KEY, resultKey)
                 }
             }
 

@@ -60,7 +60,7 @@ object LensErrors {
     fun actionFor(httpStatus: Int, code: String?): Action = when (code?.uppercase()) {
         "FACE_MATCHES_ANOTHER_PERSON", "FACE_DOES_NOT_MATCH_EXISTING_ENROLLMENT",
         "LENS_NOT_CONFIGURED", "LENS_NOT_DEPLOYED", "LENS_REJECTED", "FORBIDDEN", "NO_EMPLOYEE_CODE" -> Action.CONTACT_ADMIN
-        "NO_USABLE_FACE", "PHOTOS_SHOW_DIFFERENT_PEOPLE", "INVALID_REQUEST" -> Action.RETAKE
+        "NO_USABLE_FACE", "PHOTOS_SHOW_DIFFERENT_PEOPLE", "INVALID_REQUEST", "PHOTO_NOT_USED" -> Action.RETAKE
         "LENS_NOT_READY" -> Action.RETRY
         "STAFF_NOT_FOUND" -> Action.FIX
         else -> when {

@@ -47,9 +47,30 @@
     <string name="lens_result_saved_title">Photos saved</string>
     <string name="lens_result_saved_body">Photos saved on %1$s\'s profile. Waiting for Lens.</string>
     <string name="lens_saved_waiting">Saved · waiting for Lens</string>
-    <string name="lens_send_pending_title">Photos waiting for Lens</string>
-    <string name="lens_send_pending_body">%1$d photos of %2$s are saved on the profile and waiting for Lens.</string>
-    <string name="lens_send_pending">Send to Lens</string>
-    <string name="lens_record_again_short">Record again</string>
+    <string name="lens_sending">Sending to Lens…</string>
+    <string name="lens_captures_title">Saved photos</string>
+    <string name="lens_captures_in_lens">In Lens</string>
+    <string name="lens_captures_waiting">Waiting for Lens</string>
+    <string name="lens_captures_none">No photo</string>
+    <string name="lens_captures_status_enrolled">In Lens: %1$d photos for the cameras</string>
+    <string name="lens_captures_status_waiting">%1$d photos waiting for Lens</string>
+    <string name="lens_captures_status_none">No saved photos. Record the head turn to enroll.</string>
+    <string name="lens_captures_note">Delete removes the photo from the staff profile only. Lens keeps what it already has, so the cameras still recognise this person.</string>
+    <string name="lens_captures_delete">Delete</string>
+    <string name="lens_captures_delete_all">Delete all</string>
+    <string name="lens_captures_retake_all">Retake all</string>
+    <string name="lens_captures_send">Send to Lens (%1$d)</string>
+    <string name="lens_captures_delete_title">Delete this photo?</string>
+    <string name="lens_captures_delete_body">The %1$s photo is removed from %2$s\'s profile. Lens keeps what it already has.</string>
+    <string name="lens_captures_delete_all_title">Delete all photos?</string>
+    <string name="lens_captures_delete_all_body">All %1$d saved photos of %2$s are removed from the profile. Lens keeps what it already has.</string>
+    <string name="lens_retake_upload">Save photo</string>
+    <string name="lens_retake_added_title">Photo replaced</string>
+    <string name="lens_retake_added_body">The new %1$s photo is added to Lens.</string>
+    <string name="lens_retake_saved_body">The new %1$s photo is saved on the profile. Waiting for Lens.</string>
     <string name="lens_done">Done</string>
+    <plurals name="lens_captures_count">
+        <item quantity="one">%d photo</item>
+        <item quantity="other">%d photos</item>
+    </plurals>
 </resources>

@@ -10,6 +10,7 @@ import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.LensEnrollPhoto
 import com.manjugroups.m_connect.network.LensEnrollRequest
 import com.manjugroups.m_connect.network.LensEnrollResponse
+import com.manjugroups.m_connect.network.LensRetakeRequest
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,6 +34,8 @@ data class LensEnrollUiState(
     val skipped: Set<LensPose> = emptySet(),
     /** Retaking one pose from the review screen: go back to review after it. */
     val retakeOnly: LensPose? = null,
+    /** Retake of one saved photo: the whole session is just this pose. */
+    val single: LensPose? = null,
     val replace: Boolean = false,
     val upload: LensUploadState = LensUploadState.Idle,
     /** Per-pose reasons from the last upload (failed[] list). */
@@ -43,13 +46,14 @@ data class LensEnrollUiState(
     /** Next pose to ask for, in guided order. */
     val target: LensPose?
         get() = retakeOnly?.takeIf { it !in photos }
-            ?: LensPose.guidedOrder.firstOrNull { it !in photos && it !in skipped }
+            ?: if (single != null) single.takeIf { it !in photos }
+            else LensPose.guidedOrder.firstOrNull { it !in photos && it !in skipped }
 
     val pending: Set<LensPose>
-        get() = retakeOnly?.let { if (it in photos) emptySet() else setOf(it) }
+        get() = (retakeOnly ?: single)?.let { if (it in photos) emptySet() else setOf(it) }
             ?: LensPose.entries.filter { it !in photos && it !in skipped }.toSet()
 
-    val requiredDone: Boolean get() = LensPose.required.all { it in photos }
+    val requiredDone: Boolean get() = single?.let { it in photos } ?: LensPose.required.all { it in photos }
     val allDone: Boolean get() = pending.isEmpty()
 }
 
@@ -59,9 +63,24 @@ class LensEnrollViewModel : ViewModel() {
     private val _state = MutableStateFlow(LensEnrollUiState())
     val state: StateFlow<LensEnrollUiState> = _state.asStateFlow()
 
-    fun initReplace(existingSamples: Int) {
-        // Never replace silently: the toggle starts off.
-        if (existingSamples <= 0) _state.update { it.copy(replace = false) }
+    private var initialised = false
+
+    /**
+     * [single]: retake of one saved photo (only that pose, other poses shown as
+     * skipped). [replace]: "Retake all" starts with Replace on; otherwise it
+     * never starts on (no silent replace).
+     */
+    fun init(existingSamples: Int, replace: Boolean, single: LensPose?) {
+        if (initialised) return
+        initialised = true
+        _state.update {
+            it.copy(
+                replace = replace && single == null,
+                single = single,
+                skipped = if (single != null) LensPose.entries.filter { p -> p != single }.toSet() else emptySet(),
+            )
+        }
+        if (existingSamples <= 0 && !replace) _state.update { it.copy(replace = false) }
     }
 
     /** Called from the camera thread. */
@@ -103,7 +122,13 @@ class LensEnrollViewModel : ViewModel() {
 
     /** Start over: every pose again (after "record again"). */
     fun recordAgain() {
-        _state.update { s -> LensEnrollUiState(replace = s.replace) }
+        _state.update { s ->
+            LensEnrollUiState(
+                replace = s.replace,
+                single = s.single,
+                skipped = if (s.single != null) s.skipped else emptySet(),
+            )
+        }
     }
 
     fun setReplace(replace: Boolean) = _state.update { it.copy(replace = replace) }
@@ -126,7 +151,11 @@ class LensEnrollViewModel : ViewModel() {
                         )
                     }
                 }
-                val response = api.enrollLensFaces(token, LensEnrollRequest(staffId, s.replace, photos))
+                val response = if (s.single != null && photos.size == 1) {
+                    api.retakeLensPhoto(token, LensRetakeRequest(staffId, photos.first()))
+                } else {
+                    api.enrollLensFaces(token, LensEnrollRequest(staffId, s.replace, photos))
+                }
                 val body = response.body()
                 if (response.isSuccessful && body != null && body.ok != false && body.success != false) {
                     val all = body.failed.orEmpty().map { f ->

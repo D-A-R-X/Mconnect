@@ -93,8 +93,9 @@ class LensStaffFragment : Fragment() {
             }
         })
 
-        // An enrollment finished: refresh the badges without a skeleton.
+        // An enrollment finished, or saved photos changed: refresh the badges without a skeleton.
         setFragmentResultListener(LensEnrollFragment.RESULT_KEY) { _, _ -> viewModel.reloadQuietly() }
+        setFragmentResultListener(LensCapturesFragment.RESULT_KEY) { _, _ -> viewModel.reloadQuietly() }
 
         viewModel.start(session.bearerToken)
         viewLifecycleOwner.lifecycleScope.launch {
@@ -143,22 +144,16 @@ class LensStaffFragment : Fragment() {
             com.manjugroups.m_connect.ui.common.Floater.warning(getString(R.string.lens_no_code))
             return
         }
-        val pending = item.pendingPhotos ?: 0
-        if (pending > 0) {
-            // Photos already saved and waiting: offer to send them instead of recording again.
-            com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
-                .setTitle(R.string.lens_send_pending_title)
-                .setMessage(getString(R.string.lens_send_pending_body, pending, item.name.orEmpty()))
-                .setPositiveButton(R.string.lens_send_pending) { _, _ ->
-                    com.manjugroups.m_connect.ui.common.Floater.show("Sending the photos to Lens…")
-                    viewModel.sendPending(staffId) { ok, message ->
-                        if (ok) com.manjugroups.m_connect.ui.common.Floater.success(message)
-                        else com.manjugroups.m_connect.ui.common.Floater.warning(message)
-                    }
-                }
-                .setNeutralButton(R.string.lens_record_again_short) { _, _ -> pushEnroll(item, staffId) }
-                .setNegativeButton(android.R.string.cancel, null)
-                .show()
+        if ((item.savedPhotos ?: 0) > 0) {
+            // Saved photos: Send to Lens, retake one or all, delete.
+            parentFragmentManager.pushDetail(
+                LensCapturesFragment.newInstance(
+                    staffId = staffId,
+                    name = item.name.orEmpty(),
+                    employeeCode = item.employeeCode,
+                    existingSamples = item.enrollment?.faceSamples ?: 0,
+                ),
+            )
             return
         }
         pushEnroll(item, staffId)

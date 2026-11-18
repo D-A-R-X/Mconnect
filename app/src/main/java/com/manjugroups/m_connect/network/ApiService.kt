@@ -87,6 +87,27 @@ interface ApiService {
         @Body body: LensEnrollRequest,
     ): Response<LensEnrollResponse>
 
+    /** A staff member's saved Lens photos (newest first) with viewable URLs. */
+    @GET("api/lens/captures")
+    suspend fun getLensCaptures(
+        @Header("Authorization") token: String,
+        @Query("staffId") staffId: String,
+    ): Response<LensCapturesResponse>
+
+    /** Deletes our saved photo(s) only: { captureId } or { staffId, all: true }. Never Lens. */
+    @POST("api/lens/captures/delete")
+    suspend fun deleteLensCaptures(
+        @Header("Authorization") token: String,
+        @Body body: LensDeleteRequest,
+    ): Response<LensDeleteResponse>
+
+    /** Retake of one pose: added to Lens as a new sample (or kept waiting), then the old one goes. */
+    @POST("api/lens/captures/retake")
+    suspend fun retakeLensPhoto(
+        @Header("Authorization") token: String,
+        @Body body: LensRetakeRequest,
+    ): Response<LensEnrollResponse>
+
     /** Sends the photos already saved on the profile (Lens was down / not configured) to Lens. */
     @POST("api/lens/enroll/pending")
     suspend fun sendPendingLensPhotos(
@@ -1639,6 +1660,40 @@ data class LensStaffItem(
 
 data class LensPendingRequest(val staffId: String)
 
+data class LensCapturesResponse(
+    val success: Boolean? = null,
+    val enrollment: LensEnrollmentInfo? = null,
+    val captures: List<LensCaptureItem>? = null,
+)
+
+data class LensCaptureItem(
+    val captureId: String? = null,
+    val pose: String? = null,
+    /** "enrolled" (in Lens) or "lens_pending" (waiting for Lens). */
+    val lensStatus: String? = null,
+    val capturedAt: Double? = null,
+    val capturedByName: String? = null,
+    val url: String? = null,
+)
+
+data class LensDeleteRequest(
+    val captureId: String? = null,
+    val staffId: String? = null,
+    val all: Boolean? = null,
+)
+
+data class LensDeleteResponse(
+    val success: Boolean? = null,
+    val deleted: Int? = null,
+    val error: String? = null,
+    val code: String? = null,
+)
+
+data class LensRetakeRequest(
+    val staffId: String,
+    val photo: LensEnrollPhoto,
+)
+
 data class LensEnrollmentInfo(
     val faceSamples: Int? = null,
     val enrolledAt: Double? = null,
@@ -1669,6 +1724,10 @@ data class LensEnrollResponse(
     val needsRetake: Boolean? = null,
     val error: String? = null,
     val code: String? = null,
+    /** Retake of one pose: the pose, "enrolled" / "lens_pending", and a sentence. */
+    val pose: String? = null,
+    val lensStatus: String? = null,
+    val message: String? = null,
 )
 
 data class LensFailedPhoto(

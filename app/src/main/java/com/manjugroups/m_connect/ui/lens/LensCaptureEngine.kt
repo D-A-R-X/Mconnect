@@ -75,7 +75,10 @@ class LensCaptureEngine(
             .build(),
     )
 
-    private class Frame(val bitmap: Bitmap, val faceWidth: Int, val yaw: Float)
+    /** A still frame plus the face box in its (upright) pixels, for the head crop. */
+    private class Frame(val bitmap: Bitmap, val face: Rect, val yaw: Float) {
+        val faceWidth: Int get() = face.width()
+    }
 
     private val motion = LensMotionTracker()
     private val selector = LensBestFrameSelector<Frame>()
@@ -176,7 +179,7 @@ class LensCaptureEngine(
                         hint = LensCapturePolicy.pixelHint(pose, stats, relaxed)
                         if (hint == null) {
                             val score = LensCapturePolicy.score(pose, sample, stats)
-                            selector.offer(pose, score, now, Frame(bitmap, face.boundingBox.width(), sample.yaw))
+                            selector.offer(pose, score, now, Frame(bitmap, Rect(face.boundingBox), sample.yaw))
                         }
                     }
                 }
@@ -188,15 +191,15 @@ class LensCaptureEngine(
                 goodSince.remove(candidate.pose)
                 if (candidate.pose !in pending) continue
                 takenYaw[candidate.pose] = candidate.frame.yaw
-                val jpeg = encode(candidate.frame.bitmap)
+                val photo = encodeFaceCrop(candidate.frame) ?: continue
                 listener.onCaptured(
                     LensCapturedPhoto(
                         pose = candidate.pose,
-                        jpeg = jpeg,
+                        jpeg = photo.jpeg,
                         score = candidate.score,
-                        width = candidate.frame.bitmap.width,
-                        height = candidate.frame.bitmap.height,
-                        faceWidthPx = candidate.frame.faceWidth,
+                        width = photo.width,
+                        height = photo.height,
+                        faceWidthPx = photo.faceWidth,
                     ),
                 )
             }
@@ -337,6 +340,36 @@ class LensCaptureEngine(
             s.yaw, s.pitch, s.roll, s.faceWidth, f(s.leftEyeOpen), f(s.rightEyeOpen), f(s.smiling),
             px, if (still) "still" else "moving", fps,
         )
+    }
+
+    private class Encoded(val jpeg: ByteArray, val width: Int, val height: Int, val faceWidth: Int)
+
+    /**
+     * The head with a small margin (LensFaceCrop), never the shirt and waist:
+     * native pixels, upscaled only when the crop is tiny. Falls back to the
+     * full frame if the crop can't be made.
+     */
+    private fun encodeFaceCrop(frame: Frame): Encoded? {
+        val src = frame.bitmap
+        return try {
+            val f = frame.face
+            val box = LensFaceCrop.cropBox(
+                f.left.toFloat(), f.top.toFloat(), f.width().toFloat(), f.height().toFloat(), src.width, src.height,
+            )
+            val crop = Bitmap.createBitmap(src, box.left, box.top, box.width, box.height)
+            val (ow, oh) = LensFaceCrop.outputSize(box.width, box.height)
+            val out = if (ow == crop.width && oh == crop.height) crop else Bitmap.createScaledBitmap(crop, ow, oh, true)
+            if (out !== crop && crop !== src) crop.recycle()
+            val jpeg = encode(out)
+            val faceWidth = (f.width() * ow.toFloat() / box.width).roundToInt()
+            val encoded = Encoded(jpeg, out.width, out.height, faceWidth)
+            if (out !== src) out.recycle()
+            encoded
+        } catch (e: Exception) {
+            Encoded(encode(src), src.width, src.height, frame.faceWidth)
+        } catch (e: OutOfMemoryError) {
+            null
+        }
     }
 
     private fun encode(bitmap: Bitmap): ByteArray {
