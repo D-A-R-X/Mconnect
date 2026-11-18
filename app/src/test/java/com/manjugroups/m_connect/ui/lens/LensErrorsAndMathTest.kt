@@ -8,6 +8,17 @@ import org.junit.Test
 class LensErrorsAndMathTest {
 
     @Test
+    fun photosSavedWhileLensIsDownAreNotAFailure() {
+        val saved = LensErrors.parse(503, "{\"code\":\"LENS_NOT_CONFIGURED\",\"error\":\"Photos saved on the staff profile. Lens enrollment is not configured yet.\"}")
+        assertTrue(LensErrors.savedForLater(saved))
+        val busySaved = LensErrors.parse(503, "{\"code\":\"LENS_NOT_READY\",\"error\":\"Photos saved. The face service is busy.\"}")
+        assertTrue(LensErrors.savedForLater(busySaved))
+        val notSaved = LensErrors.parse(503, "{\"code\":\"LENS_NOT_CONFIGURED\",\"error\":\"Lens enrollment is not configured yet.\"}")
+        assertFalse(LensErrors.savedForLater(notSaved))
+        assertFalse(LensErrors.savedForLater(LensErrors.parse(409, "{\"code\":\"FACE_MATCHES_ANOTHER_PERSON\"}")))
+    }
+
+    @Test
     fun bareNotFoundMeansLensRoutesNotDeployed() {
         // Convex answers an unknown route with a plain-text 404 and no JSON code.
         val out = LensErrors.parse(404, "No matching routes found")

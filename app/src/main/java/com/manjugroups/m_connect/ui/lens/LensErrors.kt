@@ -14,6 +14,14 @@ object LensErrors {
 
     data class Outcome(val code: String, val message: String, val action: Action, val failed: List<FailedPhoto>)
 
+    /**
+     * Lens was down or not configured, but the server kept the photos on the
+     * staff profile ("Photos saved…"): not a failure for the person enrolling.
+     */
+    fun savedForLater(outcome: Outcome): Boolean =
+        (outcome.code.equals("LENS_NOT_CONFIGURED", true) || outcome.code.equals("LENS_NOT_READY", true)) &&
+            outcome.message.trim().startsWith("Photos saved", ignoreCase = true)
+
     data class FailedPhoto(val pose: LensPose?, val code: String, val message: String)
 
     /** A bare 404 (no JSON code) means the Lens routes aren't deployed on the server yet. */

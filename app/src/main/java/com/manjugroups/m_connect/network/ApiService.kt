@@ -87,6 +87,13 @@ interface ApiService {
         @Body body: LensEnrollRequest,
     ): Response<LensEnrollResponse>
 
+    /** Sends the photos already saved on the profile (Lens was down / not configured) to Lens. */
+    @POST("api/lens/enroll/pending")
+    suspend fun sendPendingLensPhotos(
+        @Header("Authorization") token: String,
+        @Body body: LensPendingRequest,
+    ): Response<LensEnrollResponse>
+
     // Staff
     @GET("api/hr/staff")
     suspend fun getStaff(
@@ -1625,7 +1632,12 @@ data class LensStaffItem(
     val designation: String? = null,
     val photoUrl: String? = null,
     val enrollment: LensEnrollmentInfo? = null,
+    /** Live photos saved on the profile, and how many still wait for Lens. */
+    val savedPhotos: Int? = null,
+    val pendingPhotos: Int? = null,
 )
+
+data class LensPendingRequest(val staffId: String)
 
 data class LensEnrollmentInfo(
     val faceSamples: Int? = null,

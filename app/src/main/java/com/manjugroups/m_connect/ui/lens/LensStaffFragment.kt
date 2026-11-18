@@ -143,6 +143,28 @@ class LensStaffFragment : Fragment() {
             com.manjugroups.m_connect.ui.common.Floater.warning(getString(R.string.lens_no_code))
             return
         }
+        val pending = item.pendingPhotos ?: 0
+        if (pending > 0) {
+            // Photos already saved and waiting: offer to send them instead of recording again.
+            com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
+                .setTitle(R.string.lens_send_pending_title)
+                .setMessage(getString(R.string.lens_send_pending_body, pending, item.name.orEmpty()))
+                .setPositiveButton(R.string.lens_send_pending) { _, _ ->
+                    com.manjugroups.m_connect.ui.common.Floater.show("Sending the photos to Lens…")
+                    viewModel.sendPending(staffId) { ok, message ->
+                        if (ok) com.manjugroups.m_connect.ui.common.Floater.success(message)
+                        else com.manjugroups.m_connect.ui.common.Floater.warning(message)
+                    }
+                }
+                .setNeutralButton(R.string.lens_record_again_short) { _, _ -> pushEnroll(item, staffId) }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+            return
+        }
+        pushEnroll(item, staffId)
+    }
+
+    private fun pushEnroll(item: LensStaffItem, staffId: String) {
         parentFragmentManager.pushDetail(
             LensEnrollFragment.newInstance(
                 staffId = staffId,
@@ -218,6 +240,12 @@ class LensStaffFragment : Fragment() {
                     }
                     b.tvLensStatus.setBackgroundResource(R.drawable.bg_lens_badge_enrolled)
                     b.tvLensStatus.setTextColor(attrColor(b.root, R.attr.colorSuccess))
+                }
+                (item.pendingPhotos ?: 0) > 0 -> {
+                    // Saved while Lens was down / not configured: not lost, waiting.
+                    b.tvLensStatus.text = ctx.getString(R.string.lens_saved_waiting)
+                    b.tvLensStatus.setBackgroundResource(R.drawable.bg_lens_badge_warning)
+                    b.tvLensStatus.setTextColor(attrColor(b.root, R.attr.colorWarning))
                 }
                 else -> {
                     b.tvLensStatus.text = ctx.getString(R.string.lens_not_enrolled)

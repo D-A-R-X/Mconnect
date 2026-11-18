@@ -448,8 +448,10 @@ class LensEnrollFragment : Fragment() {
         val done = state.upload as? LensUploadState.Done
         val failed = state.upload as? LensUploadState.Failed
         val succeeded = done != null && done.response.needsRetake != true && (done.response.addedSamples ?: 0) >= 3
+        // Lens down / not configured, but the server kept the photos on the profile.
+        val savedPending = failed != null && LensErrors.savedForLater(failed.outcome)
 
-        renderPoseGrid(state, locked = uploading || succeeded)
+        renderPoseGrid(state, locked = uploading || succeeded || savedPending)
 
         b.lensReplaceRow.isVisible = existingSamples > 0 && !succeeded
         b.tvLensReplaceBody.text = getString(R.string.lens_replace_body, existingSamples)
@@ -473,22 +475,26 @@ class LensEnrollFragment : Fragment() {
                     )
                 }
             }
+            savedPending -> showResult(
+                getString(R.string.lens_result_saved_title), R.attr.colorWarning,
+                getString(R.string.lens_result_saved_body, staffName.ifBlank { "this staff member" }),
+            )
             failed != null -> showResult(getString(R.string.lens_result_failed_title), R.attr.colorError, failed.outcome.message)
             else -> b.lensResultCard.isVisible = false
         }
 
         b.lensUploadProgress.isVisible = uploading
-        b.btnLensRecordAgain.isVisible = !uploading && !succeeded
-        b.btnLensUpload.isEnabled = !uploading && (succeeded || state.requiredDone)
+        b.btnLensRecordAgain.isVisible = !uploading && !succeeded && !savedPending
+        b.btnLensUpload.isEnabled = !uploading && (succeeded || savedPending || state.requiredDone)
         b.btnLensUpload.text = when {
             uploading -> getString(R.string.lens_uploading)
-            succeeded -> getString(R.string.lens_done)
+            succeeded || savedPending -> getString(R.string.lens_done)
             failed?.outcome?.action == LensErrors.Action.RETRY -> getString(R.string.lens_retry)
             failed?.outcome?.action == LensErrors.Action.CONTACT_ADMIN -> getString(R.string.lens_done)
             dryRun -> "Save ${state.photos.size} test photos"
             else -> getString(R.string.lens_upload, state.photos.size)
         }
-        if (done != null && (done.response.addedSamples ?: 0) > 0 && !enrolled) {
+        if (((done != null && (done.response.addedSamples ?: 0) > 0) || savedPending) && !enrolled) {
             enrolled = true
             // The list behind refreshes its badge even if the person closes now.
             setFragmentResult(RESULT_KEY, Bundle().apply { putString(ARG_STAFF_ID, staffId) })
@@ -595,6 +601,7 @@ class LensEnrollFragment : Fragment() {
         when {
             done != null && done.response.needsRetake != true && (done.response.addedSamples ?: 0) >= 3 -> finish()
             done != null -> viewModel.recordAgain()
+            failed != null && LensErrors.savedForLater(failed.outcome) -> finish()
             failed?.outcome?.action == LensErrors.Action.CONTACT_ADMIN -> finish()
             failed?.outcome?.action == LensErrors.Action.RETAKE -> viewModel.recordAgain()
             else -> viewModel.upload(session.bearerToken, staffId)

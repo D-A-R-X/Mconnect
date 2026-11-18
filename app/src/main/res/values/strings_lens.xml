@@ -44,5 +44,12 @@
     <string name="lens_result_retake_title">Record again</string>
     <string name="lens_result_retake_body">Only %1$d photos could be used. At least 3 are needed.</string>
     <string name="lens_result_failed_title">Not enrolled</string>
+    <string name="lens_result_saved_title">Photos saved</string>
+    <string name="lens_result_saved_body">Photos saved on %1$s\'s profile. Waiting for Lens.</string>
+    <string name="lens_saved_waiting">Saved · waiting for Lens</string>
+    <string name="lens_send_pending_title">Photos waiting for Lens</string>
+    <string name="lens_send_pending_body">%1$d photos of %2$s are saved on the profile and waiting for Lens.</string>
+    <string name="lens_send_pending">Send to Lens</string>
+    <string name="lens_record_again_short">Record again</string>
     <string name="lens_done">Done</string>
 </resources>

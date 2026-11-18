@@ -60,6 +60,30 @@ class LensStaffViewModel : ViewModel() {
     /** Re-reads the list after an enrollment so the badge updates. */
     fun reloadQuietly() = loadFirstPage(debounceMs = 0, asRefresh = true, silent = true)
 
+    /**
+     * Sends a staff member's saved, waiting photos to Lens (no re-recording).
+     * [onDone] gets (success, staff-facing message); the list reloads after.
+     */
+    fun sendPending(staffId: String, onDone: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            val (ok, message) = try {
+                val res = api.sendPendingLensPhotos(token, com.manjugroups.m_connect.network.LensPendingRequest(staffId))
+                val body = res.body()
+                if (res.isSuccessful && body?.success != false) {
+                    true to "Sent to Lens: ${body?.addedSamples ?: 0} added, ${body?.faceSamples ?: 0} photos for the cameras."
+                } else {
+                    false to LensErrors.parse(res.code(), res.errorBody()?.string()).message
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                false to ApiErrors.noticeFor(e, "Couldn't send the photos to Lens.").text
+            }
+            onDone(ok, message)
+            reloadQuietly()
+        }
+    }
+
     fun loadMore() {
         val s = _state.value
         val cursor = s.nextCursor ?: return
