@@ -127,6 +127,15 @@ android {
     }
 
     buildTypes {
+        // Side-by-side "Lens Test" app (assembleLensTest): opens straight into
+        // the Lens capture in dry-run mode (no login, no upload) so capture can
+        // be checked on a phone that has the Play build. Own package, own launcher.
+        create("lensTest") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".lenstest"
+            versionNameSuffix = "-lenstest"
+            matchingFallbacks += listOf("debug")
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true

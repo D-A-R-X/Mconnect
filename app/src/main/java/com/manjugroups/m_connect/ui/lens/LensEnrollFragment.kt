@@ -66,6 +66,8 @@ class LensEnrollFragment : Fragment() {
     private val staffName by lazy { requireArguments().getString(ARG_NAME).orEmpty() }
     private val employeeCode by lazy { requireArguments().getString(ARG_CODE).orEmpty() }
     private val existingSamples by lazy { requireArguments().getInt(ARG_EXISTING, 0) }
+    /** Lens Test build only: capture + review, photos saved on the phone, nothing uploaded. */
+    private val dryRun by lazy { requireArguments().getBoolean(ARG_DRY_RUN, false) }
 
     private var cameraExecutor: ExecutorService? = null
     private var engine: LensCaptureEngine? = null
@@ -86,7 +88,7 @@ class LensEnrollFragment : Fragment() {
             maybeStartCamera()
         } else {
             Floater.warning(getString(R.string.lens_camera_permission_needed))
-            parentFragmentManager.popBackStack()
+            finish()
         }
     }
 
@@ -114,7 +116,7 @@ class LensEnrollFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         session = SessionManager(requireContext())
-        if (!LensStaffFragment.isAvailable(session) || staffId.isBlank()) {
+        if (!dryRun && (!LensStaffFragment.isAvailable(session) || staffId.isBlank())) {
             parentFragmentManager.popBackStack()
             return
         }
@@ -405,6 +407,7 @@ class LensEnrollFragment : Fragment() {
             succeeded -> getString(R.string.lens_done)
             failed?.outcome?.action == LensErrors.Action.RETRY -> getString(R.string.lens_retry)
             failed?.outcome?.action == LensErrors.Action.CONTACT_ADMIN -> getString(R.string.lens_done)
+            dryRun -> "Save ${state.photos.size} test photos"
             else -> getString(R.string.lens_upload, state.photos.size)
         }
         if (done != null && (done.response.addedSamples ?: 0) > 0 && !enrolled) {
@@ -504,6 +507,10 @@ class LensEnrollFragment : Fragment() {
     }
 
     private fun onUploadClicked() {
+        if (dryRun) {
+            saveDryRun()
+            return
+        }
         val s = viewModel.state.value
         val done = s.upload as? LensUploadState.Done
         val failed = s.upload as? LensUploadState.Failed
@@ -534,7 +541,34 @@ class LensEnrollFragment : Fragment() {
 
     private fun finish() {
         stopCamera()
-        parentFragmentManager.popBackStack()
+        if (parentFragmentManager.backStackEntryCount == 0) activity?.finish()
+        else parentFragmentManager.popBackStack()
+    }
+
+    /**
+     * Lens Test build: write each pose's JPEG (exactly what would be uploaded)
+     * plus a line of capture stats to the app's files dir, then start again.
+     * Pull with: adb pull /sdcard/Android/data/<pkg>/files/lens-test
+     */
+    private fun saveDryRun() {
+        val photos = viewModel.state.value.photos
+        if (photos.isEmpty()) return
+        val dir = java.io.File(requireContext().getExternalFilesDir(null), "lens-test/" +
+            java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.US).format(java.util.Date()))
+        runCatching {
+            dir.mkdirs()
+            val stats = StringBuilder()
+            photos.forEach { (pose, p) ->
+                java.io.File(dir, "${pose.key}.jpg").writeBytes(p.jpeg)
+                stats.appendLine("${pose.key}: ${p.width}x${p.height} face=${p.faceWidthPx}px score=${"%.3f".format(p.score)} bytes=${p.jpeg.size}")
+            }
+            java.io.File(dir, "stats.txt").writeText(stats.toString())
+        }.onSuccess {
+            Floater.success("Saved ${photos.size} test photos (not uploaded)")
+            viewModel.recordAgain()
+        }.onFailure {
+            Floater.error("Couldn't save the test photos")
+        }
     }
 
     private fun attrColor(attr: Int): Int {
@@ -562,6 +596,7 @@ class LensEnrollFragment : Fragment() {
         private const val ARG_NAME = "name"
         private const val ARG_CODE = "employeeCode"
         private const val ARG_EXISTING = "existingSamples"
+        private const val ARG_DRY_RUN = "dryRun"
         private const val OPTIONAL_TIMEOUT_MS = 10_000L
 
         fun newInstance(staffId: String, name: String, employeeCode: String?, existingSamples: Int) =
@@ -573,5 +608,16 @@ class LensEnrollFragment : Fragment() {
                     putInt(ARG_EXISTING, existingSamples)
                 }
             }
+
+        /** Lens Test build: no login, no upload (see saveDryRun). */
+        fun newDryRun() = LensEnrollFragment().apply {
+            arguments = Bundle().apply {
+                putString(ARG_STAFF_ID, "lens-test")
+                putString(ARG_NAME, "Capture test")
+                putString(ARG_CODE, "TEST")
+                putInt(ARG_EXISTING, 0)
+                putBoolean(ARG_DRY_RUN, true)
+            }
+        }
     }
 }

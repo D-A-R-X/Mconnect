@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Lens Test build only (assembleLensTest, package com.manjugroups.mconnect.lenstest).
+  The app opens straight into the Lens capture in dry-run mode: no login, no
+  upload, photos saved on the phone. The normal splash/login launcher is removed
+  so nobody signs in from this test package (its device id differs from the
+  Play app's, which device binding would refuse anyway).
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application tools:replace="android:label" android:label="Lens Test">
+
+        <activity
+            android:name=".SplashActivity"
+            tools:node="merge">
+            <intent-filter tools:node="removeAll" />
+        </activity>
+
+        <activity
+            android:name=".lenstest.LensCaptureTestActivity"
+            android:exported="true"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.Mconnect">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
