@@ -208,7 +208,13 @@ class LeavesViewModel(private val api: ApiService = ApiService.create()) : ViewM
      * the cancelled row disappears (or flips to a terminal state per
      * backend semantics). Mirrors PermissionsViewModel.cancelPermission.
      */
+    /** Cancels on their way; the row stays listed until the reload. */
+    private val cancellingIds = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+
     fun cancelLeave(bearerToken: String, id: String, canApprove: Boolean) {
+        // Same as permissions: a slow cancel left the row on screen and a
+        // second cancel was refused ("only pending … can be cancelled").
+        if (!cancellingIds.add(id)) return
         viewModelScope.launch {
             try {
                 val resp = api.cancelLeave(bearerToken, IdRequest(id))
@@ -219,7 +225,10 @@ class LeavesViewModel(private val api: ApiService = ApiService.create()) : ViewM
                     _event.emit(resp.error ?: "Failed to cancel leave")
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 _event.emit(e.message ?: "Network error")
+            } finally {
+                cancellingIds.remove(id)
             }
         }
     }
