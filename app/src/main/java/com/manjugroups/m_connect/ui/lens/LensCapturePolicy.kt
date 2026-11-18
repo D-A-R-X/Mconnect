@@ -24,10 +24,10 @@ enum class LensPose(
     val targetYaw: Float,
 ) {
     STRAIGHT("straight", "Straight", true, 0f),
-    SLIGHT_LEFT("slight_left", "Slight left", true, 15f),
-    MORE_LEFT("more_left", "More left", false, 38f),
-    SLIGHT_RIGHT("slight_right", "Slight right", true, -15f),
-    MORE_RIGHT("more_right", "More right", false, -38f);
+    SLIGHT_LEFT("slight_left", "Slight left", true, 22f),
+    MORE_LEFT("more_left", "More left", false, 47f),
+    SLIGHT_RIGHT("slight_right", "Slight right", true, -22f),
+    MORE_RIGHT("more_right", "More right", false, -47f);
 
     companion object {
         /** Guided order: straight, left side, back through centre, right side. */
@@ -119,21 +119,22 @@ object LensCapturePolicy {
      * same at 22..30). The test phone's log showed people settle at 35..45 for a
      * side turn; past ~45 the nose crosses the far eye and Lens can't align it.
      */
-    const val MORE_MAX = 45f
+    const val MORE_MAX = 50f
     /** Head tilt toward a shoulder. ML Kit's angles jitter a few degrees per frame. */
     const val LEVEL_MAX = 12f
     /**
      * Capture windows sit inside the doc's ranges with gaps between them, so a
      * head held near a boundary (e.g. 20 degrees) can't fill two poses at once.
      */
-    const val SLIGHT_CAPTURE_MIN = 11f
-    const val SLIGHT_CAPTURE_MAX = 19f
+    // User's angles (18 Nov): slight 15..30, more 45..50, straight within 5.
+    const val SLIGHT_CAPTURE_MIN = 15f
+    const val SLIGHT_CAPTURE_MAX = 30f
     /**
      * People stop turning the moment the ring fills, so "more" must start well
      * past "slight" or the two photos look the same (user, 18 Nov). The phone's
      * log showed people settle at 35..45 for a side turn when left to it.
      */
-    const val MORE_CAPTURE_MIN = 32f
+    const val MORE_CAPTURE_MIN = 45f
     /** Every photo must differ from the ones already taken by at least this much yaw. */
     const val MIN_POSE_SEPARATION = 15f
     /** Up/down: a phone held a little low reads ~10 degrees; Lens tolerates mild pitch. */
