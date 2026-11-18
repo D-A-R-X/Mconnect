@@ -112,7 +112,7 @@ object SettingsGuide {
         "Keep M-connect active",
         listOf(
             "Find \"Manage app if unused\" (also called \"Pause app activity if unused\" or \"Remove permissions if unused\")",
-            "Turn it OFF",
+            "Turn it OFF. If it already shows OFF, don't touch it",
         ),
         *listOfNotNull(direct).toTypedArray(),
     )
