@@ -19,6 +19,12 @@ interface PendingPunchDao {
     @Query("UPDATE pending_punches SET attemptCount = attemptCount + 1, lastError = :err WHERE id = :id")
     suspend fun bumpAttempt(id: Long, err: String?)
 
+    @Query("UPDATE pending_punches SET uploadedPhotoId = :storageId WHERE id = :id")
+    suspend fun saveUploadedPhoto(id: Long, storageId: String)
+
+    @Query("UPDATE pending_punches SET reviewReason = :reason, lastError = :reason WHERE id = :id")
+    suspend fun markForReview(id: Long, reason: String)
+
     @Query("SELECT COUNT(*) FROM pending_punches")
     suspend fun count(): Int
 }

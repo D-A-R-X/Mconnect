@@ -12,6 +12,8 @@ import com.manjugroups.m_connect.attendance.AttendanceFailure
 import com.manjugroups.m_connect.attendance.AttendanceSubmissionGate
 import com.manjugroups.m_connect.attendance.OfflinePunchQueue
 import com.manjugroups.m_connect.attendance.PunchSyncWorker
+import com.manjugroups.m_connect.attendance.recordedPunchMatches
+import com.manjugroups.m_connect.attendance.pendingPunchDay
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.geotrack.AttendanceTrackingGate
 import com.manjugroups.m_connect.geotrack.GeoTrackBootstrapSync
@@ -95,6 +97,7 @@ data class AttendanceFlowState(
     val startedAtGate: Boolean = false,
     /** A punch-in today has no punch-out yet (any source). */
     val hasOpenPunchNow: Boolean = false,
+    val pendingPunchReview: String? = null,
 )
 
 enum class PunchMode {
@@ -228,7 +231,7 @@ class AttendanceFlowViewModel(
                 // A punch may still be sitting in the offline queue (not yet
                 // synced) — the server won't know about it, so OR it into the
                 // displayed state or today would wrongly read as not-clocked-in.
-                val withPending = appCtx?.let { overlayPendingPunch(it, fresh) } ?: fresh
+                val withPending = appCtx?.let { overlayPendingPunch(it, fresh, dayResp) } ?: fresh
                 val withConfirmed = overlayConfirmedPunch(withPending)
                 _uiState.value = mergeAttendanceRefresh(withConfirmed, _uiState.value, submission.isActive)
                 if (withConfirmed != withPending && catchUpRefreshes < MAX_CATCH_UP_REFRESHES) {
@@ -290,18 +293,36 @@ class AttendanceFlowViewModel(
     private suspend fun overlayPendingPunch(
         appCtx: Context,
         base: AttendanceFlowState,
+        confirmedDay: com.manjugroups.m_connect.network.DaySessionsResponse? = null,
     ): AttendanceFlowState {
-        val pending = withContext(Dispatchers.IO) {
-            runCatching {
-                GeoTrackDatabase.getInstance(appCtx).pendingPunchDao().listAll()
-            }.getOrDefault(emptyList())
+        val pending = try { withContext(Dispatchers.IO) {
+            val dao = GeoTrackDatabase.getInstance(appCtx).pendingPunchDao()
+            val staffId = SessionManager(appCtx).staffId
+            val rows = dao.listAll().filter { it.staffId.isNullOrBlank() || it.staffId == staffId }
+            val resolved = rows.filter { it.reviewReason != null && confirmedDay != null &&
+                recordedPunchMatches(it, confirmedDay) }
+            for (punch in resolved) {
+                dao.deleteById(punch.id)
+                punch.photoPath?.let { runCatching { File(it).delete() } }
+            }
+            if (resolved.isNotEmpty()) PunchSyncWorker.enqueue(appCtx)
+            rows.filter { row -> resolved.none { it.id == row.id } }
+        } } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            return base
         }
         if (pending.isEmpty()) return base
-        val todayPrefix = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+        val todayPrefix = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")).toString()
         val todays = pending
-            .filter { it.clientPunchTime.substringBefore('T') == todayPrefix }
+            .filter { pendingPunchDay(it) == todayPrefix }
+            .takeWhile { it.reviewReason == null }
             .map { PendingPunchLite(it.isPunchIn, it.clientPunchTime) }
-        return mergePendingPunch(base, todays)
+        return mergePendingPunch(base, todays).copy(
+            pendingPunchReview = pending.firstOrNull { it.reviewReason != null }?.let {
+                "Offline punch needs HR review. ${it.reviewReason} Your saved time and selfie are kept."
+            },
+        )
     }
 
     /**

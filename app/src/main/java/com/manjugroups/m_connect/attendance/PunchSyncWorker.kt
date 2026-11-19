@@ -15,11 +15,7 @@ import com.manjugroups.m_connect.geotrack.data.GeoTrackDatabase
 import com.manjugroups.m_connect.geotrack.data.PendingPunchEntity
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.GeoTrackApi
-import com.manjugroups.m_connect.network.PunchRequest
 import com.manjugroups.m_connect.network.StorageUploader
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
 import java.io.File
 import java.util.concurrent.TimeUnit
 
@@ -68,78 +64,31 @@ class PunchSyncWorker(
         if (pending.isEmpty()) return Result.success()
 
         val api = ApiService.create()
-        var networkFailure = false
-
-        replayPunchesInOrder(pending) { p ->
-            try {
-                currentCoroutineContext().ensureActive()
-                val photo = p.photoPath?.let(::File)?.takeIf { it.exists() }
-                val storageId = photo?.let { f ->
-                    runCatching {
-                        StorageUploader.upload(
-                            api,
-                            token,
-                            f,
-                            purpose = com.manjugroups.m_connect.network.MobileStoragePurpose.ATTENDANCE_PHOTO,
-                        ).storageId
-                    }.getOrNull()?.takeIf { it.isNotBlank() }
-                }
-                currentCoroutineContext().ensureActive()
-                // The selfie is part of the punch. Keep the row and retry rather
-                // than recording it without the photo, which is how punches
-                // reached the web with time and GPS but no selfie. After many
-                // failed attempts, record it without the photo so the staff
-                // member's attendance itself is never lost.
-                if (photo != null && storageId == null && p.attemptCount < MAX_SELFIE_UPLOAD_ATTEMPTS) {
-                    networkFailure = true
-                    dao.bumpAttempt(p.id, "Selfie upload failed")
-                    return@replayPunchesInOrder false
-                }
-                val request = PunchRequest(
-                    latitude = p.latitude,
-                    longitude = p.longitude,
-                    address = p.address,
-                    photo = storageId,
-                    deviceId = p.deviceId,
-                    source = p.source,
-                    clientPunchTime = p.clientPunchTime,
+        val replay = PendingPunchReplay(
+            dao = dao, api = api, token = token,
+            upload = { file ->
+                StorageUploader.upload(
+                    api, token, file,
+                    purpose = com.manjugroups.m_connect.network.MobileStoragePurpose.ATTENDANCE_PHOTO,
                 )
-                val resp = if (p.isPunchIn) {
-                    api.punchIn(token, request)
-                } else {
-                    api.punchOut(token, request)
-                }
-                // Success OR a business rejection (already-punched / blocked
-                // location, etc.) both clear the row — retrying a rejection would
-                // loop forever, and a duplicate-rejection means it already landed.
-                dao.deleteById(p.id)
-                if (resp.success) {
-                    deletePhoto(p.photoPath)
-                    GeoTrackBootstrapSync.onPunchRecorded(
-                        context = applicationContext,
-                        punchedIn = p.isPunchIn,
-                        contextId = resp.attendanceId,
-                        occurredAt = runCatching {
-                            java.time.OffsetDateTime.parse(p.clientPunchTime)
-                                .toInstant()
-                                .toEpochMilli()
-                        }.getOrDefault(System.currentTimeMillis()),
-                        lat = p.latitude,
-                        lng = p.longitude,
-                        api = GeoTrackApi.create(),
-                    )
-                }
-                true
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (e: Exception) {
-                // Network / server error — keep the row and let WorkManager retry.
-                networkFailure = true
-                dao.bumpAttempt(p.id, e.message)
-                false
-            }
-        }
-        return if (networkFailure) Result.retry() else Result.success()
+            },
+            deletePhoto = ::deletePhoto,
+            onRecorded = { punch, response ->
+                GeoTrackBootstrapSync.onPunchRecorded(
+                    context = applicationContext,
+                    punchedIn = punch.isPunchIn,
+                    contextId = response.attendanceId,
+                    occurredAt = runCatching {
+                        java.time.OffsetDateTime.parse(punch.clientPunchTime).toInstant().toEpochMilli()
+                    }.getOrDefault(System.currentTimeMillis()),
+                    lat = punch.latitude,
+                    lng = punch.longitude,
+                    api = GeoTrackApi.create(),
+                )
+            },
+        )
+        val needsRetry = replayPendingPunchQueue(pending, replay::replay)
+        return if (needsRetry) Result.retry() else Result.success()
     }
 
     private fun deletePhoto(path: String?) {
@@ -149,9 +98,6 @@ class PunchSyncWorker(
 
     companion object {
         private const val UNIQUE_WORK = "attendance-punch-sync"
-
-        /** Retries (WorkManager backoff) before a punch is recorded without its selfie. */
-        private const val MAX_SELFIE_UPLOAD_ATTEMPTS = 20
 
         /** Schedule a flush; runs as soon as the network is available. Safe to
          *  call repeatedly (KEEP keeps a pending run rather than piling up). */

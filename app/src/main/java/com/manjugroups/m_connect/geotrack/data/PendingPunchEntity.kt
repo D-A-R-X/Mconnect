@@ -39,4 +39,7 @@ data class PendingPunchEntity(
     val createdAt: Long,
     val attemptCount: Int = 0,
     val lastError: String? = null,
+    val uploadedPhotoId: String? = null,
+    /** Retained evidence after a business refusal; never automatically re-submitted. */
+    val reviewReason: String? = null,
 )

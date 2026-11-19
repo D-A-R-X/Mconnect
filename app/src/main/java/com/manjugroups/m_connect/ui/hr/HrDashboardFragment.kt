@@ -597,6 +597,10 @@ class HrDashboardFragment : Fragment() {
                         binding.btnClockInNow.alpha = 1f
                         binding.tvClockInFenceStatus.visibility = View.GONE
                     }
+                    binding.tvAttendanceHeaderSubtitle.contentDescription = state.pendingPunchReview
+                    state.pendingPunchReview?.let {
+                        binding.tvAttendanceHeaderSubtitle.text = "Offline punch needs HR review. Evidence saved."
+                    }
                 }
             }
         }
