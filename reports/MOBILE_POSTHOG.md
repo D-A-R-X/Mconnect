@@ -14,6 +14,9 @@ business endpoint behavior changes. Older released apps keep their old behavior.
   iOS keeps existing MetricKit/Objective-C exception hooks; native reports are
   delayed summaries, not a new fully symbolicated crash-reporting SDK.
 - Random installation UUID, no staff ID or person profile. GeoIP is disabled.
+  Keep PostHog Project > Privacy > Discard client IP data enabled: disabling
+  GeoIP enrichment alone does not prevent PostHog from retaining client IPs.
+  The project setting applies to future Android and iOS events, not old data.
   No request/response bodies, headers, query values, raw URLs, error/notice text,
   staff names, phones, photos, precise location, or free-text breadcrumbs.
 - Unknown path segments become `:id`; only known app hosts are monitored. The
@@ -66,6 +69,17 @@ Before public rollout: native Android device/battery comparison, Mac archive and
 iPhone smoke/crash checks, appropriate privacy/store data disclosures and Manoj's
 review. No production or store release is implied by a successful local build.
 
+## Explicit Handset Verification
+
+`MobileTelemetryDeviceTest` is skipped unless instrumentation receives
+`-e posthogVerification true`. It enqueues one labelled, handled synthetic
+exception through the real persisted queue and waits for its normal batch
+acknowledgement. It does not crash the app, force a flush, or call a business
+endpoint. Run only on an authorized debug handset with no active duty/tracking;
+the instrumentation runner can stop the app process. Separately verify the
+run marker in PostHog Activity/Error Tracking and check that no IP is retained.
+
 References:
 - https://posthog.com/docs/api/capture
 - https://posthog.com/docs/error-tracking/installation/manual
+- https://posthog.com/docs/privacy/data-storage
