@@ -187,7 +187,8 @@ class HomeHeaderView @JvmOverloads constructor(
     fun setup(
         fragment: Fragment? = null,
         onDesignationChanged: (() -> Unit)? = null,
-        onViewSummaryClick: (() -> Unit)? = null
+        onViewSummaryClick: (() -> Unit)? = null,
+        refreshProfile: Boolean = true,
     ) {
         // Apply status bar padding inset to the profile row
         if (basePaddingTop == null) {
@@ -269,7 +270,7 @@ class HomeHeaderView @JvmOverloads constructor(
         // Skip the staff-detail refresh for external-fleet agency principals
         // — their session.staffId points at a travelAgencies row, not a real
         // staff record, so the call would fail and could blank the role.
-        if (!session.isExternalFleetAgencyOperator) {
+        if (refreshProfile && !session.isExternalFleetAgencyOperator) {
             loadHeaderDesignation(onDesignationChanged)
         }
     }

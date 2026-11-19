@@ -13,7 +13,7 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * The first caller makes the request in its own coroutine; overlapping
  * callers wait for its answer. If that first caller is cancelled, the ones
- * waiting make their own request instead of failing.
+ * waiting elect one replacement rather than all issuing their own request.
  */
 object AttendanceReads {
     private val inFlight = ConcurrentHashMap<String, CompletableDeferred<Any>>()
@@ -28,27 +28,31 @@ object AttendanceReads {
 
     @Suppress("UNCHECKED_CAST")
     internal suspend fun <T : Any> shared(key: String, fetch: suspend () -> T): T {
-        val mine = CompletableDeferred<Any>()
-        val existing = inFlight.putIfAbsent(key, mine)
-        if (existing != null) {
-            return try {
-                existing.await() as T
-            } catch (_: LeaderCancelled) {
-                fetch()
+        while (true) {
+            val mine = CompletableDeferred<Any>()
+            val existing = inFlight.putIfAbsent(key, mine)
+            if (existing != null) {
+                try {
+                    return existing.await() as T
+                } catch (_: LeaderCancelled) {
+                    continue
+                }
             }
-        }
-        try {
-            val value = fetch()
-            mine.complete(value)
-            return value
-        } catch (cancelled: CancellationException) {
-            mine.completeExceptionally(LeaderCancelled())
-            throw cancelled
-        } catch (error: Throwable) {
-            mine.completeExceptionally(error)
-            throw error
-        } finally {
-            inFlight.remove(key, mine)
+            try {
+                val value = fetch()
+                mine.complete(value)
+                return value
+            } catch (cancelled: CancellationException) {
+                // Release ownership before waking waiters so they can elect one successor.
+                inFlight.remove(key, mine)
+                mine.completeExceptionally(LeaderCancelled())
+                throw cancelled
+            } catch (error: Throwable) {
+                mine.completeExceptionally(error)
+                throw error
+            } finally {
+                inFlight.remove(key, mine)
+            }
         }
     }
 

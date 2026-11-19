@@ -107,7 +107,7 @@ class HomeFragment : Fragment() {
         session = SessionManager(requireContext())
         wireClockInForTripAutoStart()
 
-        binding.homeHeader.setup(this, onDesignationChanged = {
+        binding.homeHeader.setup(this, refreshProfile = false, onDesignationChanged = {
             setupRoleAdaptiveView()
             (viewModel.uiState.value as? HomeUiState.Loaded)?.let { state ->
                 renderVisitCard(state)
@@ -137,16 +137,13 @@ class HomeFragment : Fragment() {
         collectState()
         collectEvents()
         observeIamUpdates()
-        viewModel.loadHomeData(session.bearerToken, requireContext().applicationContext)
-        loadUnreadNotifications()
+        // onResume owns the initial reads too; launching here duplicated the startup batch.
         startBannerAnimation()
 
         setupRoleAdaptiveView()
         setupMarketingOverview()
         setupDriverTabs()
-        // Fleet administrators see the allocation queue in this same
-        // Today's Trip surface, so load it alongside the normal home data.
-        loadFleetDispatch()
+        // Fleet dispatch is loaded onResume alongside the normal home data.
         // Overview (dashboard) vs Today's Trip from the start, so a normal user
         // never flashes the dashboard before data loads.
         applyDashboardVisibility()

@@ -315,8 +315,7 @@ class HrDashboardFragment : Fragment() {
 
         collectState()
         collectEvents()
-        flowViewModel.loadTodayAttendance(session.bearerToken, requireContext())
-        loadRecentHistoryCards()
+        // Prewarmed tabs are created while hidden. Load only when shown/resumed.
 
         // Pull-to-refresh: same two loads as the initial open. There's no
         // single completion signal across both calls, so dismiss after a
@@ -382,8 +381,13 @@ class HrDashboardFragment : Fragment() {
 
     override fun onHiddenChanged(hidden: Boolean) {
         super.onHiddenChanged(hidden)
+        if (hidden) {
+            stopGeofenceWatcher()
+            stopClockStatusWatcher()
+        }
         if (!hidden && _binding != null) {
             applyHrChrome()
+            refreshVisibleDashboard()
             // Replay when returning to the Attendance tab.
             primeHeaderForEntryAnimation()
             binding.attendanceHeader.post { playHeaderEntryAnimation() }
@@ -459,7 +463,14 @@ class HrDashboardFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
-        if (!isHidden) applyHrChrome()
+        if (!isHidden) {
+            applyHrChrome()
+            refreshVisibleDashboard()
+        }
+    }
+
+    private fun refreshVisibleDashboard() {
+        if (_binding == null || isHidden || !isResumed) return
         flowViewModel.loadTodayAttendance(session.bearerToken, requireContext())
         loadRecentHistoryCards()
         // Refresh the geofence policy each time the dashboard becomes
@@ -1454,6 +1465,7 @@ class HrDashboardFragment : Fragment() {
 
     /** Recompute inside-fence and update the button + subtitle. */
     private fun refreshGeofenceState() {
+        if (_binding == null || isHidden || !isResumed) return
         viewLifecycleOwner.lifecycleScope.launch {
             val inside = computeInsideHomeFence()
             if (_binding == null) return@launch
@@ -1484,9 +1496,10 @@ class HrDashboardFragment : Fragment() {
     }
 
     private fun startGeofenceWatcher() {
+        if (_binding == null || isHidden || !isResumed) return
         if (geofenceWatcherJob?.isActive == true) return
         geofenceWatcherJob = viewLifecycleOwner.lifecycleScope.launch {
-            while (isActive && _binding != null) {
+            while (isActive && _binding != null && !isHidden && isResumed) {
                 if (!fenceCheckNeeded) {
                     delay(5_000L)
                     continue
@@ -1516,11 +1529,12 @@ class HrDashboardFragment : Fragment() {
      *  app, so without this the header stays stale until the fragment is
      *  resumed again. Re-loads are painted in place (no skeleton flash). */
     private fun startClockStatusWatcher() {
+        if (_binding == null || isHidden || !isResumed) return
         if (clockStatusWatcherJob?.isActive == true) return
         clockStatusWatcherJob = viewLifecycleOwner.lifecycleScope.launch {
             while (isActive && _binding != null) {
                 delay(20_000L)
-                if (_binding == null) break
+                if (_binding == null || isHidden || !isResumed) break
                 flowViewModel.loadTodayAttendance(session.bearerToken, requireContext())
             }
         }
