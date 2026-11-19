@@ -1,5 +1,6 @@
 package com.manjugroups.m_connect.ui.hr
 
+import com.manjugroups.m_connect.network.AttendanceReads
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -156,10 +157,10 @@ class AttendanceFlowViewModel(
             }
             _uiState.update { it.copy(isLoading = true) }
             try {
-                val todayResp = api.getMyAttendanceToday(token)
+                val todayResp = AttendanceReads.today(api, token)
                 check(todayResp.success) { "Attendance read was not confirmed" }
                 val dayResp = try {
-                    api.getDaySessions(token).takeIf { it.success }
+                    AttendanceReads.daySessions(api, token).takeIf { it.success }
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Exception) {

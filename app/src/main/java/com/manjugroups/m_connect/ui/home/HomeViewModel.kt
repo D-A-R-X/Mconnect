@@ -1,5 +1,6 @@
 package com.manjugroups.m_connect.ui.home
 
+import com.manjugroups.m_connect.network.AttendanceReads
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.content.Context
@@ -131,10 +132,10 @@ class HomeViewModel : ViewModel() {
                 // Home wait for the sum of every backend response before any
                 // attendance/trip content could render.
                 val attendanceRead = async {
-                    runCatching { api.getMyAttendanceToday(bearerToken, today) }.getOrNull()
+                    runCatching { AttendanceReads.today(api, bearerToken, today) }.getOrNull()
                 }
                 val sessionsRead = async {
-                    runCatching { api.getDaySessions(bearerToken, today) }.getOrNull()
+                    runCatching { AttendanceReads.daySessions(api, bearerToken, today) }.getOrNull()
                 }
                 val monthRead = async {
                     runCatching {

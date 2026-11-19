@@ -1,5 +1,6 @@
 package com.manjugroups.m_connect.geotrack
 
+import com.manjugroups.m_connect.network.AttendanceReads
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.SessionData
 import java.text.SimpleDateFormat
@@ -119,9 +120,9 @@ object AttendanceTrackingGate {
         token: String,
         api: ApiService = ApiService.create(),
     ): Boolean {
-        val todayResp = runCatching { api.getMyAttendanceToday(token) }.getOrNull()
+        val todayResp = runCatching { AttendanceReads.today(api, token) }.getOrNull()
         val attendance = if (todayResp?.success == true) todayResp.attendance else null
-        val dayResp = runCatching { api.getDaySessions(token) }.getOrNull()
+        val dayResp = runCatching { AttendanceReads.daySessions(api, token) }.getOrNull()
         // Prefer day-sessions because it always returns the canonical
         // `firstPunchIn` even when the very first session was biometric and
         // already closed (e.g. someone punched in then out at the gate).
@@ -159,8 +160,8 @@ object AttendanceTrackingGate {
         // Both at once: back to back, a stalled connection held this for two
         // full timeouts. A caller's timeout cancels both.
         val (todayResp, dayResp) = kotlinx.coroutines.coroutineScope {
-            val today = async { runCatching { api.getMyAttendanceToday(token) }.getOrNull() }
-            val day = async { runCatching { api.getDaySessions(token) }.getOrNull() }
+            val today = async { runCatching { AttendanceReads.today(api, token) }.getOrNull() }
+            val day = async { runCatching { AttendanceReads.daySessions(api, token) }.getOrNull() }
             today.await() to day.await()
         }
         val todayOk = todayResp?.success == true
