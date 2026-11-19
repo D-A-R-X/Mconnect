@@ -106,21 +106,22 @@
             android:textSize="14sp" />
     </LinearLayout>
 
-    <!-- Hint under the scan window, pointing at the gallery alternative. -->
+    <!-- Hint under the title, pointing at the gallery alternative. -->
     <TextView
         android:id="@+id/tvScanHint"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginHorizontal="32dp"
-        android:layout_marginTop="20dp"
+        android:layout_marginTop="6dp"
         android:fontFamily="@font/inter_medium"
         android:gravity="center"
-        android:text="Point the camera at the QR code"
+        android:text="Have it as a picture? Tap Upload QR"
         android:textColor="@color/lens_overlay_text_secondary"
         android:textSize="13sp"
+        android:elevation="4dp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/scanWindow" />
+        app:layout_constraintTop_toBottomOf="@id/tvScanTitle" />
 
     <!-- Alternate to the camera: pick a QR picture someone shared (photo picker, no permission).
          Round frosted button + caption, bottom-left, in the scanner overlay style. -->
@@ -218,11 +219,14 @@
         </LinearLayout>
     </LinearLayout>
 
-    <!-- Scan Prompt Subtitle -->
+    <!-- Scan prompt: title under the window, hint (tvScanHint) below it. -->
     <TextView
-        android:layout_width="wrap_content"
+        android:id="@+id/tvScanTitle"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
+        android:layout_marginHorizontal="32dp"
         android:layout_marginTop="24dp"
+        android:gravity="center"
         android:fontFamily="@font/inter_semibold"
         android:text="Scan a visitor or site visit QR code"
         android:textColor="#FFFFFF"
