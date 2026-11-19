@@ -138,6 +138,7 @@ class LensCapturesFragment : Fragment() {
         b.tvLensCapStatus.text = when {
             state.error != null && !state.loaded -> state.error
             state.waiting > 0 -> getString(R.string.lens_captures_status_waiting, state.waiting)
+            samples > 0 && count == 0 -> getString(R.string.lens_captures_status_enrolled_none, samples)
             samples > 0 -> getString(R.string.lens_captures_status_enrolled, samples)
             count == 0 -> getString(R.string.lens_captures_status_none)
             else -> getString(R.string.lens_captures_status_enrolled, count)

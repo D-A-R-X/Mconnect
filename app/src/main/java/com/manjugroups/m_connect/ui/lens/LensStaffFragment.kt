@@ -146,8 +146,9 @@ class LensStaffFragment : Fragment() {
             com.manjugroups.m_connect.ui.common.Floater.warning(getString(R.string.lens_no_code))
             return
         }
-        if ((item.savedPhotos ?: 0) > 0) {
-            // Saved photos: Send to Lens, retake one or all, delete.
+        if ((item.savedPhotos ?: 0) > 0 || (item.enrollment?.faceSamples ?: 0) > 0) {
+            // Saved photos (or already in Lens): see what's there first, then
+            // Send to Lens, retake one or all, delete. Never straight to the camera.
             parentFragmentManager.pushDetail(
                 LensCapturesFragment.newInstance(
                     staffId = staffId,

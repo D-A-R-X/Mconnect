@@ -104,8 +104,18 @@ class LensEnrollViewModel : ViewModel() {
         }
     }
 
+    /**
+     * Review from the first photo on: missing angles show Capture there (and
+     * come back to review); upload still needs the required angles.
+     */
     fun review() {
-        _state.update { s -> if (s.requiredDone) s.copy(reviewing = true, skipped = s.skipped + s.pending.filter { !it.required }) else s }
+        _state.update { s ->
+            when {
+                s.photos.isEmpty() -> s
+                s.requiredDone -> s.copy(reviewing = true, skipped = s.skipped + s.pending.filter { !it.required })
+                else -> s.copy(reviewing = true)
+            }
+        }
     }
 
     fun retake(pose: LensPose) {

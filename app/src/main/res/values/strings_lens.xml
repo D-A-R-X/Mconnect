@@ -17,6 +17,7 @@
     <string name="lens_close">Close</string>
     <string name="lens_skip">Skip</string>
     <string name="lens_review">Review photos</string>
+    <string name="lens_upload_needs_required">Capture the 3 required angles first</string>
     <string name="lens_step_count">%1$d of %2$d photos</string>
 
     <string name="lens_prompt_straight">Look straight at the camera</string>
@@ -34,6 +35,7 @@
     <string name="lens_record_again">Record again</string>
     <string name="lens_replace_title">Replace earlier photos</string>
     <string name="lens_replace_body">Already enrolled with %1$d photos. Turn on to remove them first.</string>
+    <string name="lens_replace_note">These photos replace the %1$d already in Lens.</string>
     <string name="lens_upload">Enroll %1$d photos</string>
     <string name="lens_uploading">Enrolling…</string>
     <string name="lens_optional">Optional</string>
@@ -53,6 +55,7 @@
     <string name="lens_captures_waiting">Waiting for Lens</string>
     <string name="lens_captures_none">No photo</string>
     <string name="lens_captures_status_enrolled">In Lens: %1$d photos for the cameras</string>
+    <string name="lens_captures_status_enrolled_none">In Lens: %1$d photos for the cameras. None are saved on the profile; use Retake all to save new ones.</string>
     <string name="lens_captures_status_waiting">%1$d photos waiting for Lens</string>
     <string name="lens_captures_status_none">No saved photos. Record the head turn to enroll.</string>
     <string name="lens_captures_note">Delete removes the photo from the staff profile only. Lens keeps what it already has, so the cameras still recognise this person.</string>

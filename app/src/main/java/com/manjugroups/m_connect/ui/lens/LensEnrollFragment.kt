@@ -273,7 +273,7 @@ class LensEnrollFragment : Fragment() {
 
         val total = LensPose.entries.count { it !in state.skipped }
         b.tvLensCaptureStep.text = getString(R.string.lens_step_count, state.photos.size, total)
-        b.btnLensReview.isEnabled = state.requiredDone && state.retakeOnly == null
+        b.btnLensReview.isEnabled = state.photos.isNotEmpty() && state.retakeOnly == null
         b.btnLensReview.isVisible = state.retakeOnly == null && state.single == null
         val target = state.target
         b.btnLensSkip.isVisible = target != null && !target.required && state.retakeOnly == null && state.single == null
@@ -474,10 +474,11 @@ class LensEnrollFragment : Fragment() {
 
         renderPoseGrid(state, locked = uploading || succeeded || savedPending)
 
-        b.lensReplaceRow.isVisible = (existingSamples > 0 || startReplace) && !succeeded && single == null
-        b.tvLensReplaceBody.text = getString(R.string.lens_replace_body, existingSamples)
-        if (b.swLensReplace.isChecked != state.replace) b.swLensReplace.isChecked = state.replace
-        b.swLensReplace.isEnabled = !uploading
+        // No switch: "Retake all" is the replace (decided on the saved photos
+        // screen); here it's only a note. Other enrolls add to what's there.
+        b.lensReplaceRow.isVisible = state.replace && existingSamples > 0 && !succeeded && single == null
+        b.tvLensReplaceBody.text = getString(R.string.lens_replace_note, existingSamples)
+        b.swLensReplace.isVisible = false
 
         // Result card.
         when {
@@ -528,6 +529,7 @@ class LensEnrollFragment : Fragment() {
             failed?.outcome?.action == LensErrors.Action.CONTACT_ADMIN -> getString(R.string.lens_done)
             dryRun -> "Save ${state.photos.size} test photos"
             single != null -> getString(R.string.lens_retake_upload)
+            !state.requiredDone -> getString(R.string.lens_upload_needs_required)
             else -> getString(R.string.lens_upload, state.photos.size)
         }
         val changed = (done != null && ((done.response.addedSamples ?: 0) > 0 || (single != null && succeeded))) || savedPending
