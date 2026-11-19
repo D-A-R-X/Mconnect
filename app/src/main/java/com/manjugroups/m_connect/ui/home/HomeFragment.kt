@@ -526,8 +526,24 @@ class HomeFragment : Fragment() {
     }
 
     private fun startBannerAnimation() {
-        val anim = binding.homeHeader.getHeaderBinding().ivBannerAnimation.drawable as? android.graphics.drawable.AnimationDrawable
+        val image = binding.homeHeader.getHeaderBinding().ivBannerAnimation
+        if (!image.isShown) return
+        val anim = image.drawable as? android.graphics.drawable.AnimationDrawable
+        anim?.isOneShot = true
         anim?.start()
+    }
+
+    private fun stopDecorativeAnimations() {
+        _binding?.homeHeader?.let { header ->
+            header.stopFloatingAnimation()
+            (header.getHeaderBinding().ivBannerAnimation.drawable as? android.graphics.drawable.AnimationDrawable)?.stop()
+        }
+        stopFloatingAnimations()
+    }
+
+    override fun onPause() {
+        stopDecorativeAnimations()
+        super.onPause()
     }
 
     override fun onResume() {
@@ -593,7 +609,7 @@ class HomeFragment : Fragment() {
     override fun onHiddenChanged(hidden: Boolean) {
         super.onHiddenChanged(hidden)
         if (hidden) {
-            _binding?.homeHeader?.stopFloatingAnimation()
+            stopDecorativeAnimations()
         } else {
             // Re-showing Home by UNHIDING (pop-back from a pushDetail screen, or a
             // tab return) does NOT re-run onResume — pushDetail retains this view
@@ -3657,7 +3673,7 @@ class HomeFragment : Fragment() {
     }
 
     private fun startFloatingAnimations() {
-        if (_binding == null) return
+        if (_binding == null || !isResumed || isHidden) return
         
         // 1. Tooltip horizontal float (moves left slightly and returns)
         val tooltipAnim = android.animation.ObjectAnimator.ofFloat(
@@ -3666,7 +3682,7 @@ class HomeFragment : Fragment() {
             0f, -16f, 0f
         ).apply {
             duration = 2000
-            repeatCount = android.animation.ValueAnimator.INFINITE
+            repeatCount = 1
             interpolator = android.view.animation.AccelerateDecelerateInterpolator()
         }
         tooltipAnimator = tooltipAnim
@@ -3679,7 +3695,7 @@ class HomeFragment : Fragment() {
             0f, -8f, 0f
         ).apply {
             duration = 2000
-            repeatCount = android.animation.ValueAnimator.INFINITE
+            repeatCount = 1
             interpolator = android.view.animation.AccelerateDecelerateInterpolator()
         }
         handleAnimator = handleAnim
@@ -3698,10 +3714,9 @@ class HomeFragment : Fragment() {
     }
 
     override fun onDestroyView() {
-        stopFloatingAnimations()
+        stopDecorativeAnimations()
         cancelPendingVisitSkeleton()
         SkeletonUtils.stopAll()
-        binding.homeHeader.stopFloatingAnimation()
         // Pooled dispatch cards hold views bound to this destroyed view tree.
         fleetCardPool.clear()
         super.onDestroyView()

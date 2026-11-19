@@ -46,6 +46,9 @@ class HomeHeaderView @JvmOverloads constructor(
     private val session = SessionManager(context)
     private val api = ApiService.create()
     private val bannerFloatAnimators = mutableListOf<Animator>()
+    private val startBannerFloat = Runnable {
+        if (isAttachedToWindow && isShown && hasWindowFocus()) startFloatingAnimation()
+    }
     private var viewScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var isFleetBannerMode = false
     private var basePaddingTop: Int? = null
@@ -409,10 +412,8 @@ class HomeHeaderView @JvmOverloads constructor(
             if (delay > lastDelay) lastDelay = delay
         }
 
-        // Kick off the continuous floating loop once the cluster has landed.
-        postDelayed({
-            startFloatingAnimation()
-        }, lastDelay + 480L)
+        // Brief decorative motion after entry, not a permanent render loop.
+        postDelayed(startBannerFloat, lastDelay + 480L)
     }
 
     private fun playFleetEntryAnimation() {
@@ -477,9 +478,7 @@ class HomeHeaderView @JvmOverloads constructor(
             .setInterpolator(easeOut)
             .start()
 
-        postDelayed({
-            startFloatingAnimation()
-        }, 720L)
+        postDelayed(startBannerFloat, 720L)
     }
 
     private fun animateInFromLeft(
@@ -501,13 +500,14 @@ class HomeHeaderView @JvmOverloads constructor(
 
     fun startFloatingAnimation() {
         stopFloatingAnimation()
+        if (!isAttachedToWindow || !isShown) return
         val density = resources.displayMetrics.density
         if (isFleetBannerMode) {
             val animator = ObjectAnimator.ofFloat(
                 binding.ivFleetVan, View.TRANSLATION_Y, 0f, -8f * density
             ).apply {
                 duration = 2800L
-                repeatCount = ValueAnimator.INFINITE
+                repeatCount = 1
                 repeatMode = ValueAnimator.REVERSE
                 interpolator = AccelerateDecelerateInterpolator()
             }
@@ -527,7 +527,7 @@ class HomeHeaderView @JvmOverloads constructor(
             ).apply {
                 duration = 2800L
                 this.startDelay = startDelay
-                repeatCount = ValueAnimator.INFINITE
+                repeatCount = 1
                 repeatMode = ValueAnimator.REVERSE
                 interpolator = AccelerateDecelerateInterpolator()
             }
@@ -537,6 +537,7 @@ class HomeHeaderView @JvmOverloads constructor(
     }
 
     fun stopFloatingAnimation() {
+        removeCallbacks(startBannerFloat)
         bannerFloatAnimators.forEach { it.cancel() }
         bannerFloatAnimators.clear()
     }

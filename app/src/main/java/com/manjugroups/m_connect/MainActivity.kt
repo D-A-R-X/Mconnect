@@ -364,27 +364,7 @@ class MainActivity : AppCompatActivity() {
         navTasksPeek = findViewById(R.id.navTasksPeek)
         tvNavTasksPeek = findViewById(R.id.tvNavTasksPeek)
 
-        // Premium breathing/pulsing animation on the red border to draw user attention to pending tasks
-        (navTasksPeek.background as? android.graphics.drawable.GradientDrawable)?.let { bg ->
-            val strokeAnim = android.animation.ValueAnimator.ofObject(
-                android.animation.ArgbEvaluator(),
-                Color.parseColor("#FECDCA"), // Soft warning red
-                Color.parseColor("#D92D20")  // Urgent alert red
-            ).apply {
-                duration = 1400 // 1.4 seconds per pulse wave
-                repeatMode = android.animation.ValueAnimator.REVERSE
-                repeatCount = android.animation.ValueAnimator.INFINITE
-                addUpdateListener { animator ->
-                    val color = animator.animatedValue as Int
-                    val fraction = animator.animatedFraction
-                    // Breathe stroke thickness from 1.0dp to 2.2dp dynamically to keep it subtle yet notice-worthy
-                    val width = (1.0f + fraction * 1.2f) * resources.displayMetrics.density
-                    bg.setStroke(width.toInt(), color)
-                }
-            }
-            // Start the infinite breathing animation
-            strokeAnim.start()
-        }
+        // Keep the drawable's warning stroke static; a perpetual pulse redraws every root tab.
 
         // Custom touch listener that supports both tap and swipe up to expand cards smoothly
         val density = resources.displayMetrics.density
