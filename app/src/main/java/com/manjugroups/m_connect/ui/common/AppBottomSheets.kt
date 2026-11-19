@@ -120,6 +120,7 @@ object AppBottomSheets {
         message: String,
         confirmLabel: String,
         destructive: Boolean = false,
+        cancelLabel: String = "Cancel",
         onConfirm: () -> Unit,
     ) {
         val (dialog, root) = sheetRoot(ctx, title)
@@ -134,7 +135,7 @@ object AppBottomSheets {
             dialog.dismiss()
             onConfirm()
         })
-        root.addView(cancelButton(ctx) { dialog.dismiss() })
+        root.addView(cancelButton(ctx, cancelLabel) { dialog.dismiss() })
         dialog.show()
     }
 
@@ -364,8 +365,8 @@ object AppBottomSheets {
             ).apply { topMargin = dp(ctx, 4) }
         }
 
-    private fun cancelButton(ctx: Context, onTap: () -> Unit) =
-        com.manjugroups.m_connect.ui.common.MconnectButtons.create(ctx, com.manjugroups.m_connect.ui.common.MconnectButtons.Kind.SECONDARY, "Cancel") { onTap() }.apply {
+    private fun cancelButton(ctx: Context, label: String = "Cancel", onTap: () -> Unit) =
+        com.manjugroups.m_connect.ui.common.MconnectButtons.create(ctx, com.manjugroups.m_connect.ui.common.MconnectButtons.Kind.SECONDARY, label) { onTap() }.apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
             ).apply { topMargin = dp(ctx, 6) }

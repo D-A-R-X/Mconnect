@@ -17,7 +17,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import coil.dispose
 import coil.load
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.manjugroups.m_connect.ui.common.AppBottomSheets
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentLensCapturesBinding
@@ -213,19 +213,21 @@ class LensCapturesFragment : Fragment() {
     private fun confirmDelete(captureId: String?, pose: LensPose?) {
         val name = staffName.ifBlank { "this staff member" }
         val count = viewModel.state.value.captures.size
-        val dialog = MaterialAlertDialogBuilder(requireContext())
-        if (captureId != null && pose != null) {
-            dialog.setTitle(R.string.lens_captures_delete_title)
-                .setMessage(getString(R.string.lens_captures_delete_body, pose.label.lowercase(), name))
-        } else {
-            dialog.setTitle(R.string.lens_captures_delete_all_title)
-                .setMessage(getString(R.string.lens_captures_delete_all_body, count, name))
+        val one = captureId != null && pose != null
+        // Shared sheet: Mconnect buttons, red Delete (never the stock dialog).
+        AppBottomSheets.showConfirm(
+            ctx = requireContext(),
+            title = getString(if (one) R.string.lens_captures_delete_title else R.string.lens_captures_delete_all_title),
+            message = if (one) {
+                getString(R.string.lens_captures_delete_body, pose!!.label.lowercase(), name)
+            } else {
+                getString(R.string.lens_captures_delete_all_body, count, name)
+            },
+            confirmLabel = getString(if (one) R.string.lens_captures_delete else R.string.lens_captures_delete_all),
+            destructive = true,
+        ) {
+            viewModel.delete(session.bearerToken, staffId, captureId, ::onActionDone)
         }
-        dialog.setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton(R.string.lens_captures_delete) { _, _ ->
-                viewModel.delete(session.bearerToken, staffId, captureId, ::onActionDone)
-            }
-            .show()
     }
 
     private fun attrColor(attr: Int): Int {

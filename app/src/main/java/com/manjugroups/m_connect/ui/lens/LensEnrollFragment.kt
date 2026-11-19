@@ -32,7 +32,7 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.manjugroups.m_connect.ui.common.AppBottomSheets
 import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.databinding.FragmentLensEnrollBinding
@@ -656,12 +656,14 @@ class LensEnrollFragment : Fragment() {
             finish()
             return
         }
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Discard photos?")
-            .setMessage("The captured photos haven't been enrolled yet.")
-            .setNegativeButton("Keep", null)
-            .setPositiveButton("Discard") { _, _ -> finish() }
-            .show()
+        AppBottomSheets.showConfirm(
+            ctx = requireContext(),
+            title = "Discard photos?",
+            message = "The captured photos haven't been enrolled yet.",
+            confirmLabel = "Discard",
+            destructive = true,
+            cancelLabel = "Keep photos",
+        ) { finish() }
     }
 
     private fun finish() {
