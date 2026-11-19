@@ -49,6 +49,7 @@ interface MobileStorageApi {
     companion object {
         fun create(): MobileStorageApi {
             val client = OkHttpClient.Builder()
+                .addInterceptor(IssueReporter.httpInterceptor)
                 .connectTimeout(30, TimeUnit.SECONDS)
                 .readTimeout(120, TimeUnit.SECONDS)
                 .writeTimeout(120, TimeUnit.SECONDS)

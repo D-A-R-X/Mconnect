@@ -7,6 +7,14 @@ import org.junit.Test
 class SessionInvalidationPolicyTest {
     private val mmsHost = "api-mfpl.theairix.com"
 
+    @Test fun `PostHog 401 never invalidates MMS even if caller incorrectly supplies auth`() {
+        assertFalse(SessionInvalidationPolicy.shouldInvalidate(
+            responseCode = 401, authorizationHeader = "Bearer test-session",
+            requestHost = "us.i.posthog.com", sessionAuthorityHost = mmsHost,
+            requestPath = "/batch/", responseBody = """{"error":"session expired"}""",
+        ))
+    }
+
     @Test
     fun `explicit expired-session MMS 401 invalidates session`() {
         assertTrue(

@@ -32,6 +32,7 @@ object TelecallerCoreClient {
     private val json = "application/json".toMediaType()
     private val http by lazy {
         OkHttpClient.Builder()
+            .addInterceptor(IssueReporter.httpInterceptor)
             .connectTimeout(20, TimeUnit.SECONDS)
             .readTimeout(45, TimeUnit.SECONDS)
             .build()

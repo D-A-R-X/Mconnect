@@ -7,516 +7,272 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.os.SystemClock
-import android.util.Log
-import androidx.fragment.app.DialogFragment
-import androidx.fragment.app.Fragment
-import androidx.fragment.app.FragmentActivity
-import androidx.fragment.app.FragmentManager
+import android.util.AtomicFile
 import com.manjugroups.m_connect.BuildConfig
-import com.manjugroups.m_connect.auth.SessionManager
 import okhttp3.Interceptor
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
-import java.io.PrintWriter
-import java.io.StringWriter
-import java.lang.ref.WeakReference
-import java.util.ArrayDeque
+import java.net.URI
+import java.time.Instant
+import java.util.UUID
+import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.Executors
+import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 
-/**
- * Reports what goes wrong on the phone to Settings → Mobile → Issues, so a
- * failure is known without the staff member having to describe it:
- *
- * - crash: an uncaught exception (saved at crash time, sent on next launch);
- * - http: a server call that failed (4xx except 401, 5xx), with the server's
- *   reply;
- * - network: a call that timed out / couldn't connect while the phone did
- *   have internet (no report when the phone is simply offline);
- * - flow: an error notice the user saw (Floater) — attached to the call that
- *   caused it when there is one, otherwise reported on its own.
- *
- * Every report carries the screen, the last steps (screens opened, calls
- * made, notices shown), build, phone model and network type. Reports wait in
- * a small file queue and go out in batches; the same problem within 10
- * minutes is counted, not sent again. Request bodies and query values are
- * never sent (they can hold OTPs and personal data).
- */
+/** Existing hooks, now direct to PostHog. Never calls MMS for telemetry. */
 object IssueReporter {
-
-    private const val TAG = "IssueReporter"
-    private const val QUEUE_FILE = "mobile_issue_queue.json"
-    private const val CRASH_FILE = "mobile_issue_crash.json"
-    private const val MAX_QUEUE = 60
-    private const val MAX_BREADCRUMBS = 30
-    private const val REPEAT_WINDOW_MS = 10 * 60 * 1000L
-    private const val LINK_WINDOW_MS = 6_000L
-    private const val SEND_DELAY_MS = 8_000L
-    private const val MAX_AGE_MS = 3L * 24 * 60 * 60 * 1000
-    private const val REPORT_PATH = "/api/mobile/issues/"
-
+    private const val QUEUE_FILE = "mobile_posthog_queue_v1.json"
+    private const val CRASH_FILE = "mobile_posthog_crash_v1.json"
     private lateinit var app: Application
-    private val io = Executors.newSingleThreadExecutor { Thread(it, "issue-reporter").apply { isDaemon = true } }
-
-    /**
-     * "Unable to resolve host" is almost always the phone being offline: Wi-Fi
-     * that lost its upstream (Android keeps calling it validated until it
-     * re-checks), a captive portal, or background network limits. That filed
-     * 1,868 issues from 93 staff while our DNS was healthy. Before reporting
-     * one, resolve a host that is always up: if that fails too the phone is
-     * offline and only the breadcrumb is kept; if it resolves, our own host is
-     * the problem and it is reported. One probe per minute at most, on its own
-     * thread so a slow lookup never holds the report queue.
-     */
-    private const val DNS_PROBE_HOST = "connectivitycheck.gstatic.com"
-    private const val DNS_PROBE_TTL_MS = 60_000L
-    private val probe = Executors.newSingleThreadExecutor { Thread(it, "issue-dns-probe").apply { isDaemon = true } }
-    @Volatile private var probeAt = 0L
-    @Volatile private var probeOnline = false
-
-    private fun internetResolves(): Boolean {
-        val now = SystemClock.elapsedRealtime()
-        if (now - probeAt < DNS_PROBE_TTL_MS) return probeOnline
-        probeOnline = runCatching { java.net.InetAddress.getByName(DNS_PROBE_HOST) != null }.getOrDefault(false)
-        probeAt = SystemClock.elapsedRealtime()
-        return probeOnline
+    private val worker = ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS, ArrayBlockingQueue(64),
+        { r -> Thread(r, "mobile-telemetry").apply { isDaemon = true; priority = Thread.MIN_PRIORITY } },
+        ThreadPoolExecutor.AbortPolicy())
+    private val timer = Executors.newSingleThreadScheduledExecutor { r ->
+        Thread(r, "mobile-telemetry-timer").apply { isDaemon = true }
     }
-    private val main = Handler(Looper.getMainLooper())
-    private val lock = Any()
-
-    private val breadcrumbs = ArrayDeque<String>()
-    private val queue = ArrayList<JSONObject>()
-    private val lastSentAt = HashMap<String, Long>()
+    private val pending = ArrayList<JSONObject>()
+    @Volatile private var scheduled = false
+    private var retryAt = 0L
+    private var failures = 0
+    private var lastAttempt = -MobileTelemetryPolicy.FLUSH_MS
     private var loaded = false
-    private var retryAfter = 0L
-    private var sendScheduled = false
+    private lateinit var budget: MobileTelemetryBudget
+    private var anonymousId = ""
+    @Volatile private var screen = "App"
+    private val authority by lazy { URI(BuildConfig.BASE_URL).host.orEmpty() }
+    private val client by lazy { PostHogTransport.client() }
 
-    private var currentActivity: WeakReference<Activity>? = null
-    private val resumedFragments = ArrayList<String>()
-
-    private val sendClient by lazy {
-        OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(20, TimeUnit.SECONDS)
-            .build()
-    }
-
-    fun install(application: Application) {
+    @Synchronized fun install(application: Application) {
+        if (::app.isInitialized || !PostHogConfig.ENABLED) return
         app = application
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
-            runCatching { saveCrash(thread, error) }
+            // Save code frames only; never send a network request on a crashing thread.
+            runCatching {
+                val file = AtomicFile(File(app.filesDir, CRASH_FILE))
+                val stream = file.startWrite()
+                try { stream.write(errorEvent(error).toString().toByteArray()); file.finishWrite(stream) }
+                catch (failure: Exception) { file.failWrite(stream) }
+            }
             previous?.uncaughtException(thread, error)
         }
         application.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
-            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
-                (activity as? FragmentActivity)?.supportFragmentManager
-                    ?.registerFragmentLifecycleCallbacks(fragmentCallbacks, true)
-            }
             override fun onActivityResumed(activity: Activity) {
-                currentActivity = WeakReference(activity)
-                crumb("Opened ${activity.javaClass.simpleName}")
-                if (queueSize() > 0) scheduleSend(2_000L)
+                screen = MobileTelemetryPolicy.symbol(activity.javaClass.simpleName)
+                submit { load(); schedule() }
             }
-            override fun onActivityPaused(activity: Activity) = Unit
-            override fun onActivityStarted(activity: Activity) = Unit
-            override fun onActivityStopped(activity: Activity) = Unit
-            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
-            override fun onActivityDestroyed(activity: Activity) {
-                if (currentActivity?.get() === activity) currentActivity = null
-            }
+            override fun onActivityCreated(a: Activity, b: Bundle?) = Unit
+            override fun onActivityStarted(a: Activity) = Unit
+            override fun onActivityPaused(a: Activity) = Unit
+            override fun onActivityStopped(a: Activity) = Unit
+            override fun onActivitySaveInstanceState(a: Activity, b: Bundle) = Unit
+            override fun onActivityDestroyed(a: Activity) = Unit
         })
-        // A crash from the last run, and anything still queued.
-        io.execute {
-            loadQueue()
-            promoteSavedCrash()
-        }
-        scheduleSend(5_000L)
-    }
-
-    private val fragmentCallbacks = object : FragmentManager.FragmentLifecycleCallbacks() {
-        override fun onFragmentResumed(fm: FragmentManager, f: Fragment) {
-            val name = f.javaClass.simpleName
-            if (name.isBlank() || name.startsWith("SupportRequestManager")) return
-            synchronized(lock) {
-                resumedFragments.remove(name)
-                resumedFragments.add(name)
+        submit {
+            load()
+            // Old server reports contain raw text. Do not migrate them to a third party.
+            File(app.filesDir, "mobile_issue_queue.json").delete()
+            File(app.filesDir, "mobile_issue_crash.json").delete()
+            val crash = File(app.filesDir, CRASH_FILE)
+            if (crash.exists()) {
+                runCatching { JSONObject(crash.readText()) }.getOrNull()?.let { add(it, false, false) }
+                crash.delete()
             }
-            crumb(if (f is DialogFragment) "Opened sheet $name" else "Opened $name")
-        }
-
-        override fun onFragmentPaused(fm: FragmentManager, f: Fragment) {
-            synchronized(lock) { resumedFragments.remove(f.javaClass.simpleName) }
+            schedule()
         }
     }
 
-    /** "MainActivity › CpVisitsFragment › CreateCpVisitBottomSheet". */
-    fun currentScreen(): String {
-        val activity = currentActivity?.get()?.javaClass?.simpleName
-        val fragments = synchronized(lock) { resumedFragments.takeLast(2) }
-        return (listOfNotNull(activity) + fragments).joinToString(" › ").ifBlank { "App" }
-    }
+    fun currentScreen(): String = screen
+    // These call sites can contain user or server text; never retain that text.
+    @Suppress("UNUSED_PARAMETER") fun crumb(text: String) = Unit
 
-    fun crumb(text: String) {
-        val stamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date())
-        synchronized(lock) {
-            breadcrumbs.addLast("$stamp $text".take(200))
-            while (breadcrumbs.size > MAX_BREADCRUMBS) breadcrumbs.removeFirst()
-        }
-    }
-
-    private fun crumbs(): JSONArray = synchronized(lock) { JSONArray(breadcrumbs.toList()) }
-
-    // ── HTTP ──
-
-    /** Add to every API client (after the build headers, before ApiErrors). */
     val httpInterceptor = Interceptor { chain ->
         val request = chain.request()
-        val path = request.url.encodedPath
-        if (path.startsWith(REPORT_PATH)) return@Interceptor chain.proceed(request)
+        val service = MobileTelemetryPolicy.service(request.url.host, authority)
+        if (!::app.isInitialized || service == null || request.url.encodedPath.startsWith("/api/mobile/issues/")) {
+            return@Interceptor chain.proceed(request)
+        }
         val started = SystemClock.elapsedRealtime()
-        val response = try {
-            chain.proceed(request)
-        } catch (error: IOException) {
-            val took = SystemClock.elapsedRealtime() - started
-            crumb("${request.method} $path → ${error.javaClass.simpleName} (${took} ms)")
-            if (!isCanceled(error) && hasInternet()) {
-                if (error is java.net.UnknownHostException) {
-                    val screen = currentScreen()
-                    probe.execute { if (internetResolves()) reportNetwork(request, error, took, screen) }
-                } else {
-                    reportNetwork(request, error, took)
-                }
+        val response = try { chain.proceed(request) } catch (error: IOException) {
+            if (!chain.call().isCanceled() && hasInternet()) runCatching {
+                observe(request, service, 0, SystemClock.elapsedRealtime() - started, networkKind(error))
             }
             throw error
         }
-        val took = SystemClock.elapsedRealtime() - started
-        crumb("${request.method} $path → ${response.code} (${took} ms)")
-        // OkHttp's own 504 "Unsatisfiable Request (only-if-cached)" is the
-        // offline cache saying it has nothing saved after the real call
-        // failed — not a server reply. The real failure is already reported,
-        // so this only made a second issue for the same problem.
-        val offlineCacheMiss = request.cacheControl.onlyIfCached ||
-            (response.code == 504 && response.message.contains("only-if-cached", ignoreCase = true))
-        if (!response.isSuccessful && response.code != 401 && !response.isRedirect && !offlineCacheMiss) {
-            val body = runCatching { response.peekBody(4_096).string() }.getOrNull()
-            if (!isHandledHandshake(response.code, body)) {
-                reportHttp(request, response.code, response.message, body, took)
+        runCatching {
+            if (!request.cacheControl.onlyIfCached && response.networkResponse != null) {
+                observe(request, service, response.code, SystemClock.elapsedRealtime() - started, null)
             }
         }
         response
     }
 
-    /**
-     * Replies that are a designed step the app handles, not a failure:
-     * 422 OVERRIDE_REASON_REQUIRED asks the approver for a reason, the app
-     * prompts and retries. Filing it made a "Server error" for every approval
-     * that needed a reason.
-     */
-    private fun isHandledHandshake(code: Int, body: String?): Boolean =
-        code == 422 && body?.contains("\"OVERRIDE_REASON_REQUIRED\"") == true
-
-    private fun isCanceled(error: IOException) =
-        error.message?.contains("Canceled", ignoreCase = true) == true ||
-            error.javaClass.simpleName.contains("Cancel") ||
-            // HTTP/2 "stream was reset: CANCEL" is our own call being cancelled
-            // (screen rebuilt). R8 renames the class (it arrived as "b0"), so
-            // the name check above never caught it.
-            (error is okhttp3.internal.http2.StreamResetException &&
-                error.errorCode == okhttp3.internal.http2.ErrorCode.CANCEL)
-
-    private fun reportHttp(request: Request, code: Int, reason: String, body: String?, took: Long) {
-        val endpoint = "${request.method} ${normalizedPath(request.url.encodedPath)}"
-        val serverText = ApiErrors.extract(body)
-            ?: reason.takeIf { it.isNotBlank() }
-            ?: ApiErrors.forStatus(code).text
-        enqueue(
-            JSONObject()
-                .put("kind", "http")
-                .put("fingerprint", "$endpoint $code")
-                .put("title", "$endpoint → HTTP $code")
-                .put("message", "HTTP $code $serverText".take(2_000))
-                .put("errorCode", "HTTP $code")
-                .put("endpoint", endpoint)
-                .put("screen", currentScreen())
-                .put("requestMethod", request.method)
-                .put("requestUrl", safeUrl(request))
-                .put("responseStatus", code)
-                .put("durationMs", took)
-                .apply { if (!body.isNullOrBlank()) put("responseBody", body.take(3_000)) },
-        )
+    private fun observe(request: Request, service: String, status: Int, duration: Long, error: String?) {
+        val path = MobileTelemetryPolicy.route(request.url.encodedPath)
+        val method = MobileTelemetryPolicy.method(request.method)
+        val timing = status in 200..399
+        val healthy = timing && duration < 3_000
+        val signature = "$service $method $path ${error ?: status.toString()}"
+        // Only constant dimensions are copied; no headers, bodies, query or host strings.
+        val properties = JSONObject().put("service", service).put("endpoint", "$method $path")
+            .put("method", method).put("status", status).put("duration_ms", duration.coerceIn(0, 300_000))
+            .put("outcome", error ?: if (status >= 400) "http_error" else if (healthy) "success" else "slow")
+            .put("sample_rate", if (healthy) 0.05 else 1.0)
+        submit {
+            val report = event("mobile_endpoint", properties, signature)
+            add(report, timing, healthy)
+        }
     }
 
-    private fun reportNetwork(
-        request: Request,
-        error: IOException,
-        took: Long,
-        screen: String = currentScreen(),
-    ) {
-        val endpoint = "${request.method} ${normalizedPath(request.url.encodedPath)}"
-        val type = error.javaClass.simpleName.ifBlank { "IOException" }
-        enqueue(
-            JSONObject()
-                .put("kind", "network")
-                .put("fingerprint", "$endpoint $type")
-                .put("title", "$endpoint → $type")
-                .put("message", "$type: ${error.message.orEmpty()}".take(2_000))
-                .put("errorCode", type)
-                .put("endpoint", endpoint)
-                .put("screen", screen)
-                .put("requestMethod", request.method)
-                .put("requestUrl", safeUrl(request))
-                .put("durationMs", took)
-                .put("stack", stackOf(error).take(4_000)),
-        )
+    private fun networkKind(error: IOException): String = when (error) {
+        is java.net.SocketTimeoutException -> "Timeout"
+        is java.net.UnknownHostException -> "DNS"
+        is javax.net.ssl.SSLException -> "TLS"
+        else -> "Connection"
     }
 
-    /** Scheme, host and path; query keys only (values can be phones/OTPs). */
-    private fun safeUrl(request: Request): String {
-        val url = request.url
-        val keys = url.queryParameterNames
-        val base = "${url.scheme}://${url.host}${url.encodedPath}"
-        return if (keys.isEmpty()) base else "$base?${keys.joinToString("&") { "$it=…" }}"
+    @Suppress("UNUSED_PARAMETER") fun onNotice(text: String, kind: String) {
+        if (kind != "ERROR") return
+        val atScreen = screen
+        submit {
+            val report = event("\$exception", JSONObject().put("screen", atScreen), "flow $atScreen")
+            exception(report, "MobileFlowError", true)
+            add(report, false, false)
+        }
     }
 
-    /** /api/x/k97mw73m5j81reyfb2kvqz8hc98ey4jh → /api/x/:id so repeats group. */
-    private fun normalizedPath(path: String): String =
-        path.split('/').joinToString("/") { segment ->
-            when {
-                segment.length >= 16 && segment.any(Char::isDigit) -> ":id"
-                segment.isNotEmpty() && segment.all(Char::isDigit) -> ":n"
-                else -> segment
+    private fun event(name: String, properties: JSONObject, signature: String): JSONObject = JSONObject()
+        .put("event", name).put("properties", properties).put("fingerprint", signature)
+        .put("occurredAt", System.currentTimeMillis()).put("uuid", UUID.randomUUID().toString())
+
+    private fun exception(event: JSONObject, type: String, handled: Boolean, frames: JSONArray? = null) {
+        val detail = JSONObject().put("type", type).put("value", type)
+            .put("mechanism", JSONObject().put("type", "mobile").put("handled", handled).put("synthetic", frames == null))
+        if (frames != null) detail.put("stacktrace", JSONObject().put("type", "raw").put("frames", frames))
+        event.getJSONObject("properties").put("\$exception_list", JSONArray().put(detail))
+            .put("\$exception_fingerprint", event.getString("fingerprint"))
+    }
+
+    private fun errorEvent(error: Throwable): JSONObject {
+        val type = MobileTelemetryPolicy.symbol(error.javaClass.name)
+        val frames = JSONArray()
+        error.stackTrace.take(20).reversed().forEach { frame ->
+            frames.put(JSONObject().put("platform", "custom").put("lang", "java")
+                .put("function", MobileTelemetryPolicy.symbol("${frame.className}.${frame.methodName}"))
+                .put("lineno", frame.lineNumber.coerceAtLeast(0))
+                .put("in_app", frame.className.startsWith("com.manjugroups.")))
+        }
+        val report = event("\$exception", JSONObject().put("screen", screen),
+            "crash $type ${frames.optJSONObject(frames.length() - 1)?.optString("function")}")
+        exception(report, type, false, frames)
+        return report
+    }
+
+    private fun submit(block: () -> Unit): Boolean = ::app.isInitialized &&
+        runCatching { worker.execute { runCatching(block) }; true }.getOrDefault(false)
+
+    private fun load() {
+        if (loaded) return
+        loaded = true
+        val prefs = app.getSharedPreferences("mobile_posthog", Context.MODE_PRIVATE)
+        anonymousId = prefs.getString("anonymous_id", null) ?: UUID.randomUUID().toString().also {
+            prefs.edit().putString("anonymous_id", it).apply()
+        }
+        budget = MobileTelemetryBudget(prefs.getLong("day", -1), prefs.getInt("errors", 0),
+            prefs.getInt("timings", 0), prefs.getInt("exceptions", 0))
+        retryAt = prefs.getLong("retry_at", 0)
+        val file = File(app.filesDir, QUEUE_FILE)
+        if (file.exists() && file.length() <= 512_000) runCatching {
+            val saved = JSONArray(file.readText())
+            for (index in 0 until minOf(saved.length(), MobileTelemetryPolicy.MAX_QUEUE)) {
+                val item = saved.optJSONObject(index) ?: continue
+                if (System.currentTimeMillis() - item.optLong("occurredAt") in 0..MobileTelemetryPolicy.MAX_AGE_MS) pending.add(item)
             }
         }
-
-    // ── Notices the user saw ──
-
-    /** From Floater: an error the user was shown is a flow that didn't finish. */
-    fun onNotice(text: String, kind: String) {
-        if (!::app.isInitialized) return
-        crumb("Notice ($kind): $text")
-        val screen = currentScreen()
-        // Same thread as enqueue(), so the failed call is already queued.
-        io.execute { linkOrReportNotice(text, kind, screen) }
     }
 
-    private fun linkOrReportNotice(text: String, kind: String, screen: String) {
-        loadQueue()
-        val serious = kind == "ERROR"
-        val linked = synchronized(lock) {
-            val now = System.currentTimeMillis()
-            queue.lastOrNull {
-                (it.optString("kind") == "http" || it.optString("kind") == "network") &&
-                    now - it.optLong("occurredAt") <= LINK_WINDOW_MS &&
-                    !it.has("userMessage")
-            }?.also {
-                it.put("userMessage", text.take(500))
-                it.put("flow", screen)
-            }
-        }
-        if (linked != null) {
-            persist()
-            return
-        }
-        if (!serious) return
-        val pattern = text.replace(Regex("\\d+"), "#").take(120)
-        addToQueue(baseReport(
-            JSONObject()
-                .put("kind", "flow")
-                .put("fingerprint", "flow $screen $pattern")
-                .put("title", "$screen: ${text.take(140)}")
-                .put("message", text.take(2_000))
-                .put("userMessage", text.take(500))
-                .put("errorCode", "Flow failed")
-                .put("screen", screen)
-                .put("flow", screen),
-        ))
+    private fun add(report: JSONObject, timing: Boolean, healthy: Boolean) {
+        load()
+        val key = report.getString("fingerprint")
+        if (pending.any { it.optString("fingerprint") == key }) return
+        if (!budget.accept(key, timing, healthy, System.currentTimeMillis(), report.optString("event") == "\$exception")) return
+        app.getSharedPreferences("mobile_posthog", Context.MODE_PRIVATE).edit()
+            .putLong("day", budget.day).putInt("errors", budget.errors).putInt("timings", budget.timings)
+            .putInt("exceptions", budget.exceptions).apply()
+        if (pending.size >= MobileTelemetryPolicy.MAX_QUEUE) pending.removeAt(0)
+        pending.add(report)
         persist()
-        scheduleSend(SEND_DELAY_MS)
+        schedule()
     }
-
-    // ── Crashes ──
-
-    private fun saveCrash(thread: Thread, error: Throwable) {
-        val root = generateSequence(error) { it.cause }.last()
-        val appFrame = (error.stackTrace + root.stackTrace)
-            .firstOrNull { it.className.startsWith("com.manjugroups") }
-            ?.let { "${it.className.substringAfterLast('.')}.${it.methodName}:${it.lineNumber}" }
-            ?: error.stackTrace.firstOrNull()?.toString().orEmpty()
-        val type = error.javaClass.simpleName
-        val report = baseReport(
-            JSONObject()
-                .put("kind", "crash")
-                .put("fingerprint", "crash $type $appFrame")
-                .put("title", "Crash: $type at $appFrame".take(200))
-                .put("message", "$type: ${error.message.orEmpty()}".take(2_000))
-                .put("errorCode", type)
-                .put("screen", currentScreen())
-                .put("flow", "Thread ${thread.name}")
-                .put("stack", stackOf(error).take(12_000)),
-        )
-        // The process is about to die: write synchronously, send next launch.
-        File(app.filesDir, CRASH_FILE).writeText(report.toString())
-    }
-
-    private fun promoteSavedCrash() {
-        val file = File(app.filesDir, CRASH_FILE)
-        if (!file.exists()) return
-        runCatching { JSONObject(file.readText()) }.getOrNull()?.let { addToQueue(it) }
-        file.delete()
-        persist()
-    }
-
-    private fun stackOf(error: Throwable): String =
-        StringWriter().also { error.printStackTrace(PrintWriter(it)) }.toString()
-
-    // ── Queue ──
-
-    private fun baseReport(report: JSONObject): JSONObject = report
-        .put("occurredAt", System.currentTimeMillis())
-        .put("breadcrumbs", crumbs())
-        .put("count", 1)
-
-    private fun enqueue(report: JSONObject) {
-        if (!::app.isInitialized) return
-        val full = baseReport(report)
-        io.execute {
-            loadQueue()
-            addToQueue(full)
-            persist()
-        }
-        scheduleSend(SEND_DELAY_MS)
-    }
-
-    private fun addToQueue(report: JSONObject) {
-        synchronized(lock) {
-            val fingerprint = report.optString("fingerprint")
-            // Same problem still waiting to go out: count it instead.
-            queue.firstOrNull { it.optString("fingerprint") == fingerprint }?.let { waiting ->
-                waiting.put("count", waiting.optInt("count", 1) + 1)
-                if (!waiting.has("userMessage") && report.has("userMessage")) {
-                    waiting.put("userMessage", report.optString("userMessage"))
-                }
-                return
-            }
-            // Sent recently: drop (the server already has a fresh occurrence).
-            val sentAt = lastSentAt[fingerprint]
-            if (sentAt != null && System.currentTimeMillis() - sentAt < REPEAT_WINDOW_MS) return
-            queue.add(report)
-            while (queue.size > MAX_QUEUE) queue.removeAt(0)
-        }
-    }
-
-    private fun queueSize() = synchronized(lock) { queue.size }
-
-    private fun loadQueue() {
-        synchronized(lock) {
-            if (loaded) return
-            loaded = true
-            val file = File(app.filesDir, QUEUE_FILE)
-            if (!file.exists()) return
-            val now = System.currentTimeMillis()
-            runCatching { JSONArray(file.readText()) }.getOrNull()?.let { array ->
-                for (i in 0 until array.length()) {
-                    val item = array.optJSONObject(i) ?: continue
-                    if (now - item.optLong("occurredAt") <= MAX_AGE_MS) queue.add(item)
-                }
-            }
-        }
-    }
-
 
     private fun persist() {
-        val snapshot = synchronized(lock) { JSONArray(queue.map { JSONObject(it.toString()) }) }
-        runCatching { File(app.filesDir, QUEUE_FILE).writeText(snapshot.toString()) }
+        val file = AtomicFile(File(app.filesDir, QUEUE_FILE))
+        val stream = file.startWrite()
+        try { stream.write(JSONArray(pending).toString().toByteArray()); file.finishWrite(stream) }
+        catch (failure: Exception) { file.failWrite(stream) }
     }
 
-    private fun scheduleSend(delayMs: Long) {
-        synchronized(lock) {
-            if (sendScheduled) return
-            sendScheduled = true
-        }
-        main.postDelayed({
-            synchronized(lock) { sendScheduled = false }
-            io.execute { send() }
-        }, delayMs)
+    private fun schedule() {
+        if (scheduled || pending.isEmpty()) return
+        scheduled = true
+        val delay = maxOf(MobileTelemetryPolicy.FLUSH_MS, retryAt - System.currentTimeMillis(),
+            lastAttempt + MobileTelemetryPolicy.FLUSH_MS - SystemClock.elapsedRealtime())
+        timer.schedule({
+            if (!submit { scheduled = false; send() }) scheduled = false
+        }, delay, TimeUnit.MILLISECONDS)
     }
 
     private fun send() {
-        if (!::app.isInitialized) return
-        loadQueue()
-        if (SystemClock.elapsedRealtime() < retryAfter || !hasInternet()) return
-        val batch = synchronized(lock) { queue.take(20).map { JSONObject(it.toString()) } }
-        if (batch.isEmpty()) return
-        val session = runCatching { SessionManager(app) }.getOrNull()
-        val body = JSONObject()
-            .put("platform", "android")
-            .put("appVersion", BuildConfig.VERSION_NAME)
-            .put("buildNumber", BuildConfig.VERSION_CODE)
-            .put("deviceModel", deviceModel())
-            .put("osVersion", Build.VERSION.RELEASE.orEmpty())
-            .put("networkType", networkType())
-            .put("reports", JSONArray(batch))
-        val request = Request.Builder()
-            .url(BuildConfig.BASE_URL.trimEnd('/') + REPORT_PATH + "report")
-            .post(body.toString().toRequestBody("application/json".toMediaType()))
-            .apply { if (session?.isLoggedIn == true) header("Authorization", session.bearerToken) }
-            .build()
-        val ok = runCatching { sendClient.newCall(request).execute().use { it.isSuccessful } }
-            .onFailure { Log.w(TAG, "Issue report not sent: ${it.message}") }
-            .getOrDefault(false)
-        if (ok) {
-            val now = System.currentTimeMillis()
-            synchronized(lock) {
-                val sent = batch.map { it.optString("fingerprint") }.toSet()
-                sent.forEach { lastSentAt[it] = now }
-                queue.removeAll { it.optString("fingerprint") in sent }
-            }
-            persist()
-            retryAfter = 0L
-            if (queueSize() > 0) scheduleSend(2_000L)
-        } else {
-            // Server down or route not live yet: try again later, keep the queue.
-            retryAfter = SystemClock.elapsedRealtime() + REPEAT_WINDOW_MS
+        load()
+        pending.removeAll { System.currentTimeMillis() - it.optLong("occurredAt") > MobileTelemetryPolicy.MAX_AGE_MS }
+        if (pending.isEmpty() || !hasInternet() || System.currentTimeMillis() < retryAt) return
+        lastAttempt = SystemClock.elapsedRealtime()
+        val batch = pending.take(MobileTelemetryPolicy.BATCH_SIZE)
+        val events = batch.map { stored ->
+            val properties = JSONObject(stored.getJSONObject("properties").toString())
+                .put("\$process_person_profile", false).put("\$geoip_disable", true)
+                .put("platform", "android").put("app_version", BuildConfig.VERSION_NAME)
+                .put("build", BuildConfig.VERSION_CODE).put("os_version", Build.VERSION.RELEASE.orEmpty())
+            JSONObject().put("event", stored.getString("event")).put("distinct_id", anonymousId)
+                .put("uuid", stored.getString("uuid")).put("properties", properties)
+                .put("timestamp", Instant.ofEpochMilli(stored.getLong("occurredAt")).toString())
         }
-    }
-
-    // ── Device ──
-
-    private fun deviceModel(): String {
-        val model = Build.MODEL.orEmpty()
-        val maker = Build.MANUFACTURER.orEmpty()
-        return if (maker.isBlank() || model.startsWith(maker, ignoreCase = true)) model else "$maker $model"
-    }
-
-    private fun capabilities(): NetworkCapabilities? {
-        if (!::app.isInitialized) return null
-        val cm = app.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return null
-        return runCatching { cm.getNetworkCapabilities(cm.activeNetwork) }.getOrNull()
+        val body = JSONObject().put("api_key", PostHogConfig.PROJECT_TOKEN).put("batch", JSONArray(events))
+        val request = PostHogTransport.request(body.toString())
+        var status: Int? = null
+        var retryAfter: Long? = null
+        val ok = runCatching {
+            client.newCall(request).execute().use { response ->
+                status = response.code
+                retryAfter = response.header("Retry-After")?.toLongOrNull()
+                response.isSuccessful
+            }
+        }.getOrDefault(false)
+        if (ok) {
+            val sent = batch.map { it.getString("uuid") }.toSet()
+            pending.removeAll { it.optString("uuid") in sent }
+            failures = 0; retryAt = 0
+            persist()
+        } else {
+            failures++
+            retryAt = System.currentTimeMillis() + MobileTelemetryPolicy.retryDelayMs(status, failures, retryAfter)
+        }
+        app.getSharedPreferences("mobile_posthog", Context.MODE_PRIVATE).edit().putLong("retry_at", retryAt).apply()
+        // No recurring jobs/probes. A later real event or foreground resume retries failures.
+        if (ok) schedule()
     }
 
     private fun hasInternet(): Boolean {
-        val caps = capabilities() ?: return false
-        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
-            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
-    }
-
-    private fun networkType(): String {
-        val caps = capabilities() ?: return "offline"
-        return when {
-            caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "wifi"
-            caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "mobile data"
-            caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "ethernet"
-            else -> "other"
-        }
+        if (!::app.isInitialized) return false
+        return runCatching {
+            val manager = app.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            manager.getNetworkCapabilities(manager.activeNetwork)
+                ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true
+        }.getOrDefault(false)
     }
 }
