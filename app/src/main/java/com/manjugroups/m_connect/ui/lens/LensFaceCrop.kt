@@ -5,11 +5,12 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
- * Face crop for the photo sent to Lens: the whole head with a small margin,
- * never the shirt and waist. Pure math (no Android) so it is unit-tested.
+ * Face crop for the photo sent to Lens: the face and its sides (ears, hair)
+ * only, never the neck, chest or shirt (19 Nov 2026: 1.9x/2.3x still showed
+ * the chest). Pure math (no Android) so it is unit-tested.
  *
  * Lens rule: never cut the chin or forehead. The box is the face box grown to
- * about 1.9x its width and 2.3x its height, moved up 10% of the face height
+ * about 1.45x its width and 1.6x its height, moved up 8% of the face height
  * (hair and forehead), made 4:5 portrait by growing the short side, then
  * kept inside the frame (it slides; it only shrinks when the frame itself is
  * smaller, and never below the face plus a small margin).
@@ -21,9 +22,9 @@ object LensFaceCrop {
         val bottom: Int get() = top + height
     }
 
-    const val WIDTH_FACTOR = 1.9f
-    const val HEIGHT_FACTOR = 2.3f
-    const val SHIFT_UP = 0.10f
+    const val WIDTH_FACTOR = 1.45f
+    const val HEIGHT_FACTOR = 1.6f
+    const val SHIFT_UP = 0.08f
     /** Portrait width / height. */
     const val ASPECT = 0.8f
     /** Smallest box when the frame is tight: face plus this margin on each side. */

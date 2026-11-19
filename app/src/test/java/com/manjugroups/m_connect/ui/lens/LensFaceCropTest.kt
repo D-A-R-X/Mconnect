@@ -19,15 +19,16 @@ class LensFaceCropTest {
         val b = LensFaceCrop.cropBox(380f, 420f, 200f, 240f, 960, 1280)
         assertEquals(0.8f, b.width.toFloat() / b.height, 0.01f)
         assertContainsFace(b, 380f, 420f, 200f, 240f)
-        // Wider than the face by about 1.9x (or more for 4:5).
-        assertTrue(b.width >= 380)
+        // Face sides (ears) included: about 1.45x the face width.
+        assertTrue(b.width >= 280)
         // More room above the face (hair, forehead) than below the chin.
         val above = 420 - b.top
         val below = b.bottom - (420 + 240)
         assertTrue("above $above below $below", above > below)
         assertTrue("chin margin", below > 0)
-        // Not the whole frame: no shirt and waist.
-        assertTrue(b.height < 1280 * 0.6)
+        // Face only: at most a sliver under the chin (no neck, chest or shirt).
+        assertTrue("below chin $below", below <= 240 * 0.3)
+        assertTrue(b.height <= 240 * 1.7)
     }
 
     @Test
