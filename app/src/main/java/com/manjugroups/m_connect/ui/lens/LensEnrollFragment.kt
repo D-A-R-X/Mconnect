@@ -121,6 +121,10 @@ class LensEnrollFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        // No keyboard on this screen (e.g. still open from the staff search).
+        (requireContext().getSystemService(android.content.Context.INPUT_METHOD_SERVICE)
+            as? android.view.inputmethod.InputMethodManager)
+            ?.hideSoftInputFromWindow(view.windowToken ?: requireActivity().window.decorView.windowToken, 0)
         session = SessionManager(requireContext())
         if (!dryRun && (!LensStaffFragment.isAvailable(session) || staffId.isBlank())) {
             parentFragmentManager.popBackStack()

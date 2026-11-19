@@ -140,6 +140,8 @@ class LensStaffFragment : Fragment() {
 
     private fun openEnroll(item: LensStaffItem) {
         val staffId = item.staffId ?: return
+        // Close the search keyboard: the next screen is the camera / photos.
+        dismissSearchKeyboard()
         if (item.employeeCode.isNullOrBlank()) {
             com.manjugroups.m_connect.ui.common.Floater.warning(getString(R.string.lens_no_code))
             return
@@ -168,6 +170,14 @@ class LensStaffFragment : Fragment() {
                 existingSamples = item.enrollment?.faceSamples ?: 0,
             ),
         )
+    }
+
+    private fun dismissSearchKeyboard() {
+        val field = _binding?.etLensSearch ?: return
+        field.clearFocus()
+        val imm = requireContext().getSystemService(android.content.Context.INPUT_METHOD_SERVICE)
+            as? android.view.inputmethod.InputMethodManager
+        imm?.hideSoftInputFromWindow(field.windowToken, 0)
     }
 
     override fun onDestroyView() {
