@@ -28,6 +28,10 @@ internal object MobileTelemetryPolicy {
         .joinToString("/", prefix = "/") { if (it in segments) it else ":id" }
 
     fun method(method: String): String = method.takeIf { it in methods } ?: "OTHER"
+    fun timestamp(epochMillis: Long): String = java.text.SimpleDateFormat(
+        "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US,
+    ).apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }.format(java.util.Date(epochMillis))
+
     fun service(host: String, authority: String): String? = when (host.lowercase()) {
         authority.lowercase() -> "mms"
         "api-geo.theairix.com" -> "geotrack"

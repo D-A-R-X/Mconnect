@@ -4,6 +4,10 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class MobileTelemetryPolicyTest {
+    @Test fun `batch timestamps are UTC and work on min SDK without java time desugaring`() {
+        assertEquals("1970-01-01T00:00:00.000Z", MobileTelemetryPolicy.timestamp(0))
+        assertEquals("2026-11-19T00:00:00.000Z", MobileTelemetryPolicy.timestamp(1_795_046_400_000L))
+    }
     @Test fun `routes remove identifiers query fragments and encoded personal data`() {
         assertEquals("/api/hr/staff/:id/:id", MobileTelemetryPolicy.route("/api/hr/staff/Surya/9884693351?otp=1234#secret"))
         assertEquals("/api/:id/:id", MobileTelemetryPolicy.route("/api/user%40example.com/secretToken"))

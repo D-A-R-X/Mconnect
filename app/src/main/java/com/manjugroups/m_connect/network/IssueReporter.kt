@@ -17,7 +17,6 @@ import org.json.JSONObject
 import java.io.File
 import java.io.IOException
 import java.net.URI
-import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.Executors
@@ -240,7 +239,7 @@ object IssueReporter {
                 .put("build", BuildConfig.VERSION_CODE).put("os_version", Build.VERSION.RELEASE.orEmpty())
             JSONObject().put("event", stored.getString("event")).put("distinct_id", anonymousId)
                 .put("uuid", stored.getString("uuid")).put("properties", properties)
-                .put("timestamp", Instant.ofEpochMilli(stored.getLong("occurredAt")).toString())
+                .put("timestamp", MobileTelemetryPolicy.timestamp(stored.getLong("occurredAt")))
         }
         val body = JSONObject().put("api_key", PostHogConfig.PROJECT_TOKEN).put("batch", JSONArray(events))
         val request = PostHogTransport.request(body.toString())
