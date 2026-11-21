@@ -4179,6 +4179,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     visitEffectiveStatus = completion.visit?.effectiveStatus,
                     visitStatus = completion.visit?.status,
                 )?.lowercase(Locale.US)?.replace('-', '_')
+                heldForApproval = cpStatus == "pending_gm_approval"
                 if (isCpBackedVisit && !cpOutcome.isNullOrBlank()) {
                     // Older/current backends confirm the field-visit mutation with
                     // { success:true, fieldVisitId } and omit `status`. The CP
