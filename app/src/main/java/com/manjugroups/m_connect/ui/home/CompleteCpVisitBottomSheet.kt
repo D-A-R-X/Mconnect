@@ -6877,19 +6877,9 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     // the telecaller already prepared". This helper detects that
     // payload and re-shapes the sheet accordingly.
 
-    /** A visit is "already decided" — a genuine re-open, not a fresh
-     *  completion — when it (or its field-visit) is completed/cancelled or
-     *  carries a completion timestamp. Only then may a caller-supplied outcome
-     *  legitimately skip the "What happened with the client?" chooser. A stray
-     *  outcome on a still-pending row does NOT count. */
-    private fun visitAlreadyDecided(visit: CpVisitDetail): Boolean {
-        val status = visit.status?.lowercase(Locale.getDefault())
-        val fieldStatus = visit.fieldVisit?.status?.lowercase(Locale.getDefault())
-        return visit.completedAt != null ||
-            visit.fieldVisit?.completedAt != null ||
-            status == "completed" || status == "cancelled" ||
-            fieldStatus == "completed"
-    }
+    /** Only the parent decision counts; a completed travel leg is not an outcome. */
+    private fun visitAlreadyDecided(visit: CpVisitDetail): Boolean =
+        com.manjugroups.m_connect.ui.marketing.isCpDecisionCommitted(visit.status)
 
     private fun detectAndApplyLockedSvMode() {
         val cpVisitId = arguments?.getString(ARG_CP_VISIT_ID)

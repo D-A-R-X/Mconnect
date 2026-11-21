@@ -149,6 +149,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     private var cpFollowUpDate: String? = null
     private var cpFollowUpTime: String? = null
     private var cpVisitDecisionCaptured: Boolean = false
+    private var cpDecisionSelectedLocally = false
     private var serverOutcomePendingFinalClose = false
     private var verifiedArrivalLat: Double? = null
     private var verifiedArrivalLng: Double? = null
@@ -443,13 +444,15 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         tripType = args.getString(ARG_TRIP_TYPE)
         cpVisitId = args.getString(ARG_CP_VISIT_ID)
         cpClientMet = if (args.containsKey(ARG_CP_CLIENT_MET)) args.getBoolean(ARG_CP_CLIENT_MET) else null
-        cpOutcome = args.getString(ARG_CP_OUTCOME)
+        // List arguments can contain a draft or a pre-created SV linkage.
+        // Only reconciliation or an explicit outcome result confirms a decision.
+        cpOutcome = null
         cpType = args.getString(ARG_CP_TYPE)
         clientMobile = args.getString(ARG_CLIENT_MOBILE)
         // A CP visit decision is complete only when an outcome exists. Client
         // Met alone can be saved before the staff exits, so reopen the sheet
         // later until outcome/project conversion is captured.
-        cpVisitDecisionCaptured = !cpOutcome.isNullOrBlank()
+        cpVisitDecisionCaptured = false
 
         // LMO (telecaller) + deadline — shown only when the caller supplied
         // them (both are optional args threaded from the visit row).
@@ -527,6 +530,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         // result and finalize completion afterward.
         setFragmentResultListener(CompleteCpVisitBottomSheet.RESULT_KEY) { _, bundle ->
             isOpeningOutcomeSheet = false
+            cpDecisionSelectedLocally = true
             cpVisitDecisionCaptured = true
             pendingCpRevisit = CpRevisitConfirmation.fromResult(bundle)
             val outcome = bundle.getString(CompleteCpVisitBottomSheet.KEY_OUTCOME)
@@ -634,7 +638,6 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             }
                     "completed", "complete", "done", "closed" -> {
                         visitStarted = true
-                        cpVisitDecisionCaptured = true
                         showTripStartTime()
                         btnOpenMaps?.visibility = View.GONE
                         if (isJointCpWorkflow() && jointWorkflow?.state != "completed") {
@@ -1280,12 +1283,12 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 if (!isAdded) return@launch
                 cpType = cp.cpType ?: cpType
                 cpClientMet = cp.clientMet ?: cpClientMet
-                val persistedOutcome = cp.outcome?.takeIf { it.isNotBlank() }
-                    ?: cp.convertedSiteVisitId?.takeIf { it.isNotBlank() }?.let { "converted_to_site_visit" }
-                    ?: cp.convertedBookingId?.takeIf { it.isNotBlank() }?.let { "converted_to_booking" }
-                if (persistedOutcome != null) {
+                val persistedOutcome = com.manjugroups.m_connect.ui.marketing.confirmedCpOutcome(
+                    cp.status, cp.outcome, cp.convertedSiteVisitId, cp.convertedBookingId,
+                )
+                if (!cpDecisionSelectedLocally) {
                     cpOutcome = persistedOutcome
-                    cpVisitDecisionCaptured = true
+                    cpVisitDecisionCaptured = com.manjugroups.m_connect.ui.marketing.isCpDecisionCommitted(cp.status)
                 }
                 cp.arrivalProof?.let { proof ->
                     pendingArrivalStorageId = proof.photoStorageId ?: pendingArrivalStorageId
@@ -1353,7 +1356,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 // spawned fieldVisits row (where "arrived" lives) over
                 // the CP-side lifecycle (which only tracks
                 // scheduled/in_progress/completed).
-                val effective = com.manjugroups.m_connect.ui.marketing.resolveParticipantCpEffectiveStatus(
+                val participantStatus = com.manjugroups.m_connect.ui.marketing.resolveParticipantCpEffectiveStatus(
                     cp.effectiveStatus,
                     cp.status,
                     cp.fieldVisit?.status,
@@ -1365,6 +1368,8 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     parentFieldVisitId = cp.fieldVisitId,
                 )
                     .lowercase(Locale.getDefault())
+                val effective = com.manjugroups.m_connect.ui.marketing.cpOutcomeCaptureStatus(cp.status, participantStatus)
+                heldForApproval = effective.replace('-', '_') == "pending_gm_approval"
                 serverOutcomePendingFinalClose = persistedOutcome != null && effective !in setOf(
                     "completed", "complete", "done", "closed", "cancelled", "canceled",
                     "postponed", "pending_gm_approval",
@@ -2770,6 +2775,11 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         // route through the CP-visit decision sheet when applicable, then
         // finalize the visit with the photo proof.
         if (visitId == null) return
+        if (heldForApproval) return
+        if (isPureSiteVisit) {
+            openSiteVisitOutcomeSheet()
+            return
+        }
 
         val isCpVisit = isCpVisit()
 
@@ -2811,7 +2821,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
 
         if (isCpVisit && !cpVisitDecisionCaptured) {
             renderArrivalPhase(alreadyArrived = true)
-            showCpCompletionSheet()
+            onCompleteCpDetailsClicked()
             return
         }
         finalizeCompleteVisit()
@@ -3748,6 +3758,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
      *  outcomeSheetGuardResetDelayMs so a silent open-failure doesn't
      *  permanently brick the button. */
     private fun onCompleteCpDetailsClicked() {
+        if (heldForApproval) return
         val workflow = jointWorkflow
         if (isJointCpWorkflow() && workflow != null) {
             if (jointCpReviewerCanReview(workflow)) {
@@ -4108,6 +4119,11 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
 
     private fun finalizeCompleteVisit() {
         val id = visitId ?: return
+        if (heldForApproval) return
+        if (isCpBackedTrip(cpVisitId) && !cpVisitDecisionCaptured) {
+            onCompleteCpDetailsClicked()
+            return
+        }
         val hasPersistedCpOutcome = isCpBackedTrip(cpVisitId) && !cpOutcome.isNullOrBlank()
         if (hasPersistedCpOutcome) serverOutcomePendingFinalClose = true
         // The trip is being finished — drop the local "started" bridge so a
@@ -4162,7 +4178,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     status = completion.status,
                     visitEffectiveStatus = completion.visit?.effectiveStatus,
                     visitStatus = completion.visit?.status,
-                )?.lowercase(Locale.US)
+                )?.lowercase(Locale.US)?.replace('-', '_')
                 if (isCpBackedVisit && !cpOutcome.isNullOrBlank()) {
                     // Older/current backends confirm the field-visit mutation with
                     // { success:true, fieldVisitId } and omit `status`. The CP
@@ -4173,7 +4189,11 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                         "The trip was saved, but the CP outcome state was not confirmed. Refresh before retrying."
                     }
                 }
-                applyStatusPill(if (cpStatus == "pending_gm_approval") "Pending Approval" else "Complete")
+                applyStatusPill(when {
+                    cpStatus == "pending_gm_approval" -> "Pending Approval"
+                    isCpBackedVisit && cpStatus == null -> "Saved"
+                    else -> "Complete"
+                })
                 // Completion is already committed. A dashboard refresh failure
                 // must not tell staff the visit failed and tempt a duplicate.
                 runCatching {
@@ -4182,18 +4202,26 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     android.util.Log.w("TripNav", "Post-completion refresh failed", it)
                 }
                 val revisit = pendingCpRevisit
+                if (cpStatus == "pending_gm_approval") {
+                    toastSafe("Outcome saved and waiting for GM approval")
+                }
                 if (revisit != null) {
                     showClientNotSeenCompletion = false
                     CpRevisitConfirmation.show(this@TripNavigationFragment, revisit) {
                         pendingCpRevisit = null
                         navigateUp()
                     }
+                } else if (cpStatus == "pending_gm_approval") {
+                    showClientNotSeenCompletion = false
+                    navigateUp()
                 } else if (showClientNotSeenCompletion) {
                     showClientNotSeenCompletion = false
                     CpTripCompletedBottomSheet().showOnce(parentFragmentManager, "cp_trip_completed")
                 } else {
                     val message = if (cpStatus == "pending_gm_approval") {
                         "Outcome saved and waiting for GM approval"
+                    } else if (isCpBackedVisit && cpStatus == null) {
+                        "Outcome saved. Refresh the visit to confirm approval status."
                     } else if (completion.alreadyCompleted == true) {
                         "Visit was already completed"
                     } else {

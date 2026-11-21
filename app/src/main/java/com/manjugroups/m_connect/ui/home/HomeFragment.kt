@@ -2011,35 +2011,9 @@ class HomeFragment : Fragment() {
      * so no further OTP/photo step is needed.
      */
     private fun openCpOutcomeSheetForVisit(visit: TodayVisit) {
-        val cpId = visit.clientPlaceVisitId
-        if (cpId.isNullOrBlank()) {
-            // No CP row behind it — fall back to the trip detail screen.
-            openTripNavigationForVisit(visit)
-            return
-        }
-        val cpType = visit.cpVisit?.cpType?.lowercase(Locale.getDefault())
-        if (cpType == "collection_cp" ||
-            cpType == "old_client" ||
-            cpType == "gift_distribution"
-        ) {
-            // Trip nav screen's onCompleteCpDetailsClicked() + the
-            // belt-and-braces guard in showCpCompletionSheet() will
-            // route to promptCollectionPayment / promptOldClientRemarks
-            // / completeGiftDistributionMet as appropriate. Reusing
-            // that path avoids duplicating the booking-lookup + result-
-            // listener wiring here.
-            openTripNavigationForVisit(visit)
-            return
-        }
-        CompleteCpVisitBottomSheet
-            .newInstance(
-                cpVisitId = cpId,
-                cpClientMet = visit.cpVisit?.clientMet,
-                cpOutcome = visit.cpVisit?.outcome,
-                isSvFixedHint = visit.visitCategory == "sv_cum_cp",
-                cpType = visit.cpVisit?.cpType,
-            )
-            .showOnce(parentFragmentManager, "cp_visit_complete")
+        // The trip screen owns the explicit outcome payload and final approval
+        // response. A standalone form here drops locked-SV confirmation results.
+        openTripNavigationForVisit(visit)
     }
 
     /**

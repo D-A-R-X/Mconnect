@@ -17,7 +17,7 @@ internal fun isCpBackedTrip(cpVisitId: String?): Boolean = !cpVisitId.isNullOrBl
 
 /** Accepts both the enriched response and the legacy success-only contract. */
 internal fun isCompatibleCpCompletionStatus(status: String?): Boolean {
-    val normalized = status?.trim()?.lowercase(Locale.US)?.takeIf(String::isNotEmpty)
+    val normalized = status?.trim()?.lowercase(Locale.US)?.replace('-', '_')?.takeIf(String::isNotEmpty)
     return normalized == null || normalized in TERMINAL_CP_COMPLETION_STATUSES
 }
 
@@ -27,9 +27,13 @@ internal fun resolvedCpCompletionStatus(
     status: String?,
     visitEffectiveStatus: String?,
     visitStatus: String?,
-): String? = sequenceOf(effectiveStatus, status, visitEffectiveStatus, visitStatus)
-    .mapNotNull { it?.trim()?.takeIf(String::isNotEmpty) }
-    .firstOrNull()
+): String? {
+    val candidates = listOf(effectiveStatus, status, visitEffectiveStatus, visitStatus)
+        .mapNotNull { it?.trim()?.takeIf(String::isNotEmpty) }
+    return candidates.firstOrNull {
+        it.lowercase(Locale.US).replace('-', '_') == "pending_gm_approval"
+    } ?: candidates.firstOrNull()
+}
 
 internal fun jointCpReviewerCanReview(workflow: JointCpWorkflow?): Boolean {
     val state = workflow?.state?.trim()?.lowercase(Locale.US)?.replace('-', '_')

@@ -32,3 +32,35 @@ fun shouldOfferOtherOutcome(isPureSiteVisit: Boolean, cpType: String?): Boolean 
 /** New Client CP is the only category that asks the post-outcome referral question. */
 fun isNewClientCpType(cpType: String?): Boolean =
     cpType?.trim()?.lowercase(Locale.ROOT) == "new_client_cp"
+
+/** A setup linkage is not, by itself, a staff decision. */
+fun confirmedCpOutcome(
+    status: String?,
+    outcome: String?,
+    convertedSiteVisitId: String? = null,
+    convertedBookingId: String? = null,
+): String? {
+    if (!isCpDecisionCommitted(status)) return null
+    outcome?.trim()?.takeIf(String::isNotEmpty)?.let { return it }
+    // Old completed records may omit outcome; pending SV confirmations also
+    // have links, so only a genuinely completed CP may use this fallback.
+    if (normalizedCpDecisionStatus(status) !in COMPLETED_CP_STATUSES) return null
+    return convertedSiteVisitId?.takeIf { it.isNotBlank() }?.let { "converted_to_site_visit" }
+        ?: convertedBookingId?.takeIf { it.isNotBlank() }?.let { "converted_to_booking" }
+}
+
+private val COMPLETED_CP_STATUSES = setOf("completed", "complete", "done", "closed")
+
+private fun normalizedCpDecisionStatus(status: String?): String? =
+    status?.trim()?.lowercase(Locale.ROOT)?.replace('-', '_')
+
+fun isCpDecisionCommitted(status: String?): Boolean =
+    normalizedCpDecisionStatus(status) in COMPLETED_CP_STATUSES + setOf(
+        "postponed", "pending_gm_approval", "cancelled", "canceled", "rejected",
+    )
+
+/** A closed travel leg cannot hide an undecided parent CP's outcome form. */
+fun cpOutcomeCaptureStatus(parentStatus: String?, effectiveStatus: String): String =
+    if (!isCpDecisionCommitted(parentStatus) &&
+        normalizedCpDecisionStatus(effectiveStatus) in COMPLETED_CP_STATUSES
+    ) "arrived" else effectiveStatus

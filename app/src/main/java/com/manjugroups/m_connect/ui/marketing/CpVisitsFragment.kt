@@ -925,18 +925,11 @@ class CpVisitsFragment : Fragment() {
         // renderer can detect a "completed but no decision yet" state
         // for SV-via-CP visits (telecaller-fixed SV path).
         //
-        // Defensive: when the row already carries a convertedSiteVisitId
-        // or convertedBookingId, the conversion happened — even if the
-        // outcome string field is somehow blank (legacy data, partial
-        // patch, or a future mutation that forgets the explicit outcome
-        // write). Derive a synthetic outcome from those linkages so the
-        // Pending UI doesn't lure the user into a re-convert that would
-        // either no-op (idempotent path) or worse, double-action.
-        val effectiveOutcome = this.outcome?.takeIf { it.isNotBlank() }
-            ?: this.convertedSiteVisitId?.takeIf { it.isNotBlank() }
-                ?.let { "converted_to_site_visit" }
-            ?: this.convertedBookingId?.takeIf { it.isNotBlank() }
-                ?.let { "converted_to_booking" }
+        // A pending SV is prelinked at setup. Only a committed parent CP may
+        // use conversion linkage as a legacy outcome fallback.
+        val effectiveOutcome = confirmedCpOutcome(
+            this.status, this.outcome, this.convertedSiteVisitId, this.convertedBookingId,
+        )
         // "Trip over, outcome never recorded" - decided HERE because this is the
         // only place that can see both the CP row's own status and its field
         // visit's. The card's merged `effectiveStatus` prefers
@@ -1681,32 +1674,9 @@ class CpVisitsFragment : Fragment() {
      * immediately after the trip-complete swipe.
      */
     private fun reopenConfirmSheet(visit: TodayVisit) {
-        val cpId = visit.clientPlaceVisitId ?: visit.id
-        // Per-cpType routing — gift_distribution / old_client /
-        // collection_cp have dedicated sheets handled by the trip nav
-        // screen; opening the default booking-outcome sheet here is
-        // wrong UI for them. Punt those into the trip nav, which has
-        // both the per-type click dispatcher and the belt-and-braces
-        // guard in showCpCompletionSheet().
-        val cpType = visit.cpVisit?.cpType?.lowercase()
-        if (cpType == "collection_cp" || cpType == "old_client" || cpType == "gift_distribution") {
-            openVisit(visit)
-            return
-        }
-        // Pre-pass the SV-fixed hint only when the row is actually a
-        // telecaller-fixed SV-via-CP visit. For regular CP visits the
-        // sheet should open in its default multi-tab Booking flow, not
-        // locked to the SV tab. detectAndApplyLockedSvMode still runs
-        // server-side either way as a backstop.
-        val isSvFixed = visit.visitCategory == "sv_cum_cp"
-        CompleteCpVisitBottomSheet.newInstance(
-            cpVisitId = cpId,
-            cpClientMet = null,
-            cpOutcome = null,
-            isSvFixedHint = isSvFixed,
-            cpType = visit.cpVisit?.cpType,
-            cpClientPhone = visit.leadPhone,
-        ).showOnce(parentFragmentManager, "CompleteCpVisitBottomSheet")
+        // Reuse the handler that persists the selected outcome and interprets
+        // GM hold; list refresh alone cannot finish locked-SV confirmation.
+        openVisit(visit)
     }
 
     /**

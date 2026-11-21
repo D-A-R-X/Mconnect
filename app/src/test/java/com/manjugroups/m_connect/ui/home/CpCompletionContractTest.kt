@@ -15,6 +15,12 @@ import org.junit.Test
 class CpCompletionContractTest {
 
     @Test
+    fun `GM hold wins over a completed field trip in a mixed response`() {
+        assertEquals("pending_gm_approval", resolvedCpCompletionStatus(null, "completed", null, "pending_gm_approval"))
+        assertEquals(" Pending-GM-Approval ".trim(), resolvedCpCompletionStatus("completed", null, " Pending-GM-Approval ", null))
+    }
+
+    @Test
     fun `verified owner can reopen outcome when transient permission flag is stale`() {
         val workflow = JointCpWorkflow(
             state = "awaiting_owner_outcome",

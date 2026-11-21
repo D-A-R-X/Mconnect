@@ -17,7 +17,9 @@ import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.CpVisitDetail
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.ui.home.CompleteCpVisitBottomSheet
+import com.manjugroups.m_connect.ui.home.TripNavigationFragment
 import com.manjugroups.m_connect.ui.common.navigateUp
+import com.manjugroups.m_connect.ui.common.pushDetail
 import com.manjugroups.m_connect.ui.common.preferredCpClientName
 import com.manjugroups.m_connect.ui.common.preferredCpClientPhone
 import kotlinx.coroutines.launch
@@ -214,12 +216,9 @@ class CompletedVisitDetailFragment : Fragment() {
         convertedSiteVisitId: String?,
         convertedBookingId: String?,
         postponeReasons: List<String>,
+        status: String? = null,
     ) {
-        val effectiveOutcome = outcome?.takeIf { it.isNotBlank() }
-            ?: convertedSiteVisitId?.takeIf { it.isNotBlank() }
-                ?.let { "converted_to_site_visit" }
-            ?: convertedBookingId?.takeIf { it.isNotBlank() }
-                ?.let { "converted_to_booking" }
+        val effectiveOutcome = confirmedCpOutcome(status, outcome, convertedSiteVisitId, convertedBookingId)
         val outcomePill = root.findViewById<TextView>(R.id.tvCvdOutcomeLabel)
         val (outcomeLabel, outcomeBg, outcomeFg) = outcomePresentation(effectiveOutcome)
         outcomePill.text = outcomeLabel
@@ -378,15 +377,14 @@ class CompletedVisitDetailFragment : Fragment() {
         clientMetAt: Long?,
         convertedSiteVisitId: String?,
         convertedBookingId: String?,
+        status: String? = null,
     ) {
-        val effectiveOutcome = outcome?.takeIf { it.isNotBlank() }
-            ?: convertedSiteVisitId?.takeIf { it.isNotBlank() }
-                ?.let { "converted_to_site_visit" }
-            ?: convertedBookingId?.takeIf { it.isNotBlank() }
-                ?.let { "converted_to_booking" }
+        val effectiveOutcome = confirmedCpOutcome(status, outcome, convertedSiteVisitId, convertedBookingId)
         val outcomePending = effectiveOutcome.isNullOrBlank()
+        val pendingApproval = status?.trim()?.lowercase(Locale.ROOT)?.replace('-', '_') == "pending_gm_approval"
 
         val statusSummary = when {
+            pendingApproval -> "Waiting for GM approval"
             outcomePending -> "Outcome pending"
             clientMet == true -> "Client met"
             clientMet == false -> "Client not seen"
@@ -395,6 +393,7 @@ class CompletedVisitDetailFragment : Fragment() {
         root.findViewById<TextView>(R.id.tvCvdStatusSummary).text = statusSummary
 
         val statusSub = when {
+            pendingApproval -> "Outcome saved. The GM must review this visit before it is finalized."
             outcomePending ->
                 "Trip was completed but no outcome was recorded. Tap below to finish."
             clientMetAt != null -> "Outcome recorded on ${formatEpochMillis(clientMetAt)}"
@@ -403,8 +402,8 @@ class CompletedVisitDetailFragment : Fragment() {
         root.findViewById<TextView>(R.id.tvCvdStatusSubtitle).text = statusSub
 
         val statusPill = root.findViewById<TextView>(R.id.tvCvdStatusLabel)
-        if (outcomePending) {
-            statusPill.text = "Pending"
+        if (outcomePending || pendingApproval) {
+            statusPill.text = if (pendingApproval) "Pending approval" else "Pending"
             statusPill.setTextColor(Color.parseColor("#B54708"))
             (statusPill.parent as? View)?.setBackgroundResource(R.drawable.bg_home_trip_status_progress)
         } else {
@@ -414,7 +413,7 @@ class CompletedVisitDetailFragment : Fragment() {
         }
 
         val recordBtn = root.findViewById<TextView>(R.id.btnCvdRecordOutcome)
-        if (outcomePending) {
+        if (outcomePending && status != null && !isCpDecisionCommitted(status)) {
             recordBtn.visibility = View.VISIBLE
             recordBtn.setOnClickListener { openOutcomeSheet() }
         } else {
@@ -431,14 +430,19 @@ class CompletedVisitDetailFragment : Fragment() {
      */
     private fun openOutcomeSheet() {
         val cpId = visitId?.takeIf { it.isNotBlank() } ?: return
-        CompleteCpVisitBottomSheet.newInstance(
-            cpVisitId = cpId,
-            cpClientMet = null,
-            cpOutcome = null,
-            isSvFixedHint = isSvFixedHint,
+        val args = requireArguments()
+        parentFragmentManager.pushDetail(TripNavigationFragment.forVisit(
+            visitId = cpId,
+            placeName = args.getString(ARG_PLACE_NAME) ?: args.getString(ARG_LEAD_NAME),
+            placeAddress = args.getString(ARG_PLACE_ADDRESS),
+            destLat = if (args.containsKey(ARG_PLACE_LAT)) args.getDouble(ARG_PLACE_LAT) else null,
+            destLng = if (args.containsKey(ARG_PLACE_LNG)) args.getDouble(ARG_PLACE_LNG) else null,
+            status = "completed", // Closed travel leg; the trip screen rechecks the parent decision.
+            clientPlaceVisitId = cpId,
+            visitCategory = if (isSvFixedHint) "sv_cum_cp" else "direct_cp",
             cpType = cpType,
-            cpClientPhone = clientPhone,
-        ).showOnce(parentFragmentManager, "CompleteCpVisitBottomSheet")
+            clientMobile = clientPhone,
+        ))
     }
 
     private fun bindEnriched(root: View, visit: CpVisitDetail) {
@@ -500,6 +504,7 @@ class CompletedVisitDetailFragment : Fragment() {
             clientMetAt = visit.clientMetAt,
             convertedSiteVisitId = visit.convertedSiteVisitId,
             convertedBookingId = visit.convertedBookingId,
+            status = visit.status,
         )
         // Same fallback for the small Outcome pill on the lower card —
         // shows "Converted to Site Visit" / "Converted to Booking"
@@ -510,6 +515,7 @@ class CompletedVisitDetailFragment : Fragment() {
             convertedSiteVisitId = visit.convertedSiteVisitId,
             convertedBookingId = visit.convertedBookingId,
             postponeReasons = visit.postponeReasons ?: emptyList(),
+            status = visit.status,
         )
 
         // Upgrade client info — prefer the fully-resolved name + phone from

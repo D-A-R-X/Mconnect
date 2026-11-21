@@ -868,7 +868,9 @@ class HomeViewModel : ViewModel() {
                 clientMet = this.clientMet,
                 clientMetAt = this.clientMetAt,
                 clientNoShowReason = this.clientNoShowReason,
-                outcome = this.outcome,
+                outcome = com.manjugroups.m_connect.ui.marketing.confirmedCpOutcome(
+                    this.status, this.outcome, this.convertedSiteVisitId, this.convertedBookingId,
+                ),
                 postponeReasons = this.postponeReasons,
                 cpType = this.cpType,
                 jointCpCategory = this.jointCpCategory,
