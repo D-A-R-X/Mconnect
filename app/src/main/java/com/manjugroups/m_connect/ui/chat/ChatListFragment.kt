@@ -47,6 +47,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.async
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ensureActive
+import kotlin.coroutines.coroutineContext
+import android.os.SystemClock
+import retrofit2.HttpException
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -63,6 +68,9 @@ class ChatListFragment : Fragment() {
     private val api = ApiService.create()
 
     private var refreshJob: Job? = null
+    private var loadJob: Job? = null
+    private var photoJob: Job? = null
+    private val readPolicy = ChatListReadPolicy()
     private var activeStaffCache: List<StaffData> = emptyList()
 
     /**
@@ -149,7 +157,6 @@ class ChatListFragment : Fragment() {
         // Pull-to-refresh — re-runs loadData() which the existing polling
         // loop also calls every 5s. dismissRefresh is wired below.
         binding.chatRefresh.setupPullToRefresh { loadData(refreshStaff = true) }
-        loadData()
     }
 
     private fun setupRecyclerView() {
@@ -382,7 +389,11 @@ class ChatListFragment : Fragment() {
 
     override fun onHiddenChanged(hidden: Boolean) {
         super.onHiddenChanged(hidden)
-        if (!hidden && _binding != null) applyChatChrome()
+        if (hidden) stopReads()
+        else if (_binding != null && isResumed) {
+            applyChatChrome()
+            startRefreshLoop()
+        }
     }
 
     private fun applyChatChrome() {
@@ -393,16 +404,27 @@ class ChatListFragment : Fragment() {
     }
 
     override fun onPause() {
-        refreshJob?.cancel()
-        refreshJob = null
+        stopReads()
         super.onPause()
     }
 
-    private fun startRefreshLoop() {
+    private fun stopReads() {
         refreshJob?.cancel()
+        refreshJob = null
+        loadJob?.cancel()
+        photoJob?.cancel()
+    }
+
+    private fun canRead(): Boolean = _binding != null &&
+        readPolicy.canRead(!isHidden, isResumed, SystemClock.elapsedRealtime())
+
+    private fun startRefreshLoop() {
+        if (_binding == null || isHidden || !isResumed || refreshJob?.isActive == true) return
         refreshJob = viewLifecycleOwner.lifecycleScope.launch {
+            loadJob?.join()
             while (true) {
-                loadData()
+                // Wait for completion; hiding cancels the actual request, not just its timer.
+                loadData()?.join()
                 delay(5_000)
             }
         }
@@ -476,103 +498,128 @@ class ChatListFragment : Fragment() {
 
     private fun chatCacheKey(): String = "chatlist:${session.staffId.orEmpty()}"
 
-    private fun loadData(refreshStaff: Boolean = false) {
-        if (isLoadingChats) return
+    private fun loadData(refreshStaff: Boolean = false): Job? {
+        if (isLoadingChats || !canRead()) {
+            _binding?.chatRefresh?.dismissRefresh()
+            return loadJob
+        }
         isLoadingChats = true
         val fetchStaff = refreshStaff || activeStaffCache.isEmpty() ||
             System.currentTimeMillis() - staffFetchedAt >= STAFF_REFRESH_MS
-        viewLifecycleOwner.lifecycleScope.launch {
-            if (!hasLoadedOnce) {
-                // Cache-first: paint the last-known chat list INSTANTLY (no
-                // skeleton) and let the network refresh in the background. Only
-                // show the skeleton when there's genuinely nothing cached — this
-                // is what stops Chat from sitting on a long blank/skeleton wait.
-                val cached = runCatching {
-                    LocalCache.get(requireContext(), chatCacheKey(), ChatListSnapshot::class.java)
-                }.getOrNull()
-                if (cached != null && _binding != null) {
-                    allConversations = cached.conversations
-                    allChannels = cached.channels
-                    activeStaffCache = cached.staff
-                    hasLoadedOnce = true
-                    SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
-                    binding.rvChatList.visibility = View.VISIBLE
-                    renderCurrentList()
-                } else {
-                    SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
-                    binding.rvChatList.visibility = View.GONE
-                }
-            }
-            var conversations: List<ConversationData> = emptyList()
-            var channels: List<ChannelData> = emptyList()
-            var staffList: List<StaffData> = emptyList()
-            var fetchSuccess = false
-
+        loadJob = viewLifecycleOwner.lifecycleScope.launch {
             try {
-                kotlinx.coroutines.coroutineScope {
-                    val conversationsDeferred = async(kotlinx.coroutines.Dispatchers.IO) {
-                        api.getConversations(session.bearerToken).conversations
-                    }
-                    val channelsDeferred = async(kotlinx.coroutines.Dispatchers.IO) {
-                        api.getChannels(session.bearerToken).channels
-                    }
-                    val staffListDeferred = async(kotlinx.coroutines.Dispatchers.IO) {
-                        if (!fetchStaff) return@async activeStaffCache
-                        try {
-                            api.getStaff(session.bearerToken, status = "active").staff
-                                .also { if (it.isNotEmpty()) staffFetchedAt = System.currentTimeMillis() }
-                        } catch (e: Exception) {
-                            // Keep the roster we have rather than blanking photos/names.
-                            activeStaffCache
-                        }
-                    }
-                    conversations = conversationsDeferred.await()
-                    channels = channelsDeferred.await()
-                    staffList = staffListDeferred.await()
-                    fetchSuccess = true
-                }
-            } catch (e: Exception) {
-                // Error handled by fetchSuccess = false
+                refreshData(fetchStaff)
+            } finally {
+                if (_binding != null) binding.chatRefresh.dismissRefresh()
+                isLoadingChats = false
             }
+        }
+        return loadJob
+    }
 
-            if (fetchSuccess) {
-                if (_binding == null) { isLoadingChats = false; return@launch }
-                allConversations = conversations
-                allChannels = channels
-                activeStaffCache = staffList
+    private suspend fun refreshData(fetchStaff: Boolean) {
+        if (!hasLoadedOnce) {
+            // Cache-first: paint the last-known chat list INSTANTLY (no
+            // skeleton) and let the network refresh in the background. Only
+            // show the skeleton when there's genuinely nothing cached — this
+            // is what stops Chat from sitting on a long blank/skeleton wait.
+            val cached = runCatching {
+                LocalCache.get(requireContext(), chatCacheKey(), ChatListSnapshot::class.java)
+            }.getOrNull()
+            if (cached != null && _binding != null) {
+                allConversations = cached.conversations
+                allChannels = cached.channels
+                activeStaffCache = cached.staff
                 hasLoadedOnce = true
-                // Persist for the next cold open's instant paint.
-                runCatching {
-                    LocalCache.put(
-                        requireContext(), chatCacheKey(),
-                        ChatListSnapshot(conversations, channels, staffList),
-                        System.currentTimeMillis(),
-                    )
-                }
                 SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
                 binding.rvChatList.visibility = View.VISIBLE
                 renderCurrentList()
-
-                // Background-fetch profile photos for conversation
-                // participants whose photo isn't already known. This runs
-                // after the list is visible so the user sees initials
-                // first, then photos pop in once fetched.
-                fetchMissingConversationPhotos(conversations, staffList)
             } else {
-                if (_binding == null) { isLoadingChats = false; return@launch }
-                SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
-                if (!hasLoadedOnce) {
-                    showEmptyState(
-                        title = "Unable to load chats",
-                        subtitle = "Pull to refresh later or try opening chat again."
-                    )
-                }
+                SkeletonUtils.startSkeletonPulse(binding.skeletonContainer)
+                binding.rvChatList.visibility = View.GONE
             }
-            // Drop the pull-refresh spinner regardless of outcome, then
-            // unblock the in-flight guard.
-            if (_binding != null) binding.chatRefresh.dismissRefresh()
-            isLoadingChats = false
         }
+        var conversations: List<ConversationData> = emptyList()
+        var channels: List<ChannelData> = emptyList()
+        var staffList: List<StaffData> = emptyList()
+        var staffReadFailure: Exception? = null
+        var fetchSuccess = false
+
+        try {
+            kotlinx.coroutines.coroutineScope {
+                val conversationsDeferred = async(kotlinx.coroutines.Dispatchers.IO) {
+                    api.getConversations(session.bearerToken).conversations
+                }
+                val channelsDeferred = async(kotlinx.coroutines.Dispatchers.IO) {
+                    api.getChannels(session.bearerToken).channels
+                }
+                val staffListDeferred = async(kotlinx.coroutines.Dispatchers.IO) {
+                    if (!fetchStaff) return@async activeStaffCache
+                    try {
+                        api.getStaff(session.bearerToken, status = "active").staff
+                            .also { if (it.isNotEmpty()) staffFetchedAt = System.currentTimeMillis() }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        staffReadFailure = e
+                        // Keep the roster we have rather than blanking photos/names.
+                        activeStaffCache
+                    }
+                }
+                conversations = conversationsDeferred.await()
+                channels = channelsDeferred.await()
+                staffList = staffListDeferred.await()
+                fetchSuccess = true
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            noteReadFailure(e)
+            // Error handled by fetchSuccess = false
+        }
+
+        coroutineContext.ensureActive()
+        if (fetchSuccess) {
+            readPolicy.onSuccess()
+            staffReadFailure?.let(::noteReadFailure)
+            if (_binding == null) return
+            allConversations = conversations
+            allChannels = channels
+            activeStaffCache = staffList
+            hasLoadedOnce = true
+            // Persist for the next cold open's instant paint.
+            runCatching {
+                LocalCache.put(
+                    requireContext(), chatCacheKey(),
+                    ChatListSnapshot(conversations, channels, staffList),
+                    System.currentTimeMillis(),
+                )
+            }
+            SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
+            binding.rvChatList.visibility = View.VISIBLE
+            renderCurrentList()
+
+            // Background-fetch profile photos for conversation
+            // participants whose photo isn't already known. This runs
+            // after the list is visible so the user sees initials
+            // first, then photos pop in once fetched.
+            fetchMissingConversationPhotos(conversations, staffList)
+        } else {
+            if (_binding == null) return
+            SkeletonUtils.stopSkeletonPulse(binding.skeletonContainer)
+            if (!hasLoadedOnce) {
+                showEmptyState(
+                    title = "Unable to load chats",
+                    subtitle = "Pull to refresh later or try opening chat again."
+                )
+            }
+        }
+    }
+
+    private fun noteReadFailure(error: Exception) {
+        val http = error as? HttpException ?: return
+        readPolicy.onFailure(http.code(), http.response()?.headers()?.get("Retry-After")?.toLongOrNull(),
+            SystemClock.elapsedRealtime())
     }
 
     private fun renderCurrentList() {
@@ -640,38 +687,35 @@ class ChatListFragment : Fragment() {
         }
 
         android.util.Log.d("ChatListPhoto", "missingIds=$missingIds")
-        if (missingIds.isEmpty()) return
+        if (missingIds.isEmpty() || !canRead() || photoJob?.isActive == true) return
 
-        viewLifecycleOwner.lifecycleScope.launch {
+        photoJob = viewLifecycleOwner.lifecycleScope.launch {
             var anyFound = false
-            // Fetch in parallel batches on IO
-            kotlinx.coroutines.coroutineScope {
-                missingIds.map { staffId ->
-                    async(kotlinx.coroutines.Dispatchers.IO) {
-                        val result = runCatching {
-                            api.getStaffDetail(session.bearerToken, staffId)
-                        }
-                        result.onFailure { e ->
-                            android.util.Log.e("ChatListPhoto", "getStaffDetail FAILED for $staffId", e)
-                        }
-                        result.getOrNull()?.let { response ->
-                            val photo = response.staff?.photo
-                            android.util.Log.d("ChatListPhoto", "getStaffDetail for $staffId: success=${response.success}, staff=${response.staff != null}, photo='$photo'")
-                            val resolved = com.manjugroups.m_connect.ui.common.ProfilePhotos.resolve(photo)
-                            android.util.Log.d("ChatListPhoto", "  resolved='$resolved'")
-                            if (!resolved.isNullOrBlank()) {
-                                staffPhotoMap[staffId] = resolved
-                                anyFound = true
-                            }
-                            // Also persist to disk cache for next session
-                            response.staff?.let { staff ->
-                                context?.applicationContext?.let { ctx ->
-                                    ChatMetadataCache.saveStaff(ctx, staffId, staff)
-                                }
-                            }
-                        }
+            // One optional avatar read at a time; an absent photo is a valid cached result.
+            for (staffId in missingIds) {
+                coroutineContext.ensureActive()
+                if (!canRead()) break
+                if (!readPolicy.beginPhotoRead(staffId, SystemClock.elapsedRealtime())) continue
+                val response = try {
+                    api.getStaffDetail(session.bearerToken, staffId)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    noteReadFailure(e)
+                    continue
+                }
+                coroutineContext.ensureActive()
+                val photo = response.staff?.photo
+                val resolved = com.manjugroups.m_connect.ui.common.ProfilePhotos.resolve(photo)
+                if (!resolved.isNullOrBlank()) {
+                    staffPhotoMap[staffId] = resolved
+                    anyFound = true
+                }
+                response.staff?.let { staff ->
+                    context?.applicationContext?.let { ctx ->
+                        ChatMetadataCache.saveStaff(ctx, staffId, staff)
                     }
-                }.forEach { it.await() }
+                }
             }
 
             android.util.Log.d("ChatListPhoto", "All fetches done. anyFound=$anyFound, staffPhotoMap=$staffPhotoMap")
@@ -1844,8 +1888,7 @@ class ChatListFragment : Fragment() {
 
     override fun onDestroyView() {
         SkeletonUtils.stopAll()
-        refreshJob?.cancel()
-        refreshJob = null
+        stopReads()
         super.onDestroyView()
         _binding = null
     }

@@ -68,3 +68,63 @@ confirmed avoidable load; it is not proof that every production 429/503 is fixed
 - The in-place debug update preserves the app's session/data. No real attendance,
   visit or trip was submitted. An actual active GeoTrack route and long-term
   battery use were not exercised, so those are not claimed as verified.
+
+## Related 21 November Follow-Up
+
+The latest PostHog 24-hour sample contained six HTTP429, one HTTP503 and three
+slow successful reads, all Android108. Five429 responses crossed attendance,
+IAM, chat and alerts between 20 November18:28:13 and18:29:26IST. The earlier
+429/503 pair was at11:24IST. The server operator must correlate those windows
+with the deployed revision, gateway and Convex capacity logs. Sampled/capped
+telemetry is not total request volume; a build number does not identify the
+installed commit. No diagnostic requests were made to reproduce server load.
+
+Further confirmed client amplifiers in ChatListFragment:
+
+- MainActivity retains hidden tabs at RESUMED. Chat's five-second loop did not
+  stop on hide, and onViewCreated also launched a redundant initial read.
+- Cancelling that timer did not cancel the separately launched list reads.
+- Avatar hydration launched all missing people concurrently and repeated
+  successful no-photo lookups on later list refreshes.
+
+The related fix stays on the same MMS-257 branch. Hidden/paused Chat now cancels
+its actual list/avatar jobs; showing it starts one completion-scheduled loop.
+The visible five-second interval stays unchanged. List data is retained on
+failure, cancellation propagates, and local optional-read429/503 cooldown skips
+polls (10/20/40/60seconds or bounded Retry-After). No request is automatically
+retried. Avatar reads are sequential, attempts including no-photo results are
+cached five minutes, and the256-entry limit never evicts fresh attempts in a
+way that would create repeated overflow lookups.
+
+No GeoTrack service, location/heartbeat/batch, offline-punch, attendance/visit
+write, notification-delivery, authentication or server source was modified.
+
+Final-source Android570JVM tests pass with zero failures/errors/skips; debug and
+androidTest APK assembly pass. Seven new policy tests cover visibility,
+cooldown/Retry-After, isolation, negative-photo caching and bounded admission.
+The opt-in phone regression injects suspended Chat responses, so its Chat
+requests never reach production. Its first run could not reach the screen:
+the phone is signed out and MainActivity immediately redirects to login.
+The in-place debug108 install succeeded with no uninstall/data clear; a normal
+sign-in is needed before claiming this new physical-phone test passed.
+
+After the operator signed in, GeoTrack became active. The instrumented test
+was deliberately NOT rerun because instrumentation relaunches the app process.
+With explicit operator approval, normal ADB Chat/Home taps instead verified:
+Chat responses were initially200, Home hid Chat for19seconds with zero Chat
+list requests, and reopening Chat initiated fresh reads. The reopened read
+received an upstream429 at21November14:41:53IST; this is NOT a claim that the
+remaining server429/503 cause is resolved. The app PID6426 and the original
+GeoTrack service record remained unchanged, with zero service restarts.
+Only allowlisted request metadata was retained, no bodies/credentials/locations.
+No punch, visit, trip, message or settings write was submitted. This proves
+the observed UI-read lifecycle and process/service continuity, not a driven
+GPS route, every-device behavior, or battery-day measurement. The injected
+instrumented cancellation case is built but still needs a non-tracking window.
+
+For iOS, App Store Connect confirms newest M-Chat1.0(70) uploaded17November,
+before PostHog was added19November. Canonical darx311fce0 contains the telemetry
+and polling fixes but is not in that uploaded binary. All15 standalone Swift
+helper harnesses passed again21November. Native build/install and real iPhone
+PostHog verification remain required (MMS-254); Cloud onboarding is separately
+tracked as MMS-260, internal TestFlight only, pending initial Mac Xcode setup.
