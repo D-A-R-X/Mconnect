@@ -89,8 +89,8 @@ class RejectWithReasonBottomSheet : BottomSheetDialogFragment() {
         btnSubmit.text = buttonText
 
         btnSubmit.setOnClickListener {
-            val reason = etReason.text?.toString()?.trim().orEmpty()
-            if (reason.isEmpty()) {
+            val reason = requiredReason(etReason.text?.toString())
+            if (reason == null) {
                 etReason.error = "A reason is required to reject"
                 return@setOnClickListener
             }
@@ -109,6 +109,9 @@ class RejectWithReasonBottomSheet : BottomSheetDialogFragment() {
         const val DEFAULT_RESULT_KEY = "RejectWithReason"
         const val KEY_ITEM_ID = "itemId"
         const val KEY_REASON = "reason"
+
+        /** Trimmed reason, or null when nothing meaningful was typed. */
+        fun requiredReason(text: String?): String? = text?.trim()?.takeIf(String::isNotEmpty)
 
         private const val ARG_ITEM_ID = "arg_item_id"
         private const val ARG_RESULT_KEY = "arg_result_key"

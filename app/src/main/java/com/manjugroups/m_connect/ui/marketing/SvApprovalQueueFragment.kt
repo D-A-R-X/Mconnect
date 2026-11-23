@@ -28,11 +28,12 @@ import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.DailyTaskData
 import com.manjugroups.m_connect.network.UpdateDailyTaskStatusRequest
 import com.manjugroups.m_connect.network.userMessage
-import com.manjugroups.m_connect.ui.common.AppBottomSheets
+import com.manjugroups.m_connect.ui.common.RejectWithReasonBottomSheet
 import com.manjugroups.m_connect.ui.common.ButtonLoader
 import com.manjugroups.m_connect.ui.common.Floater
 import com.manjugroups.m_connect.ui.common.SkeletonLoader
 import com.manjugroups.m_connect.ui.common.navigateUp
+import com.manjugroups.m_connect.ui.common.showOnce
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -65,6 +66,8 @@ class SvApprovalQueueFragment : Fragment() {
     private var tab = Tab.MINE
     private var skeleton: ObjectAnimator? = null
     private var submitting = false
+    /** Reject button per rendered task, so the reason sheet's result can show its loader. */
+    private val rejectButtons = mutableMapOf<String, View>()
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).roundToInt()
     private fun font(res: Int): Typeface? =
@@ -107,6 +110,12 @@ class SvApprovalQueueFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        childFragmentManager.setFragmentResultListener(REJECT_RESULT_KEY, viewLifecycleOwner) { _, b ->
+            onRejectReason(
+                b.getString(RejectWithReasonBottomSheet.KEY_ITEM_ID).orEmpty(),
+                b.getString(RejectWithReasonBottomSheet.KEY_REASON).orEmpty(),
+            )
+        }
         load(showSkeleton = true)
     }
 
@@ -127,6 +136,7 @@ class SvApprovalQueueFragment : Fragment() {
         skeleton?.cancel()
         skeleton = null
         tabChips.clear()
+        rejectButtons.clear()
         super.onDestroyView()
     }
 
@@ -235,6 +245,7 @@ class SvApprovalQueueFragment : Fragment() {
 
     private fun render() {
         list.removeAllViews()
+        rejectButtons.clear()
         val items = itemsFor(tab)
         if (items.isEmpty()) {
             list.addView(message("No site visits to approve", null, retry = false))
@@ -328,9 +339,9 @@ class SvApprovalQueueFragment : Fragment() {
                 orientation = LinearLayout.HORIZONTAL
                 setPadding(0, dp(14), 0, 0)
             }
-            lateinit var reject: TextView
-            reject = button("Reject", "#B42318", "#FFFFFF", "#FDA29B") { confirmReject(task, reject) }
+            val reject = button("Reject", "#B42318", "#FFFFFF", "#FDA29B") { confirmReject(task) }
                 .also { (it.layoutParams as LinearLayout.LayoutParams).rightMargin = dp(10) }
+            rejectButtons[task.id] = reject
             lateinit var approve: TextView
             approve = button("Approve", "#FFFFFF", "#169B2F", "#169B2F") { decide(task, "completed", approve) }
             actions.addView(reject)
@@ -371,22 +382,31 @@ class SvApprovalQueueFragment : Fragment() {
         })
     }
 
-    /** Same as the web handoff dialog: a rejection needs a reason. */
-    private fun confirmReject(task: DailyTaskData, button: View) {
-        AppBottomSheets.showRequiredReason(
-            ctx = requireContext(),
-            title = "Reject site visit for ${clientName(task)}?",
-            message = "The site visit won't be created and the request closes. Share why so the team can follow up.",
-            reasonHint = "Why is this site visit being rejected?",
-            confirmLabel = "Reject",
-            missingReasonError = "Please share a reason for the rejection",
-            cancelLabel = "Keep",
-        ) { reason -> decide(task, "cancelled", button, reason) }
+    /**
+     * Same as the web handoff dialog: a rejection needs a reason. Uses the
+     * shared reject-with-reason sheet (leaves, permissions, attendance); its
+     * result comes back through [REJECT_RESULT_KEY] in onViewCreated.
+     */
+    private fun confirmReject(task: DailyTaskData) {
+        if (submitting) return
+        RejectWithReasonBottomSheet.newInstance(
+            itemId = task.id,
+            resultKey = REJECT_RESULT_KEY,
+            title = "Reject site visit",
+            subtitle = "Add a reason for rejecting ${clientName(task)}'s site visit",
+            buttonText = "Reject",
+        ).showOnce(childFragmentManager, "reject_sv_approval")
+    }
+
+    private fun onRejectReason(taskId: String, reason: String) {
+        val task = queue?.let { (it.mine + it.team + it.all).firstOrNull { t -> t.id == taskId } } ?: return
+        val button = rejectButtons[taskId] ?: return
+        decide(task, "cancelled", button, reason)
     }
 
     private fun decide(task: DailyTaskData, status: String, button: View, reason: String? = null) {
         if (submitting) return
-        val rejectReason = AppBottomSheets.requiredReason(reason)
+        val rejectReason = RejectWithReasonBottomSheet.requiredReason(reason)
         if (status == "cancelled" && rejectReason == null) {
             Floater.error("Please share a reason for the rejection")
             return
@@ -502,6 +522,7 @@ class SvApprovalQueueFragment : Fragment() {
 
     companion object {
         const val RESULT_KEY = "sv_approval_changed"
+        private const val REJECT_RESULT_KEY = "sv_approval_reject_reason"
 
         fun newInstance(): SvApprovalQueueFragment = SvApprovalQueueFragment()
 

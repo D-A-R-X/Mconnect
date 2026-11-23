@@ -3,7 +3,7 @@ package com.manjugroups.m_connect.ui.marketing
 import com.google.gson.JsonParser
 import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.UpdateDailyTaskStatusRequest
-import com.manjugroups.m_connect.ui.common.AppBottomSheets
+import com.manjugroups.m_connect.ui.common.RejectWithReasonBottomSheet
 import kotlinx.coroutines.runBlocking
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -18,10 +18,10 @@ import retrofit2.converter.gson.GsonConverterFactory
 class SvApprovalRejectReasonTest {
 
     @Test fun `blank or whitespace reasons are not accepted`() {
-        assertNull(AppBottomSheets.requiredReason(null))
-        assertNull(AppBottomSheets.requiredReason(""))
-        assertNull(AppBottomSheets.requiredReason("   \n\t "))
-        assertEquals("Client not ready", AppBottomSheets.requiredReason("  Client not ready \n"))
+        assertNull(RejectWithReasonBottomSheet.requiredReason(null))
+        assertNull(RejectWithReasonBottomSheet.requiredReason(""))
+        assertNull(RejectWithReasonBottomSheet.requiredReason("   \n\t "))
+        assertEquals("Client not ready", RejectWithReasonBottomSheet.requiredReason("  Client not ready \n"))
     }
 
     @Test fun `reject sends the reason and approve sends none`() = runBlocking {
