@@ -3291,7 +3291,9 @@ data class TeamScopeResponse(
 
 data class UpdateDailyTaskStatusRequest(
     val id: String,
-    val status: String
+    val status: String,
+    /** Why a GM-handoff (SV approval) task was rejected; omitted when null. */
+    val reason: String? = null,
 )
 
 data class DailyTaskStatusResponse(

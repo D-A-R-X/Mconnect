@@ -139,6 +139,87 @@ object AppBottomSheets {
         dialog.show()
     }
 
+    /**
+     * Confirmation that cannot go through without a typed reason (e.g. rejecting
+     * an approval, matching the web's required "Rejection reason"). A blank
+     * reason keeps the sheet open with an inline error; [onConfirm] gets the
+     * trimmed text.
+     */
+    fun showRequiredReason(
+        ctx: Context,
+        title: String,
+        message: String,
+        reasonHint: String,
+        confirmLabel: String,
+        destructive: Boolean = true,
+        missingReasonError: String = "Please share a reason",
+        cancelLabel: String = "Cancel",
+        onConfirm: (String) -> Unit,
+    ) {
+        val (dialog, root) = sheetRoot(ctx, title)
+        root.addView(TextView(ctx).apply {
+            text = message
+            textSize = 14f
+            setTextColor(Color.parseColor("#475467"))
+            typeface = font(ctx, R.font.inter_medium, Typeface.DEFAULT)
+            setPadding(0, 0, 0, dp(ctx, 12))
+        })
+        val error = TextView(ctx).apply {
+            text = missingReasonError
+            textSize = 13f
+            setTextColor(Color.parseColor("#D92D20"))
+            typeface = font(ctx, R.font.inter_medium, Typeface.DEFAULT)
+            visibility = View.GONE
+            setPadding(0, 0, 0, dp(ctx, 8))
+        }
+        val input = EditText(ctx).apply {
+            hint = reasonHint
+            textSize = 15f
+            setTextColor(Color.parseColor("#101828"))
+            setHintTextColor(Color.parseColor("#98A2B3"))
+            typeface = font(ctx, R.font.inter_medium, Typeface.DEFAULT)
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#F8F9FB"))
+                cornerRadius = dp(ctx, 12).toFloat()
+                setStroke(dp(ctx, 1), Color.parseColor("#E4E7EC"))
+            }
+            setPadding(dp(ctx, 14), dp(ctx, 12), dp(ctx, 14), dp(ctx, 12))
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or
+                InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            minLines = 3
+            maxLines = 5
+            gravity = Gravity.TOP or Gravity.START
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { bottomMargin = dp(ctx, 8) }
+            addTextChangedListener(object : android.text.TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+                override fun afterTextChanged(s: android.text.Editable?) {
+                    if (!s.isNullOrBlank()) error.visibility = View.GONE
+                }
+            })
+        }
+        root.addView(input)
+        root.addView(error)
+        root.addView(actionButton(ctx, confirmLabel, if (destructive) "#D92D20" else "#0B61CA") {
+            val reason = requiredReason(input.text?.toString())
+            if (reason == null) {
+                error.visibility = View.VISIBLE
+                input.requestFocus()
+            } else {
+                dialog.dismiss()
+                onConfirm(reason)
+            }
+        })
+        root.addView(cancelButton(ctx, cancelLabel) { dialog.dismiss() })
+        dialog.show()
+    }
+
+    /** Trimmed reason, or null when nothing meaningful was typed. */
+    fun requiredReason(text: String?): String? = text?.trim()?.takeIf(String::isNotEmpty)
+
     /** One- or two-field text editor (e.g. group name + description). */
     fun showTextInput(
         ctx: Context,

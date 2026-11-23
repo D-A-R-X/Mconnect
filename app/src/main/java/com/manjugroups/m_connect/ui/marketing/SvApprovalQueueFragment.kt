@@ -1,7 +1,6 @@
 package com.manjugroups.m_connect.ui.marketing
 
 import android.animation.ObjectAnimator
-import android.app.AlertDialog
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
@@ -29,6 +28,7 @@ import com.manjugroups.m_connect.network.ApiService
 import com.manjugroups.m_connect.network.DailyTaskData
 import com.manjugroups.m_connect.network.UpdateDailyTaskStatusRequest
 import com.manjugroups.m_connect.network.userMessage
+import com.manjugroups.m_connect.ui.common.AppBottomSheets
 import com.manjugroups.m_connect.ui.common.ButtonLoader
 import com.manjugroups.m_connect.ui.common.Floater
 import com.manjugroups.m_connect.ui.common.SkeletonLoader
@@ -371,21 +371,38 @@ class SvApprovalQueueFragment : Fragment() {
         })
     }
 
+    /** Same as the web handoff dialog: a rejection needs a reason. */
     private fun confirmReject(task: DailyTaskData, button: View) {
-        AlertDialog.Builder(requireContext())
-            .setTitle("Reject site visit for ${clientName(task)}?")
-            .setNegativeButton("Keep", null)
-            .setPositiveButton("Reject") { _, _ -> decide(task, "cancelled", button) }
-            .show()
+        AppBottomSheets.showRequiredReason(
+            ctx = requireContext(),
+            title = "Reject site visit for ${clientName(task)}?",
+            message = "The site visit won't be created and the request closes. Share why so the team can follow up.",
+            reasonHint = "Why is this site visit being rejected?",
+            confirmLabel = "Reject",
+            missingReasonError = "Please share a reason for the rejection",
+            cancelLabel = "Keep",
+        ) { reason -> decide(task, "cancelled", button, reason) }
     }
 
-    private fun decide(task: DailyTaskData, status: String, button: View) {
+    private fun decide(task: DailyTaskData, status: String, button: View, reason: String? = null) {
         if (submitting) return
+        val rejectReason = AppBottomSheets.requiredReason(reason)
+        if (status == "cancelled" && rejectReason == null) {
+            Floater.error("Please share a reason for the rejection")
+            return
+        }
         submitting = true
         ButtonLoader.start(button, if (status == "completed") "Approving" else "Rejecting")
         viewLifecycleOwner.lifecycleScope.launch {
             val result = runCatching {
-                api.updateDailyTaskStatus(session.bearerToken, UpdateDailyTaskStatusRequest(id = task.id, status = status))
+                api.updateDailyTaskStatus(
+                    session.bearerToken,
+                    UpdateDailyTaskStatusRequest(
+                        id = task.id,
+                        status = status,
+                        reason = if (status == "cancelled") rejectReason else null,
+                    ),
+                )
             }
             submitting = false
             ButtonLoader.stop(button)
