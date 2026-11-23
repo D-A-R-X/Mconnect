@@ -288,6 +288,11 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
      * fact succeeded.
      */
     private var detailSaysJointCp: Boolean = false
+    // cpType / jointCpCategory from the loaded visit. A Joint CP arrives with
+    // cpType "joint_cp"; its real purpose (booking / collection) is the
+    // joint category, which decides the follow-up date cap.
+    private var detailCpType: String? = null
+    private var detailJointCpCategory: String? = null
     // CP-assigned staff (the on-site person) from the loaded CP visit. An SV
     // fixed from this CP defaults its Site Incharge to this staffer — so the
     // QR scan shows the on-site incharge, NOT the telecaller who fixed it.
@@ -1685,13 +1690,15 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     /** VP follow-up window cap for the postpone / next-visit date: a collection
      *  follow-up may land within 5 days and a booking-CP postpone within 7.
      *  Anchored at today; other cpTypes are uncapped (null). Mirrors the
-     *  setOutcome server-side check so the picker can't offer an invalid date. */
+     *  setOutcome server-side check so the picker can't offer an invalid date.
+     *  Uses the effective purpose (Joint CP → jointCpCategory), as the server
+     *  does; a Joint Booking CP picker used to offer any date and the save
+     *  then failed. */
     private fun followUpWindowMaxMillis(): Long? {
-        val days = when (cpType) {
-            "collection_cp" -> 5
-            "booking_cp" -> 7
-            else -> return null
-        }
+        val days = com.manjugroups.m_connect.ui.marketing.cpFollowUpWindowDays(
+            cpType = detailCpType?.takeIf { it.isNotBlank() } ?: cpType,
+            jointCpCategory = detailJointCpCategory,
+        ) ?: return null
         return Calendar.getInstance().apply {
             add(Calendar.DAY_OF_YEAR, days)
         }.timeInMillis
@@ -2969,6 +2976,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         clearError()
         when (activeOutcome) {
             Outcome.SITE_VISIT -> {
+                if (svFixedHint && !lockedFromProposedSv && lockedCpVisit == null) {
+                    confirmSvCumCpAfterDetailReload()
+                    return
+                }
                 persistSiteVisit()
                 return
             }
@@ -6923,6 +6934,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 // defaults its Site Incharge to the on-site person.
                 cpAssignedStaff = visit.assignedStaff
                 if (visit.isJointCpVisit()) detailSaysJointCp = true
+                detailCpType = visit.cpType
+                detailJointCpCategory = visit.jointCpCategory
                 // Diagnostic dump of every signal we use to detect
                 // "this CP came from a telecaller-fixed SV". If the
                 // locked UI still doesn't activate on a known SV-fixed
@@ -7359,6 +7372,45 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             persistSvCumCpConfirm(cpVisitId, convertedSvId)
         } else {
             persistSiteVisit()
+        }
+    }
+
+    /**
+     * SV-cum-CP picked "Site Visit" while the visit detail never loaded (the
+     * open-time load failed on a weak network / 429, or had not returned yet).
+     * Without the detail the sheet doesn't know the SV is already linked, so
+     * it fell through to [persistSiteVisit]: convert only refills the existing
+     * SV, never records the CP outcome, and the save always failed with "server
+     * did not confirm the saved CP outcome". Load the detail now and take the
+     * SV-cum-CP confirm path when an SV is linked.
+     */
+    private fun confirmSvCumCpAfterDetailReload() {
+        val cpVisitId = arguments?.getString(ARG_CP_VISIT_ID)
+            ?: return showError("Missing CP visit id")
+        val submit = btnSubmit
+        submit?.let { ButtonLoader.start(it, "Loading") }
+        viewLifecycleOwner.lifecycleScope.launch {
+            val visit = runCatching { geoApi.getCpVisitDetail(session.bearerToken, cpVisitId) }
+                .getOrNull()
+                ?.takeIf { it.success }
+                ?.visit
+            if (!isAdded) return@launch
+            submit?.let(ButtonLoader::stop)
+            if (visit == null) {
+                showError("Couldn't load this visit's details. Check the connection and try again.")
+                return@launch
+            }
+            lockedCpVisit = visit
+            if (cpAssignedStaff == null) cpAssignedStaff = visit.assignedStaff
+            val linkedSvId = visit.convertedSiteVisitId?.takeIf { it.isNotBlank() }
+            if (linkedSvId != null) {
+                // Same footer the normal locked path uses, so the save shows its
+                // loader and a second tap can't start a second convert.
+                configureLockedSiteVisitFooter()
+                persistSvCumCpConfirm(cpVisitId, linkedSvId)
+            } else {
+                persistSiteVisit()
+            }
         }
     }
 

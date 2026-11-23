@@ -222,6 +222,13 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     // arrival-photo + OTP path.
     private var isGiftDistributionPostOtpPhotoCapture = false
 
+    // Remarks for a Gift Distribution "Others" close that is waiting on the
+    // handover photo. The gift path verifies the OTP without a photo, and
+    // setOutcome refuses any CP close without photo proof, so "Others" runs
+    // the same post-OTP camera step as "Gift distributed" and then closes
+    // with outcome="other" + these remarks. Null on every other path.
+    private var pendingGiftOtherRemarks: String? = null
+
     private var tvTitle: TextView? = null
     private var tvDestName: TextView? = null
     private var tvDestAddress: TextView? = null
@@ -278,6 +285,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             arrivalInProgress = false
             cpNoPathPhotoCapture = false
             isGiftDistributionPostOtpPhotoCapture = false
+            pendingGiftOtherRemarks = null
             swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
             toastSafe("Photo capture cancelled")
             return@registerForActivityResult
@@ -315,6 +323,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             arrivalInProgress = false
             cpNoPathPhotoCapture = false
             isGiftDistributionPostOtpPhotoCapture = false
+            pendingGiftOtherRemarks = null
             swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
             Toast.makeText(
                 requireContext(),
@@ -345,6 +354,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         outState.putBoolean(STATE_ARRIVAL_IN_PROGRESS, arrivalInProgress)
         outState.putBoolean(STATE_CP_NO_PATH_CAPTURE, cpNoPathPhotoCapture)
         outState.putBoolean(STATE_GIFT_POST_OTP_CAPTURE, isGiftDistributionPostOtpPhotoCapture)
+        pendingGiftOtherRemarks?.let { outState.putString(STATE_GIFT_OTHER_REMARKS, it) }
     }
 
     private fun restoreArrivalCaptureState(state: Bundle?) {
@@ -359,6 +369,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         arrivalInProgress = state.getBoolean(STATE_ARRIVAL_IN_PROGRESS, false)
         cpNoPathPhotoCapture = state.getBoolean(STATE_CP_NO_PATH_CAPTURE, false)
         isGiftDistributionPostOtpPhotoCapture = state.getBoolean(STATE_GIFT_POST_OTP_CAPTURE, false)
+        pendingGiftOtherRemarks = state.getString(STATE_GIFT_OTHER_REMARKS)
     }
 
     override fun onCreateView(
@@ -476,7 +487,12 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         // doesn't go through the legacy fieldVisits flow. The CTA at
         // the bottom of the screen becomes "Complete Outcome" instead
         // of "Start Trip"; tap opens the outcome sheet in SV mode.
-        isPureSiteVisit = (visitCategory == "site_visit") && cpVisitIdLocal.isNullOrBlank()
+        // A driver's fleet trip is mapped to visitCategory=site_visit too
+        // (HomeViewModel.toTodayVisitOrNull), but drivers never record the
+        // SV outcome — they run On Site → Picked from Site → End Trip.
+        isPureSiteVisit = (visitCategory == "site_visit") &&
+            cpVisitIdLocal.isNullOrBlank() &&
+            !session.isDriverMode
         tvDestName?.text = com.manjugroups.m_connect.ui.marketing.formatCpVisitTypeLabel(
             visitCategory = visitCategory,
             cpType = cpType,
@@ -522,6 +538,13 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
 
         // Listen for OTP verify result from the bottom sheet.
         setFragmentResultListener(ArrivalOtpBottomSheet.RESULT_KEY) { _, bundle ->
+            if (bundle.getBoolean(ArrivalOtpBottomSheet.KEY_CANCELLED, false)) {
+                // Sheet closed without verifying: release the arrival guard
+                // so the next swipe runs the flow again.
+                arrivalInProgress = false
+                swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                return@setFragmentResultListener
+            }
             val otp = bundle.getString(ArrivalOtpBottomSheet.KEY_OTP).orEmpty()
             onArrivalOtpVerified(otp)
         }
@@ -567,6 +590,11 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             }
         }
         setFragmentResultListener(CpClientSeenBottomSheet.RESULT_KEY) { _, bundle ->
+            if (bundle.getBoolean(CpClientSeenBottomSheet.KEY_CANCELLED, false)) {
+                arrivalInProgress = false
+                swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                return@setFragmentResultListener
+            }
             val clientSeen = bundle.getBoolean(CpClientSeenBottomSheet.KEY_CLIENT_SEEN)
             if (clientSeen) {
                 recordClientMetEarly()
@@ -626,6 +654,18 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 arrivalConfirmedForProgress = true
                 showTripStartTime()
                 applyStatusPill(if (session.isDriverMode) "On Site" else "Reaching")
+                btnOpenMaps?.visibility = View.GONE
+                renderArrivalPhase(alreadyArrived = true)
+            }
+            // Driver return leg (fleet phase picked_from_site). Without this
+            // branch the screen stayed on the pre-start view, so a driver
+            // reopening the trip saw "Complete Outcome" instead of End Trip.
+            "picked_from_site", "picked-from-site" -> if (session.isDriverMode) {
+                visitStarted = true
+                arrivalConfirmedForProgress = true
+                pickedFromSiteConfirmed = true
+                showTripStartTime()
+                applyStatusPill("Picked from Site")
                 btnOpenMaps?.visibility = View.GONE
                 renderArrivalPhase(alreadyArrived = true)
             }
@@ -1968,10 +2008,24 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 visitId = effectiveVisitId
 
                 if (!alreadyInFlight) {
-                    geoApi.startVisit(
+                    val startResp = geoApi.startVisit(
                         session.bearerToken,
                         StartVisitRequest(effectiveVisitId, location?.latitude, location?.longitude)
                     )
+                    // The route answers 200 {success:false} with the reason
+                    // (completed / cancelled / not assigned). Treating that as
+                    // started pinned the trip "Enroute" locally while the
+                    // server still had it scheduled, so the arrival OTP always
+                    // failed and Start Trip never came back.
+                    if (!startResp.success) {
+                        btnOpenMaps?.isEnabled = true
+                        tvStartTripLabel?.text = "Start Trip"
+                        failAndClose(
+                            com.manjugroups.m_connect.network.ApiErrors.clean(startResp.error)
+                                ?: "Failed to start trip"
+                        )
+                        return@launch
+                    }
                 }
 
                 GeoTrackBootstrapSync.sync(requireContext(), api = geoApi)
@@ -2879,7 +2933,10 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             primaryKey = "GIFT_DISTRIBUTED",
             primaryLabel = "Gift distributed",
             primaryIcon = R.drawable.ic_outcome_booking,
-            onPrimary = ::completeGiftDistributionMet,
+            onPrimary = {
+                pendingGiftOtherRemarks = null
+                completeGiftDistributionMet()
+            },
         )
     }
 
@@ -2932,6 +2989,16 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     private fun completeOtherCpVisit(remarks: String) {
         val cpId = cpVisitId ?: return
         if (!cpTypeSupportsOtherOutcome(cpType) || remarks.isBlank()) return
+        // Gift Distribution verifies the OTP without a photo; the handover
+        // photo is taken after it. Without one, setOutcome("other") always
+        // failed the server's photo-proof check. Take it first, exactly like
+        // "Gift distributed"; the camera result comes back through
+        // uploadGiftDistributionPhotoThenComplete and re-enters here.
+        if (isGiftDistribution && pendingArrivalStorageId.isNullOrBlank()) {
+            pendingGiftOtherRemarks = remarks
+            completeGiftDistributionMet()
+            return
+        }
         swipeArrived?.lockAsBusy("Completing visit…")
         viewLifecycleOwner.lifecycleScope.launch {
             try {
@@ -3554,7 +3621,28 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     private fun uploadGiftDistributionPhotoThenComplete(photoFile: java.io.File) {
         val cpId = cpVisitId ?: run {
             isGiftDistributionPostOtpPhotoCapture = false
+            pendingGiftOtherRemarks = null
             finalizeCompleteVisit()
+            return
+        }
+        val otherRemarks = pendingGiftOtherRemarks
+        if (otherRemarks != null) {
+            // "Others" on a Gift Distribution CP: the photo is the proof the
+            // server needs; the close itself is the normal Others close.
+            uploadProofPhotoWithRetry(
+                photoFile = photoFile,
+                onGiveUp = {
+                    isGiftDistributionPostOtpPhotoCapture = false
+                    pendingGiftOtherRemarks = null
+                    swipeArrived?.reset(newLabel = "Swipe to Complete Trip")
+                },
+            ) { storageId ->
+                isGiftDistributionPostOtpPhotoCapture = false
+                pendingGiftOtherRemarks = null
+                pendingArrivalStorageId = storageId
+                discardUploadedArrivalPhoto(photoFile)
+                completeOtherCpVisit(otherRemarks)
+            }
             return
         }
         uploadProofPhotoWithRetry(
@@ -4314,6 +4402,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         private const val STATE_ARRIVAL_IN_PROGRESS = "state_arrival_in_progress"
         private const val STATE_CP_NO_PATH_CAPTURE = "state_cp_no_path_capture"
         private const val STATE_GIFT_POST_OTP_CAPTURE = "state_gift_post_otp_capture"
+        private const val STATE_GIFT_OTHER_REMARKS = "state_gift_other_remarks"
         private const val ARG_VISIT_ID = "arg_visit_id"
         private const val ARG_PLACE_ID = "arg_place_id"
         private const val ARG_PLACE_NAME = "arg_place_name"

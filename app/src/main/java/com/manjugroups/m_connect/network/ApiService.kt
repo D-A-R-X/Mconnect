@@ -1198,7 +1198,9 @@ interface ApiService {
     @GET("api/dailyTasks/listForTaskManager")
     suspend fun getTaskManagerTasks(
         @Header("Authorization") token: String,
-        @Query("today") today: String? = null
+        @Query("today") today: String? = null,
+        // Null keeps the route's default (200 rows); the route caps at 500.
+        @Query("limit") limit: Int? = null,
     ): TaskManagerResponse
 
     @POST("api/dailyTasks/updateStatus")

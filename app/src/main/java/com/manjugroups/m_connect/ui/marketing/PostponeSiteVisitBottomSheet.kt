@@ -20,6 +20,7 @@ import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.PostponeSiteVisitRequest
+import com.manjugroups.m_connect.network.userMessage
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -117,7 +118,8 @@ class PostponeSiteVisitBottomSheet : BottomSheetDialogFragment() {
                     ).show()
                     dismiss()
                 } catch (exception: Exception) {
-                    error.text = exception.message ?: "Unable to postpone site visit"
+                    // The server's own reason, not "HTTP 500 …".
+                    error.text = exception.userMessage("Unable to postpone site visit")
                     error.visibility = View.VISIBLE
                     ButtonLoader.stop(confirm)
                 }

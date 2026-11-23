@@ -49,6 +49,28 @@ import java.text.SimpleDateFormat
 import java.util.*
 import java.util.TimeZone
 
+/**
+ * CP statuses that drop a CP off Today's Trip. These are the server's terminal
+ * CP statuses (completed / cancelled / postponed) plus legacy aliases. A
+ * postponed ("Follow up") CP is closed: the server spawns the next CP as a new
+ * row, so keeping the old one showed a dead "Start Trip" card. Held
+ * (pending_gm_approval) and joint pending_review CPs stay — Home renders them
+ * as non-actionable states.
+ */
+internal val HOME_HIDDEN_CP_STATUSES = setOf(
+    "completed", "complete", "done", "closed", "cancelled", "canceled", "postponed",
+)
+
+internal fun isHiddenFromTodayTrips(status: String?): Boolean =
+    status?.trim()?.lowercase(Locale.ROOT) in HOME_HIDDEN_CP_STATUSES
+
+/**
+ * Home's CP merge reads `/clientPlaceVisits/my` with no date window (overdue and
+ * future CPs both show). The route defaults to the newest 10 by scheduled date,
+ * so a staffer with 10+ later CPs lost today's. 200 is the route's maximum.
+ */
+internal const val HOME_CP_MERGE_LIMIT = 200
+
 data class SessionItem(val type: String, val source: String, val time: String)
 
 sealed interface HomeUiState {
@@ -513,7 +535,12 @@ class HomeViewModel : ViewModel() {
             // existing per-section try/catch handles it exactly as before.
             val cpDeferred = if (!isDriverMode) async {
                 runCatching {
-                    geoApi.getMyMarketingCpVisits(bearerToken, fromDate = null, toDate = null)
+                    geoApi.getMyMarketingCpVisits(
+                        bearerToken,
+                        fromDate = null,
+                        toDate = null,
+                        limit = HOME_CP_MERGE_LIMIT,
+                    )
                 }
             } else null
             val driverDeferred = if (shouldProbeDriverTrips) async {
@@ -564,9 +591,6 @@ class HomeViewModel : ViewModel() {
                         // exclusions — cancelled visits aren't actionable,
                         // and completed ones already lived their day.
                         val authoritativeCpIds = mutableSetOf<String>()
-                        val hiddenTerminalStatuses = setOf(
-                            "completed", "complete", "done", "closed", "cancelled", "canceled",
-                        )
                         val extras = cpResp.safeVisits.mapNotNull { detail ->
                             val id = detail.id ?: return@mapNotNull null
                             val mapped = detail.toTodayVisitOrNull(session?.staffId)
@@ -574,7 +598,7 @@ class HomeViewModel : ViewModel() {
                                 ?.trim()
                                 ?.lowercase(Locale.getDefault())
                                 ?: detail.status?.trim()?.lowercase(Locale.getDefault())
-                            if (status in hiddenTerminalStatuses) {
+                            if (isHiddenFromTodayTrips(status)) {
                                 // The parent CP is authoritative. Remove any stale legacy
                                 // field-visit card that still says Start/Enroute, but do not
                                 // add terminal work back to Today's actionable list.
