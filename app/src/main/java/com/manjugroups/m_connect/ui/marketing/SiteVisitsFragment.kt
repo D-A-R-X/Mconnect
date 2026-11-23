@@ -65,7 +65,13 @@ class SiteVisitsFragment : Fragment() {
     // Gates the skeleton to the first load so refreshes / re-opens don't
     // flash already-rendered rows back to placeholders.
     private var hasLoadedOnce = false
+    // What the list shows: status pills (and the filter sheet) set it and
+    // matchesFilter applies it to the loaded rows on the phone.
     private var currentFilter: Filter = Filter.ALL
+    // The status sent to the server. Only the full-screen filter sheet sets
+    // it. Pills used to filter locally while every reload / page sent the pill
+    // status, so after a refresh "All" showed only the last pill's rows.
+    private var serverStatusFilter: Filter = Filter.ALL
     private var currentScope: CpVisitListScope = CpVisitListScope.ALL
     private var activeOwnershipScope: CpVisitListScope? = null
     private var directReportIds: Set<String> = emptySet()
@@ -206,6 +212,7 @@ class SiteVisitsFragment : Fragment() {
             currentFilter = state.value(KEY_STATUS)?.let { value ->
                 Filter.entries.firstOrNull { it.name == value }
             } ?: Filter.ALL
+            serverStatusFilter = currentFilter
             activeOwnershipScope = null
             currentScope = CpVisitListScope.ALL
             filterProject = state.value(KEY_PROJECT)
@@ -217,6 +224,7 @@ class SiteVisitsFragment : Fragment() {
         }
         root.findViewById<TextView>(R.id.tvDateFilterChip)?.setOnClickListener {
             currentFilter = Filter.ALL
+            serverStatusFilter = Filter.ALL
             filterFromDate = null
             filterToDate = null
             filterProject = null
@@ -362,7 +370,7 @@ class SiteVisitsFragment : Fragment() {
             currentFilter = Filter.ALL
             applyPillStyles(root)
             updateDateFilterChip()
-            renderList()
+            renderWithLocalStatus()
         }
         root.findViewById<TextView>(R.id.pillMy).apply {
             visibility = View.VISIBLE
@@ -411,10 +419,24 @@ class SiteVisitsFragment : Fragment() {
                 currentFilter = filter
                 applyPillStyles(root)
                 updateDateFilterChip()
-                renderList()
+                renderWithLocalStatus()
             }
         }
         applyPillStyles(root)
+    }
+
+    /**
+     * A pill replaces any status the filter sheet sent to the server. While
+     * that server status is active the loaded rows are only that status, so
+     * drop it and reload; otherwise the pill just filters the loaded rows.
+     */
+    private fun renderWithLocalStatus() {
+        if (serverStatusFilter != Filter.ALL) {
+            serverStatusFilter = Filter.ALL
+            loadVisits()
+        } else {
+            renderList()
+        }
     }
 
     private fun applyPillStyles(root: View) {
@@ -579,7 +601,7 @@ class SiteVisitsFragment : Fragment() {
             projectId = filterProject,
             telecallerStaffId = filterLmo,
             assignedStaffId = filterFieldStaff,
-            status = currentFilter.takeUnless { it == Filter.ALL }?.name?.lowercase(Locale.US),
+            status = serverStatusFilter.takeUnless { it == Filter.ALL }?.name?.lowercase(Locale.US),
             search = searchQuery.ifBlank { null },
         )
         val generation = ++svLoadGeneration

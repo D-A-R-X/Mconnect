@@ -20,6 +20,7 @@ import com.manjugroups.m_connect.R
 import com.manjugroups.m_connect.auth.SessionManager
 import com.manjugroups.m_connect.network.CancelSiteVisitRequest
 import com.manjugroups.m_connect.network.GeoTrackApi
+import com.manjugroups.m_connect.network.userMessage
 import kotlinx.coroutines.launch
 
 class CancelSiteVisitBottomSheet : BottomSheetDialogFragment() {
@@ -61,7 +62,9 @@ class CancelSiteVisitBottomSheet : BottomSheetDialogFragment() {
                     toastSafe("Site visit cancelled", Toast.LENGTH_LONG)
                     dismiss()
                 } catch (exception: Exception) {
-                    error.text = exception.message ?: "Unable to cancel site visit"
+                    // The server's own reason (e.g. the 409 "client is
+                    // already on site"), not "HTTP 409 …".
+                    error.text = exception.userMessage("Unable to cancel site visit")
                     error.visibility = View.VISIBLE
                     ButtonLoader.stop(confirm)
                 }

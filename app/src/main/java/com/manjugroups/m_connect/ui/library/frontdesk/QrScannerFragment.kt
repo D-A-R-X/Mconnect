@@ -39,6 +39,7 @@ import com.manjugroups.m_connect.network.InvitationDetail
 import com.manjugroups.m_connect.network.GeoTrackApi
 import com.manjugroups.m_connect.network.SiteVisitIdRequest
 import com.manjugroups.m_connect.network.SiteVisitQrScanRequest
+import com.manjugroups.m_connect.network.userMessage
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -538,7 +539,8 @@ class QrScannerFragment : Fragment() {
                 val message = if (error is TimeoutCancellationException) {
                     "The SV details are taking too long to load. Check the connection and scan again."
                 } else {
-                    error.message ?: "This SV QR could not be confirmed"
+                    // The server's reason, not "HTTP 4xx/500 …".
+                    error.userMessage("This SV QR could not be confirmed")
                 }
                 Toast.makeText(
                     requireContext(),
@@ -619,9 +621,10 @@ class QrScannerFragment : Fragment() {
                 // form — exactly the "scanned the QR but the outcome stays locked"
                 // report. Surface the real reason and stay on the scanner so they
                 // can retry or hand off to the Site Incharge instead.
-                val msg = response?.error
-                    ?: outcome.exceptionOrNull()?.message
-                    ?: "Couldn't start counselling. Try again, or ask the Site Incharge to start it."
+                val fallback = "Couldn't start counselling. Try again, or ask the Site Incharge to start it."
+                val msg = response?.error?.takeIf { it.isNotBlank() }
+                    ?: outcome.exceptionOrNull()?.userMessage(fallback)
+                    ?: fallback
                 toastSafe(msg, Toast.LENGTH_LONG)
                 resumeScanning()
             }

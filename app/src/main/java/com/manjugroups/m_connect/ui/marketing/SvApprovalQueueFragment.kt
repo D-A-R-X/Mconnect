@@ -49,8 +49,10 @@ import kotlin.math.roundToInt
  * Super admins get tabs: Mine = assigned to me; Team = my team's GMs (task list
  * teamIds); All = every open one (scope "all"). Everyone else gets one list of
  * their own + their team's approvals with no tab row. The server lets the GM, their
- * supervisor, the requester or a super admin decide; anyone else sees whose
- * turn it is.
+ * supervisor, the requester or a super admin change the task; Approve is
+ * narrower — only the assigned GM, an admin or a holder of
+ * `marketing.siteVisits.confirm` (see [SvApprovalAccess]). Anyone else sees
+ * whose turn it is.
  */
 class SvApprovalQueueFragment : Fragment() {
 
@@ -334,20 +336,9 @@ class SvApprovalQueueFragment : Fragment() {
             })
         }
 
-        if (canDecide(task)) {
-            val actions = LinearLayout(requireContext()).apply {
-                orientation = LinearLayout.HORIZONTAL
-                setPadding(0, dp(14), 0, 0)
-            }
-            val reject = button("Reject", "#B42318", "#FFFFFF", "#FDA29B") { confirmReject(task) }
-                .also { (it.layoutParams as LinearLayout.LayoutParams).rightMargin = dp(10) }
-            rejectButtons[task.id] = reject
-            lateinit var approve: TextView
-            approve = button("Approve", "#FFFFFF", "#169B2F", "#169B2F") { decide(task, "completed", approve) }
-            actions.addView(reject)
-            actions.addView(approve)
-            card.addView(actions)
-        } else {
+        val canReject = canDecide(task)
+        val canApprove = canReject && canApprove(task)
+        if (!canApprove) {
             card.addView(text("Waiting for ${task.assignedToName ?: "the GM"} to approve", 13f, "#475467", R.font.inter_medium).apply {
                 gravity = Gravity.CENTER
                 setPadding(dp(12), dp(11), dp(12), dp(11))
@@ -357,15 +348,44 @@ class SvApprovalQueueFragment : Fragment() {
                 ).apply { topMargin = dp(14) }
             })
         }
+        if (canReject) {
+            val actions = LinearLayout(requireContext()).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(0, dp(14), 0, 0)
+            }
+            val reject = button("Reject", "#B42318", "#FFFFFF", "#FDA29B") { confirmReject(task) }
+            rejectButtons[task.id] = reject
+            actions.addView(reject)
+            if (canApprove) {
+                (reject.layoutParams as LinearLayout.LayoutParams).rightMargin = dp(10)
+                lateinit var approve: TextView
+                approve = button("Approve", "#FFFFFF", "#169B2F", "#169B2F") { decide(task, "completed", approve) }
+                actions.addView(approve)
+            }
+            card.addView(actions)
+        }
         return card
     }
 
-    /** Same rule as the server (canChangeDailyTaskStatus for handoff tasks). */
-    private fun canDecide(task: DailyTaskData): Boolean {
-        val me = session.staffId ?: return false
-        return task.assignedTo == me || task.supervisorId == me || task.assignedBy == me ||
-            queue?.scope == "all"
-    }
+    /** Same rule as the server (canChangeDailyTaskStatus for handoff tasks). Gates Reject. */
+    private fun canDecide(task: DailyTaskData): Boolean =
+        SvApprovalAccess.canChangeTask(
+            me = session.staffId,
+            assignedTo = task.assignedTo,
+            supervisorId = task.supervisorId,
+            assignedBy = task.assignedBy,
+            listScope = queue?.scope,
+        )
+
+    /** Narrower server rule for Approve (dailyTasks.updateStatus → handoff completion). */
+    private fun canApprove(task: DailyTaskData): Boolean =
+        SvApprovalAccess.canApprove(
+            me = session.staffId,
+            assignedTo = task.assignedTo,
+            isAdmin = session.isAdmin,
+            role = session.role,
+            permissions = session.iamPermissions,
+        )
 
     private fun line(icon: Int, value: String, color: String): View = LinearLayout(requireContext()).apply {
         orientation = LinearLayout.HORIZONTAL
@@ -526,6 +546,14 @@ class SvApprovalQueueFragment : Fragment() {
 
         fun newInstance(): SvApprovalQueueFragment = SvApprovalQueueFragment()
 
+        /**
+         * The queue is filtered on the phone out of the task-manager list, which
+         * defaults to 200 rows (newest first, system-wide for admins / team view).
+         * On a busy day older pending approvals fell outside that window and
+         * vanished from the queue and the badge. 500 is the route's maximum.
+         */
+        internal const val SV_APPROVAL_TASK_LIMIT = 500
+
         // The task list is cached for 60 s (server read cache + Cache-Control
         // max-age=60 in OkHttp), so a reload right after Approve / Reject can
         // still list the decided visit. Hide decided ones for a few minutes so
@@ -556,7 +584,7 @@ class SvApprovalQueueFragment : Fragment() {
         suspend fun loadQueue(api: ApiService, session: SessionManager): Queue {
             val me = session.staffId.orEmpty()
             val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-            val resp = api.getTaskManagerTasks(session.bearerToken, today)
+            val resp = api.getTaskManagerTasks(session.bearerToken, today, limit = SV_APPROVAL_TASK_LIMIT)
             val open = resp.tasks.filter(::isOpenHandoff).sortedBy { it.deadline ?: "" }
             val teamIds = resp.teamIds.toSet()
             val superAdmin = resp.scope == "all" ||
@@ -588,10 +616,53 @@ class SvApprovalQueueFragment : Fragment() {
         suspend fun loadPending(api: ApiService, session: SessionManager): List<DailyTaskData> {
             val me = session.staffId ?: return emptyList()
             val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-            val resp = api.getTaskManagerTasks(session.bearerToken, today)
+            val resp = api.getTaskManagerTasks(session.bearerToken, today, limit = SV_APPROVAL_TASK_LIMIT)
             return resp.tasks
                 .filter { isOpenHandoff(it) && it.assignedTo == me }
                 .sortedBy { it.deadline ?: "" }
         }
+    }
+}
+
+/** Who may act on an SV-approval (out_of_station_handoff) task, mirroring the server. */
+internal object SvApprovalAccess {
+
+    const val CONFIRM_PERMISSION = "marketing.siteVisits.confirm"
+
+    /**
+     * Server `canChangeDailyTaskStatus` for handoff tasks: the GM it is
+     * assigned to, their supervisor, the requester, or an "all"-scope viewer.
+     * This is what Reject needs.
+     */
+    fun canChangeTask(
+        me: String?,
+        assignedTo: String?,
+        supervisorId: String?,
+        assignedBy: String?,
+        listScope: String?,
+    ): Boolean {
+        if (me.isNullOrBlank()) return false
+        return assignedTo == me || supervisorId == me || assignedBy == me || listScope == "all"
+    }
+
+    /**
+     * Approving mints the site visit, and the server (dailyTasks.updateStatus)
+     * allows that only for the handoff's assigned GM (the task's assignee), an
+     * admin (staff.isAdmin or super-admin role), or a holder of
+     * [CONFIRM_PERMISSION]. A supervisor or requester who passes
+     * [canChangeTask] still gets "FORBIDDEN: only the assigned GM can approve".
+     */
+    fun canApprove(
+        me: String?,
+        assignedTo: String?,
+        isAdmin: Boolean,
+        role: String?,
+        permissions: Set<String>,
+    ): Boolean {
+        if (me.isNullOrBlank()) return false
+        if (assignedTo == me) return true
+        if (isAdmin) return true
+        if (role?.trim().equals("super-admin", ignoreCase = true)) return true
+        return CONFIRM_PERMISSION in permissions
     }
 }

@@ -1,6 +1,7 @@
 package com.manjugroups.m_connect.ui.home
 
 import android.app.Dialog
+import android.content.DialogInterface
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -66,8 +67,17 @@ class CpClientSeenBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
+    // Back / tap-outside closes the sheet without a choice. Tell the host so
+    // it can release its arrival guard; otherwise every later swipe was
+    // ignored until the staff left the screen.
+    override fun onCancel(dialog: DialogInterface) {
+        super.onCancel(dialog)
+        setFragmentResult(RESULT_KEY, bundleOf(KEY_CANCELLED to true))
+    }
+
     companion object {
         const val RESULT_KEY = "cp_client_seen_result"
         const val KEY_CLIENT_SEEN = "clientSeen"
+        const val KEY_CANCELLED = "cancelled"
     }
 }

@@ -29,6 +29,27 @@ fun cpTypeSupportsOtherOutcome(cpType: String?): Boolean =
 fun shouldOfferOtherOutcome(isPureSiteVisit: Boolean, cpType: String?): Boolean =
     isPureSiteVisit || cpTypeSupportsOtherOutcome(cpType)
 
+/**
+ * The CP's real purpose: a Joint CP (`joint_cp`) carries it in
+ * `jointCpCategory`. Mirrors the server's `effectiveCpPurpose`.
+ */
+fun effectiveCpPurpose(cpType: String?, jointCpCategory: String?): String? {
+    val type = cpType?.trim()?.lowercase(Locale.ROOT)
+    return if (type == "joint_cp") jointCpCategory?.trim()?.lowercase(Locale.ROOT) else type
+}
+
+/**
+ * Follow-up / postpone date window in days from today, or null when uncapped.
+ * Same rule as server setOutcome: collection 5, booking 7, decided on the
+ * effective purpose so a Joint Booking / Joint Collection CP is capped too.
+ */
+fun cpFollowUpWindowDays(cpType: String?, jointCpCategory: String?): Int? =
+    when (effectiveCpPurpose(cpType, jointCpCategory)) {
+        "collection_cp" -> 5
+        "booking_cp" -> 7
+        else -> null
+    }
+
 /** New Client CP is the only category that asks the post-outcome referral question. */
 fun isNewClientCpType(cpType: String?): Boolean =
     cpType?.trim()?.lowercase(Locale.ROOT) == "new_client_cp"

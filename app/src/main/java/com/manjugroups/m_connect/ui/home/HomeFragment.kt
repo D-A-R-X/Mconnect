@@ -1268,7 +1268,10 @@ class HomeFragment : Fragment() {
      * and render as "–". Returns null only if every call fails.
      */
     private suspend fun computeVpFallback(date: String): com.manjugroups.m_connect.network.MobileDashboardResponse {
-        val cp = try { geoApi.getMyMarketingCpVisits(session.bearerToken, date, date) } catch (_: Exception) { null }
+        // Without a limit the route returns 10, so the fallback tile never read above 10.
+        val cp = try {
+            geoApi.getMyMarketingCpVisits(session.bearerToken, date, date, limit = HOME_CP_MERGE_LIMIT)
+        } catch (_: Exception) { null }
         val sv = try { geoApi.getMySiteVisits(session.bearerToken, date, date) } catch (_: Exception) { null }
         return com.manjugroups.m_connect.network.MobileDashboardResponse(
             success = true,

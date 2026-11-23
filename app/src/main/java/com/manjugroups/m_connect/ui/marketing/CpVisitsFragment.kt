@@ -76,7 +76,19 @@ class CpVisitsFragment : Fragment() {
      * of bouncing straight back into the trip.
      */
     private var focusCpVisitId: String? = null
+    // What the list shows: pills (and the filter sheet) set it; renderList
+    // applies it to the loaded rows on the phone.
     private var currentFilter: Filter = Filter.ALL
+    // The status sent to the server. Only the full-screen filter sheet sets
+    // it. Pills used to filter locally while reloads and pages sent the pill
+    // status, so after a refresh "All" showed one status and the page cursor
+    // from one status was reused under another (rows skipped).
+    private var serverStatusFilter: Filter = Filter.ALL
+    // The status / outcome page one was actually fetched with (it can drop
+    // them on the 5xx fallback). Later pages must use the same query or the
+    // cursor walks a different result set.
+    private var cpPageStatus: String? = null
+    private var cpPageOutcome: String? = null
     private var currentScope: CpVisitListScope = CpVisitListScope.MY
     private var activeOwnershipScope: CpVisitListScope? = null
     /**
@@ -321,6 +333,7 @@ class CpVisitsFragment : Fragment() {
             currentFilter = state.value(KEY_STATUS)?.let { value ->
                 Filter.entries.firstOrNull { it.name == value }
             } ?: Filter.ALL
+            serverStatusFilter = currentFilter
             activeOwnershipScope = null
             currentScope = CpVisitListScopePolicy.initialScope(session.isAdmin)
             filterOutcome = state.value(KEY_OUTCOME)
@@ -333,6 +346,7 @@ class CpVisitsFragment : Fragment() {
         }
         root.findViewById<TextView>(R.id.tvDateFilterChip)?.setOnClickListener {
             currentFilter = Filter.ALL
+            serverStatusFilter = Filter.ALL
             filterFromDate = null
             filterToDate = null
             filterOutcome = null
@@ -483,6 +497,7 @@ class CpVisitsFragment : Fragment() {
             currentScope = selected
             activeOwnershipScope = selected
             currentFilter = Filter.ALL
+            serverStatusFilter = Filter.ALL
             allVisits = emptyList()
             rowViewCache.clear()
             hasLoadedOnce = false
@@ -521,15 +536,21 @@ class CpVisitsFragment : Fragment() {
             pill.setOnClickListener {
                 val defaultScope = CpVisitListScopePolicy.initialScope(session.isAdmin)
                 val needsReload = currentScope != defaultScope
+                // A pill replaces the sheet's server-side status: the loaded
+                // rows are only that status, so refetch without it.
+                val dropServerStatus = serverStatusFilter != Filter.ALL
                 activeOwnershipScope = null
                 currentScope = defaultScope
                 currentFilter = filter
+                serverStatusFilter = Filter.ALL
                 applyPillStyles(root)
                 updateDateFilterChip()
                 if (needsReload) {
                     allVisits = emptyList()
                     rowViewCache.clear()
                     hasLoadedOnce = false
+                    loadVisits()
+                } else if (dropServerStatus) {
                     loadVisits()
                 } else {
                     renderList()
@@ -638,6 +659,9 @@ class CpVisitsFragment : Fragment() {
             .serverQuery(requestedSearch)
             .ifBlank { null }
         val requestGeneration = ++loadGeneration
+        val requestedStatus = serverStatusFilter.takeUnless { it == Filter.ALL }
+            ?.name?.lowercase(Locale.US)
+        val requestedOutcome = filterOutcome
         cpNextCursor = null
         cpHasMore = false
         cpLoadingMore = false
@@ -682,23 +706,25 @@ class CpVisitsFragment : Fragment() {
                         search = requestedServerSearch,
                         assignedStaffId = filterAssignedStaffId,
                         telecallerStaffId = filterTelecallerStaffId,
-                        status = currentFilter.takeUnless { it == Filter.ALL }
-                            ?.name?.lowercase(Locale.US)
-                            ?.takeIf { includeUnhealthyFacets },
-                        outcome = filterOutcome?.takeIf { includeUnhealthyFacets },
+                        status = requestedStatus?.takeIf { includeUnhealthyFacets },
+                        outcome = requestedOutcome?.takeIf { includeUnhealthyFacets },
                         cpType = filterCpType,
                         pageSize = 200,
                     )
 
+                var usedFacets = true
                 val resp = try {
                     retryIo(times = 1, initialDelayMs = 500) { requestVisits(true) }
                 } catch (e: HttpException) {
                     val canFallback = e.code() >= 500 &&
-                        (currentFilter != Filter.ALL || !filterOutcome.isNullOrBlank())
+                        (requestedStatus != null || !requestedOutcome.isNullOrBlank())
                     if (!canFallback) throw e
+                    usedFacets = false
                     retryIo(times = 1, initialDelayMs = 500) { requestVisits(false) }
                 }
                 if (requestGeneration != loadGeneration) return@launch
+                cpPageStatus = requestedStatus?.takeIf { usedFacets }
+                cpPageOutcome = requestedOutcome?.takeIf { usedFacets }
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
                 hasLoadedOnce = true
                 if (!resp.success) {
@@ -811,8 +837,8 @@ class CpVisitsFragment : Fragment() {
                         .ifBlank { null },
                     assignedStaffId = filterAssignedStaffId,
                     telecallerStaffId = filterTelecallerStaffId,
-                    status = currentFilter.takeUnless { it == Filter.ALL }?.name?.lowercase(Locale.US),
-                    outcome = filterOutcome,
+                    status = cpPageStatus,
+                    outcome = cpPageOutcome,
                     cpType = filterCpType,
                     cursor = cursor,
                     pageSize = 200,

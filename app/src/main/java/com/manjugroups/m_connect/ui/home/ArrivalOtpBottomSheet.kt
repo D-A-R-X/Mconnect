@@ -197,6 +197,14 @@ class ArrivalOtpBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
+    // Back / tap-outside closes the sheet without verifying. Tell the host so
+    // it can release its arrival guard and re-arm the swipe; otherwise the
+    // swipe stayed frozen until the staff left the screen.
+    override fun onCancel(dialog: android.content.DialogInterface) {
+        super.onCancel(dialog)
+        setFragmentResult(RESULT_KEY, bundleOf(KEY_CANCELLED to true))
+    }
+
     private fun setVerifyBusy(busy: Boolean) {
         verifyBtn?.isEnabled = !busy
         (verifyBtn as? TextView)?.text = if (busy) "Confirming OTP..." else verifyButtonLabel
@@ -325,6 +333,7 @@ class ArrivalOtpBottomSheet : BottomSheetDialogFragment() {
     companion object {
         const val RESULT_KEY = "arrival_otp_result"
         const val KEY_OTP = "otp"
+        const val KEY_CANCELLED = "cancelled"
         private const val ARG_VISIT_ID = "arg_visit_id"
         private const val ARG_PHONE_MASKED = "arg_phone_masked"
         private const val ARG_LAT = "arg_lat"
