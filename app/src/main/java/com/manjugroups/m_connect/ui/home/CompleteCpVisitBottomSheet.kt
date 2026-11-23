@@ -128,6 +128,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     // standalone booking, site-visit outcome, or a caller-provided outcome arg)
     // set this true so they skip the chooser.
     private var outcomeChosen: Boolean = false
+    private var outcomeInteractionStarted: Boolean = false
     // Synchronous signal from Trip Details that this is an SV-cum-CP. It lets
     // the first chooser paint the locked decision set while the detail request
     // preloads the Site Visit form in the background.
@@ -930,7 +931,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun maybeShowOutcomePicker() {
-        if (outcomeChosen) return
+        if (outcomeChosen || !isAdded || dialog?.isShowing != true) return
         val options = enabledOutcomeOptions()
         if (options.isEmpty()) {
             // Nothing to pick — reveal the sheet so it isn't stuck hidden.
@@ -954,6 +955,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             subtitle = "Choose an outcome to continue.",
             options = options,
             onSelect = { key ->
+                outcomeInteractionStarted = true
                 outcomePickerDialog = null
                 when (key) {
                     "OTHER" -> showOtherRemarksSheet()
@@ -7032,6 +7034,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
                 // other tabs pale) still applies, just without
                 // pre-filled values.
                 applyLockedSvMode(visit, proposed ?: ProposedSiteVisit())
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 android.util.Log.w(LOG_TAG, "detect: exception ${e.message}", e)
             }
@@ -7067,7 +7071,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
      * can layer telecaller-pre-fixed overrides on top.
      */
     private suspend fun seedSvDefaultsFromCpVisit(visit: CpVisitDetail) {
-        if (!isAdded) return
+        if (!isAdded || outcomeInteractionStarted) return
 
         // Client display name → first visitor name + "Self" relation.
         cachedLeadDisplayName = visit.preferredCpClientName()
@@ -7120,6 +7124,10 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         if (!isAdded) return
         lockedFromProposedSv = true
         lockedCpVisit = visit
+        if (outcomeInteractionStarted) {
+            if (outcomeChosen && activeOutcome == Outcome.SITE_VISIT) configureLockedSiteVisitFooter()
+            return
+        }
 
         // Preload fixed-SV data without changing the selected outcome. The
         // chooser remains visible until the staff explicitly chooses an action.
@@ -7181,7 +7189,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             configureLockedSiteVisitFooter()
         }
 
-        if (!outcomeChosen) {
+        if (com.manjugroups.m_connect.ui.marketing.shouldRefreshCpOutcomePicker(outcomeChosen, outcomeInteractionStarted)) {
             outcomePickerDialog?.dismiss()
             outcomePickerDialog = null
             maybeShowOutcomePicker()
@@ -7207,6 +7215,7 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
             }
         }
         val match = svProjectCache.firstOrNull { it.id == projectId }
+        if (outcomeInteractionStarted) return
         if (match != null) {
             svProject = match
             tvSvProject?.text = match.name ?: "Selected"
@@ -7239,6 +7248,8 @@ class CompleteCpVisitBottomSheet : BottomSheetDialogFragment() {
         }
         fun byId(id: String?): StaffData? =
             if (id.isNullOrBlank()) null else svStaffCache.firstOrNull { it.id == id }
+
+        if (outcomeInteractionStarted) return
 
         byId(proposed.inchargeStaffId)?.let { svIncharge = it; tvSvIncharge?.text = it.name ?: "Selected" }
             ?: run { if (!proposed.inchargeStaffId.isNullOrBlank()) tvSvIncharge?.text = "Selected" }

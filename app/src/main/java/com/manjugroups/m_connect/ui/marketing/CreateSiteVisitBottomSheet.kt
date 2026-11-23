@@ -37,6 +37,7 @@ import com.manjugroups.m_connect.ui.common.SearchableOption
 import com.manjugroups.m_connect.ui.common.SearchableSelectionDialog
 import com.manjugroups.m_connect.util.ongoingThenCompleted
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
@@ -61,7 +62,11 @@ class CreateSiteVisitBottomSheet : BottomSheetDialogFragment() {
     private val geoApi = GeoTrackApi.create()
     private lateinit var session: SessionManager
     private var requestId = UUID.randomUUID().toString()
+    private var requestFingerprint: String? = null
     private var submitJob: Job? = null
+    private var staffLoadJob: Job? = null
+    private var projectLoadJob: Job? = null
+    private val pickerLoadGate = PickerLoadGate()
 
     private var routing: Choice? = null
     private var origin = Choice("telecaller", "Calls")
@@ -87,14 +92,17 @@ class CreateSiteVisitBottomSheet : BottomSheetDialogFragment() {
     private val visitorFields = mutableListOf<VisitorFields>()
     private var lastPhoneLookup = ""
     private var phoneLookupJob: Job? = null
+    private var previousPhone = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestId = savedInstanceState?.getString(STATE_REQUEST_ID) ?: requestId
+        requestFingerprint = savedInstanceState?.getString(STATE_REQUEST_FINGERPRINT)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putString(STATE_REQUEST_ID, requestId)
+        outState.putString(STATE_REQUEST_FINGERPRINT, requestFingerprint)
         super.onSaveInstanceState(outState)
     }
 
@@ -149,6 +157,8 @@ class CreateSiteVisitBottomSheet : BottomSheetDialogFragment() {
     override fun onDestroyView() {
         submitJob?.cancel()
         phoneLookupJob?.cancel()
+        staffLoadJob?.cancel()
+        projectLoadJob?.cancel()
         super.onDestroyView()
     }
 
@@ -225,13 +235,22 @@ class CreateSiteVisitBottomSheet : BottomSheetDialogFragment() {
         }
         root.findViewById<EditText>(R.id.etSvClientPhone).addTextChangedListener { value ->
             val phone = value?.toString().orEmpty().filter(Char::isDigit).takeLast(10)
+            if (phone == previousPhone) return@addTextChangedListener
+            phoneLookupJob?.cancel()
+            if (previousPhone.length == 10) {
+                root.findViewById<EditText>(R.id.etSvLead).setText("")
+                root.findViewById<EditText>(R.id.etSvPickupAddress).setText("")
+                pinLat = null; pinLng = null; pinMapsLink = null
+                root.findViewById<TextView>(R.id.tvSvPin).text = ""
+                allowNewClientName(root)
+            }
+            previousPhone = phone
             lead = null
             if (phone.length != 10) {
                 lastPhoneLookup = ""
                 root.findViewById<TextView>(R.id.tvSvClientHint).text = "Enter a phone number to find an existing lead."
                 return@addTextChangedListener
             }
-            phoneLookupJob?.cancel()
             phoneLookupJob = viewLifecycleOwner.lifecycleScope.launch {
                 delay(350)
                 lookupLead(root, phone)
@@ -247,11 +266,11 @@ class CreateSiteVisitBottomSheet : BottomSheetDialogFragment() {
         hint.text = "Looking up client..."
         try {
             val response = api.searchTelecallerLeadsByPhone(session.bearerToken, phone)
+            if (!siteVisitLookupMatches(phone, currentPhone(root))) return
             if (!response.success) throw IllegalStateException(response.error ?: "Could not search clients")
             val matches = response.leads
             if (matches.isEmpty()) {
                 lead = null
-                name.setText("")
                 allowNewClientName(root)
                 hint.text = "New client: enter the full name. The backend will create the client and lead safely."
             } else {
@@ -262,11 +281,17 @@ class CreateSiteVisitBottomSheet : BottomSheetDialogFragment() {
                     hint.text = "${matches.size} leads found. Tap to choose."
                 }
             }
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: Throwable) {
+            if (!siteVisitLookupMatches(phone, currentPhone(root))) return
             lastPhoneLookup = ""
             hint.text = friendlyError(error)
         }
     }
+
+    private fun currentPhone(root: View): String =
+        root.findViewById<EditText>(R.id.etSvClientPhone).text.toString().filter(Char::isDigit).takeLast(10)
 
     private fun pickLead(root: View, leads: List<TelecallerLeadSearchData>) {
         SearchableSelectionDialog.show(requireContext(), "Select client", leads.map {
@@ -399,39 +424,74 @@ class CreateSiteVisitBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun pickProject(label: EditText) {
-        if (projectCache.isEmpty()) { toast("Projects are still loading"); return }
-        SearchableSelectionDialog.show(requireContext(), "Select project", projectCache.ongoingThenCompleted().map {
-            SearchableOption(it, it.name ?: "Unnamed project", listOfNotNull(it.location, it.status).joinToString(" • "), listOfNotNull(it.name, it.location).joinToString(" "))
-        }) { project = it; label.setText(it.name ?: "Selected project") }
+        if (!pickerLoadGate.tryStart()) return
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                if (!ensureProjects() || !isAdded) return@launch
+                SearchableSelectionDialog.show(requireContext(), "Select project", projectCache.ongoingThenCompleted().map {
+                    SearchableOption(it, it.name ?: "Unnamed project", listOfNotNull(it.location, it.status).joinToString(" • "), listOfNotNull(it.name, it.location).joinToString(" "))
+                }) { project = it; label.setText(it.name ?: "Selected project") }
+            } finally { pickerLoadGate.finish() }
+        }
     }
 
     private fun bindStaffPicker(root: View, id: Int, title: String, filter: (StaffData) -> Boolean, save: (StaffData) -> Unit) {
         root.findViewById<EditText>(id).setOnClickListener { clicked ->
-            if (staffCache.isEmpty()) { toast("Staff are still loading"); return@setOnClickListener }
-            val options = staffCache.filter { it.id != null && filter(it) }
-            SearchableSelectionDialog.show(requireContext(), title, options.map {
-                SearchableOption(it, it.name ?: "Unnamed staff", listOfNotNull(it.employeeId, it.designation, it.department).joinToString(" • "), listOfNotNull(it.name, it.employeeId, it.phone).joinToString(" "))
-            }, "No eligible active staff found") { selected -> save(selected); (clicked as EditText).setText(selected.name ?: "Selected") }
+            if (!pickerLoadGate.tryStart()) return@setOnClickListener
+            viewLifecycleOwner.lifecycleScope.launch {
+                try {
+                    if (!ensureStaff() || !isAdded) return@launch
+                    val options = staffCache.filter { it.id != null && filter(it) }
+                    SearchableSelectionDialog.show(requireContext(), title, options.map {
+                        SearchableOption(it, it.name ?: "Unnamed staff", listOfNotNull(it.employeeId, it.designation, it.department).joinToString(" • "), listOfNotNull(it.name, it.employeeId, it.phone).joinToString(" "))
+                    }, "No eligible active staff found") { selected -> save(selected); (clicked as EditText).setText(selected.name ?: "Selected") }
+                } finally { pickerLoadGate.finish() }
+            }
         }
     }
 
     private fun preloadOptions() {
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val staff = api.getStaff(session.bearerToken, "active")
-                if (staff.success) staffCache = staff.staff.filter { SiteVisitStaffRules.isActive(it.status) }
-            } catch (_: Throwable) { }
+        viewLifecycleOwner.lifecycleScope.launch { ensureStaff() }
+        viewLifecycleOwner.lifecycleScope.launch { ensureProjects() }
+    }
+
+    private suspend fun ensureStaff(): Boolean {
+        if (staffCache.isNotEmpty()) return true
+        if (staffLoadJob?.isActive != true) {
+            staffLoadJob = viewLifecycleOwner.lifecycleScope.launch {
+                try {
+                    val response = api.getStaff(session.bearerToken, "active")
+                    check(response.success) { "Couldn't load staff" }
+                    staffCache = response.staff.filter { SiteVisitStaffRules.isActive(it.status) }
+                    check(staffCache.isNotEmpty()) { "No active staff are available" }
+                } catch (error: CancellationException) { throw error
+                } catch (error: Throwable) { toast(friendlyError(error)) }
+            }
         }
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val projects = geoApi.getMarketingProjects(session.bearerToken)
-                if (projects.success) projectCache = projects.projects
-            } catch (_: Throwable) { }
+        staffLoadJob?.join()
+        return staffCache.isNotEmpty()
+    }
+
+    private suspend fun ensureProjects(): Boolean {
+        if (projectCache.isNotEmpty()) return true
+        if (projectLoadJob?.isActive != true) {
+            projectLoadJob = viewLifecycleOwner.lifecycleScope.launch {
+                try {
+                    val response = geoApi.getMarketingProjects(session.bearerToken)
+                    check(response.success) { "Couldn't load projects" }
+                    projectCache = response.projects
+                    check(projectCache.isNotEmpty()) { "No projects are available" }
+                } catch (error: CancellationException) { throw error
+                } catch (error: Throwable) { toast(friendlyError(error)) }
+            }
         }
+        projectLoadJob?.join()
+        return projectCache.isNotEmpty()
     }
 
     private fun submit(root: View) {
         if (submitJob?.isActive == true) return
+        if (phoneLookupJob?.isActive == true) { toast("Client lookup is still in progress"); return }
         val phone = root.findViewById<EditText>(R.id.etSvClientPhone).text.toString().filter(Char::isDigit).takeLast(10)
         val clientName = root.findViewById<EditText>(R.id.etSvLead).text.toString().trim()
         val address = root.findViewById<EditText>(R.id.etSvPickupAddress).text.toString().trim()
@@ -442,9 +502,11 @@ class CreateSiteVisitBottomSheet : BottomSheetDialogFragment() {
         val attendees = visitorFields.map {
             SiteVisitAttendeeRequest(it.name.text.toString().trim().ifBlank { null }, it.relation.text.toString().trim().ifBlank { null }, it.age.text.toString().trim().ifBlank { null }, it.veg.isChecked)
         }
-        val body = CreateSiteVisitRequest(
+        val identity = siteVisitLeadIdentity(lead?.id, lead?.coreLeadId)
+        val draft = CreateSiteVisitRequest(
             requestId = requestId, routing = routing!!.id, origin = origin.id,
-            leadId = lead?.id, clientName = if (lead == null) clientName else null, mobileNumber = phone,
+            leadId = identity.leadId, coreLeadId = identity.coreLeadId,
+            clientName = if (lead == null) clientName else null, mobileNumber = phone,
             projectId = project!!.id, scheduledDate = scheduledDate, scheduledTime = scheduledTime,
             pickupTime = pickupTime.takeIf { routing?.id != "direct_sv" },
             travelMode = if (routing?.id == "direct_sv") "own_vehicle" else travelMode.id,
@@ -455,6 +517,12 @@ class CreateSiteVisitBottomSheet : BottomSheetDialogFragment() {
             expectedAttendeeCount = attendees.size.takeIf { it > 0 }, attendees = attendees.takeIf { it.isNotEmpty() },
             notes = root.findViewById<EditText>(R.id.etSvNotes).text.toString().trim().ifBlank { null },
         )
+        val fingerprint = siteVisitCreateFingerprint(draft)
+        if (requestFingerprint != fingerprint) {
+            requestId = UUID.randomUUID().toString()
+            requestFingerprint = fingerprint
+        }
+        val body = draft.copy(requestId = requestId)
         submitJob = viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val response = geoApi.createSiteVisit(session.bearerToken, body)
@@ -465,7 +533,10 @@ class CreateSiteVisitBottomSheet : BottomSheetDialogFragment() {
                 toast(response.message ?: if (response.handoffId != null) "Sent for GM verification" else "Site visit scheduled")
                 setFragmentResult(RESULT_CREATED, bundleOf("siteVisitId" to response.siteVisitId, "handoffId" to response.handoffId))
                 requestId = UUID.randomUUID().toString()
+                requestFingerprint = null
                 dismiss()
+            } catch (error: CancellationException) {
+                throw error
             } catch (error: Throwable) {
                 toast(friendlyError(error))
                 button.isEnabled = true; button.text = "Schedule"
@@ -493,13 +564,12 @@ class CreateSiteVisitBottomSheet : BottomSheetDialogFragment() {
         if (incharge == null) return "Select a site incharge"
         if (routing?.id == "same_area" && fieldStaff == null) return "Select the Same Area verification staff"
         if (hod == null || avp == null || gm == null || seniorManager == null) return "Complete all required reporting assignments"
+        if (!siteVisitHasRequiredVisitor(routing?.id, visitorFields.map { it.name.text.toString() })) return "Add at least one visitor's name"
         if (address.isBlank()) return "Enter the pickup address"
         val lat = pinLat
         val lng = pinLng
         if (lat == null || lng == null) return "Set the client pickup location on the map"
-        if (!lat.isFinite() || !lng.isFinite() || lat == 0.0 || lng == 0.0 ||
-            lat !in -90.0..90.0 || lng !in -180.0..180.0
-        ) return "Select a valid pickup location on the map"
+        if (!siteVisitPickupIsUsable(lat, lng)) return "Select a valid pickup location on the map"
         return null
     }
 
@@ -547,7 +617,7 @@ class CreateSiteVisitBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun salesMarketing(staff: StaffData): Boolean =
-        SiteVisitStaffRules.salesMarketing(staff.status, staff.department)
+        SiteVisitStaffRules.salesMarketing(staff.status, staff.department, staff.designation, staff.role)
 
     private fun eligibleLmo(staff: StaffData): Boolean =
         SiteVisitStaffRules.lmoOrBdo(staff.status, staff.department, staff.designation)
@@ -567,6 +637,7 @@ class CreateSiteVisitBottomSheet : BottomSheetDialogFragment() {
 
     companion object {
         private const val STATE_REQUEST_ID = "site_visit_request_id"
+        private const val STATE_REQUEST_FINGERPRINT = "site_visit_request_fingerprint"
         const val RESULT_CREATED = "site_visit_created"
         fun newInstance() = CreateSiteVisitBottomSheet()
     }

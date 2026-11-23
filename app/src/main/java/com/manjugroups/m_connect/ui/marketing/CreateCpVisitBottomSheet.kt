@@ -142,6 +142,10 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
     // web's `createLastEnrichedPin` guard but keyed on the phone tail
     // rather than the pincode.
     private var lastAutofilledPhone: String? = null
+    private var leadLookupJob: kotlinx.coroutines.Job? = null
+    private val autofilledClientValues = mutableMapOf<Int, String>()
+    private var autofilledProjectId: String? = null
+    private var lastEnrichedPincode: String? = null
     private var existingClientProfile: ClientProfile? = null
     private var existingClientPhone: String? = null
 
@@ -166,7 +170,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             val addr = runCatching {
                 mapApi.reverseGeocode(lat, lng).results.firstOrNull()?.address
             }.getOrNull()
-            if (!isAdded) return@launch
+            if (!isAdded || pinLat != lat || pinLng != lng) return@launch
             if (!addr.isNullOrBlank()) tv.text = "Pinned: $addr"
         }
     }
@@ -328,12 +332,11 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                     existingClientProfile = null
                     existingClientPhone = null
                 }
-                if (digits.length == 10 && digits != lastAutofilledPhone) {
-                    lastAutofilledPhone = digits
-                    autofillFromLead(
-                        phone = digits,
-                        view = view,
-                    )
+                if (digits != lastAutofilledPhone) {
+                    leadLookupJob?.cancel()
+                    if (lastAutofilledPhone != null) clearPreviousClientAutofill(view)
+                    lastAutofilledPhone = digits.takeIf { it.length == 10 }
+                    if (digits.length == 10) autofillFromLead(phone = digits, view = view)
                 }
             }
         })
@@ -351,8 +354,10 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) {
                 val line1 = s?.toString()?.trim().orEmpty()
-                if (line1.length < 25 || line1 == lastParsedAddressLine1) return
                 pendingParse?.cancel()
+                if (line1.length < 25 || line1 == lastParsedAddressLine1) return
+                val phoneAtStart = etPhone.text.toString().filter(Char::isDigit).takeLast(10)
+                val tracksAutofill = autofilledClientValues[R.id.etAddressLine1] == line1
                 pendingParse = viewLifecycleOwner.lifecycleScope.launch {
                     kotlinx.coroutines.delay(700)
                     lastParsedAddressLine1 = line1
@@ -363,6 +368,10 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                             session.bearerToken,
                             com.manjugroups.m_connect.network.AddressParseRequest(raw = line1),
                         )
+                        if (!isAdded || this@CreateCpVisitBottomSheet.view !== view ||
+                            etPhone.text.toString().filter(Char::isDigit).takeLast(10) != phoneAtStart ||
+                            etAddressLine1.text.toString().trim() != line1
+                        ) return@launch
                         if (!resp.success || resp.fields == null) {
                             tvAddressParseStatus.text = resp.error ?: "Could not split address"
                             return@launch
@@ -370,7 +379,10 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                         val f = resp.fields
                         fun fillIfBlank(et: EditText, value: String?) {
                             if (value.isNullOrBlank()) return
-                            if (et.text?.toString()?.isBlank() != false) et.setText(value)
+                            if (et.text?.toString()?.isBlank() != false) {
+                                if (tracksAutofill) autofilledClientValues[et.id] = value
+                                et.setText(value)
+                            }
                         }
                         fillIfBlank(etDoorNo, f.doorNo)
                         fillIfBlank(etStreet, f.street)
@@ -379,14 +391,21 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                         // address segment — keeps the user's verbatim
                         // text if the parser failed to split.
                         if (!f.addressLine1.isNullOrBlank() && f.addressLine1 != line1) {
+                            lastParsedAddressLine1 = f.addressLine1.trim()
                             etAddressLine1.setText(f.addressLine1)
+                            if (tracksAutofill) autofilledClientValues[R.id.etAddressLine1] = f.addressLine1
                         }
                         fillIfBlank(etAddressLine2, f.addressLine2)
                         fillIfBlank(etCity, f.city)
                         fillIfBlank(etState, com.manjugroups.m_connect.ui.common.IndianStates.canonical(f.state))
                         fillIfBlank(etPincode, f.pincode)
                         tvAddressParseStatus.text = "Address auto-filled"
+                    } catch (error: kotlinx.coroutines.CancellationException) {
+                        throw error
                     } catch (_: Exception) {
+                        if (etPhone.text.toString().filter(Char::isDigit).takeLast(10) != phoneAtStart ||
+                            etAddressLine1.text.toString().trim() != line1
+                        ) return@launch
                         // The splitter is opportunistic (OpenAI-backed) — if it's
                         // unavailable, never dump a raw "HTTP 500" at the user;
                         // they can just fill the fields below by hand.
@@ -402,7 +421,6 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         // blank-fill District (from the API District), State, and the locality
         // (into Address Line 2). Same anti-overwrite policy: only fill fields
         // the operator left blank so typed values always win.
-        var lastEnrichedPincode: String? = null
         etPincode.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
@@ -410,15 +428,24 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
                 val pin = s?.toString().orEmpty().filter { it.isDigit() }
                 if (pin.length != 6 || pin == lastEnrichedPincode) return
                 lastEnrichedPincode = pin
+                val phoneAtStart = etPhone.text.toString().filter(Char::isDigit).takeLast(10)
+                val tracksAutofill = autofilledClientValues[R.id.etPincode] == pin
                 viewLifecycleOwner.lifecycleScope.launch {
                     val enriched = try {
                         com.manjugroups.m_connect.network.PincodeLookup.lookup(pin)
                     } catch (_: Throwable) {
                         null
                     } ?: return@launch
+                    if (!isAdded || this@CreateCpVisitBottomSheet.view !== view ||
+                        etPhone.text.toString().filter(Char::isDigit).takeLast(10) != phoneAtStart ||
+                        etPincode.text.toString().filter(Char::isDigit) != pin
+                    ) return@launch
                     fun fillIfBlank(et: EditText, value: String?) {
                         if (value.isNullOrBlank()) return
-                        if (et.text?.toString()?.isBlank() != false) et.setText(value)
+                        if (et.text?.toString()?.isBlank() != false) {
+                            if (tracksAutofill) autofilledClientValues[et.id] = value
+                            et.setText(value)
+                        }
                     }
                     fillIfBlank(etCity, enriched.district)
                     fillIfBlank(
@@ -819,17 +846,22 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
     /** Mirrors the web `leadToLocationFields` + project autolink. Fires
      *  on first 10-digit phone entry, only patches blank fields. */
     private fun autofillFromLead(phone: String, view: View) {
-        viewLifecycleOwner.lifecycleScope.launch {
+        leadLookupJob = viewLifecycleOwner.lifecycleScope.launch {
+            delay(250)
+            if (!canApplyClientLookup(view, phone)) return@launch
             // 1) Telecaller-lead autofill (name + address), blank-only.
             try {
                 val resp = api.searchTelecallerLeadsByPhone(session.bearerToken, phone)
+                if (!canApplyClientLookup(view, phone)) return@launch
                 if (resp.success && resp.leads.isNotEmpty()) {
-                    applyLeadAutofill(view, resp.leads.first())
+                    applyLeadAutofill(view, resp.leads.first(), phone)
                 }
+            } catch (error: kotlinx.coroutines.CancellationException) {
+                throw error
             } catch (_: Exception) {
                 // Silent — autofill is opportunistic, never block submit.
             }
-            if (!isAdded) return@launch
+            if (!canApplyClientLookup(view, phone)) return@launch
             // 2) Clients-master fallback — many numbers exist as a client (an
             // existing buyer) with NO telecaller lead, or with a lead whose
             // contactName is blank. Fill any still-blank name / address from the
@@ -837,17 +869,45 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             try {
                 val resp = api.searchClientByPhone(session.bearerToken, phone)
                 val client = resp.client
-                if (isAdded && resp.success && client != null) {
+                if (canApplyClientLookup(view, phone) && resp.success && client != null) {
                     applyClientAutofill(view, client)
                     rememberExistingClient(client, phone)
                     if (isNewClientCpPurpose()) {
                         blockNewClientCpForExistingClient(view)
                     }
                 }
+            } catch (error: kotlinx.coroutines.CancellationException) {
+                throw error
             } catch (_: Exception) {
                 // Silent — fallback is opportunistic too.
             }
         }
+    }
+
+    private fun canApplyClientLookup(root: View, phone: String): Boolean =
+        isAdded && view === root && root.findViewById<View>(R.id.btnSubmit)?.isEnabled != false &&
+            siteVisitLookupMatches(phone, root.findViewById<EditText>(R.id.etClientPhone).text.toString().filter(Char::isDigit).takeLast(10))
+
+    private fun clearPreviousClientAutofill(root: View) {
+        autofilledClientValues.toMap().forEach { (id, previous) ->
+            root.findViewById<EditText>(id)?.takeIf { it.text.toString() == previous }?.setText("")
+        }
+        autofilledClientValues.clear()
+        pinLat = null; pinLng = null; pinMapsLink = ""
+        root.findViewById<View>(R.id.tvPinLocation)?.visibility = View.GONE
+        lastParsedAddressLine1 = ""
+        lastEnrichedPincode = null
+        if (lmoAutofilled) {
+            selectedLmo = null
+            lmoAutofilled = false
+            root.findViewById<EditText>(R.id.etLmo)?.setText("")
+            session.staffId?.let(::prefillLmoFromSelf)
+        }
+        if (selectedProject?.id == autofilledProjectId && autofilledProjectId != null) {
+            selectedProject = null
+            root.findViewById<EditText>(R.id.etProject)?.setText("")
+        }
+        autofilledProjectId = null
     }
 
     /** Blank-only fill from the clients master (searchClientByPhone). Runs after
@@ -860,7 +920,10 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         fun fillIfBlank(id: Int, value: String?) {
             if (value.isNullOrBlank()) return
             val et = view.findViewById<EditText>(id) ?: return
-            if (et.text?.toString()?.isBlank() != false) et.setText(value.trim())
+            if (et.text?.toString()?.isBlank() != false) {
+                autofilledClientValues[id] = value.trim()
+                et.setText(value.trim())
+            }
         }
         fillIfBlank(R.id.etClientName, c.clientName)
         fillIfBlank(R.id.etDoorNo, c.doorNo)
@@ -878,7 +941,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         renderPinLocation(view)
     }
 
-    private fun applyLeadAutofill(view: View, lead: TelecallerLeadSearchData) {
+    private fun applyLeadAutofill(view: View, lead: TelecallerLeadSearchData, phone: String) {
         val cp = lead.clientPlaceProfile
         val ai = lead.latestAnalysisProfile
         val mp = lead.manualProfile
@@ -909,7 +972,10 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         fun fillIfBlank(id: Int, value: String) {
             if (value.isBlank()) return
             val et = view.findViewById<EditText>(id) ?: return
-            if (et.text?.toString()?.isBlank() != false) et.setText(value)
+            if (et.text?.toString()?.isBlank() != false) {
+                autofilledClientValues[id] = value
+                et.setText(value)
+            }
         }
 
         // Client name from the lead (blank-only, like the address fields).
@@ -950,17 +1016,20 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             val cached = projectCache.firstOrNull { it.id == lead.projectId }
             if (cached != null) {
                 selectedProject = cached
+                autofilledProjectId = cached.id
                 view.findViewById<EditText>(R.id.etProject)?.setText(cached.name ?: "Selected")
             } else {
                 // Lazy-load and try again — non-blocking, swallow errors.
                 viewLifecycleOwner.lifecycleScope.launch {
                     try {
                         val r = api.getMarketingProjects(session.bearerToken)
+                        if (!canApplyClientLookup(view, phone)) return@launch
                         if (r.success) {
                             projectCache = r.projects
                             r.projects.firstOrNull { it.id == lead.projectId }?.let { p ->
                                 if (selectedProject == null) {
                                     selectedProject = p
+                                    autofilledProjectId = p.id
                                     view.findViewById<EditText>(R.id.etProject)
                                         ?.setText(p.name ?: "Selected")
                                 }
@@ -1160,8 +1229,10 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
         val staffId = assignedToStaffId?.trim().orEmpty()
         if (staffId.isEmpty()) return
         val label = view.findViewById<EditText>(R.id.etLmo) ?: return
+        val phoneAtStart = view.findViewById<EditText>(R.id.etClientPhone).text.toString().filter(Char::isDigit).takeLast(10)
 
         fun apply(from: List<StaffData>) {
+            if (!canApplyClientLookup(view, phoneAtStart)) return
             if (selectedLmo != null && !lmoAutofilled) return
             val match = from.firstOrNull { it.id == staffId && isEligibleLmo(it) } ?: return
             selectedLmo = match
@@ -1304,6 +1375,7 @@ class CreateCpVisitBottomSheet : BottomSheetDialogFragment() {
             emptyMessage = "No projects found"
         ) { project ->
             selectedProject = project
+            autofilledProjectId = null
             label.setText(project.name ?: "Selected")
         }
     }

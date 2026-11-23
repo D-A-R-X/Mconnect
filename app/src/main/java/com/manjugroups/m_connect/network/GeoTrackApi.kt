@@ -1322,6 +1322,7 @@ data class CreateSiteVisitRequest(
     val expectedAttendeeCount: Int? = null,
     val attendees: List<SiteVisitAttendeeRequest>? = null,
     val notes: String? = null,
+    val coreLeadId: String? = null,
 )
 
 data class CreateSiteVisitResponse(

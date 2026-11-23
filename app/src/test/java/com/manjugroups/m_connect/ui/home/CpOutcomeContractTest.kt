@@ -129,4 +129,11 @@ class CpOutcomeContractTest {
                 ?.contains("did not confirm") == true,
         )
     }
+
+    @Test
+    fun `legacy postponed site visit receipt confirms a follow up without another read`() {
+        assertNull(siteVisitOutcomeConfirmationError("follow_up", "completed", "postponed"))
+        assertNull(siteVisitOutcomeConfirmationError("postponed", "completed", "follow_up"))
+        assertTrue(siteVisitOutcomeConfirmationError("follow_up", "on_counselling", "postponed") != null)
+    }
 }

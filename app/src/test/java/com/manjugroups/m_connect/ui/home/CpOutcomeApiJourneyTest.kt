@@ -3,6 +3,7 @@ package com.manjugroups.m_connect.ui.home
 import com.google.gson.JsonParser
 import com.manjugroups.m_connect.network.CompleteVisitRequest
 import com.manjugroups.m_connect.network.GeoTrackApi
+import com.manjugroups.m_connect.network.SetSiteVisitOutcomeRequest
 import com.manjugroups.m_connect.ui.marketing.confirmedCpOutcome
 import com.manjugroups.m_connect.ui.marketing.isCpDecisionCommitted
 import kotlinx.coroutines.runBlocking
@@ -15,6 +16,22 @@ import retrofit2.converter.gson.GsonConverterFactory
 
 /** Real Retrofit envelopes, with no production visits or location requests. */
 class CpOutcomeApiJourneyTest {
+    @Test fun `confirmed SV receipt completes without an extra detail request`() = runBlocking {
+        val server = MockWebServer()
+        server.start()
+        try {
+            val api = Retrofit.Builder().baseUrl(server.url("/"))
+                .addConverterFactory(GsonConverterFactory.create()).build().create(GeoTrackApi::class.java)
+            server.enqueue(json("""{"success":true,"visit":{"_id":"sv-test","status":"completed","outcome":"postponed"}}"""))
+            val response = api.setSiteVisitOutcomeConfirmed("Bearer local-test", SetSiteVisitOutcomeRequest(
+                id = "sv-test", outcome = "follow_up",
+            ))
+            assertTrue(response.success)
+            assertEquals(1, server.requestCount)
+            assertEquals("/api/marketing/siteVisits/setOutcome", server.takeRequest().path)
+        } finally { server.shutdown() }
+    }
+
     @Test fun `precreated SV requires selection then completion carries outcome and preserves GM hold`() = runBlocking {
         val server = MockWebServer()
         server.start()

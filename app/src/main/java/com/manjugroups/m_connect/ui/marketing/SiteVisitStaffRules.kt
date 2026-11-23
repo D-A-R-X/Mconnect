@@ -5,9 +5,11 @@ import java.util.Locale
 internal object SiteVisitStaffRules {
     fun isActive(status: String?): Boolean = status.isNullOrBlank() || status.trim().equals("active", true)
 
-    fun salesMarketing(status: String?, department: String?): Boolean {
+    fun salesMarketing(status: String?, department: String?, designation: String? = null, role: String? = null): Boolean {
         val normalized = normalize(department)
-        return isActive(status) && normalized.contains("sales") && normalized.contains("marketing")
+        val roleText = normalize("${designation.orEmpty()} ${role.orEmpty()}")
+        return isActive(status) && ((normalized.contains("sales") && normalized.contains("marketing")) ||
+            (roleText.contains("sales") && roleText.contains("marketing")))
     }
 
     // Sales & Marketing accepts every designation, matching the web and API.

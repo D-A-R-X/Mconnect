@@ -3759,6 +3759,7 @@ data class TelecallerLeadSearchData(
     val projectId: String? = null,
     val assignedToStaffId: String? = null,
     val assignedToStaffName: String? = null,
+    val coreLeadId: String? = null,
 )
 
 /** Inbound-only — corresponds to clientPlaces row enrichment from

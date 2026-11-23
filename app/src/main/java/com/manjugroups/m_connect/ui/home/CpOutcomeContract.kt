@@ -212,7 +212,8 @@ internal fun siteVisitOutcomeConfirmationError(
     } else {
         expectedOutcome.contractValue()
     }
-    if (actualOutcome.contractValue() != expected) {
+    val actual = actualOutcome.contractValue().let { if (it == "postponed") "follow_up" else it }
+    if (actual != expected) {
         return "The server did not confirm the saved site visit outcome. Refresh the visit and try again."
     }
     if (status.contractValue() !in setOf("completed", "complete", "done", "closed")) {
@@ -245,7 +246,13 @@ internal suspend fun GeoTrackApi.setSiteVisitOutcomeConfirmed(
         ?: (response?.status to response?.outcome)
     var confirmationError = siteVisitOutcomeConfirmationError(request.outcome, status, outcome)
     if (confirmationError != null) {
-        val detailResponse = runCatching { getCpVisitDetail(token, request.id) }.getOrNull()
+        val detailResponse = try {
+            getCpVisitDetail(token, request.id)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Throwable) {
+            null
+        }
         val detail = detailResponse?.visit
         if (detailResponse?.success == true && detail != null) {
             detail.siteVisitState().also {

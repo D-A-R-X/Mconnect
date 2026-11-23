@@ -33,6 +33,9 @@ fun shouldOfferOtherOutcome(isPureSiteVisit: Boolean, cpType: String?): Boolean 
 fun isNewClientCpType(cpType: String?): Boolean =
     cpType?.trim()?.lowercase(Locale.ROOT) == "new_client_cp"
 
+internal fun shouldRefreshCpOutcomePicker(outcomeChosen: Boolean, userInteracted: Boolean): Boolean =
+    !outcomeChosen && !userInteracted
+
 /** A setup linkage is not, by itself, a staff decision. */
 fun confirmedCpOutcome(
     status: String?,
