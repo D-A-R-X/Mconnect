@@ -2361,7 +2361,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                         listOfNotNull(
                             CpStaffTrackPolicy.motionToShow(track, now)?.label,
                             CpStaffTrackPolicy.locationLabel(live, now, CpStaffTracksLoader::formatClock),
-                            CpStaffTrackPolicy.distanceLabel(track.distanceMeters, track.windowStartMs, now),
+                            CpStaffTrackPolicy.travelLabel(track),
                         ).joinToString(" · "),
                     )
                     .icon(if (stale) hollowMarkerIcon(ctx, color, 16) else dotMarkerIcon(ctx, color, 18))
@@ -2578,33 +2578,15 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         staffTracks.forEachIndexed { index, track ->
             val name = if (track.staffId == session.staffId) "${track.name} (you)" else track.name
             val location = CpStaffTrackPolicy.locationLabel(track.live, now, CpStaffTracksLoader::formatClock)
-            // "since 22 Nov" when the trip window began on an earlier day,
-            // so a multi-day total is not read as one ride.
-            val distance = { meters: Double? -> CpStaffTrackPolicy.distanceLabel(meters, track.windowStartMs, now) }
-            val travel = when (track.pathState) {
-                CpStaffTrack.PathState.SHOWN -> distance(track.distanceMeters)
-                CpStaffTrack.PathState.NOT_STARTED -> "Trip not started"
-                CpStaffTrack.PathState.START_UNKNOWN -> "Start time not recorded"
-                CpStaffTrack.PathState.NO_POINTS ->
-                    track.distanceMeters?.let { distance(it) } ?: "No path recorded"
-                CpStaffTrack.PathState.NOT_AVAILABLE ->
-                    track.distanceMeters?.let { distance(it) + " · path not available" }
-                        ?: "Path not available"
-            }.let { text ->
-                // Running with no recorded start: the path is today's duty
-                // window only, and the row says why.
-                if (!track.startKnown && track.pathState != CpStaffTrack.PathState.START_UNKNOWN) {
-                    "$text today · start time not recorded"
-                } else {
-                    text
-                }
-            }
+            // Trips open since an earlier day count today's travel only;
+            // no multi-day totals, and no text when there is nothing to say.
+            val detail = listOfNotNull(location, CpStaffTrackPolicy.travelLabel(track)).joinToString(" · ")
             rows.addView(
                 staffLegendRow(
                     ctx,
                     staffTrackColor(ctx, track, index),
                     name,
-                    "$location · $travel",
+                    detail,
                     muted = false,
                     motion = CpStaffTrackPolicy.motionToShow(track, now),
                 ),

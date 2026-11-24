@@ -164,13 +164,31 @@ class CpStaffTrackPolicyTest {
     }
 
     @Test
-    fun `multi-day distance says since when`() {
+    fun `a trip open since an earlier day shows today's travel only`() {
         val nov22 = 1795350273286L // 22 Nov 2026 17:54 IST
-        val nov24 = nov22 + 2 * 24 * 60 * min - 11 * 60 * min
-        assertEquals("82.0 km travelled since 22 Nov", CpStaffTrackPolicy.distanceLabel(82_000.0, nov22, nov24))
-        assertEquals("3.4 km travelled", CpStaffTrackPolicy.distanceLabel(3_420.0, nov24 - 60 * min, nov24))
-        assertEquals(listOf("2026-11-22", "2026-11-23", "2026-11-24"),
-            CpStaffTrackPolicy.istDates(CpStaffTrackPolicy.Window(nov22, nov24, open = true)))
+        val nov24 = nov22 + 2 * 24 * 60 * min - 11 * 60 * min // 24 Nov 06:54 IST
+        val open = CpStaffTrackPolicy.Window(nov22, nov24, open = true)
+        assertTrue(CpStaffTrackPolicy.isTodayOnly(open, nov24))
+        // Same-day trips, finished trips and no window are drawn as they are.
+        assertFalse(CpStaffTrackPolicy.isTodayOnly(CpStaffTrackPolicy.Window(nov24 - 60 * min, nov24, open = true), nov24))
+        assertFalse(CpStaffTrackPolicy.isTodayOnly(open.copy(open = false), nov24))
+        assertFalse(CpStaffTrackPolicy.isTodayOnly(null, nov24))
+        // No recorded start is also today only.
+        assertTrue(CpStaffTrackPolicy.isTodayOnly(CpStaffTrackPolicy.Window(nov24 - min, nov24, open = true, startKnown = false), nov24))
+
+        fun track(state: CpStaffTrack.PathState, meters: Double?, todayOnly: Boolean) = CpStaffTrack(
+            staffId = "a", name = "A", isPrimary = true, routeColor = null, segments = emptyList(),
+            distanceMeters = meters, live = null, pathState = state, tripInProgress = true,
+            windowStartMs = nov22, windowEndMs = nov24, todayOnly = todayOnly,
+        )
+        // The path window starts at today's IST midnight, not 22 Nov.
+        assertEquals(CpStaffTrackPolicy.istStartOfDay(nov24), track(CpStaffTrack.PathState.SHOWN, 1.0, true).pathWindow!!.start)
+        assertEquals(nov22, track(CpStaffTrack.PathState.SHOWN, 1.0, false).pathWindow!!.start)
+        assertEquals("12.4 km travelled today", CpStaffTrackPolicy.travelLabel(track(CpStaffTrack.PathState.SHOWN, 12_400.0, true)))
+        assertEquals("3.4 km travelled", CpStaffTrackPolicy.travelLabel(track(CpStaffTrack.PathState.SHOWN, 3_420.0, false)))
+        // No travel today → no distance text at all (no multi-day totals).
+        assertNull(CpStaffTrackPolicy.travelLabel(track(CpStaffTrack.PathState.NO_POINTS, null, true)))
+        assertEquals(listOf("2026-11-22", "2026-11-23", "2026-11-24"), CpStaffTrackPolicy.istDates(open))
     }
 
     @Test
