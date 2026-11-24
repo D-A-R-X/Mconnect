@@ -238,6 +238,59 @@ class CpStaffTrackPolicyTest {
     }
 
     @Test
+    fun `running is decided by trip status, not by a recorded start`() {
+        val now = 1795350273286L + 36 * 60 * min // 24 Nov 05:54 IST
+        // Enroute with no recorded start → today's IST day, open, start unknown.
+        val w = CpStaffTrackPolicy.tripWindow(null, null, "enroute", now)!!
+        assertTrue(w.open)
+        assertFalse(w.startKnown)
+        assertEquals(CpStaffTrackPolicy.istStartOfDay(now), w.start)
+        assertEquals(now, w.end)
+        assertTrue(CpStaffTrackPolicy.tripWindow(null, null, "In-Progress", now)!!.open)
+        // Scheduled and never started → no window.
+        assertNull(CpStaffTrackPolicy.tripWindow(null, null, "scheduled", now))
+        // A recorded start still works with no status at all.
+        assertTrue(CpStaffTrackPolicy.tripWindow(now - 60 * min, null, null, now)!!.open)
+        // Completed (by status) is not running even without completedAt.
+        assertFalse(CpStaffTrackPolicy.tripWindow(now - 60 * min, null, "completed", now)!!.open)
+        assertEquals(
+            CpStaffTrack.PathState.START_UNKNOWN,
+            CpStaffTrackPolicy.initialPathState(null, "completed"),
+        )
+        assertEquals(CpStaffTrack.PathState.NOT_STARTED, CpStaffTrackPolicy.initialPathState(null, "scheduled"))
+    }
+
+    @Test
+    fun `long windows are read one IST day at a time, never over 48 h`() {
+        val start = 1795350273286L // 22 Nov 17:54 IST
+        val end = start + 60 * 60 * min // 25 Nov 05:54 IST
+        val chunks = CpStaffTrackPolicy.dayChunks(CpStaffTrackPolicy.Window(start, end, open = true))
+        assertEquals(4, chunks.size) // 22, 23, 24, 25 Nov
+        assertEquals(start, chunks.first().first)
+        assertEquals(end, chunks.last().second)
+        chunks.forEach { (from, to) -> assertTrue(to - from <= 24 * 60 * min) }
+        chunks.zipWithNext().forEach { (a, b) -> assertEquals(a.second + 1, b.first) }
+        // Older days beyond the cap are dropped, newest kept.
+        val week = CpStaffTrackPolicy.dayChunks(CpStaffTrackPolicy.Window(start, start + 7 * 24 * 60 * min, open = true))
+        assertEquals(CpStaffTrackPolicy.MAX_SNAP_DAYS, week.size)
+    }
+
+    @Test
+    fun `server row with a running status but no start uses today's window`() {
+        val now = 1795350273286L + 36 * 60 * min
+        val dto = Gson().fromJson(
+            """{"staffId":"a","staffName":"Hajesh","routeAvailable":true,"routePoints":[],
+               "live":{"lat":13.0,"lng":80.2,"lastSeen":${now - min},"trackingActive":true,"movementMode":"stationary"}}""",
+            com.manjugroups.m_connect.network.CpStaffTrackDto::class.java,
+        )
+        val involved = CpInvolvedStaff("a", "Hajesh", true, null, null, null, null, status = "enroute")
+        val track = CpStaffTrackPolicy.fromServer(dto, now, involved)!!
+        assertTrue(track.tripInProgress)
+        assertFalse(track.startKnown)
+        assertEquals(CpStaffTrack.Motion.IDLE, CpStaffTrackPolicy.motionToShow(track, now))
+    }
+
+    @Test
     fun `labels`() {
         val now = 100 * min
         val fmt: (Long) -> String = { "T" }

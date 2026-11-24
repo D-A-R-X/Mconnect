@@ -2349,8 +2349,12 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             val isSelf = track.staffId == session.staffId
             if (isSelf && !isViewerObserver() && hasLocationPermission()) return@forEachIndexed
             val position = LatLng(live.lat, live.lng)
+            // Not live now (tracking off / older than the live threshold):
+            // a hollow, faded marker at that staff member's OWN last fix.
+            val stale = CpStaffTrackPolicy.isStale(live, now)
             map.addMarker(
                 MarkerOptions()
+                    .alpha(if (stale) 0.6f else 1f)
                     .position(position)
                     .title(track.name)
                     .snippet(
@@ -2360,9 +2364,9 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                             CpStaffTrackPolicy.distanceLabel(track.distanceMeters, track.windowStartMs, now),
                         ).joinToString(" · "),
                     )
-                    .icon(dotMarkerIcon(ctx, color, 18))
+                    .icon(if (stale) hollowMarkerIcon(ctx, color, 16) else dotMarkerIcon(ctx, color, 18))
                     .anchor(0.5f, 0.5f)
-                    .zIndex(10f + index)
+                    .zIndex(if (stale) 5f + index else 10f + index)
             )?.let { staffOverlayHandles += it }
             drawn += position
         }
@@ -2412,6 +2416,24 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         canvas.drawCircle(r, r, r, paint)
         paint.color = fill
         canvas.drawCircle(r, r, r - ring, paint)
+        return BitmapDescriptorFactory.fromBitmap(bitmap)
+    }
+
+    /** A ring in the staff colour with a surface centre: a last-seen (not live) position. */
+    private fun hollowMarkerIcon(ctx: Context, ring: Int, sizeDp: Int): com.google.android.gms.maps.model.BitmapDescriptor {
+        val density = ctx.resources.displayMetrics.density
+        val px = (sizeDp * density).roundToInt().coerceAtLeast(8)
+        val stroke = 3f * density
+        val bitmap = android.graphics.Bitmap.createBitmap(px, px, android.graphics.Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bitmap)
+        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        val r = px / 2f
+        paint.color = themeColor(ctx, R.attr.colorSurfacePrimary)
+        canvas.drawCircle(r, r, r - stroke / 2f, paint)
+        paint.style = android.graphics.Paint.Style.STROKE
+        paint.strokeWidth = stroke
+        paint.color = ring
+        canvas.drawCircle(r, r, r - stroke / 2f, paint)
         return BitmapDescriptorFactory.fromBitmap(bitmap)
     }
 
@@ -2562,11 +2584,20 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             val travel = when (track.pathState) {
                 CpStaffTrack.PathState.SHOWN -> distance(track.distanceMeters)
                 CpStaffTrack.PathState.NOT_STARTED -> "Trip not started"
+                CpStaffTrack.PathState.START_UNKNOWN -> "Start time not recorded"
                 CpStaffTrack.PathState.NO_POINTS ->
                     track.distanceMeters?.let { distance(it) } ?: "No path recorded"
                 CpStaffTrack.PathState.NOT_AVAILABLE ->
                     track.distanceMeters?.let { distance(it) + " · path not available" }
                         ?: "Path not available"
+            }.let { text ->
+                // Running with no recorded start: the path is today's duty
+                // window only, and the row says why.
+                if (!track.startKnown && track.pathState != CpStaffTrack.PathState.START_UNKNOWN) {
+                    "$text today · start time not recorded"
+                } else {
+                    text
+                }
             }
             rows.addView(
                 staffLegendRow(
