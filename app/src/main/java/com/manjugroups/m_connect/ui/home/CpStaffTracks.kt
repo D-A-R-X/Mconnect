@@ -12,6 +12,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withTimeout
 import retrofit2.HttpException
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
@@ -39,13 +40,19 @@ data class CpStaffTrack(
     val distanceMeters: Double?,
     val live: LiveFix?,
     val pathState: PathState,
-    /** The trip has started and is not completed yet. */
+    /** This staff member's trip on this CP is running (by its status). */
     val tripInProgress: Boolean,
     /** Trip window, for "since 22 Nov" when it spans more than one day. */
     val windowStartMs: Long?,
     val windowEndMs: Long?,
     /** Segments come from the geo service's road-matched route. */
     val roadMatched: Boolean = false,
+    /**
+     * False when the trip is running but its start time was never recorded:
+     * the window is then today's IST day (the duty window), and the legend
+     * says "start time not recorded" instead of "trip not started".
+     */
+    val startKnown: Boolean = true,
 ) {
     data class LiveFix(
         val lat: Double,
@@ -71,9 +78,11 @@ data class CpStaffTrack(
         SHOWN,
         /** The trip has not started, so there is no trip path yet. */
         NOT_STARTED,
+        /** The trip started (by its status) but no start time was recorded. */
+        START_UNKNOWN,
         /** Started, but no fixes were recorded in the trip window. */
         NO_POINTS,
-        /** This viewer may not read the path on this server version. */
+        /** The path could not be read (no access on this server, or the read failed). */
         NOT_AVAILABLE,
     }
 }
@@ -87,6 +96,8 @@ data class CpInvolvedStaff(
     val startedAt: Long?,
     val completedAt: Long?,
     val recordedDistanceMeters: Double?,
+    /** This staff member's trip status (their Joint CP leg, else the CP's). */
+    val status: String? = null,
 )
 
 /** One road-matched piece from the geo service's snapped-route, decoded. */
@@ -110,12 +121,31 @@ object CpStaffTrackPolicy {
     /** Faster than this between two fixes is a jump, never a drawn line. */
     const val MAX_SEGMENT_SPEED_MPS = 55.0
 
-    /** Snapped-route is read per IST day; long-open trips read only the latest days. */
+    /** Paths are read per IST day; long-open trips read only the latest days. */
     const val MAX_SNAP_DAYS = 4
 
     private val IST: TimeZone = TimeZone.getTimeZone("Asia/Kolkata")
 
-    data class Window(val start: Long, val end: Long, val open: Boolean)
+    /** Trip statuses that mean "on the way / at the client", across CP, field visit and Joint CP legs. */
+    private val RUNNING_STATUSES = setOf(
+        "in_progress", "started", "enroute", "en_route", "ongoing", "active",
+        "arrived", "arrival_verified", "on_site", "reached", "reaching",
+        "picked_up", "client_started", "pending_review", "reviewing",
+    )
+
+    private val FINISHED_STATUSES = setOf(
+        "completed", "complete", "done", "closed", "cancelled", "canceled",
+        "postponed", "pending_gm_approval", "rejected", "no_show",
+    )
+
+    private fun normalized(status: String?): String? =
+        status?.trim()?.lowercase()?.replace('-', '_')?.replace(' ', '_')?.takeIf { it.isNotEmpty() }
+
+    fun isRunningStatus(status: String?): Boolean = normalized(status) in RUNNING_STATUSES
+
+    fun isFinishedStatus(status: String?): Boolean = normalized(status) in FINISHED_STATUSES
+
+    data class Window(val start: Long, val end: Long, val open: Boolean, val startKnown: Boolean = true)
 
     /**
      * Trip window: trip start to completion, or to [now] while it runs.
@@ -125,6 +155,50 @@ object CpStaffTrackPolicy {
         if (startedAt == null || startedAt <= 0L) return null
         val finished = completedAt != null && completedAt >= startedAt
         return Window(startedAt, if (finished) completedAt!! else maxOf(startedAt, now), open = !finished)
+    }
+
+    /**
+     * The window for a staff member's trip, deciding "running" from the trip
+     * STATUS, not from whether a start time exists:
+     * - start recorded → start .. completion (or now), open while not finished;
+     * - running but no start recorded → today's IST day (the duty window), open;
+     * - otherwise → null (not started).
+     */
+    fun tripWindow(startedAt: Long?, completedAt: Long?, status: String?, now: Long): Window? {
+        val finished = (completedAt != null && completedAt > 0L) || isFinishedStatus(status)
+        val running = !finished && (isRunningStatus(status) || (startedAt != null && startedAt > 0L))
+        if (startedAt != null && startedAt > 0L) {
+            val base = window(startedAt, completedAt, now) ?: return null
+            return base.copy(open = base.open && running)
+        }
+        if (!running) return null
+        return Window(istStartOfDay(now), now, open = true, startKnown = false)
+    }
+
+    fun istStartOfDay(now: Long): Long = Calendar.getInstance(IST).apply {
+        timeInMillis = now
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+
+    /**
+     * The window split into IST-day chunks (each ≤ 24 h), the latest
+     * [max] days only. The geo timeline / session-route refuse ranges over
+     * 48 h, so a trip open for days must be read day by day.
+     */
+    fun dayChunks(window: Window, max: Int = MAX_SNAP_DAYS): List<Pair<Long, Long>> {
+        val chunks = mutableListOf<Pair<Long, Long>>()
+        var start = window.start
+        while (start < window.end && chunks.size < 400) {
+            val nextDay = istStartOfDay(start) + 24 * 60 * 60_000L
+            val end = minOf(nextDay - 1, window.end)
+            chunks += start to end
+            start = end + 1
+        }
+        if (chunks.isEmpty() && window.end >= window.start) chunks += window.start to window.end
+        return chunks.takeLast(max)
     }
 
     /**
@@ -142,6 +216,10 @@ object CpStaffTrackPolicy {
         return window != null && lastSeenMs in window.start..window.end
     }
 
+    /** A fix that is not live right now (tracking off, or older than the live threshold). */
+    fun isStale(live: CpStaffTrack.LiveFix, now: Long): Boolean =
+        !live.trackingActive || now - live.lastSeenMs > LIVE_FRESH_MS
+
     /**
      * The geo service only lets admins and attendance.liveTracking holders
      * read another staff member's route; everyone else silently gets their
@@ -158,6 +236,7 @@ object CpStaffTrackPolicy {
     fun cleanPath(fixes: List<TrackCleaner.Fix>, window: Window): List<TrackCleaner.Point> =
         TrackCleaner.clean(
             fixes.filter { it.atMs != null && it.atMs in window.start..window.end }
+                .distinctBy { Triple(it.atMs, it.lat, it.lng) }
                 .sortedBy { it.atMs },
         )
 
@@ -226,16 +305,7 @@ object CpStaffTrackPolicy {
     /** IST calendar days the window touches, oldest first, at most [max] (the latest ones). */
     fun istDates(window: Window, max: Int = MAX_SNAP_DAYS): List<String> {
         val format = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = IST }
-        val dates = mutableListOf<String>()
-        var at = window.start
-        while (at <= window.end && dates.size < 400) {
-            val date = format.format(Date(at))
-            if (dates.lastOrNull() != date) dates += date
-            at += 6 * 60 * 60_000L
-        }
-        val last = format.format(Date(window.end))
-        if (dates.lastOrNull() != last) dates += last
-        return dates.takeLast(max)
+        return dayChunks(window, Int.MAX_VALUE).map { format.format(Date(it.first)) }.distinct().takeLast(max)
     }
 
     fun sameIstDay(a: Long, b: Long): Boolean {
@@ -293,14 +363,13 @@ object CpStaffTrackPolicy {
 
     /**
      * The motion status to show, or null. Only while this staff member's trip
-     * on this CP is running (started, not completed), and only from a live,
-     * fresh fix: before the trip, after it, or on a stale fix nothing shows.
+     * on this CP is running (by its status), and only from a live, fresh fix:
+     * before the trip, after it, or on a stale fix nothing shows.
      */
     fun motionToShow(track: CpStaffTrack, now: Long): CpStaffTrack.Motion? {
         if (!track.tripInProgress) return null
         val live = track.live ?: return null
-        if (!live.trackingActive) return null
-        if (now - live.lastSeenMs > LIVE_FRESH_MS) return null
+        if (isStale(live, now)) return null
         return live.motion
     }
 
@@ -314,6 +383,11 @@ object CpStaffTrackPolicy {
             "Last seen ${timeFormat(live.lastSeenMs)}"
         }
     }
+
+    private fun cpTripStatus(cp: CpVisitDetail): String? =
+        cp.effectiveStatus?.takeIf { it.isNotBlank() }
+            ?: cp.fieldVisit?.status?.takeIf { it.isNotBlank() }
+            ?: cp.status
 
     /** Staff on the CP, from the CP detail: Joint participants, else the assigned field staff. */
     fun involvedStaff(cp: CpVisitDetail): List<CpInvolvedStaff> {
@@ -332,6 +406,7 @@ object CpStaffTrackPolicy {
                         startedAt = it.startedAt,
                         completedAt = it.completedAt,
                         recordedDistanceMeters = it.distanceMeters,
+                        status = it.status?.takeIf { s -> s.isNotBlank() } ?: cpTripStatus(cp),
                     )
                 }
         }
@@ -345,6 +420,7 @@ object CpStaffTrackPolicy {
                 startedAt = cp.fieldVisit?.startedAt,
                 completedAt = cp.fieldVisit?.completedAt,
                 recordedDistanceMeters = cp.fieldVisit?.distanceMeters,
+                status = cpTripStatus(cp),
             ),
         )
     }
@@ -364,9 +440,30 @@ object CpStaffTrackPolicy {
         ).firstOrNull { it > 0L }
     }
 
-    fun fromServer(dto: CpStaffTrackDto, now: Long): CpStaffTrack? {
+    /** Path state before any path is read: decided by the window alone. */
+    fun initialPathState(window: Window?, status: String?): CpStaffTrack.PathState = when {
+        window != null -> CpStaffTrack.PathState.NOT_AVAILABLE
+        isFinishedStatus(status) -> CpStaffTrack.PathState.START_UNKNOWN
+        else -> CpStaffTrack.PathState.NOT_STARTED
+    }
+
+    fun liveFix(
+        lat: Double?, lng: Double?, lastSeenMs: Long?, trackingActive: Boolean,
+        movementMode: String?, activity: String?, speed: Double?, window: Window?,
+    ): CpStaffTrack.LiveFix? {
+        if (!liveFixVisible(lat, lng, lastSeenMs, trackingActive, window)) return null
+        return CpStaffTrack.LiveFix(lat!!, lng!!, lastSeenMs!!, trackingActive, motionFrom(movementMode, activity, speed))
+    }
+
+    /**
+     * A server staff-tracks row. The CP detail row for the same staff (when
+     * known) decides the window from the trip status, like the direct path.
+     */
+    fun fromServer(dto: CpStaffTrackDto, now: Long, involved: CpInvolvedStaff? = null): CpStaffTrack? {
         val staffId = dto.staffId?.takeIf { it.isNotBlank() } ?: return null
-        val window = window(dto.startedAt?.toLong(), dto.completedAt?.toLong(), now)
+        val startedAt = dto.startedAt?.toLong() ?: involved?.startedAt
+        val completedAt = dto.completedAt?.toLong() ?: involved?.completedAt
+        val window = tripWindow(startedAt, completedAt, involved?.status, now)
         val segments = window?.let { w ->
             rawSegments(
                 dto.routePoints.orEmpty().map { TrackCleaner.Fix(it.lat, it.lng, atMs = it.recordedAt.toLong()) },
@@ -374,36 +471,26 @@ object CpStaffTrackPolicy {
             )
         }.orEmpty()
         val liveDto = dto.live
-        val liveMs = liveDto?.lastSeen?.toLong()
-        val live = if (liveDto != null &&
-            liveFixVisible(liveDto.lat, liveDto.lng, liveMs, liveDto.trackingActive == true, window)
-        ) {
-            CpStaffTrack.LiveFix(
-                liveDto.lat!!, liveDto.lng!!, liveMs!!, liveDto.trackingActive == true,
-                motion = motionFrom(liveDto.movementMode, liveDto.activity, liveDto.speed),
+        val live = liveDto?.let {
+            liveFix(
+                it.lat, it.lng, it.lastSeen?.toLong(), it.trackingActive == true,
+                it.movementMode, it.activity, it.speed, window,
             )
-        } else {
-            null
         }
         val drawn = segmentsDistanceMeters(segments)
-        val pathState = when {
-            drawn != null -> CpStaffTrack.PathState.SHOWN
-            window == null -> CpStaffTrack.PathState.NOT_STARTED
-            dto.routeAvailable == false -> CpStaffTrack.PathState.NOT_AVAILABLE
-            else -> CpStaffTrack.PathState.NO_POINTS
-        }
         return CpStaffTrack(
             staffId = staffId,
-            name = dto.staffName?.takeIf { it.isNotBlank() } ?: "Staff",
+            name = dto.staffName?.takeIf { it.isNotBlank() } ?: involved?.name?.takeIf { it.isNotBlank() } ?: "Staff",
             isPrimary = dto.isPrimary == true,
-            routeColor = dto.routeColor,
+            routeColor = dto.routeColor ?: involved?.routeColor,
             segments = segments,
-            distanceMeters = drawn ?: dto.recordedDistanceMeters,
+            distanceMeters = drawn ?: dto.recordedDistanceMeters ?: involved?.recordedDistanceMeters,
             live = live,
-            pathState = pathState,
+            pathState = if (drawn != null) CpStaffTrack.PathState.SHOWN else initialPathState(window, involved?.status),
             tripInProgress = window?.open == true,
             windowStartMs = window?.start,
             windowEndMs = window?.end,
+            startKnown = window?.startKnown ?: true,
         )
     }
 
@@ -425,10 +512,11 @@ object CpStaffTrackPolicy {
 /**
  * Loads [CpStaffTrack]s for one CP. Prefers the server's scoped
  * `staff-tracks` route; when that route is not deployed yet it falls back to
- * the direct geo reads, reading another staff member's path only where the
- * geo service will really return THAT staff member's rows. Where the viewer
- * may read the path directly, the road-matched snapped-route replaces the raw
- * fixes.
+ * the direct geo reads. Paths, where the viewer may read them directly: the
+ * road-matched snapped-route first, else the session-route fixes read one
+ * IST day at a time (the geo service refuses ranges over 48 h) and split at
+ * gaps. Another staff member's path is only read where the geo service will
+ * really return THAT staff member's rows.
  */
 class CpStaffTracksLoader(
     private val geoApi: GeoTrackApi,
@@ -448,13 +536,14 @@ class CpStaffTracksLoader(
         viewerCanViewAllTracking: Boolean,
         now: Long = System.currentTimeMillis(),
     ): Result {
+        val involvedById = involved.associateBy { it.staffId }
         var tracks: List<CpStaffTrack>? = null
         if (!serverRouteMissing) {
             val server = runCatching {
                 withTimeout(TIMEOUT_MS) { geoApi.getCpStaffTracks(bearerToken, cpId) }
             }
             server.getOrNull()?.takeIf { it.success }?.data?.staff?.let { rows ->
-                val parsed = rows.mapNotNull { CpStaffTrackPolicy.fromServer(it, now) }
+                val parsed = rows.mapNotNull { CpStaffTrackPolicy.fromServer(it, now, involvedById[it.staffId]) }
                 if (parsed.isNotEmpty() || involved.isEmpty()) tracks = parsed
             }
             val error = server.exceptionOrNull()
@@ -465,122 +554,129 @@ class CpStaffTracksLoader(
         }
         if (tracks == null) {
             if (involved.isEmpty()) return Result.Unavailable
-            tracks = loadDirect(involved, viewerStaffId, viewerCanViewAllTracking, now)
+            tracks = loadLive(involved, now)
         }
-        return Result.Loaded(withRoadMatched(tracks!!, viewerStaffId, viewerCanViewAllTracking))
+        // One row (and one marker) per staff member, primary first.
+        val unique = tracks!!.distinctBy { it.staffId }
+        val filled = coroutineScope {
+            unique.map { track ->
+                async { withPath(track, viewerStaffId, viewerCanViewAllTracking) }
+            }.awaitAll()
+        }
+        return Result.Loaded(filled)
     }
 
-    /** Road-matched path per IST day of the trip window, where the viewer may read it. */
-    private suspend fun withRoadMatched(
-        tracks: List<CpStaffTrack>,
+    /**
+     * Fill a track's path where the viewer may read it directly and it has
+     * none yet: road-matched first, else session-route day by day.
+     */
+    private suspend fun withPath(
+        track: CpStaffTrack,
         viewerStaffId: String?,
         viewerCanViewAllTracking: Boolean,
-    ): List<CpStaffTrack> = coroutineScope {
-        tracks.map { track ->
-            async {
-                val start = track.windowStartMs
-                val end = track.windowEndMs
-                if (snappedRouteMissing || start == null || end == null ||
-                    !CpStaffTrackPolicy.canReadRouteDirectly(track.staffId, viewerStaffId, viewerCanViewAllTracking)
-                ) {
-                    return@async track
-                }
-                val dates = CpStaffTrackPolicy.istDates(CpStaffTrackPolicy.Window(start, end, track.tripInProgress))
-                val pieces = dates.map { date ->
-                    async {
-                        val response = runCatching {
-                            withTimeout(TIMEOUT_MS) {
-                                geoApi.getSnappedRoute(bearerToken, staffId = track.staffId, date = date)
-                            }
-                        }
-                        val error = response.exceptionOrNull()
-                        if (error is HttpException && error.code() == 404) snappedRouteMissing = true
-                        response.getOrNull()?.takeIf { it.success }?.data?.segments.orEmpty().map { segment ->
-                            CpSnapPiece(
-                                kind = segment.kind,
-                                startMs = segment.startMs,
-                                endMs = segment.endMs,
-                                points = SnappedRoute.decode(segment.encodedPolyline.orEmpty())
-                                    .map { TrackCleaner.Point(it.latitude, it.longitude, null) },
-                            )
-                        }
+    ): CpStaffTrack {
+        val start = track.windowStartMs ?: return track
+        val end = track.windowEndMs ?: return track
+        if (track.hasPath) return track
+        if (!CpStaffTrackPolicy.canReadRouteDirectly(track.staffId, viewerStaffId, viewerCanViewAllTracking)) {
+            return track.copy(pathState = CpStaffTrack.PathState.NOT_AVAILABLE)
+        }
+        val window = CpStaffTrackPolicy.Window(start, end, track.tripInProgress, track.startKnown)
+        val snapped = CpStaffTrackPolicy.withSnapped(track, snappedPieces(track.staffId, window))
+        if (snapped.hasPath) return snapped
+        return withSessionRoute(track, window)
+    }
+
+    private suspend fun snappedPieces(staffId: String, window: CpStaffTrackPolicy.Window): List<CpSnapPiece> {
+        if (snappedRouteMissing) return emptyList()
+        return coroutineScope {
+            CpStaffTrackPolicy.istDates(window).map { date ->
+                async {
+                    val response = runCatching {
+                        withTimeout(TIMEOUT_MS) { geoApi.getSnappedRoute(bearerToken, staffId = staffId, date = date) }
                     }
-                }.awaitAll().flatten()
-                CpStaffTrackPolicy.withSnapped(track, pieces)
-            }
-        }.awaitAll()
+                    val error = response.exceptionOrNull()
+                    if (error is HttpException && error.code() == 404) snappedRouteMissing = true
+                    response.getOrNull()?.takeIf { it.success }?.data?.segments.orEmpty().map { segment ->
+                        CpSnapPiece(
+                            kind = segment.kind,
+                            startMs = segment.startMs,
+                            endMs = segment.endMs,
+                            points = SnappedRoute.decode(segment.encodedPolyline.orEmpty())
+                                .map { TrackCleaner.Point(it.latitude, it.longitude, null) },
+                        )
+                    }
+                }
+            }.awaitAll().flatten()
+        }
     }
 
-    private suspend fun loadDirect(
-        involved: List<CpInvolvedStaff>,
-        viewerStaffId: String?,
-        viewerCanViewAllTracking: Boolean,
-        now: Long,
-    ): List<CpStaffTrack> = coroutineScope {
+    /**
+     * Raw fixes from session-route, one IST-day chunk (≤ 24 h) per request,
+     * cleaned and split at gaps. "Path not available" only when every read
+     * failed; "No path recorded" when the reads worked but had no fixes.
+     */
+    private suspend fun withSessionRoute(track: CpStaffTrack, window: CpStaffTrackPolicy.Window): CpStaffTrack {
+        val reads = coroutineScope {
+            CpStaffTrackPolicy.dayChunks(window).map { (from, to) ->
+                async {
+                    runCatching {
+                        withTimeout(SESSION_ROUTE_TIMEOUT_MS) {
+                            geoApi.getSessionRoute(bearerToken, staffId = track.staffId, dayStart = from, dayEnd = to)
+                        }
+                    }.getOrNull()?.takeIf { it.success }?.data
+                }
+            }.awaitAll()
+        }
+        val fixes = reads.filterNotNull().flatMap { data -> data.timeline.map(::toFix) }
+        val segments = CpStaffTrackPolicy.rawSegments(fixes, window)
+        val drawn = CpStaffTrackPolicy.segmentsDistanceMeters(segments)
+        return track.copy(
+            segments = segments,
+            distanceMeters = drawn ?: track.distanceMeters,
+            pathState = when {
+                drawn != null -> CpStaffTrack.PathState.SHOWN
+                reads.any { it != null } -> CpStaffTrack.PathState.NO_POINTS
+                else -> CpStaffTrack.PathState.NOT_AVAILABLE
+            },
+        )
+    }
+
+    /** Tracks from the CP detail + each staff member's own live row (no path yet). */
+    private suspend fun loadLive(involved: List<CpInvolvedStaff>, now: Long): List<CpStaffTrack> {
         val liveRows = runCatching {
             withTimeout(TIMEOUT_MS) {
                 geoApi.getLiveStatusForStaff(bearerToken, staffIds = involved.joinToString(",") { it.staffId })
             }
-        }.getOrNull()?.data.orEmpty().filter { !it.staffId.isNullOrBlank() }.associateBy { it.staffId!! }
+        }.getOrNull()?.data.orEmpty()
+            .filter { !it.staffId.isNullOrBlank() }
+            // Latest row per staff, keyed by that staff member's own id only.
+            .groupBy { it.staffId!! }
+            .mapValues { (_, rows) -> rows.maxByOrNull { it.lastSeen ?: 0L }!! }
 
-        involved.map { staff ->
-            async {
-                val window = CpStaffTrackPolicy.window(staff.startedAt, staff.completedAt, now)
-                val canRead = CpStaffTrackPolicy.canReadRouteDirectly(staff.staffId, viewerStaffId, viewerCanViewAllTracking)
-                var routeRead = false
-                val segments = if (window != null && canRead) {
-                    runCatching {
-                        withTimeout(TIMEOUT_MS) {
-                            geoApi.getSessionRoute(
-                                bearerToken,
-                                staffId = staff.staffId,
-                                dayStart = window.start,
-                                dayEnd = window.end,
-                            )
-                        }
-                    }.getOrNull()?.takeIf { it.success }?.data?.let { data ->
-                        // Defence in depth: never draw a route the service
-                        // resolved for someone else.
-                        val owner = data.session?.staffId
-                        if (owner != null && owner != staff.staffId) return@let null
-                        routeRead = true
-                        CpStaffTrackPolicy.rawSegments(data.timeline.map(::toFix), window)
-                    }.orEmpty()
-                } else {
-                    emptyList()
-                }
-                val row = liveRows[staff.staffId]
-                val live = if (row != null &&
-                    CpStaffTrackPolicy.liveFixVisible(row.lat, row.lng, row.lastSeen, row.trackingActive == true, window)
-                ) {
-                    CpStaffTrack.LiveFix(
-                        row.lat!!, row.lng!!, row.lastSeen!!, row.trackingActive == true,
-                        motion = CpStaffTrackPolicy.motionFrom(row.movementMode, row.activity, row.speed),
+        return involved.map { staff ->
+            val window = CpStaffTrackPolicy.tripWindow(staff.startedAt, staff.completedAt, staff.status, now)
+            val row = liveRows[staff.staffId]
+            CpStaffTrack(
+                staffId = staff.staffId,
+                name = staff.name?.takeIf { it.isNotBlank() } ?: "Staff",
+                isPrimary = staff.isPrimary,
+                routeColor = staff.routeColor,
+                segments = emptyList(),
+                distanceMeters = staff.recordedDistanceMeters,
+                live = row?.let {
+                    CpStaffTrackPolicy.liveFix(
+                        it.lat, it.lng, it.lastSeen, it.trackingActive == true,
+                        it.movementMode, it.activity, it.speed, window,
                     )
-                } else {
-                    null
-                }
-                val drawn = CpStaffTrackPolicy.segmentsDistanceMeters(segments)
-                CpStaffTrack(
-                    staffId = staff.staffId,
-                    name = staff.name?.takeIf { it.isNotBlank() } ?: "Staff",
-                    isPrimary = staff.isPrimary,
-                    routeColor = staff.routeColor,
-                    segments = segments,
-                    distanceMeters = drawn ?: staff.recordedDistanceMeters,
-                    live = live,
-                    pathState = when {
-                        drawn != null -> CpStaffTrack.PathState.SHOWN
-                        window == null -> CpStaffTrack.PathState.NOT_STARTED
-                        !canRead || !routeRead -> CpStaffTrack.PathState.NOT_AVAILABLE
-                        else -> CpStaffTrack.PathState.NO_POINTS
-                    },
-                    tripInProgress = window?.open == true,
-                    windowStartMs = window?.start,
-                    windowEndMs = window?.end,
-                )
-            }
-        }.awaitAll()
+                },
+                pathState = CpStaffTrackPolicy.initialPathState(window, staff.status),
+                tripInProgress = window?.open == true,
+                windowStartMs = window?.start,
+                windowEndMs = window?.end,
+                startKnown = window?.startKnown ?: true,
+            )
+        }
     }
 
     private fun toFix(point: TimelinePoint) =
@@ -588,6 +684,7 @@ class CpStaffTracksLoader(
 
     companion object {
         private const val TIMEOUT_MS = 15_000L
+        private const val SESSION_ROUTE_TIMEOUT_MS = 30_000L
 
         @Volatile
         private var serverRouteMissing = false
