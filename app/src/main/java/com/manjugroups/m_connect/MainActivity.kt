@@ -244,6 +244,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Push is primary; a missed/delayed push must not require an app restart.
+        // Every 30 s (not 5 s): see MobileAlerts.FOREGROUND_POLL_INTERVAL_MS.
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 while (true) {
@@ -254,7 +255,9 @@ class MainActivity : AppCompatActivity() {
                             fromPoll = true,
                         )
                     }
-                    kotlinx.coroutines.delay(5_000)
+                    kotlinx.coroutines.delay(
+                        com.manjugroups.m_connect.notifications.MobileAlerts.FOREGROUND_POLL_INTERVAL_MS,
+                    )
                 }
             }
         }

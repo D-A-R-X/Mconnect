@@ -114,8 +114,15 @@ class CpVisitsFragment : Fragment() {
     private var filterAssignedStaffId: String? = null
     private var filterTelecallerStaffId: String? = null
     private var filterOptions: CpVisitFilterOptionsResponse? = null
+    // Which scope/dates [filterOptions] belongs to and when it was read, so a
+    // refresh doesn't re-ask the server for options it already has.
+    private var filterOptionsKey: String? = null
+    private var filterOptionsLoadedAt = 0L
     private val ADVANCED_FILTER_KEY = "cp_advanced_filter_result"
     private var loadGeneration = 0
+    // Server-busy (429/5xx) handling: one quiet automatic retry pending at a time.
+    private var busyRetryJob: kotlinx.coroutines.Job? = null
+    private var busyRetryAttempt = 0
     // Row cache: a visit's card is inflated at most ONCE per (data,
     // clock-state) generation — re-inflating up to 200 card layouts on every
     // tab switch is what used to make this screen feel slow. Pagination now
@@ -272,6 +279,8 @@ class CpVisitsFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        busyRetryJob?.cancel()
+        busyRetryJob = null
         SkeletonUtils.stopAll()
         pendingEntryAnimation = true
         rootView = null
@@ -633,9 +642,14 @@ class CpVisitsFragment : Fragment() {
 
     private var hasLoadedVisitsOnce = false
 
-    private fun loadVisits() {
+    private fun loadVisits(fromBusyRetry: Boolean = false) {
         hasLoadedVisitsOnce = true
         val root = rootView ?: return
+        // Any load supersedes a pending busy-retry; a load the user started
+        // (pull, filter, return) also starts a fresh retry budget.
+        busyRetryJob?.cancel()
+        busyRetryJob = null
+        if (!fromBusyRetry) busyRetryAttempt = 0
         val skeletonContainer = root.findViewById<View>(R.id.skeletonContainer)
         val empty = root.findViewById<View>(R.id.cpvEmptyState)
         val list = root.findViewById<LinearLayout>(R.id.cpVisitsList)
@@ -667,18 +681,26 @@ class CpVisitsFragment : Fragment() {
         cpLoadingMore = false
         cpPager.reset()
 
+        val plainQuery = CpListBusyPolicy.isPlainQuery(
+            serverSearch = requestedServerSearch,
+            status = requestedStatus,
+            outcome = requestedOutcome,
+            cpType = filterCpType,
+            fromDate = from,
+            toDate = to,
+            assignedStaffId = filterAssignedStaffId,
+            telecallerStaffId = filterTelecallerStaffId,
+        )
+        val savedListKey = CpListBusyPolicy.cacheKey(session.staffId, requestedScope.apiValue)
+            ?.takeIf { plainQuery }
+        // Filter options (staff / outcome / CP-type pickers) are read after the
+        // list, not alongside it, and only when the scope or dates changed or
+        // they are 10+ min old: the server runs only a few requests at once
+        // for everyone, and a second parallel call per refresh used one of them.
+        val optionsKey = CpListBusyPolicy.filterOptionsKey(requestedScope.apiValue, from, to)
+
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val optionsRequest = async {
-                    runCatching {
-                        geoApi.getMarketingCpVisitFilterOptions(
-                            session.bearerToken,
-                            scope = requestedScope.apiValue,
-                            fromDate = from,
-                            toDate = to,
-                        )
-                    }.getOrNull()
-                }
                 // Switched from /api/sitevisits/my (legacy fieldVisits) to
                 // /api/marketing/clientPlaceVisits/my so each row carries
                 // the proposedSiteVisit / lead.followUpStatus / party
@@ -736,7 +758,6 @@ class CpVisitsFragment : Fragment() {
                     ).show()
                     return@launch
                 }
-                optionsRequest.await()?.takeIf { it.success }?.let { filterOptions = it }
                 val teamAvailable = resp.hasDirectReports == true ||
                     (resp.directReportCount ?: 0) > 0 ||
                     resp.safeDirectReportIds.isNotEmpty()
@@ -783,6 +804,35 @@ class CpVisitsFragment : Fragment() {
                 // noise into the user-facing app. Both branches
                 // collapse to a no-op render call below.
                 renderList()
+                busyRetryAttempt = 0
+                // Keep a copy of the plain list so a later "server busy" can
+                // still show the user their CP visits instead of an error.
+                if (savedListKey != null) {
+                    val snapshot = allVisits
+                    val appContext = requireContext().applicationContext
+                    launch(kotlinx.coroutines.Dispatchers.IO) {
+                        com.manjugroups.m_connect.ui.common.LocalCache.put(appContext, savedListKey, snapshot, System.currentTimeMillis())
+                    }
+                }
+                if (CpListBusyPolicy.filterOptionsStale(
+                        filterOptionsKey, filterOptionsLoadedAt, optionsKey, System.currentTimeMillis(),
+                    )
+                ) {
+                    runCatching {
+                        geoApi.getMarketingCpVisitFilterOptions(
+                            session.bearerToken,
+                            scope = requestedScope.apiValue,
+                            fromDate = from,
+                            toDate = to,
+                        )
+                    }.getOrNull()?.takeIf { it.success }?.let {
+                        if (requestGeneration == loadGeneration) {
+                            filterOptions = it
+                            filterOptionsKey = optionsKey
+                            filterOptionsLoadedAt = System.currentTimeMillis()
+                        }
+                    }
+                }
             } catch (e: Exception) {
                 // A load cancelled because the screen went away (or was rebuilt)
                 // is not a failed refresh: it showed "Couldn't refresh" while the
@@ -790,7 +840,48 @@ class CpVisitsFragment : Fragment() {
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 if (requestGeneration != loadGeneration) return@launch
                 SkeletonUtils.stopSkeletonPulse(skeletonContainer)
-                if (allVisits.isNotEmpty()) {
+                val httpCode = (e as? HttpException)?.code()
+                if (CpListBusyPolicy.isServerBusy(httpCode)) {
+                    // The server is refusing because it is full for everyone
+                    // (429 "too many concurrent requests" / 5xx), not because
+                    // this request is wrong: keep or restore the list, say so
+                    // plainly, and try again on our own a bit later.
+                    val retryAfter = (e as HttpException).response()?.headers()
+                        ?.get("Retry-After")?.trim()?.toLongOrNull()
+                    val retryInMs = CpListBusyPolicy.retryDelayMs(busyRetryAttempt, retryAfter)
+                    if (allVisits.isEmpty() && savedListKey != null) {
+                        val appContext = requireContext().applicationContext
+                        val saved = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            com.manjugroups.m_connect.ui.common.LocalCache.getEntry<List<TodayVisit>>(
+                                appContext,
+                                savedListKey,
+                                com.google.gson.reflect.TypeToken.getParameterized(
+                                    List::class.java, TodayVisit::class.java,
+                                ).type,
+                            )
+                        }
+                        if (requestGeneration != loadGeneration) return@launch
+                        if (!saved?.value.isNullOrEmpty()) {
+                            allVisits = saved!!.value
+                            hasLoadedOnce = true
+                        }
+                    }
+                    if (allVisits.isNotEmpty()) {
+                        renderList()
+                        Toast.makeText(
+                            requireContext(),
+                            if (retryInMs != null) {
+                                "Server is busy — showing your last loaded CP visits. Retrying shortly."
+                            } else {
+                                "Server is busy — showing your last loaded CP visits. Pull down to refresh."
+                            },
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    } else {
+                        showLoadError(CpListBusyPolicy.busyMessage(retryInMs))
+                    }
+                    scheduleBusyRetry(retryInMs, requestGeneration)
+                } else if (allVisits.isNotEmpty()) {
                     // A transient failure on a refresh must NOT blank a list the
                     // user already has — keep the last-loaded rows and mention it
                     // quietly instead of throwing them to the error screen.
@@ -816,6 +907,25 @@ class CpVisitsFragment : Fragment() {
                     )?.dismissRefresh()
                 }
             }
+        }
+    }
+
+    /**
+     * One quiet automatic reload after a "server busy" answer, only while this
+     * screen is on top and no newer load has started. [delayMs] null = the
+     * retry budget is spent; the user can still pull to refresh.
+     */
+    private fun scheduleBusyRetry(delayMs: Long?, generation: Int) {
+        busyRetryJob?.cancel()
+        busyRetryJob = null
+        if (delayMs == null || rootView == null) return
+        busyRetryAttempt++
+        busyRetryJob = viewLifecycleOwner.lifecycleScope.launch {
+            kotlinx.coroutines.delay(delayMs)
+            if (!isAdded || rootView == null || generation != loadGeneration) return@launch
+            // Off screen (another tab / detail on top): onResume reloads instead.
+            if (!viewLifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return@launch
+            loadVisits(fromBusyRetry = true)
         }
     }
 
