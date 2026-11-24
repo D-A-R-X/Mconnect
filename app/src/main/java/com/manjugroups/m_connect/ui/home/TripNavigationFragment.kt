@@ -2354,8 +2354,11 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     .position(position)
                     .title(track.name)
                     .snippet(
-                        CpStaffTrackPolicy.locationLabel(live, now, CpStaffTracksLoader::formatClock) +
-                            " · " + CpStaffTrackPolicy.distanceLabel(track.distanceMeters, track.windowStartMs, now),
+                        listOfNotNull(
+                            CpStaffTrackPolicy.motionToShow(track, now)?.label,
+                            CpStaffTrackPolicy.locationLabel(live, now, CpStaffTracksLoader::formatClock),
+                            CpStaffTrackPolicy.distanceLabel(track.distanceMeters, track.windowStartMs, now),
+                        ).joinToString(" · "),
                     )
                     .icon(dotMarkerIcon(ctx, color, 18))
                     .anchor(0.5f, 0.5f)
@@ -2566,7 +2569,14 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                         ?: "Path not available"
             }
             rows.addView(
-                staffLegendRow(ctx, staffTrackColor(ctx, track, index), name, "$location · $travel", muted = false),
+                staffLegendRow(
+                    ctx,
+                    staffTrackColor(ctx, track, index),
+                    name,
+                    "$location · $travel",
+                    muted = false,
+                    motion = CpStaffTrackPolicy.motionToShow(track, now),
+                ),
             )
         }
         if (isViewerObserver()) {
@@ -2582,7 +2592,24 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         }
     }
 
-    private fun staffLegendRow(ctx: Context, color: Int, title: String, detail: String, muted: Boolean): View {
+    /** Semantic colour for a motion status pill. */
+    private fun motionColor(ctx: Context, motion: CpStaffTrack.Motion): Int = themeColor(
+        ctx,
+        when (motion) {
+            CpStaffTrack.Motion.MOVING -> R.attr.colorSuccess
+            CpStaffTrack.Motion.WALKING -> R.attr.colorInfo
+            CpStaffTrack.Motion.IDLE -> R.attr.colorForegroundMuted
+        },
+    )
+
+    private fun staffLegendRow(
+        ctx: Context,
+        color: Int,
+        title: String,
+        detail: String,
+        muted: Boolean,
+        motion: CpStaffTrack.Motion? = null,
+    ): View {
         val density = ctx.resources.displayMetrics.density
         return LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -2619,6 +2646,30 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 },
                 LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
             )
+            // Moving / Walking / Idle — only while this staff member's trip
+            // on this CP is running (see CpStaffTrackPolicy.motionToShow).
+            if (motion != null) {
+                val tint = motionColor(ctx, motion)
+                addView(
+                    TextView(ctx).apply {
+                        text = motion.label
+                        includeFontPadding = false
+                        setTextAppearance(R.style.TextAppearance_Mconnect_LabelSmall)
+                        setTextColor(tint)
+                        val padH = (8 * density).roundToInt()
+                        val padV = (3 * density).roundToInt()
+                        setPadding(padH, padV, padH, padV)
+                        background = android.graphics.drawable.GradientDrawable().apply {
+                            cornerRadius = 999f
+                            setColor(androidx.core.graphics.ColorUtils.setAlphaComponent(tint, 0x24))
+                        }
+                    },
+                    LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                    ).apply { marginStart = (8 * density).roundToInt() },
+                )
+            }
         }
     }
 

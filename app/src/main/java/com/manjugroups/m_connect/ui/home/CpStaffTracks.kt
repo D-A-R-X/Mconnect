@@ -47,7 +47,20 @@ data class CpStaffTrack(
     /** Segments come from the geo service's road-matched route. */
     val roadMatched: Boolean = false,
 ) {
-    data class LiveFix(val lat: Double, val lng: Double, val lastSeenMs: Long, val trackingActive: Boolean)
+    data class LiveFix(
+        val lat: Double,
+        val lng: Double,
+        val lastSeenMs: Long,
+        val trackingActive: Boolean,
+        /** Motion read from this fix; shown only through [CpStaffTrackPolicy.motionToShow]. */
+        val motion: Motion? = null,
+    )
+
+    enum class Motion(val label: String) {
+        MOVING("Moving"),
+        WALKING("Walking"),
+        IDLE("Idle"),
+    }
 
     data class Segment(val points: List<TrackCleaner.Point>, val dashed: Boolean = false)
 
@@ -250,6 +263,47 @@ object CpStaffTrackPolicy {
         return SimpleDateFormat(pattern, Locale.US).apply { timeZone = IST }.format(Date(ms))
     }
 
+    /**
+     * Motion from what the live row already carries, most trusted first: the
+     * geo service's movementMode, then the phone's activity-recognition
+     * label, then speed. Null when none of them says anything usable (an
+     * "anomaly" GPS jump, TILTING / UNKNOWN with no speed): nothing is
+     * guessed.
+     */
+    fun motionFrom(movementMode: String?, activity: String?, speedMps: Double?): CpStaffTrack.Motion? {
+        when (movementMode?.trim()?.lowercase()) {
+            "stationary", "still", "idle" -> return CpStaffTrack.Motion.IDLE
+            "walking", "running", "on_foot" -> return CpStaffTrack.Motion.WALKING
+            "vehicle", "two_wheeler", "four_wheeler", "cycling", "in_vehicle", "driving" -> return CpStaffTrack.Motion.MOVING
+            "anomaly" -> return null
+        }
+        when (activity?.trim()?.uppercase()) {
+            "STILL" -> return CpStaffTrack.Motion.IDLE
+            "WALKING", "ON_FOOT", "RUNNING" -> return CpStaffTrack.Motion.WALKING
+            "IN_VEHICLE", "ON_BICYCLE", "CYCLING" -> return CpStaffTrack.Motion.MOVING
+        }
+        val speed = speedMps?.takeIf { it.isFinite() && it >= 0.0 } ?: return null
+        return when {
+            speed > MAX_SEGMENT_SPEED_MPS -> null
+            speed < 0.5 -> CpStaffTrack.Motion.IDLE
+            speed < 2.5 -> CpStaffTrack.Motion.WALKING
+            else -> CpStaffTrack.Motion.MOVING
+        }
+    }
+
+    /**
+     * The motion status to show, or null. Only while this staff member's trip
+     * on this CP is running (started, not completed), and only from a live,
+     * fresh fix: before the trip, after it, or on a stale fix nothing shows.
+     */
+    fun motionToShow(track: CpStaffTrack, now: Long): CpStaffTrack.Motion? {
+        if (!track.tripInProgress) return null
+        val live = track.live ?: return null
+        if (!live.trackingActive) return null
+        if (now - live.lastSeenMs > LIVE_FRESH_MS) return null
+        return live.motion
+    }
+
     fun locationLabel(live: CpStaffTrack.LiveFix?, now: Long, timeFormat: (Long) -> String): String {
         if (live == null) return "No recent location"
         val age = (now - live.lastSeenMs).coerceAtLeast(0L)
@@ -324,7 +378,10 @@ object CpStaffTrackPolicy {
         val live = if (liveDto != null &&
             liveFixVisible(liveDto.lat, liveDto.lng, liveMs, liveDto.trackingActive == true, window)
         ) {
-            CpStaffTrack.LiveFix(liveDto.lat!!, liveDto.lng!!, liveMs!!, liveDto.trackingActive == true)
+            CpStaffTrack.LiveFix(
+                liveDto.lat!!, liveDto.lng!!, liveMs!!, liveDto.trackingActive == true,
+                motion = motionFrom(liveDto.movementMode, liveDto.activity, liveDto.speed),
+            )
         } else {
             null
         }
@@ -496,7 +553,10 @@ class CpStaffTracksLoader(
                 val live = if (row != null &&
                     CpStaffTrackPolicy.liveFixVisible(row.lat, row.lng, row.lastSeen, row.trackingActive == true, window)
                 ) {
-                    CpStaffTrack.LiveFix(row.lat!!, row.lng!!, row.lastSeen!!, row.trackingActive == true)
+                    CpStaffTrack.LiveFix(
+                        row.lat!!, row.lng!!, row.lastSeen!!, row.trackingActive == true,
+                        motion = CpStaffTrackPolicy.motionFrom(row.movementMode, row.activity, row.speed),
+                    )
                 } else {
                     null
                 }
