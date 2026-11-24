@@ -1508,6 +1508,10 @@ data class CpStaffLiveFixDto(
     val lng: Double? = null,
     val lastSeen: Double? = null,
     val trackingActive: Boolean? = null,
+    // Motion hints for the "Moving / Walking / Idle" status (optional).
+    val movementMode: String? = null,
+    val activity: String? = null,
+    val speed: Double? = null,
 )
 
 data class CpLiveStatusResponse(
@@ -1523,6 +1527,11 @@ data class CpLiveStatusRow(
     @com.google.gson.annotations.JsonAdapter(EpochMillisAdapter::class)
     val lastSeen: Long? = null,
     val trackingActive: Boolean? = null,
+    // Geo-derived movement class (stationary / walking / two_wheeler /
+    // vehicle / anomaly), the phone's activity-recognition label, and m/s.
+    val movementMode: String? = null,
+    val activity: String? = null,
+    val speed: Double? = null,
 )
 
 data class ConvertCpVisitToSiteVisitRequest(

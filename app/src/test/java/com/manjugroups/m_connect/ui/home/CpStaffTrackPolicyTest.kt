@@ -193,6 +193,51 @@ class CpStaffTrackPolicyTest {
     }
 
     @Test
+    fun `motion maps movement mode first, then activity, then speed`() {
+        assertEquals(CpStaffTrack.Motion.IDLE, CpStaffTrackPolicy.motionFrom("stationary", "IN_VEHICLE", 20.0))
+        assertEquals(CpStaffTrack.Motion.WALKING, CpStaffTrackPolicy.motionFrom("walking", null, null))
+        assertEquals(CpStaffTrack.Motion.MOVING, CpStaffTrackPolicy.motionFrom("two_wheeler", null, null))
+        assertEquals(CpStaffTrack.Motion.MOVING, CpStaffTrackPolicy.motionFrom("vehicle", null, null))
+        assertNull(CpStaffTrackPolicy.motionFrom("anomaly", "IN_VEHICLE", 20.0))
+        assertEquals(CpStaffTrack.Motion.IDLE, CpStaffTrackPolicy.motionFrom(null, "STILL", null))
+        assertEquals(CpStaffTrack.Motion.WALKING, CpStaffTrackPolicy.motionFrom(null, "ON_FOOT", null))
+        assertEquals(CpStaffTrack.Motion.MOVING, CpStaffTrackPolicy.motionFrom(null, "IN_VEHICLE", null))
+        assertEquals(CpStaffTrack.Motion.MOVING, CpStaffTrackPolicy.motionFrom(null, "TILTING", 9.0))
+        assertEquals(CpStaffTrack.Motion.WALKING, CpStaffTrackPolicy.motionFrom(null, "UNKNOWN", 1.2))
+        assertEquals(CpStaffTrack.Motion.IDLE, CpStaffTrackPolicy.motionFrom(null, null, 0.1))
+        // Nothing usable → nothing shown, never a guess.
+        assertNull(CpStaffTrackPolicy.motionFrom(null, "UNKNOWN", null))
+        assertNull(CpStaffTrackPolicy.motionFrom(null, null, 80.0))
+    }
+
+    @Test
+    fun `motion shows only while the trip runs and the fix is live and fresh`() {
+        val now = 100 * min
+        val fresh = CpStaffTrack.LiveFix(13.0, 80.0, now - 2 * min, true, CpStaffTrack.Motion.MOVING)
+        fun track(inProgress: Boolean, live: CpStaffTrack.LiveFix?) = CpStaffTrack(
+            staffId = "a", name = "A", isPrimary = true, routeColor = null, segments = emptyList(),
+            distanceMeters = null, live = live, pathState = CpStaffTrack.PathState.NO_POINTS,
+            tripInProgress = inProgress, windowStartMs = null, windowEndMs = null,
+        )
+        assertEquals(CpStaffTrack.Motion.MOVING, CpStaffTrackPolicy.motionToShow(track(true, fresh), now))
+        // Before the trip starts or after it completes: no status.
+        assertNull(CpStaffTrackPolicy.motionToShow(track(false, fresh), now))
+        // Stale or off-duty fix, or no fix: no status.
+        assertNull(CpStaffTrackPolicy.motionToShow(track(true, fresh.copy(lastSeenMs = now - 30 * min)), now))
+        assertNull(CpStaffTrackPolicy.motionToShow(track(true, fresh.copy(trackingActive = false)), now))
+        assertNull(CpStaffTrackPolicy.motionToShow(track(true, null), now))
+        assertNull(CpStaffTrackPolicy.motionToShow(track(true, fresh.copy(motion = null)), now))
+    }
+
+    @Test
+    fun `live rows carry motion hints`() {
+        val json = """{"success":true,"data":[{"staffId":"a","lat":13.0,"lng":80.2,
+            "lastSeen":"2026-11-24T10:15:30Z","trackingActive":true,"movementMode":"walking","activity":"ON_FOOT","speed":1.1}]}"""
+        val row = Gson().fromJson(json, CpLiveStatusResponse::class.java).data!!.single()
+        assertEquals(CpStaffTrack.Motion.WALKING, CpStaffTrackPolicy.motionFrom(row.movementMode, row.activity, row.speed))
+    }
+
+    @Test
     fun `labels`() {
         val now = 100 * min
         val fmt: (Long) -> String = { "T" }
