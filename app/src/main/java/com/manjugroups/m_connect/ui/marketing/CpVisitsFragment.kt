@@ -1770,6 +1770,12 @@ class CpVisitsFragment : Fragment() {
                     visit.scheduledDate,
                     visit.scheduledEndTime ?: visit.scheduledStartTime,
                 ),
+                // Who is ON this CP, so the trip map knows at once whether
+                // the viewer is one of them (a manager sees them, not self).
+                involvedStaffIds = (
+                    listOfNotNull(visit.bdoStaffId) +
+                        visit.joint?.participants.orEmpty().mapNotNull { it.staffId }
+                    ).filter { it.isNotBlank() },
             )
         )
     }

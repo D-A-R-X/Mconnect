@@ -7,6 +7,7 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.ActivityNotFoundException
 import android.content.ClipData
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -116,6 +117,20 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     private var routePolyline: Polyline? = null
     private var routeRequestGeneration: Long = 0
     private var lastUnavailableRouteKey: String? = null
+
+    // CP map: the staff ON this CP (both on a Joint CP) — their latest
+    // heartbeat fix, travelled path and distance. Read-only display state.
+    // involvedStaffIds is null until known (CP list arg or CP detail); while
+    // null the map keeps its original viewer-centred behaviour.
+    private var involvedStaffIds: Set<String>? = null
+    private var staffTracksInvolved: List<CpInvolvedStaff> = emptyList()
+    private var staffTracks: List<CpStaffTrack> = emptyList()
+    private var staffTracksLoaded = false
+    private var staffTracksJob: Job? = null
+    private var staffTracksPollJob: Job? = null
+    private var staffTracksSkeleton: android.animation.ObjectAnimator? = null
+    private var staffTracksCard: View? = null
+    private var staffTracksRows: LinearLayout? = null
 
     // Full-screen map expand/collapse. We reparent the single MapView between
     // the small preview card and the full-screen host so all markers/camera
@@ -454,6 +469,12 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         }
         tripType = args.getString(ARG_TRIP_TYPE)
         cpVisitId = args.getString(ARG_CP_VISIT_ID)
+        staffTracksCard = view.findViewById(R.id.cpStaffTracksCard)
+        staffTracksRows = view.findViewById(R.id.cpStaffTracksRows)
+        involvedStaffIds = args.getStringArrayList(ARG_INVOLVED_STAFF_IDS)
+            ?.filter { it.isNotBlank() }
+            ?.toSet()
+            ?.takeIf { it.isNotEmpty() }
         cpClientMet = if (args.containsKey(ARG_CP_CLIENT_MET)) args.getBoolean(ARG_CP_CLIENT_MET) else null
         // List arguments can contain a draft or a pre-created SV linkage.
         // Only reconciliation or an explicit outcome result confirms a decision.
@@ -1339,6 +1360,9 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     }
                 }
                 jointSummary = cp.joint ?: jointSummary
+                // Read-only CP map overlay: who is on this CP and their
+                // tracks. Never alters the trip state handled below.
+                onStaffTracksCpDetail(cp)
                 visitId = com.manjugroups.m_connect.ui.marketing.resolveCpFieldVisitId(
                     cpVisitId = cpId,
                     parentFieldVisitId = cp.fieldVisitId,
@@ -1562,6 +1586,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         super.onStart()
         mapView?.onStart()
         startJointWorkflowPolling()
+        startStaffTracksPolling()
     }
 
     override fun onPause() {
@@ -1583,6 +1608,8 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     override fun onStop() {
         jointWorkflowPollJob?.cancel()
         jointWorkflowPollJob = null
+        staffTracksPollJob?.cancel()
+        staffTracksPollJob = null
         mapView?.onStop()
         super.onStop()
     }
@@ -1593,6 +1620,12 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     }
 
     override fun onDestroyView() {
+        staffTracksJob?.cancel()
+        staffTracksJob = null
+        staffTracksSkeleton?.cancel()
+        staffTracksSkeleton = null
+        staffTracksCard = null
+        staffTracksRows = null
         mapView?.onDestroy()
         googleMap = null
         mapView = null
@@ -1610,11 +1643,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             // swallows the gesture and the page feels stuck over it).
             uiSettings.isScrollGesturesEnabled = false
         }
-        if (hasLocationPermission()) {
-            try {
-                map.isMyLocationEnabled = true
-            } catch (_: SecurityException) { /* race: permission revoked */ }
-        }
+        applyViewerLocationLayer()
         renderMapMarkersAndRoute()
         geocodeDestinationIfNeeded()
         fetchCurrentLocationAndUpdate()
@@ -2118,10 +2147,21 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         if (dest == null) {
             tvDistance?.text = "—"
             tvEta?.text = "—"
+            // No destination yet, but the CP staff overlay can still show
+            // where the staff are. Only once there is something to draw.
+            if (staffTracks.isNotEmpty() || isViewerObserver()) {
+                map.clear()
+                routePolyline = null
+                staffOverlayHandles.clear()
+                val trackPoints = drawStaffTrackOverlays(map)
+                drawMutedViewerMarker(map)
+                if (isViewerObserver()) fitCameraTo(map, trackPoints)
+            }
             return
         }
         map.clear()
         routePolyline = null
+        staffOverlayHandles.clear()
 
         map.addMarker(
             MarkerOptions()
@@ -2129,6 +2169,16 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 .title(tvDestName?.text?.toString() ?: "Destination")
                 .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED))
         )
+        // The CP staff's own paths + latest fixes (both on a Joint CP).
+        val trackPoints = drawStaffTrackOverlays(map)
+
+        // Someone who is not on this CP (a manager opening it from the CP
+        // list): their own phone position is not the point of this screen.
+        // Show it muted, and measure distance / ETA from the CP staff instead.
+        if (isViewerObserver()) {
+            renderObserverRoute(map, dest, trackPoints, requestGeneration)
+            return
+        }
 
         val origin = currentLocation
         if (origin != null) {
@@ -2158,6 +2208,359 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             map.animateCamera(CameraUpdateFactory.newLatLngZoom(dest, 14f))
             tvDistance?.text = "—"
             tvEta?.text = "—"
+        }
+    }
+
+    // ── CP staff tracks (read-only map overlay + legend) ─────────────────────
+
+    /** Overlay objects drawn for the CP staff, so a refresh can replace them
+     *  without clearing the destination pin or the road route. */
+    private val staffOverlayHandles = mutableListOf<Any>()
+
+    /**
+     * True only when we KNOW the viewer is not one of the staff on this CP.
+     * Unknown (null) keeps the original viewer-centred map for everyone.
+     */
+    private fun isViewerObserver(): Boolean {
+        val ids = involvedStaffIds ?: return false
+        // A phone that started this trip is running it, whatever the
+        // assignment data says: never mute its own location.
+        if (visitStarted && isVisitLocallyStarted()) return false
+        return !CpStaffTrackPolicy.viewerIsInvolved(session.staffId, ids)
+    }
+
+    /** The live "My Location" dot is for staff on the trip; observers get a muted pin. */
+    private fun applyViewerLocationLayer() {
+        val map = googleMap ?: return
+        if (!hasLocationPermission()) return
+        try {
+            map.isMyLocationEnabled = !isViewerObserver()
+        } catch (_: SecurityException) { /* race: permission revoked */ }
+    }
+
+    private fun renderObserverRoute(
+        map: GoogleMap,
+        dest: LatLng,
+        trackPoints: List<LatLng>,
+        requestGeneration: Long,
+    ) {
+        drawMutedViewerMarker(map)
+        // Distance / ETA from the CP staff member still on the way (primary
+        // first), never from the viewer's phone.
+        val origin = staffTracks
+            .firstOrNull { it.tripInProgress && it.live?.trackingActive == true }
+            ?.live
+            ?.let { LatLng(it.lat, it.lng) }
+        if (origin != null) {
+            updateDistanceAndEtaFromHaversine(origin, dest, adjustStatusPill = false)
+            fitCameraTo(map, trackPoints + listOf(origin, dest))
+            fetchAndRenderRoadRoute(
+                origin,
+                dest,
+                requestGeneration,
+                adjustStatusPill = false,
+                extraBounds = trackPoints,
+            )
+        } else {
+            tvDistance?.text = "—"
+            tvEta?.text = "—"
+            fitCameraTo(map, trackPoints + dest)
+        }
+    }
+
+    private fun fitCameraTo(map: GoogleMap, points: List<LatLng>) {
+        val unique = points.distinct()
+        runCatching {
+            when {
+                unique.size >= 2 -> {
+                    val builder = LatLngBounds.Builder()
+                    unique.forEach { builder.include(it) }
+                    map.animateCamera(CameraUpdateFactory.newLatLngBounds(builder.build(), 160))
+                }
+                unique.size == 1 -> map.animateCamera(CameraUpdateFactory.newLatLngZoom(unique.first(), 14f))
+            }
+        }
+    }
+
+    /** Muted, low-contrast "You" pin for a viewer who is not on this CP. */
+    private fun drawMutedViewerMarker(map: GoogleMap) {
+        if (!isViewerObserver()) return
+        val here = currentLocation ?: return
+        val ctx = context ?: return
+        map.addMarker(
+            MarkerOptions()
+                .position(here)
+                .title("You")
+                .snippet("Your location, for reference")
+                .icon(dotMarkerIcon(ctx, themeColor(ctx, R.attr.colorForegroundMuted), 12))
+                .anchor(0.5f, 0.5f)
+                .alpha(0.55f)
+                .zIndex(0f)
+        )
+    }
+
+    /**
+     * Draws every CP staff member's travelled path and latest fix. Returns the
+     * drawn positions so the caller can frame them. The involved viewer's own
+     * fix is skipped: the live blue dot already shows them.
+     */
+    private fun drawStaffTrackOverlays(map: GoogleMap): List<LatLng> {
+        val ctx = context ?: return emptyList()
+        val drawn = mutableListOf<LatLng>()
+        val now = System.currentTimeMillis()
+        staffTracks.forEachIndexed { index, track ->
+            val color = staffTrackColor(ctx, track, index)
+            if (track.path.size >= 2) {
+                val points = track.path.map { LatLng(it.lat, it.lng) }
+                map.addPolyline(
+                    PolylineOptions()
+                        .addAll(points)
+                        .width(9f)
+                        .color(androidx.core.graphics.ColorUtils.setAlphaComponent(color, 0xD9))
+                        .zIndex(1f + index)
+                )?.let { staffOverlayHandles += it }
+                drawn += points
+            }
+            val live = track.live ?: return@forEachIndexed
+            val isSelf = track.staffId == session.staffId
+            if (isSelf && !isViewerObserver() && hasLocationPermission()) return@forEachIndexed
+            val position = LatLng(live.lat, live.lng)
+            map.addMarker(
+                MarkerOptions()
+                    .position(position)
+                    .title(track.name)
+                    .snippet(
+                        CpStaffTrackPolicy.locationLabel(live, now, CpStaffTracksLoader::formatClock) +
+                            " · " + CpStaffTrackPolicy.distanceLabel(track.distanceMeters),
+                    )
+                    .icon(dotMarkerIcon(ctx, color, 18))
+                    .anchor(0.5f, 0.5f)
+                    .zIndex(10f + index)
+            )?.let { staffOverlayHandles += it }
+            drawn += position
+        }
+        return drawn
+    }
+
+    /** Replace only the staff overlay (refresh), leaving pin + road route alone. */
+    private fun redrawStaffOverlaysOnly() {
+        val map = googleMap ?: return
+        staffOverlayHandles.forEach {
+            when (it) {
+                is Polyline -> it.remove()
+                is com.google.android.gms.maps.model.Marker -> it.remove()
+            }
+        }
+        staffOverlayHandles.clear()
+        drawStaffTrackOverlays(map)
+    }
+
+    private fun staffTrackColor(ctx: Context, track: CpStaffTrack, index: Int): Int {
+        track.routeColor
+            ?.takeIf { Regex("^#[0-9a-fA-F]{6}$").matches(it) }
+            ?.let { return Color.parseColor(it) }
+        val palette = intArrayOf(R.attr.colorSuccess, R.attr.colorWarning, R.attr.colorAccentPrimary)
+        return themeColor(ctx, palette[index % palette.size])
+    }
+
+    private fun themeColor(ctx: Context, attr: Int): Int {
+        val value = android.util.TypedValue()
+        return if (ctx.theme.resolveAttribute(attr, value, true)) {
+            if (value.resourceId != 0) androidx.core.content.ContextCompat.getColor(ctx, value.resourceId) else value.data
+        } else {
+            Color.GRAY
+        }
+    }
+
+    /** A filled dot with a surface-coloured ring, so it reads on any map tile. */
+    private fun dotMarkerIcon(ctx: Context, fill: Int, sizeDp: Int): com.google.android.gms.maps.model.BitmapDescriptor {
+        val density = ctx.resources.displayMetrics.density
+        val px = (sizeDp * density).roundToInt().coerceAtLeast(8)
+        val ring = (2.5f * density)
+        val bitmap = android.graphics.Bitmap.createBitmap(px, px, android.graphics.Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bitmap)
+        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        val r = px / 2f
+        paint.color = themeColor(ctx, R.attr.colorSurfacePrimary)
+        canvas.drawCircle(r, r, r, paint)
+        paint.color = fill
+        canvas.drawCircle(r, r, r - ring, paint)
+        return BitmapDescriptorFactory.fromBitmap(bitmap)
+    }
+
+    /** CP detail arrived (reconcile): learn who is on the CP, then load their tracks. */
+    private fun onStaffTracksCpDetail(cp: com.manjugroups.m_connect.network.CpVisitDetail) {
+        runCatching {
+            if (isPureSiteVisit || session.isDriverMode) return
+            val involved = CpStaffTrackPolicy.involvedStaff(cp)
+            if (involved.isEmpty()) return
+            staffTracksInvolved = involved
+            val wasObserver = isViewerObserver()
+            involvedStaffIds = involved.map { it.staffId }.toSet()
+            if (wasObserver != isViewerObserver()) {
+                applyViewerLocationLayer()
+                renderMapMarkersAndRoute()
+            }
+            if (!staffTracksLoaded) loadStaffTracks(showSkeleton = true)
+        }.onFailure { android.util.Log.w("TripNav", "CP staff tracks setup failed", it) }
+    }
+
+    private fun loadStaffTracks(showSkeleton: Boolean) {
+        val cpId = cpVisitId?.takeIf { it.isNotBlank() } ?: return
+        if (staffTracksInvolved.isEmpty()) return
+        if (staffTracksJob?.isActive == true) return
+        val rows = staffTracksRows
+        if (showSkeleton && !staffTracksLoaded && rows != null) {
+            staffTracksCard?.visibility = View.VISIBLE
+            if (staffTracksSkeleton == null) {
+                rows.removeAllViews()
+                staffTracksSkeleton = com.manjugroups.m_connect.ui.common.SkeletonLoader.show(
+                    rows,
+                    count = staffTracksInvolved.size.coerceIn(1, 2),
+                )
+            }
+        }
+        val previousOrigin = observerOriginKey()
+        staffTracksJob = viewLifecycleOwner.lifecycleScope.launch {
+            val result = CpStaffTracksLoader(geoApi, session.bearerToken).load(
+                cpId = cpId,
+                involved = staffTracksInvolved,
+                viewerStaffId = session.staffId,
+                viewerCanViewAllTracking = session.hasPermission("attendance.liveTracking"),
+            )
+            if (!isAdded || view == null) return@launch
+            staffTracksSkeleton?.cancel()
+            staffTracksSkeleton = null
+            staffTracksRows?.alpha = 1f
+            when (result) {
+                is CpStaffTracksLoader.Result.Loaded -> {
+                    val firstLoad = !staffTracksLoaded
+                    staffTracks = result.tracks
+                    staffTracksLoaded = true
+                    renderStaffTracksLegend()
+                    // Observers' distance / ETA follow the staff member, so a
+                    // moved origin needs the full render; otherwise only the
+                    // overlay changes and the road route is left alone.
+                    if (isViewerObserver() && (firstLoad || observerOriginKey() != previousOrigin)) {
+                        renderMapMarkersAndRoute()
+                    } else {
+                        redrawStaffOverlaysOnly()
+                    }
+                }
+                CpStaffTracksLoader.Result.Forbidden -> {
+                    staffTracks = emptyList()
+                    staffTracksLoaded = true
+                    staffTracksRows?.removeAllViews()
+                    staffTracksCard?.visibility = View.GONE
+                    redrawStaffOverlaysOnly()
+                }
+                CpStaffTracksLoader.Result.Unavailable -> {
+                    if (!staffTracksLoaded) {
+                        staffTracksRows?.removeAllViews()
+                        staffTracksCard?.visibility = View.GONE
+                    }
+                }
+            }
+        }
+    }
+
+    /** ~100 m grid key of the observer's route origin; changes only on real movement. */
+    private fun observerOriginKey(): String? =
+        staffTracks.firstOrNull { it.tripInProgress && it.live?.trackingActive == true }?.live?.let {
+            "%.3f,%.3f".format(Locale.US, it.lat, it.lng)
+        }
+
+    /** Refresh while the screen is visible and someone on the CP is still moving. */
+    private fun startStaffTracksPolling() {
+        staffTracksPollJob?.cancel()
+        if (cpVisitId.isNullOrBlank()) return
+        staffTracksPollJob = viewLifecycleOwner.lifecycleScope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(STAFF_TRACKS_POLL_MS)
+                if (!staffTracksLoaded) continue
+                if (staffTracks.none { it.tripInProgress || it.live?.trackingActive == true }) continue
+                loadStaffTracks(showSkeleton = false)
+            }
+        }
+    }
+
+    private fun renderStaffTracksLegend() {
+        val card = staffTracksCard ?: return
+        val rows = staffTracksRows ?: return
+        val ctx = context ?: return
+        rows.removeAllViews()
+        if (staffTracks.isEmpty()) {
+            card.visibility = View.GONE
+            return
+        }
+        card.visibility = View.VISIBLE
+        val now = System.currentTimeMillis()
+        staffTracks.forEachIndexed { index, track ->
+            val name = if (track.staffId == session.staffId) "${track.name} (you)" else track.name
+            val location = CpStaffTrackPolicy.locationLabel(track.live, now, CpStaffTracksLoader::formatClock)
+            val travel = when (track.pathState) {
+                CpStaffTrack.PathState.SHOWN -> CpStaffTrackPolicy.distanceLabel(track.distanceMeters)
+                CpStaffTrack.PathState.NOT_STARTED -> "Trip not started"
+                CpStaffTrack.PathState.NO_POINTS ->
+                    track.distanceMeters?.let { CpStaffTrackPolicy.distanceLabel(it) } ?: "No path recorded"
+                CpStaffTrack.PathState.NOT_AVAILABLE ->
+                    track.distanceMeters?.let { CpStaffTrackPolicy.distanceLabel(it) + " · path not available" }
+                        ?: "Path not available"
+            }
+            rows.addView(
+                staffLegendRow(ctx, staffTrackColor(ctx, track, index), name, "$location · $travel", muted = false),
+            )
+        }
+        if (isViewerObserver()) {
+            rows.addView(
+                staffLegendRow(
+                    ctx,
+                    themeColor(ctx, R.attr.colorForegroundMuted),
+                    "You",
+                    if (currentLocation != null) "Your location, shown faded for reference" else "Your location is not shown",
+                    muted = true,
+                ),
+            )
+        }
+    }
+
+    private fun staffLegendRow(ctx: Context, color: Int, title: String, detail: String, muted: Boolean): View {
+        val density = ctx.resources.displayMetrics.density
+        return LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            setPadding(0, (6 * density).roundToInt(), 0, (6 * density).roundToInt())
+            alpha = if (muted) 0.7f else 1f
+            addView(
+                View(ctx).apply {
+                    background = android.graphics.drawable.GradientDrawable().apply {
+                        shape = android.graphics.drawable.GradientDrawable.OVAL
+                        setColor(color)
+                    }
+                },
+                LinearLayout.LayoutParams((10 * density).roundToInt(), (10 * density).roundToInt()).apply {
+                    marginEnd = (10 * density).roundToInt()
+                },
+            )
+            addView(
+                LinearLayout(ctx).apply {
+                    orientation = LinearLayout.VERTICAL
+                    addView(TextView(ctx).apply {
+                        text = title
+                        includeFontPadding = false
+                        setTextAppearance(R.style.TextAppearance_Mconnect_Label)
+                        setTextColor(themeColor(ctx, if (muted) R.attr.colorForegroundMuted else R.attr.colorForegroundPrimary))
+                    })
+                    addView(TextView(ctx).apply {
+                        text = detail
+                        includeFontPadding = false
+                        setTextAppearance(R.style.TextAppearance_Mconnect_BodySmall)
+                        setTextColor(themeColor(ctx, if (muted) R.attr.colorForegroundMuted else R.attr.colorForegroundSecondary))
+                        setPadding(0, (3 * density).roundToInt(), 0, 0)
+                    })
+                },
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+            )
         }
     }
 
@@ -2194,6 +2597,11 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         origin: LatLng,
         dest: LatLng,
         requestGeneration: Long,
+        // Observer view: the route starts at a CP staff member, so it must not
+        // drive this screen's own trip-status pill, and the camera also frames
+        // the staff tracks.
+        adjustStatusPill: Boolean = true,
+        extraBounds: List<LatLng> = emptyList(),
     ) {
         viewLifecycleOwner.lifecycleScope.launch {
             val routeKey = routeRequestKey(origin, dest)
@@ -2234,6 +2642,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             )
             val boundsBuilder = LatLngBounds.Builder()
             for (p in result.polyline) boundsBuilder.include(p)
+            for (p in extraBounds) boundsBuilder.include(p)
             map.animateCamera(CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), 160))
 
             tvDistance?.text =
@@ -2242,7 +2651,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
             tvEta?.text =
                 if (result.durationText.isNotBlank()) result.durationText
                 else formatDuration(result.durationSeconds)
-            if (!visitStarted) applyStatusPill("Start")
+            if (adjustStatusPill && !visitStarted) applyStatusPill("Start")
         }
     }
 
@@ -2250,10 +2659,10 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         listOf(origin.latitude, origin.longitude, dest.latitude, dest.longitude)
             .joinToString(":") { value -> "%.5f".format(Locale.US, value) }
 
-    private fun updateDistanceAndEtaFromHaversine(origin: LatLng, dest: LatLng) {
+    private fun updateDistanceAndEtaFromHaversine(origin: LatLng, dest: LatLng, adjustStatusPill: Boolean = true) {
         val meters = haversineMeters(origin, dest)
         tvDistance?.text = formatDistance(meters)
-        if (visitStarted && meters <= REACHING_RADIUS_METERS && tvStatus?.text?.toString() != "Complete") {
+        if (adjustStatusPill && visitStarted && meters <= REACHING_RADIUS_METERS && tvStatus?.text?.toString() != "Complete") {
             applyStatusPill("Reaching")
         }
         // Rough urban-driving ETA: 30 km/h average. Replaced by Directions API
@@ -4393,6 +4802,9 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         // fires for the same completions the server holds for GM approval.
         private const val GEOFENCE_APPROVAL_RADIUS_METERS = 300.0
         private const val JOINT_WORKFLOW_POLL_MS = 5_000L
+        // CP staff tracks refresh: once a minute, only while someone on the
+        // CP is still moving (see startStaffTracksPolling).
+        private const val STAFF_TRACKS_POLL_MS = 60_000L
         private const val STATE_ARRIVAL_PHOTO_PATH = "state_arrival_photo_path"
         private const val STATE_ARRIVAL_PHOTO_URI = "state_arrival_photo_uri"
         private const val STATE_ARRIVAL_LAT = "state_arrival_lat"
@@ -4434,6 +4846,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         private const val ARG_CLIENT_MOBILE = "arg_client_mobile"
         private const val ARG_LMO_NAME = "arg_lmo_name"
         private const val ARG_FIELD_STAFF_NAME = "arg_field_staff_name"
+        private const val ARG_INVOLVED_STAFF_IDS = "arg_involved_staff_ids"
         private const val ARG_DEADLINE = "arg_deadline"
 
         fun forVisit(
@@ -4455,6 +4868,10 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
              *  someone else's trip can tell whose it is. */
             fieldStaffName: String? = null,
             deadline: String? = null,
+            /** Staff ON this CP (assigned / both Joint CP participants), when
+             *  the caller knows them. Lets the map tell straight away whether
+             *  the viewer is one of them; the CP detail confirms it later. */
+            involvedStaffIds: List<String>? = null,
         ): TripNavigationFragment = TripNavigationFragment().apply {
             arguments = Bundle().apply {
                 putString(ARG_VISIT_ID, visitId)
@@ -4473,6 +4890,9 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 if (lmoName != null) putString(ARG_LMO_NAME, lmoName)
                 if (fieldStaffName != null) putString(ARG_FIELD_STAFF_NAME, fieldStaffName)
                 if (deadline != null) putString(ARG_DEADLINE, deadline)
+                involvedStaffIds?.filter { it.isNotBlank() }?.distinct()?.takeIf { it.isNotEmpty() }?.let {
+                    putStringArrayList(ARG_INVOLVED_STAFF_IDS, ArrayList(it))
+                }
             }
         }
 

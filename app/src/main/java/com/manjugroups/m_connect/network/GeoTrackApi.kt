@@ -284,6 +284,27 @@ interface GeoTrackApi {
         @Query("id") id: String,
     ): CpApprovalRouteResponse
 
+    // Read-only CP trip map data: each involved staff member's latest
+    // heartbeat fix plus their travelled path + distance in their own trip
+    // window (both staff on a Joint CP). Scoped server-side to viewers who
+    // can see the CP in their CP list. Absent on servers that predate it
+    // (404); callers then fall back to the direct geo reads.
+    @GET("api/marketing/cp-visits/staff-tracks")
+    suspend fun getCpStaffTracks(
+        @Header("Authorization") token: String,
+        @Query("id") id: String,
+    ): CpStaffTracksResponse
+
+    // Latest heartbeat rows for specific staff. Same endpoint as
+    // getLiveStatus, but with a model whose timestamps accept the geo
+    // service's RFC3339 strings and whose optional fields are nullable.
+    @GET
+    suspend fun getLiveStatusForStaff(
+        @Header("Authorization") token: String,
+        @Url url: String = DIRECT_LIVE_URL,
+        @Query("staffIds") staffIds: String,
+    ): CpLiveStatusResponse
+
     @POST("api/marketing/cp-visits/approve")
     suspend fun approveCpCompletion(
         @Header("Authorization") token: String,
@@ -1446,6 +1467,62 @@ data class CpApprovalRoutePoint(
     val lat: Double,
     val lng: Double,
     val recordedAt: Double,
+)
+
+// ── CP trip map: involved staff tracks (read-only) ──
+// Every field nullable / Double for timestamps: one unexpected value must not
+// fail the whole parse (see the Gson parse traps note in the repo memory).
+
+data class CpStaffTracksResponse(
+    val success: Boolean = false,
+    val data: CpStaffTracksData? = null,
+    val error: String? = null,
+)
+
+data class CpStaffTracksData(
+    val visitId: String? = null,
+    val cpType: String? = null,
+    val staff: List<CpStaffTrackDto>? = null,
+)
+
+data class CpStaffTrackDto(
+    val staffId: String? = null,
+    val staffName: String? = null,
+    val isPrimary: Boolean? = null,
+    val workflowRole: String? = null,
+    val routeColor: String? = null,
+    val startedAt: Double? = null,
+    val completedAt: Double? = null,
+    val windowStart: Double? = null,
+    val windowEnd: Double? = null,
+    val tripOpen: Boolean? = null,
+    val routeAvailable: Boolean? = null,
+    val routePoints: List<CpApprovalRoutePoint>? = null,
+    val distanceMeters: Double? = null,
+    val recordedDistanceMeters: Double? = null,
+    val live: CpStaffLiveFixDto? = null,
+)
+
+data class CpStaffLiveFixDto(
+    val lat: Double? = null,
+    val lng: Double? = null,
+    val lastSeen: Double? = null,
+    val trackingActive: Boolean? = null,
+)
+
+data class CpLiveStatusResponse(
+    val success: Boolean = false,
+    val data: List<CpLiveStatusRow>? = null,
+    val error: String? = null,
+)
+
+data class CpLiveStatusRow(
+    val staffId: String? = null,
+    val lat: Double? = null,
+    val lng: Double? = null,
+    @com.google.gson.annotations.JsonAdapter(EpochMillisAdapter::class)
+    val lastSeen: Long? = null,
+    val trackingActive: Boolean? = null,
 )
 
 data class ConvertCpVisitToSiteVisitRequest(
