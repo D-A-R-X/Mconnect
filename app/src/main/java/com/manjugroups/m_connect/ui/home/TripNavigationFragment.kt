@@ -251,6 +251,8 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     private var tvEta: TextView? = null
     private var tvStatus: TextView? = null
     private var tvTripStartTime: TextView? = null
+    /** Real trip start (CP detail, or the moment this phone started it); null = unknown. */
+    private var tripStartedAtMs: Long? = null
     private var tvStartTripLabel: TextView? = null
     private var tripStatusPill: LinearLayout? = null
     private var btnBack: View? = null
@@ -2065,6 +2067,9 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 // backend list still reports the CP as "scheduled".
                 markVisitLocallyStarted()
                 if (alreadyArrived) arrivalConfirmedForProgress = true
+                // Started by this tap: now IS the start. A trip that was
+                // already in flight keeps the server's time (from reconcile).
+                if (tripStartedAtMs == null && !alreadyInFlight) tripStartedAtMs = System.currentTimeMillis()
                 showTripStartTime()
                 if (location != null) currentLocation = LatLng(location.latitude, location.longitude)
                 loadingOverlay?.visibility = View.GONE
@@ -2101,8 +2106,18 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         tvTripStartTime?.visibility = View.GONE
     }
 
+    /**
+     * The trip's real start time, from the visit (or the moment this phone
+     * started it). It used to print Date() — the time the screen was opened —
+     * so a trip started days ago read "Start 01:40". Hidden when unknown.
+     */
     private fun showTripStartTime() {
-        tvTripStartTime?.text = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date())
+        val startedAt = tripStartedAtMs
+        if (startedAt == null || startedAt <= 0L) {
+            tvTripStartTime?.visibility = View.GONE
+            return
+        }
+        tvTripStartTime?.text = CpStaffTrackPolicy.clockLabel(startedAt, System.currentTimeMillis())
         tvTripStartTime?.visibility = View.VISIBLE
     }
 
@@ -2310,15 +2325,24 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         val now = System.currentTimeMillis()
         staffTracks.forEachIndexed { index, track ->
             val color = staffTrackColor(ctx, track, index)
-            if (track.path.size >= 2) {
-                val points = track.path.map { LatLng(it.lat, it.lng) }
-                map.addPolyline(
-                    PolylineOptions()
-                        .addAll(points)
-                        .width(9f)
-                        .color(androidx.core.graphics.ColorUtils.setAlphaComponent(color, 0xD9))
-                        .zIndex(1f + index)
-                )?.let { staffOverlayHandles += it }
+            // One polyline per segment: a gap (overnight, no signal, a GPS
+            // jump) stays open instead of being bridged by a straight line.
+            track.segments.filter { it.points.size >= 2 }.forEach { segment ->
+                val points = segment.points.map { LatLng(it.lat, it.lng) }
+                val options = PolylineOptions()
+                    .addAll(points)
+                    .width(9f)
+                    .color(androidx.core.graphics.ColorUtils.setAlphaComponent(color, 0xD9))
+                    .zIndex(1f + index)
+                if (segment.dashed) {
+                    options.pattern(
+                        listOf(
+                            com.google.android.gms.maps.model.Dash(24f),
+                            com.google.android.gms.maps.model.Gap(16f),
+                        ),
+                    )
+                }
+                map.addPolyline(options)?.let { staffOverlayHandles += it }
                 drawn += points
             }
             val live = track.live ?: return@forEachIndexed
@@ -2331,7 +2355,7 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                     .title(track.name)
                     .snippet(
                         CpStaffTrackPolicy.locationLabel(live, now, CpStaffTracksLoader::formatClock) +
-                            " · " + CpStaffTrackPolicy.distanceLabel(track.distanceMeters),
+                            " · " + CpStaffTrackPolicy.distanceLabel(track.distanceMeters, track.windowStartMs, now),
                     )
                     .icon(dotMarkerIcon(ctx, color, 18))
                     .anchor(0.5f, 0.5f)
@@ -2391,6 +2415,12 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
     /** CP detail arrived (reconcile): learn who is on the CP, then load their tracks. */
     private fun onStaffTracksCpDetail(cp: com.manjugroups.m_connect.network.CpVisitDetail) {
         runCatching {
+            // The real trip start for the Trip Progress "Start" time (display
+            // only). The trip-state branches below this call show it.
+            CpStaffTrackPolicy.tripStartedAt(cp, session.staffId)?.let { startedAt ->
+                tripStartedAtMs = startedAt
+                if (visitStarted) showTripStartTime()
+            }
             if (isPureSiteVisit || session.isDriverMode) return
             val involved = CpStaffTrackPolicy.involvedStaff(cp)
             if (involved.isEmpty()) return
@@ -2401,8 +2431,33 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
                 applyViewerLocationLayer()
                 renderMapMarkersAndRoute()
             }
+            if (isViewerObserver() && currentLocation == null) fetchObserverReferenceLocation()
             if (!staffTracksLoaded) loadStaffTracks(showSkeleton = true)
         }.onFailure { android.util.Log.w("TripNav", "CP staff tracks setup failed", it) }
+    }
+
+    /**
+     * An observer has no live My Location layer, and the fresh high-accuracy
+     * fix can time out indoors, so the muted "You" pin never appeared. Use a
+     * one-shot fix (last known, else a balanced current fix) only for that
+     * pin; no route or distance is ever measured from it.
+     */
+    @android.annotation.SuppressLint("MissingPermission")
+    private fun fetchObserverReferenceLocation() {
+        if (!hasLocationPermission()) return
+        viewLifecycleOwner.lifecycleScope.launch {
+            val location = runCatching {
+                val client = LocationServices.getFusedLocationProviderClient(requireContext())
+                client.lastLocation.await()
+                    ?: client.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, CancellationTokenSource().token).await()
+            }.getOrNull() ?: return@launch
+            if (!isAdded || view == null || currentLocation != null) return@launch
+            currentLocation = LatLng(location.latitude, location.longitude)
+            if (isViewerObserver()) {
+                renderMapMarkersAndRoute()
+                if (staffTracksLoaded) renderStaffTracksLegend()
+            }
+        }
     }
 
     private fun loadStaffTracks(showSkeleton: Boolean) {
@@ -2498,13 +2553,16 @@ class TripNavigationFragment : Fragment(), OnMapReadyCallback {
         staffTracks.forEachIndexed { index, track ->
             val name = if (track.staffId == session.staffId) "${track.name} (you)" else track.name
             val location = CpStaffTrackPolicy.locationLabel(track.live, now, CpStaffTracksLoader::formatClock)
+            // "since 22 Nov" when the trip window began on an earlier day,
+            // so a multi-day total is not read as one ride.
+            val distance = { meters: Double? -> CpStaffTrackPolicy.distanceLabel(meters, track.windowStartMs, now) }
             val travel = when (track.pathState) {
-                CpStaffTrack.PathState.SHOWN -> CpStaffTrackPolicy.distanceLabel(track.distanceMeters)
+                CpStaffTrack.PathState.SHOWN -> distance(track.distanceMeters)
                 CpStaffTrack.PathState.NOT_STARTED -> "Trip not started"
                 CpStaffTrack.PathState.NO_POINTS ->
-                    track.distanceMeters?.let { CpStaffTrackPolicy.distanceLabel(it) } ?: "No path recorded"
+                    track.distanceMeters?.let { distance(it) } ?: "No path recorded"
                 CpStaffTrack.PathState.NOT_AVAILABLE ->
-                    track.distanceMeters?.let { CpStaffTrackPolicy.distanceLabel(it) + " · path not available" }
+                    track.distanceMeters?.let { distance(it) + " · path not available" }
                         ?: "Path not available"
             }
             rows.addView(

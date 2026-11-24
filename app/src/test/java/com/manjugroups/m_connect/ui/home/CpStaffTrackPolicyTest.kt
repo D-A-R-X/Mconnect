@@ -118,6 +118,80 @@ class CpStaffTrackPolicyTest {
         assertEquals(1795515330123L, row.lastSeen)
     }
 
+    private fun pt(lat: Double, atMs: Long?) = com.manjugroups.m_connect.geotrack.TrackCleaner.Point(lat, 80.2, atMs)
+
+    @Test
+    fun `path splits at an overnight gap and at a jump, never joining them`() {
+        val day1 = 0L
+        val pieces = CpStaffTrackPolicy.splitAtGaps(
+            listOf(
+                pt(13.00, day1), pt(13.01, day1 + 4 * min), pt(13.02, day1 + 8 * min),
+                // overnight: 14 h later, 20 km away → a gap, not a road
+                pt(12.84, day1 + 14 * 60 * min), pt(12.85, day1 + 14 * 60 * min + 3 * min),
+                // 55 km in 30 s → a jump
+                pt(13.35, day1 + 14 * 60 * min + 3 * min + 30_000), pt(13.36, day1 + 14 * 60 * min + 8 * min),
+            ),
+        )
+        assertEquals(listOf(3, 2, 2), pieces.map { it.size })
+        // A long stop in one place is not a gap.
+        assertEquals(1, CpStaffTrackPolicy.splitAtGaps(listOf(pt(13.0, 0L), pt(13.0001, 3 * 60 * min))).size)
+    }
+
+    @Test
+    fun `distance counts only the drawn segments`() {
+        val segments = CpStaffTrackPolicy.splitAtGaps(
+            listOf(pt(13.00, 0L), pt(13.01, 4 * min), pt(12.80, 14 * 60 * min), pt(12.81, 14 * 60 * min + 4 * min)),
+        ).map { CpStaffTrack.Segment(it) }
+        val meters = CpStaffTrackPolicy.segmentsDistanceMeters(segments)!!
+        // two ~1.1 km rides; the ~23 km overnight hop is not counted
+        assertTrue(meters in 2000.0..2500.0)
+    }
+
+    @Test
+    fun `snapped pieces inside the window are drawn, gap pieces never`() {
+        val window = CpStaffTrackPolicy.Window(10 * min, 20 * min, open = false)
+        val road = listOf(pt(13.0, null), pt(13.01, null))
+        val segments = CpStaffTrackPolicy.snappedSegments(
+            listOf(
+                CpSnapPiece("snapped", 11 * min, 12 * min, road),
+                CpSnapPiece("gap", 12 * min, 13 * min, road),
+                CpSnapPiece("estimated", 13 * min, 14 * min, road),
+                CpSnapPiece("snapped", 30 * min, 40 * min, road), // after the trip
+            ),
+            window,
+        )
+        assertEquals(listOf(false, true), segments.map { it.dashed })
+    }
+
+    @Test
+    fun `multi-day distance says since when`() {
+        val nov22 = 1795350273286L // 22 Nov 2026 17:54 IST
+        val nov24 = nov22 + 2 * 24 * 60 * min - 11 * 60 * min
+        assertEquals("82.0 km travelled since 22 Nov", CpStaffTrackPolicy.distanceLabel(82_000.0, nov22, nov24))
+        assertEquals("3.4 km travelled", CpStaffTrackPolicy.distanceLabel(3_420.0, nov24 - 60 * min, nov24))
+        assertEquals(listOf("2026-11-22", "2026-11-23", "2026-11-24"),
+            CpStaffTrackPolicy.istDates(CpStaffTrackPolicy.Window(nov22, nov24, open = true)))
+    }
+
+    @Test
+    fun `trip start comes from the visit, viewer's own joint leg first`() {
+        val cp = CpVisitDetail(
+            fieldVisit = CpVisitFieldVisit(startedAt = 100L),
+            joint = JointCpSummary(
+                participants = listOf(
+                    JointCpParticipant(staffId = "a", isPrimary = true, startedAt = 100L),
+                    JointCpParticipant(staffId = "b", startedAt = 200L),
+                ),
+            ),
+        )
+        assertEquals(200L, CpStaffTrackPolicy.tripStartedAt(cp, "b"))
+        assertEquals(100L, CpStaffTrackPolicy.tripStartedAt(cp, "manager"))
+        assertNull(CpStaffTrackPolicy.tripStartedAt(CpVisitDetail(), "manager"))
+        val nov22 = 1795350273286L
+        assertEquals("05:54 PM", CpStaffTrackPolicy.clockLabel(nov22, nov22 + 60 * min))
+        assertEquals("22 Nov, 05:54 PM", CpStaffTrackPolicy.clockLabel(nov22, nov22 + 2 * 24 * 60 * min))
+    }
+
     @Test
     fun `labels`() {
         val now = 100 * min
