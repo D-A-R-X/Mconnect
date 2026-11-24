@@ -123,6 +123,9 @@ class CpVisitsFragment : Fragment() {
     // Server-busy (429/5xx) handling: one quiet automatic retry pending at a time.
     private var busyRetryJob: kotlinx.coroutines.Job? = null
     private var busyRetryAttempt = 0
+    // onViewCreated already started the list + approvals reads; the onResume
+    // that follows straight after must not send the same heavy requests again.
+    private var skipNextResumeReload = false
     // Row cache: a visit's card is inflated at most ONCE per (data,
     // clock-state) generation — re-inflating up to 200 card layouts on every
     // tab switch is what used to make this screen feel slow. Pagination now
@@ -198,6 +201,7 @@ class CpVisitsFragment : Fragment() {
 
         wireApprovalsBanner(view)
         loadVisits()
+        skipNextResumeReload = true
         attendanceVm.loadTodayAttendance(session.bearerToken, requireContext())
 
         primeEntryAnimation(view)
@@ -210,6 +214,14 @@ class CpVisitsFragment : Fragment() {
         (activity as? com.manjugroups.m_connect.MainActivity)?.setTabBarVisible(false)
         // Refresh clock-in state in case the user clocked in/out from another tab.
         attendanceVm.loadTodayAttendance(session.bearerToken, requireContext())
+        // First resume right after onViewCreated: the list and the approvals
+        // banner were just requested there. Sending them again doubled every
+        // open of this screen (two 200-row reads, ~5-15 s each, on a server
+        // that runs only 16 requests at once for everyone).
+        if (skipNextResumeReload) {
+            skipNextResumeReload = false
+            return
+        }
         // A GM may have cleared approvals elsewhere (push → queue); re-check.
         refreshApprovalsBanner()
         // Returning from the trip screen KEEPS this fragment's view, so without
@@ -299,7 +311,11 @@ class CpVisitsFragment : Fragment() {
                     val newValue = state.isClockedIn
                     if (newValue != isClockedIn) {
                         isClockedIn = newValue
-                        renderList()
+                        // Before the first list arrives there is nothing to
+                        // redraw: rendering now swapped the loading skeleton
+                        // for "No Cp Visits Yet". The first load renders with
+                        // the new clock-in state when it lands.
+                        if (hasLoadedOnce) renderList()
                     }
                 }
             }
@@ -314,8 +330,9 @@ class CpVisitsFragment : Fragment() {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 searchQuery = s?.toString()?.trim().orEmpty()
-                // Instant filter over what's already loaded…
-                renderList()
+                // Instant filter over what's already loaded… (nothing yet
+                // before the first load: keep the skeleton, not an empty state)
+                if (hasLoadedOnce) renderList()
                 // …plus a debounced backend search so results BEYOND the loaded
                 // recency window (older clients on a super-admin's list) surface.
                 searchRunnable?.let { searchDebounce.removeCallbacks(it) }
