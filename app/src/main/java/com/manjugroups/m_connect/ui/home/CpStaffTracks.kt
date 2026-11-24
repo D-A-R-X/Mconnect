@@ -42,9 +42,15 @@ data class CpStaffTrack(
     val pathState: PathState,
     /** This staff member's trip on this CP is running (by its status). */
     val tripInProgress: Boolean,
-    /** Trip window, for "since 22 Nov" when it spans more than one day. */
+    /** The whole trip window (live-fix visibility uses all of it). */
     val windowStartMs: Long?,
     val windowEndMs: Long?,
+    /**
+     * The trip is open since an earlier day (or has no recorded start): only
+     * TODAY's travel is drawn and counted, so days of unrelated driving are
+     * never shown as this trip.
+     */
+    val todayOnly: Boolean = false,
     /** Segments come from the geo service's road-matched route. */
     val roadMatched: Boolean = false,
     /**
@@ -72,6 +78,15 @@ data class CpStaffTrack(
     data class Segment(val points: List<TrackCleaner.Point>, val dashed: Boolean = false)
 
     val hasPath: Boolean get() = segments.any { it.points.size >= 2 }
+
+    /** The part of the trip window whose path is drawn: today only when [todayOnly]. */
+    val pathWindow: CpStaffTrackPolicy.Window?
+        get() {
+            val start = windowStartMs ?: return null
+            val end = windowEndMs ?: return null
+            val from = if (todayOnly) maxOf(start, CpStaffTrackPolicy.istStartOfDay(end)) else start
+            return CpStaffTrackPolicy.Window(from, end, tripInProgress, startKnown)
+        }
 
     enum class PathState {
         /** At least one segment with two or more fixes is drawn. */
@@ -308,23 +323,48 @@ object CpStaffTrackPolicy {
         return dayChunks(window, Int.MAX_VALUE).map { format.format(Date(it.first)) }.distinct().takeLast(max)
     }
 
+    /**
+     * Only today's travel is drawn for a trip that is still open but began on
+     * an earlier IST day, or has no recorded start: drawing days of driving
+     * as "the trip" was misleading.
+     */
+    fun isTodayOnly(window: Window?, now: Long): Boolean =
+        window != null && window.open && (!window.startKnown || !sameIstDay(window.start, now))
+
+    /**
+     * Travel text for a legend row, or null when there is nothing worth
+     * saying. Today-only trips: "12.4 km travelled today" when there is a
+     * path today, nothing otherwise (no multi-day totals).
+     */
+    fun travelLabel(track: CpStaffTrack): String? {
+        val text: String? = when (track.pathState) {
+            CpStaffTrack.PathState.SHOWN ->
+                distanceLabel(track.distanceMeters) + if (track.todayOnly) " today" else ""
+            CpStaffTrack.PathState.NOT_STARTED -> "Trip not started"
+            CpStaffTrack.PathState.START_UNKNOWN -> "Start time not recorded"
+            CpStaffTrack.PathState.NO_POINTS ->
+                if (track.todayOnly) null
+                else track.distanceMeters?.let { distanceLabel(it) } ?: "No path recorded"
+            CpStaffTrack.PathState.NOT_AVAILABLE ->
+                if (track.todayOnly) "Path not available"
+                else track.distanceMeters?.let { distanceLabel(it) + " · path not available" } ?: "Path not available"
+        }
+        if (!track.startKnown && track.pathState != CpStaffTrack.PathState.START_UNKNOWN) {
+            return listOfNotNull(text, "start time not recorded").joinToString(" · ")
+        }
+        return text
+    }
+
     fun sameIstDay(a: Long, b: Long): Boolean {
         val format = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = IST }
         return format.format(Date(a)) == format.format(Date(b))
     }
 
-    /**
-     * "3.4 km travelled", or "82.0 km travelled since 22 Nov" when the trip
-     * window started on an earlier day, so a multi-day total is not read as
-     * one ride.
-     */
-    fun distanceLabel(meters: Double?, sinceMs: Long? = null, now: Long = System.currentTimeMillis()): String {
-        if (meters == null || !meters.isFinite() || meters < 0) return "Distance —"
-        val base = if (meters < 1000) "${meters.roundToInt()} m travelled"
-        else String.format(Locale.US, "%.1f km travelled", meters / 1000.0)
-        if (sinceMs == null || sinceMs <= 0L || sameIstDay(sinceMs, now)) return base
-        val day = SimpleDateFormat("d MMM", Locale.US).apply { timeZone = IST }.format(Date(sinceMs))
-        return "$base since $day"
+    /** "850 m travelled" / "3.4 km travelled". */
+    fun distanceLabel(meters: Double?): String = when {
+        meters == null || !meters.isFinite() || meters < 0 -> "Distance —"
+        meters < 1000 -> "${meters.roundToInt()} m travelled"
+        else -> String.format(Locale.US, "%.1f km travelled", meters / 1000.0)
     }
 
     /** Clock time today, otherwise day + time, in IST. */
@@ -464,7 +504,9 @@ object CpStaffTrackPolicy {
         val startedAt = dto.startedAt?.toLong() ?: involved?.startedAt
         val completedAt = dto.completedAt?.toLong() ?: involved?.completedAt
         val window = tripWindow(startedAt, completedAt, involved?.status, now)
-        val segments = window?.let { w ->
+        val todayOnly = isTodayOnly(window, now)
+        val pathWindow = window?.let { if (todayOnly) it.copy(start = maxOf(it.start, istStartOfDay(now))) else it }
+        val segments = pathWindow?.let { w ->
             rawSegments(
                 dto.routePoints.orEmpty().map { TrackCleaner.Fix(it.lat, it.lng, atMs = it.recordedAt.toLong()) },
                 w,
@@ -484,21 +526,21 @@ object CpStaffTrackPolicy {
             isPrimary = dto.isPrimary == true,
             routeColor = dto.routeColor ?: involved?.routeColor,
             segments = segments,
-            distanceMeters = drawn ?: dto.recordedDistanceMeters ?: involved?.recordedDistanceMeters,
+            distanceMeters = drawn ?: if (todayOnly) null else dto.recordedDistanceMeters ?: involved?.recordedDistanceMeters,
             live = live,
             pathState = if (drawn != null) CpStaffTrack.PathState.SHOWN else initialPathState(window, involved?.status),
             tripInProgress = window?.open == true,
             windowStartMs = window?.start,
             windowEndMs = window?.end,
+            todayOnly = todayOnly,
             startKnown = window?.startKnown ?: true,
         )
     }
 
     /** Swap a track's path for the road-matched one, when there is any. */
     fun withSnapped(track: CpStaffTrack, pieces: List<CpSnapPiece>): CpStaffTrack {
-        val start = track.windowStartMs ?: return track
-        val end = track.windowEndMs ?: return track
-        val snapped = snappedSegments(pieces, Window(start, end, track.tripInProgress))
+        val window = track.pathWindow ?: return track
+        val snapped = snappedSegments(pieces, window)
         val distance = segmentsDistanceMeters(snapped) ?: return track
         return track.copy(
             segments = snapped,
@@ -575,13 +617,11 @@ class CpStaffTracksLoader(
         viewerStaffId: String?,
         viewerCanViewAllTracking: Boolean,
     ): CpStaffTrack {
-        val start = track.windowStartMs ?: return track
-        val end = track.windowEndMs ?: return track
+        val window = track.pathWindow ?: return track
         if (track.hasPath) return track
         if (!CpStaffTrackPolicy.canReadRouteDirectly(track.staffId, viewerStaffId, viewerCanViewAllTracking)) {
             return track.copy(pathState = CpStaffTrack.PathState.NOT_AVAILABLE)
         }
-        val window = CpStaffTrackPolicy.Window(start, end, track.tripInProgress, track.startKnown)
         val snapped = CpStaffTrackPolicy.withSnapped(track, snappedPieces(track.staffId, window))
         if (snapped.hasPath) return snapped
         return withSessionRoute(track, window)
@@ -656,6 +696,7 @@ class CpStaffTracksLoader(
 
         return involved.map { staff ->
             val window = CpStaffTrackPolicy.tripWindow(staff.startedAt, staff.completedAt, staff.status, now)
+            val todayOnly = CpStaffTrackPolicy.isTodayOnly(window, now)
             val row = liveRows[staff.staffId]
             CpStaffTrack(
                 staffId = staff.staffId,
@@ -663,7 +704,8 @@ class CpStaffTracksLoader(
                 isPrimary = staff.isPrimary,
                 routeColor = staff.routeColor,
                 segments = emptyList(),
-                distanceMeters = staff.recordedDistanceMeters,
+                // A trip open for days: only today's path counts (filled later).
+                distanceMeters = if (todayOnly) null else staff.recordedDistanceMeters,
                 live = row?.let {
                     CpStaffTrackPolicy.liveFix(
                         it.lat, it.lng, it.lastSeen, it.trackingActive == true,
@@ -674,6 +716,7 @@ class CpStaffTracksLoader(
                 tripInProgress = window?.open == true,
                 windowStartMs = window?.start,
                 windowEndMs = window?.end,
+                todayOnly = todayOnly,
                 startKnown = window?.startKnown ?: true,
             )
         }
