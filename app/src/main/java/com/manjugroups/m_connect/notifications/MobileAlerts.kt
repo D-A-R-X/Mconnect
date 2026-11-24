@@ -54,17 +54,27 @@ object MobileAlerts {
     private val receiptLock = Mutex()
 
     /**
-     * Back-off for the 5 s foreground poll only. When the server is refusing
+     * Foreground safety-net poll for a missed or late push. Alerts arrive by
+     * push at once (pushArrived) and on every app resume, so this only catches
+     * a lost push. It was 5 s: every open phone asked the MMS server 12 times a
+     * minute, and that server runs only 16 requests at once for all users, so
+     * the poll alone helped fill it (429 "TooManyConcurrentRequests" on CP
+     * Visits and other screens). 30 s still shows a missed alert quickly.
+     */
+    const val FOREGROUND_POLL_INTERVAL_MS = 30_000L
+
+    /**
+     * Back-off for the foreground poll only. When the server is refusing
      * or failing (429 under load, 5xx, offline), every open phone kept asking
-     * every 5 s, adding to the overload that caused it (seen: 429s with 5 s
+     * on schedule, adding to the overload that caused it (seen: 429s with 5 s
      * waits on alerts/pending and notifications). Each failed poll doubles the
      * wait up to [MAX_POLL_BACKOFF_MS]; a success resets it. Push-triggered and
      * app-resume refreshes are never held back.
      */
     @Volatile private var pollBackoffMs = 0L
     @Volatile private var nextPollAt = 0L
-    private const val FIRST_POLL_BACKOFF_MS = 5_000L
-    private const val MAX_POLL_BACKOFF_MS = 60_000L
+    private const val FIRST_POLL_BACKOFF_MS = 30_000L
+    private const val MAX_POLL_BACKOFF_MS = 300_000L
 
     private fun onPollResult(ok: Boolean, now: Long = System.currentTimeMillis()) {
         if (ok) {
