@@ -801,6 +801,41 @@
         </FrameLayout>
     </FrameLayout>
 
+    <!-- CP map legend: the staff on this CP (both on a Joint CP) with their
+         latest location and distance travelled, plus a muted "You" row when
+         the viewer is not one of them. Read-only. Hidden (GONE) on non-CP
+         trips, so the Trip Progress card sits right under the map as before. -->
+    <LinearLayout
+        android:id="@+id/cpStaffTracksCard"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_marginTop="12dp"
+        android:layout_marginEnd="12dp"
+        android:background="@drawable/bg_trip_progress_figma_card"
+        android:orientation="vertical"
+        android:padding="16dp"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/mapCard">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:includeFontPadding="false"
+            android:text="Staff on this CP"
+            android:textAppearance="@style/TextAppearance.Mconnect.Label"
+            android:textColor="?attr/colorForegroundPrimary" />
+
+        <LinearLayout
+            android:id="@+id/cpStaffTracksRows"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="vertical" />
+    </LinearLayout>
+
     <LinearLayout
         android:id="@+id/tripProgressCard"
         android:layout_width="0dp"
@@ -813,7 +848,7 @@
         android:padding="16dp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/mapCard">
+        app:layout_constraintTop_toBottomOf="@id/cpStaffTracksCard">
 
         <LinearLayout
             android:layout_width="match_parent"
