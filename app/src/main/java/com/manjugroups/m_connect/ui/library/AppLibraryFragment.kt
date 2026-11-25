@@ -526,6 +526,20 @@ class AppLibraryFragment : Fragment() {
             allowed = session.hasPermission("marketing.bookings.view") ||
                 session.hasPermission("marketing.bookings.create"),
         ) { openScreen(BookingsFragment.newInstance()) }
+        // 3D Layout Maps — same gate as the web's Marketing > Layout Maps route.
+        bindIamEntry(
+            row = binding.itemMarketingLayoutMaps,
+            allowed = hasAny(listOf(
+                "marketing.dashboard.view",
+                "marketing.dashboard.viewAll",
+                "marketing.bookings.viewOwn",
+                "marketing.bookings.viewTeam",
+                "marketing.bookings.viewAll",
+                "marketing.bookings.viewTelesalesHead",
+                "marketing.bookings.view",
+                "marketing.siteVisits.view",
+            )),
+        ) { openScreen(com.manjugroups.m_connect.ui.layoutmap.LayoutMapProjectsFragment()) }
 
         // Attendance Approvals tile removed — not needed in the app library.
         binding.itemHrAttendanceReview.visibility = View.GONE
@@ -873,6 +887,7 @@ class AppLibraryFragment : Fragment() {
                     R.id.itemMarketingDialer,
                     R.id.itemMarketingInventory,
                     R.id.itemMarketingNewBooking,
+                    R.id.itemMarketingLayoutMaps,
                 ),
             ),
             Triple(

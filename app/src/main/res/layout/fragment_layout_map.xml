@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Full-screen 3D layout map for one project: a slim native bar on top, the
+     web map (same page the web app uses) underneath. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#F1F3F8"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:id="@+id/layoutMapBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#FFFFFF"
+        android:elevation="2dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="10dp">
+
+        <com.manjugroups.m_connect.ui.common.BackButton
+            android:id="@+id/btnLayoutMapBack"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:contentDescription="Back" />
+
+        <TextView
+            android:id="@+id/tvLayoutMapTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:fontFamily="@font/inter_semibold"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:textColor="#101828"
+            android:textSize="17sp" />
+    </LinearLayout>
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <WebView
+            android:id="@+id/layoutMapWeb"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <!-- Covers the web view until the map page has loaded, or shows why it could not. -->
+        <LinearLayout
+            android:id="@+id/layoutMapOverlay"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#F1F3F8"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:padding="32dp">
+
+            <ProgressBar
+                android:id="@+id/layoutMapProgress"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:indeterminateTint="#0B61CA" />
+
+            <TextView
+                android:id="@+id/tvLayoutMapOverlay"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:fontFamily="@font/inter_medium"
+                android:gravity="center"
+                android:lineSpacingExtra="3dp"
+                android:text="Loading 3D map…"
+                android:textColor="#667085"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/btnLayoutMapRetry"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:layout_marginTop="16dp"
+                android:background="@drawable/bg_layout_map_icon"
+                android:fontFamily="@font/inter_semibold"
+                android:gravity="center"
+                android:paddingHorizontal="22dp"
+                android:text="Try again"
+                android:textColor="#0B61CA"
+                android:textSize="14sp"
+                android:visibility="gone" />
+        </LinearLayout>
+    </FrameLayout>
+</LinearLayout>
