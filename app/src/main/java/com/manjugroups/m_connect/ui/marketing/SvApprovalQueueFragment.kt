@@ -34,7 +34,12 @@ import com.manjugroups.m_connect.ui.common.Floater
 import com.manjugroups.m_connect.ui.common.SkeletonLoader
 import com.manjugroups.m_connect.ui.common.navigateUp
 import com.manjugroups.m_connect.ui.common.showOnce
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import retrofit2.HttpException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -68,6 +73,9 @@ class SvApprovalQueueFragment : Fragment() {
     private var tab = Tab.MINE
     private var skeleton: ObjectAnimator? = null
     private var submitting = false
+    /** Busy-server retries made in the current load (reset on success / manual reload). */
+    private var busyAttempt = 0
+    private var busyRetryJob: Job? = null
     /** Reject button per rendered task, so the reason sheet's result can show its loader. */
     private val rejectButtons = mutableMapOf<String, View>()
 
@@ -103,7 +111,7 @@ class SvApprovalQueueFragment : Fragment() {
                 isFillViewport = true
                 addView(list)
             })
-            setOnRefreshListener { load(showSkeleton = false) }
+            setOnRefreshListener { load(showSkeleton = false, reuse = false) }
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0).apply { weight = 1f }
         }
         page.addView(refresh)
@@ -118,7 +126,9 @@ class SvApprovalQueueFragment : Fragment() {
                 b.getString(RejectWithReasonBottomSheet.KEY_REASON).orEmpty(),
             )
         }
-        load(showSkeleton = true)
+        // First open reuses the task list the Apps badge just read (or is
+        // still reading) instead of firing a second heavy read.
+        load(showSkeleton = true, reuse = true)
     }
 
     override fun onResume() {
@@ -135,6 +145,8 @@ class SvApprovalQueueFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        busyRetryJob?.cancel()
+        busyRetryJob = null
         skeleton?.cancel()
         skeleton = null
         tabChips.clear()
@@ -167,14 +179,41 @@ class SvApprovalQueueFragment : Fragment() {
 
     // ── Loading ──
 
-    private fun load(showSkeleton: Boolean) {
-        if (showSkeleton) {
+    /**
+     * [reuse]: accept a task list read moments ago (the Apps badge's).
+     * [autoRetry]: a quiet busy-server retry, which keeps the current
+     * skeleton / list on screen instead of restarting it.
+     */
+    private fun load(showSkeleton: Boolean, reuse: Boolean = false, autoRetry: Boolean = false) {
+        busyRetryJob?.cancel()
+        busyRetryJob = null
+        if (!autoRetry) busyAttempt = 0
+        if (showSkeleton && !autoRetry) {
             skeleton?.cancel()
             skeleton = SkeletonLoader.show(list, count = 3)
         }
         viewLifecycleOwner.lifecycleScope.launch {
-            val result = runCatching { loadQueue(api, session) }
+            val result = runCatching { loadQueue(api, session, reuse) }
             if (!isAdded) return@launch
+            val error = result.exceptionOrNull()
+            val httpCode = (error as? HttpException)?.code()
+            if (error != null && CpListBusyPolicy.isServerBusy(httpCode)) {
+                // Server busy (429 / 502-504): the same read works a moment
+                // later. Keep the skeleton or list up and ask again on our own;
+                // only show the Retry card once the quiet retries run out.
+                val retryAfter = (error as HttpException).response()?.headers()
+                    ?.get("Retry-After")?.trim()?.toLongOrNull()
+                val wait = SvApprovalLoadPolicy.retryDelayMs(busyAttempt, retryAfter)
+                if (wait != null) {
+                    busyAttempt++
+                    busyRetryJob = viewLifecycleOwner.lifecycleScope.launch {
+                        delay(wait)
+                        if (isAdded) load(showSkeleton = true, reuse = false, autoRetry = true)
+                    }
+                    return@launch
+                }
+            }
+            busyAttempt = 0
             skeleton?.cancel()
             skeleton = null
             list.alpha = 1f
@@ -280,7 +319,7 @@ class SvApprovalQueueFragment : Fragment() {
                 addView(text("Try again", 14f, "#0B61CA", R.font.inter_semibold).apply {
                     setPadding(dp(16), dp(14), dp(16), dp(8))
                     isClickable = true
-                    setOnClickListener { load(showSkeleton = true) }
+                    setOnClickListener { load(showSkeleton = true, reuse = false) }
                 })
             }
         }
@@ -571,6 +610,32 @@ class SvApprovalQueueFragment : Fragment() {
             return decidedAt.containsKey(id)
         }
 
+        // One task-list read at a time, shared by the Apps badge and this
+        // screen: a caller that arrives while a read is running waits for it
+        // and reuses its result instead of firing a second heavy read.
+        private val readLock = Mutex()
+        @Volatile private var lastRead: Triple<String, Long, com.manjugroups.m_connect.network.TaskManagerResponse>? = null
+
+        private suspend fun readTasks(
+            api: ApiService,
+            session: SessionManager,
+            reuse: Boolean,
+        ): com.manjugroups.m_connect.network.TaskManagerResponse {
+            val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+            val key = "${session.staffId.orEmpty()}|$today"
+            return readLock.withLock {
+                val cached = lastRead
+                if (reuse && cached != null && cached.first == key &&
+                    SvApprovalLoadPolicy.isFresh(cached.second, System.currentTimeMillis())
+                ) {
+                    return@withLock cached.third
+                }
+                val resp = api.getTaskManagerTasks(session.bearerToken, today, limit = SV_APPROVAL_TASK_LIMIT)
+                lastRead = Triple(key, System.currentTimeMillis(), resp)
+                resp
+            }
+        }
+
         private fun isOpenHandoff(task: DailyTaskData) =
             task.sourceReferenceType == "out_of_station_handoff" &&
                 (task.status == "pending" || task.status == "in-progress") &&
@@ -581,10 +646,9 @@ class SvApprovalQueueFragment : Fragment() {
          * own + their team's SV approvals and no tab row (user rule, 17 Nov).
          * Earliest visit first.
          */
-        suspend fun loadQueue(api: ApiService, session: SessionManager): Queue {
+        suspend fun loadQueue(api: ApiService, session: SessionManager, reuse: Boolean = false): Queue {
             val me = session.staffId.orEmpty()
-            val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-            val resp = api.getTaskManagerTasks(session.bearerToken, today, limit = SV_APPROVAL_TASK_LIMIT)
+            val resp = readTasks(api, session, reuse)
             val open = resp.tasks.filter(::isOpenHandoff).sortedBy { it.deadline ?: "" }
             val teamIds = resp.teamIds.toSet()
             val superAdmin = resp.scope == "all" ||
@@ -615,8 +679,9 @@ class SvApprovalQueueFragment : Fragment() {
         /** Open SV approvals assigned to the signed-in GM (Apps tab badge). */
         suspend fun loadPending(api: ApiService, session: SessionManager): List<DailyTaskData> {
             val me = session.staffId ?: return emptyList()
-            val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-            val resp = api.getTaskManagerTasks(session.bearerToken, today, limit = SV_APPROVAL_TASK_LIMIT)
+            // Fresh read for the badge; the queue screen opened right after
+            // reuses it (or waits for it while it is still running).
+            val resp = readTasks(api, session, reuse = false)
             return resp.tasks
                 .filter { isOpenHandoff(it) && it.assignedTo == me }
                 .sortedBy { it.deadline ?: "" }
