@@ -152,17 +152,27 @@ class SelfieClockInDetailFragment : Fragment() {
             loadPreviewImage(file)
         }
 
-        val latValue = latitude
-        val lngValue = longitude
-        if (latValue != null && lngValue != null) {
-            binding.tvCapturedLat.text = String.format(Locale.US, "Lat : %.6f", latValue)
-            binding.tvCapturedLng.text = String.format(Locale.US, "Long : %.6f", lngValue)
-        } else {
-            binding.tvCapturedLat.text = "Lat : --"
-            binding.tvCapturedLng.text = "Long : --"
-        }
+        bindPlaceName()
         binding.tvCapturedTime.text = buildCaptureTimeLabel()
         renderSubmissionState(flowViewModel.uiState.value)
+    }
+
+    /**
+     * Overlay shows a short place name instead of Lat / Long. Compact
+     * coordinates show first and stay if the lookup fails or is slow; the
+     * lookup never holds up Clock In / Out. Display only: the punch still
+     * sends the raw latitude / longitude and address.
+     */
+    private fun bindPlaceName() {
+        val latValue = latitude
+        val lngValue = longitude
+        binding.tvCapturedPlace.text = PunchPlaceLabel.overlayText(null, latValue, lngValue)
+        if (latValue == null || lngValue == null) return
+        viewLifecycleOwner.lifecycleScope.launch {
+            val placeName = PunchAddressLookup.resolvePlaceName(requireContext(), latValue, lngValue)
+            if (_binding == null || placeName.isNullOrBlank()) return@launch
+            binding.tvCapturedPlace.text = PunchPlaceLabel.overlayText(placeName, latValue, lngValue)
+        }
     }
 
     private fun renderSubmissionState(state: AttendanceFlowState) {

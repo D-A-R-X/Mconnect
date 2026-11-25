@@ -125,22 +125,16 @@
                         android:paddingEnd="16dp"
                         android:paddingBottom="16dp">
 
+                        <!-- Short place name ("Area, City"); falls back to
+                             compact coordinates when geocoding is unavailable. -->
                         <TextView
-                            android:id="@+id/tvCapturedLat"
+                            android:id="@+id/tvCapturedPlace"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
+                            android:ellipsize="end"
                             android:fontFamily="@font/inter_medium"
-                            android:text="Lat : 45.43534"
-                            android:textColor="#FFFFFF"
-                            android:textSize="12sp" />
-
-                        <TextView
-                            android:id="@+id/tvCapturedLng"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="2dp"
-                            android:fontFamily="@font/inter_medium"
-                            android:text="Long : 97897.576"
+                            android:maxLines="1"
+                            android:text="Ekkattuthangal, Chennai"
                             android:textColor="#FFFFFF"
                             android:textSize="12sp" />
 
