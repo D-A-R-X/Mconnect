@@ -1240,6 +1240,12 @@ interface ApiService {
         @Header("Authorization") token: String
     ): MyProjectsResponse
 
+    /** Projects that have a 3D layout map and that this staff member can open. */
+    @GET("api/projects/layout-maps")
+    suspend fun getLayoutMaps(
+        @Header("Authorization") token: String
+    ): LayoutMapsResponse
+
     @GET("api/projects/get")
     suspend fun getProjectDetail(
         @Header("Authorization") token: String,
@@ -3376,6 +3382,20 @@ data class MyProjectsResponse(
     val total: Int? = null,
     val projects: List<ProjectSummary> = emptyList(),
     val error: String? = null
+)
+
+data class LayoutMapsResponse(
+    val success: Boolean,
+    val maps: List<LayoutMapProject> = emptyList(),
+    val error: String? = null
+)
+
+data class LayoutMapProject(
+    val projectId: String,
+    val name: String? = null,
+    val location: String? = null,
+    val status: String? = null,
+    val plotCount: Int? = null
 )
 
 data class ProjectDetailResponse(
