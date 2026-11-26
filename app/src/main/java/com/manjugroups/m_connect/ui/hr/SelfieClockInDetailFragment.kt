@@ -146,6 +146,9 @@ class SelfieClockInDetailFragment : Fragment() {
         val title = if (mode == PunchMode.PUNCH_IN) "Selfie To Clock In" else "Selfie To Clock Out"
         binding.tvDetailTitle.text = title
         binding.btnClockInAction.text = if (mode == PunchMode.PUNCH_IN) "Clock In" else "Clock Out"
+        // The notes field is shared by both punches; label it for the one in progress.
+        binding.tvNotesLabel.text = if (mode == PunchMode.PUNCH_IN) "Clock In Notes (Optional)" else "Clock Out Notes (Optional)"
+        binding.etClockInNotes.hint = if (mode == PunchMode.PUNCH_IN) "Clock-in Notes" else "Clock-out Notes"
 
         val file = photoPath?.let(::File)
         if (file != null && file.exists()) {
