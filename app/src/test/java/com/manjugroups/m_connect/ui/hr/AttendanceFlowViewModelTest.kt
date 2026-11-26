@@ -3,6 +3,7 @@ package com.manjugroups.m_connect.ui.hr
 import com.manjugroups.m_connect.ui.hr.AttendanceFlowViewModel.PendingPunchLite
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -146,5 +147,95 @@ class AttendanceFlowViewModelTest {
         )
 
         assertEquals(false, isClockedIn)
+    }
+    // --- Today card punch-out (MMS-286) ---------------------------------------
+    // After clock-out the Today row must read "<in> - <out>", not "<in> - --".
+
+    private val inIso = "2026-11-26T09:12:00.000+05:30"
+    private val outIso = "2026-11-26T18:40:00.000+05:30"
+
+    @Test
+    fun mergePendingPunch_queuedPunchOut_setsLastPunchOut() {
+        val base = AttendanceFlowState(
+            hasLoaded = true,
+            isClockedIn = true,
+            hasClockedInToday = true,
+            firstPunchInIso = inIso,
+        )
+        val merged = merge(base, PendingPunchLite(isPunchIn = false, outIso))
+        assertEquals(outIso, merged.lastPunchOutIso)
+    }
+
+    @Test
+    fun mergePendingPunch_staleQueuedPunchOut_keepsServerPunchOut() {
+        val base = AttendanceFlowState(
+            hasLoaded = true,
+            hasClockedInToday = true,
+            firstPunchInIso = inIso,
+            lastPunchOutIso = outIso,
+        )
+        val merged = merge(base, PendingPunchLite(isPunchIn = false, "2026-11-26T08:00:00.000+05:30"))
+        assertEquals(outIso, merged.lastPunchOutIso)
+    }
+
+    @Test
+    fun todayPunchOut_clockedOut_showsLivePunchOut() {
+        assertEquals(
+            outIso,
+            AttendanceFlowViewModel.todayPunchOutIso(
+                hasPunchIn = true, liveLoaded = true, isClockedIn = false,
+                liveOutIso = outIso, recordOutIso = null, recordHasOpenSession = false,
+            ),
+        )
+    }
+
+    @Test
+    fun todayPunchOut_clockedOut_fallsBackToRecordPunchOut() {
+        assertEquals(
+            outIso,
+            AttendanceFlowViewModel.todayPunchOutIso(
+                hasPunchIn = true, liveLoaded = true, isClockedIn = false,
+                liveOutIso = "  ", recordOutIso = outIso, recordHasOpenSession = false,
+            ),
+        )
+    }
+
+    @Test
+    fun todayPunchOut_stillClockedIn_staysDashes() {
+        // A biometric gate punch-out mid-day doesn't end the mobile day, so the
+        // live state is still clocked in and the card keeps "--".
+        assertNull(
+            AttendanceFlowViewModel.todayPunchOutIso(
+                hasPunchIn = true, liveLoaded = true, isClockedIn = true,
+                liveOutIso = outIso, recordOutIso = outIso, recordHasOpenSession = false,
+            ),
+        )
+    }
+
+    @Test
+    fun todayPunchOut_noPunchInToday_staysDashes() {
+        assertNull(
+            AttendanceFlowViewModel.todayPunchOutIso(
+                hasPunchIn = false, liveLoaded = true, isClockedIn = false,
+                liveOutIso = outIso, recordOutIso = outIso, recordHasOpenSession = false,
+            ),
+        )
+    }
+
+    @Test
+    fun todayPunchOut_beforeLiveLoad_recordDecides() {
+        assertEquals(
+            outIso,
+            AttendanceFlowViewModel.todayPunchOutIso(
+                hasPunchIn = true, liveLoaded = false, isClockedIn = false,
+                liveOutIso = null, recordOutIso = outIso, recordHasOpenSession = false,
+            ),
+        )
+        assertNull(
+            AttendanceFlowViewModel.todayPunchOutIso(
+                hasPunchIn = true, liveLoaded = false, isClockedIn = false,
+                liveOutIso = null, recordOutIso = outIso, recordHasOpenSession = true,
+            ),
+        )
     }
 }

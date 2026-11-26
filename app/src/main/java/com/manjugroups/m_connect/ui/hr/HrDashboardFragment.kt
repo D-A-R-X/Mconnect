@@ -1158,16 +1158,28 @@ class HrDashboardFragment : Fragment() {
             val rangeView = card.findViewById<TextView>(R.id.tvHistoryItemRange)
 
             if (index == 0) {
-                // TODAY row — tag, live clock-in, no clock-out until the day
-                // ends, hours stay live (server total is 0 for an open
-                // session; the ticker keeps it advancing).
+                // TODAY row — tag, live clock-in, clock-out time once the user
+                // has clocked out ("--" while on the clock), hours stay live
+                // (server total is 0 for an open session; the ticker keeps it
+                // advancing).
                 dateView.text = "Today"
                 val recordInIso = record.punchInTime
                     ?: record.sessions?.firstOrNull()?.punchInTime
                 val todayInIso = liveInIso?.takeIf { it.isNotBlank() } ?: recordInIso
                 val todayInLabel = todayInIso?.takeIf { it.isNotBlank() }
                     ?.let(::formatIsoTime) ?: "--"
-                rangeView.text = "$todayInLabel - --"
+                val todayOutIso = AttendanceFlowViewModel.todayPunchOutIso(
+                    hasPunchIn = !todayInIso.isNullOrBlank(),
+                    liveLoaded = liveState.hasLoaded,
+                    isClockedIn = liveState.isClockedIn,
+                    liveOutIso = liveState.lastPunchOutIso,
+                    recordOutIso = record.punchOutTime
+                        ?: record.sessions?.lastOrNull()
+                            ?.let { AttendanceSessions.realPunchOut(it, record.date) },
+                    recordHasOpenSession = record.hasOpenSession == true,
+                )
+                val todayOutLabel = todayOutIso?.let(::formatIsoTime) ?: "--"
+                rangeView.text = "$todayInLabel - $todayOutLabel"
                 hoursView.text =
                     if (liveState.isClockedIn && liveInMs != null) {
                         val mins = ((System.currentTimeMillis() - liveInMs)

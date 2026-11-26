@@ -912,7 +912,39 @@ class AttendanceFlowViewModel(
                 isClockedIn = if (queuedIsNewer) latest.isPunchIn else base.isClockedIn,
                 clockedOutOnMobile = if (queuedIsNewer) !latest.isPunchIn else base.clockedOutOnMobile,
                 firstPunchInIso = base.firstPunchInIso?.takeIf { it.isNotBlank() } ?: firstPendingIn,
+                // A queued (offline) clock-out is today's latest punch-out, so
+                // the Today card can show its time before the server has it.
+                lastPunchOutIso = if (queuedIsNewer && !latest.isPunchIn) {
+                    latest.clientPunchTime
+                } else {
+                    base.lastPunchOutIso
+                },
             )
+        }
+
+        /**
+         * Which punch-out to show on the Attendance tab's Today card (MMS-286).
+         *
+         * "--" (null) while the user is on the clock or hasn't punched in today.
+         * Once clocked out, the live state's latest punch-out wins, then the
+         * day record's real punch-out. Before the live state has loaded, the
+         * record decides on its own and an open session still reads "--".
+         */
+        internal fun todayPunchOutIso(
+            hasPunchIn: Boolean,
+            liveLoaded: Boolean,
+            isClockedIn: Boolean,
+            liveOutIso: String?,
+            recordOutIso: String?,
+            recordHasOpenSession: Boolean,
+        ): String? {
+            if (!hasPunchIn) return null
+            val recordOut = recordOutIso?.takeIf { it.isNotBlank() }
+            if (liveLoaded) {
+                if (isClockedIn) return null
+                return liveOutIso?.takeIf { it.isNotBlank() } ?: recordOut
+            }
+            return if (recordHasOpenSession) null else recordOut
         }
 
         internal fun formatMinutesForToday(totalMinutes: Int): String {
