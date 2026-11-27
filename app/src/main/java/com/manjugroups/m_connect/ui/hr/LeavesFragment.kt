@@ -275,6 +275,19 @@ class LeavesFragment : Fragment() {
         val hasAllocation = state.casualTotal > 0 || state.sickTotal > 0 || state.earnedTotal > 0
         binding.balanceCard.visibility = if (screenMode == MODE_HISTORY) View.VISIBLE else View.GONE
         binding.btnApplyLeave.visibility = if (screenMode == MODE_HISTORY) View.VISIBLE else View.GONE
+        // MMS-290: grey "Unavailable" + reason when the unpaid-leave limit set
+        // on web is used up (never when unlimited/unknown/loading).
+        HrApplyButtonBinder.bind(
+            button = binding.btnApplyLeave,
+            label = binding.tvApplyLeave,
+            reason = binding.tvApplyLeaveReason,
+            state = HrApplyAvailability.leave(
+                loaded = state.balanceLoaded,
+                unpaidLimit = state.unpaidLimit,
+                unpaidRemaining = state.unpaidRemaining,
+            ),
+            applyText = "Apply Leave",
+        )
 
         if (!state.balanceLoaded) {
             binding.tvLeaveAvailable.text = "--"

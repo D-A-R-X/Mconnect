@@ -27,6 +27,9 @@ data class PermissionsState(
     val isTeamLoading: Boolean = false,
     val isAllLoading: Boolean = false,
     val usageLoaded: Boolean = false,
+    // MMS-290: what's left this month; null = unknown (Apply stays open).
+    val remainingHours: Double? = null,
+    val remainingRequests: Int? = null,
 )
 
 class PermissionsViewModel(private val api: ApiService = ApiService.create()) : ViewModel() {
@@ -82,6 +85,12 @@ class PermissionsViewModel(private val api: ApiService = ApiService.create()) : 
                         limitHours = usage.limitHours ?: _uiState.value.limitHours,
                         count = usage.count ?: _uiState.value.count,
                         usageLoaded = true,
+                        remainingHours = usage.remainingHours
+                            ?: usage.limitHours?.let { limit ->
+                                (limit - (usage.usedHours ?: usage.totalHours ?: 0.0)).coerceAtLeast(0.0)
+                            },
+                        remainingRequests = usage.remainingRequests
+                            ?: usage.requestLimit?.let { limit -> (limit - (usage.count ?: 0)).coerceAtLeast(0) },
                     )
                 }
             }
