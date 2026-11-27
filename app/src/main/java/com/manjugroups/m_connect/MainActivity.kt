@@ -539,6 +539,16 @@ class MainActivity : AppCompatActivity() {
         supportFragmentManager.addOnBackStackChangedListener {
             syncChromeToBackStack()
         }
+        // MMS-288: going BACK (system back or gesture, not just the arrow) must
+        // not carry the closed screen's keyboard onto the one revealed below.
+        // Only on a pop: a push already closes it in pushDetail(), and a new
+        // screen that opens its own keyboard must keep it.
+        var lastBackStackCount = supportFragmentManager.backStackEntryCount
+        supportFragmentManager.addOnBackStackChangedListener {
+            val count = supportFragmentManager.backStackEntryCount
+            if (count < lastBackStackCount) com.manjugroups.m_connect.ui.common.Keyboard.hide(this)
+            lastBackStackCount = count
+        }
 
         currentTab = normalizeTab(savedInstanceState?.getInt(KEY_CURRENT_TAB, TAB_HOME) ?: TAB_HOME)
         // Keep the nudge's dismissal cool-off across recreation (rotation,
@@ -1371,6 +1381,12 @@ class MainActivity : AppCompatActivity() {
     private var locationToggleRegistered = false
 
     override fun onPause() {
+        // MMS-288: another screen is covering this one (a full-screen alert,
+        // camera, the share sheet…). Close the keyboard and drop focus now, so
+        // the last search box doesn't grab focus and pop the keyboard back up
+        // when the user returns. Tapping a field still opens it as normal;
+        // OTP lives in its own activity and is unaffected.
+        com.manjugroups.m_connect.ui.common.Keyboard.hide(this)
         if (locationToggleRegistered) {
             runCatching { unregisterReceiver(locationToggleReceiver) }
             locationToggleRegistered = false
@@ -1704,6 +1720,9 @@ class MainActivity : AppCompatActivity() {
         if (currentTab == index && existingTarget?.isVisible == true && supportFragmentManager.backStackEntryCount == 0) {
             return
         }
+        // MMS-288: tabs are hidden, not destroyed, so a focused search box on
+        // the tab being left (e.g. the Chat list) would keep the keyboard up.
+        com.manjugroups.m_connect.ui.common.Keyboard.hide(this)
 
         // Leaving Home (e.g. a tracking-notification deep link straight to
         // HR) must drop the task-nudge modal synchronously — the backstack

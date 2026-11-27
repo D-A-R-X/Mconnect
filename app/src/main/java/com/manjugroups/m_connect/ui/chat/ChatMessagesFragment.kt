@@ -1,5 +1,6 @@
 package com.manjugroups.m_connect.ui.chat
 
+import com.manjugroups.m_connect.ui.common.Keyboard
 import com.manjugroups.m_connect.ui.common.toastSafe
 
 import android.content.ClipData
@@ -2400,6 +2401,7 @@ class ChatMessagesFragment : Fragment(), ChatMessageActionsFragment.Callback {
 
         doneBtn.setOnClickListener {
             if (selectedContacts.isEmpty()) return@setOnClickListener
+            Keyboard.hide(dialog.window?.decorView) // MMS-288
             selectedContacts.forEach { contact ->
                 val contactName = contact.name ?: "Contact"
                 val contactPhone = contact.phone ?: ""

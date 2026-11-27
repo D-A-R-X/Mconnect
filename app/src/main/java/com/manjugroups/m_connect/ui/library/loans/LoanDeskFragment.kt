@@ -1,5 +1,7 @@
 package com.manjugroups.m_connect.ui.library.loans
 
+import com.manjugroups.m_connect.ui.common.Keyboard
+import com.manjugroups.m_connect.ui.common.hideKeyboard
 import com.manjugroups.m_connect.ui.common.toastSafe
 
 import android.graphics.Color
@@ -468,6 +470,7 @@ class LoanDeskFragment : Fragment() {
 
     private fun showAssignSheet(item: LoanDeskItem) {
         if (!isAdded) return
+        hideKeyboard() // MMS-288: opened from a search list
         val context = requireContext()
         val content = layoutInflater.inflate(R.layout.bottom_sheet_multi_people_picker, null)
         val dialog = BottomSheetDialog(context)
@@ -614,6 +617,7 @@ class LoanDeskFragment : Fragment() {
 
         doneBtn.setOnClickListener {
             val staff = selectedStaff ?: return@setOnClickListener
+            Keyboard.hide(dialog.window?.decorView) // MMS-288
             viewLifecycleOwner.lifecycleScope.launch {
                 try {
                     val resp = withContext(Dispatchers.IO) {

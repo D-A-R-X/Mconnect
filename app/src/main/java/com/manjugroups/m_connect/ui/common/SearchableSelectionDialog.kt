@@ -67,12 +67,17 @@ object SearchableSelectionDialog {
         var requestSequence = 0
 
         val adapter = RemoteRowAdapter<T> { item ->
+            // MMS-288: close the keyboard BEFORE handing the pick to the host,
+            // so it doesn't stay over the form, and a host that focuses a field
+            // in its callback still keeps that focus.
+            Keyboard.hide(dialog.window?.decorView)
             onSelected(item)
             dialog.dismiss()
         }
         val list = RecyclerView(context).apply {
             layoutManager = LinearLayoutManager(context)
             this.adapter = adapter
+            hideKeyboardOnDrag()
             clipToPadding = false
             setPadding(0, 0, 0, dp(context, 12))
             visibility = View.GONE
@@ -234,6 +239,8 @@ object SearchableSelectionDialog {
         // a few hundred staff meant ~600 views rebuilt per character typed —
         // which is what made this dialog crawl and, on big lists, ANR.
         val adapter = RowAdapter(options) { item ->
+            // MMS-288: same order as showRemote — keyboard first, then the pick.
+            Keyboard.hide(dialog.window?.decorView)
             onSelected(item)
             dialog.dismiss()
         }
@@ -258,6 +265,7 @@ object SearchableSelectionDialog {
         }.apply {
             layoutManager = LinearLayoutManager(context)
             this.adapter = adapter
+            hideKeyboardOnDrag()
         }
         val search = EditText(context).apply {
             hint = "Search..."
@@ -355,6 +363,8 @@ object SearchableSelectionDialog {
         })
 
         createRow?.setOnClickListener {
+            // MMS-288: the create sheet that opens next can show its own keyboard.
+            Keyboard.hide(search)
             dialog.dismiss()
             onCreateNew?.invoke(search.text?.toString()?.trim().orEmpty())
         }

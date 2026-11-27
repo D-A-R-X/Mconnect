@@ -38,6 +38,12 @@ fun DialogFragment.showOnce(manager: FragmentManager, tag: String) {
     if (now - (lastShownAt[tag] ?: 0L) < DUPLICATE_WINDOW_MS) return
     lastShownAt[tag] = now
 
+    // MMS-288: a sheet opened from a search list (tap a result → detail sheet)
+    // used to appear with the list's keyboard still up. Close the host's
+    // keyboard first; a sheet that wants typing (OTP, caption, forms) focuses
+    // its own field after it opens, so it is unaffected.
+    Keyboard.hide(manager.fragments.lastOrNull { it.view?.windowToken != null }?.view)
+
     show(manager, tag)
 }
 

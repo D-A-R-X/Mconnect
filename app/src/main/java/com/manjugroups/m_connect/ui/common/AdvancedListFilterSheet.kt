@@ -145,7 +145,10 @@ class AdvancedListFilterSheet : DialogFragment() {
             refreshFooter()
         }
 
-        view.findViewById<View>(R.id.btnFilterBack).setOnClickListener { dismissAllowingStateLoss() }
+        view.findViewById<View>(R.id.btnFilterBack).setOnClickListener {
+            hideKeyboard() // MMS-288
+            dismissAllowingStateLoss()
+        }
         view.findViewById<View>(R.id.btnFilterClear).setOnClickListener {
             selected.clear()
             fromDate = null
@@ -155,6 +158,7 @@ class AdvancedListFilterSheet : DialogFragment() {
             refreshFooter()
         }
         view.findViewById<View>(R.id.btnFilterApply).setOnClickListener {
+            hideKeyboard() // MMS-288: the filtered list comes back without the keyboard
             setFragmentResult(resultKey, bundleOf(KEY_STATE to currentState()))
             dismissAllowingStateLoss()
         }

@@ -1,5 +1,6 @@
 package com.manjugroups.m_connect.ui.library.accounts
 
+import com.manjugroups.m_connect.ui.common.hideKeyboard
 import com.manjugroups.m_connect.ui.common.toastSafe
 
 import android.graphics.Color
@@ -263,6 +264,7 @@ class PostSalesVerificationFragment : Fragment() {
      * before approving (the server rejects an approve without it).
      */
     private fun approveCollection(item: CollectionItem) {
+        hideKeyboard() // MMS-288: opened from a search list
         val ctx = requireContext()
         val pad = (20 * resources.displayMetrics.density).toInt()
         val withReceipt = android.widget.RadioButton(ctx).apply {

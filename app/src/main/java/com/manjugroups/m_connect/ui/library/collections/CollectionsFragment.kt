@@ -1,5 +1,6 @@
 package com.manjugroups.m_connect.ui.library.collections
 
+import com.manjugroups.m_connect.ui.common.hideKeyboard
 import com.manjugroups.m_connect.ui.common.toastSafe
 
 import android.graphics.Color
@@ -260,6 +261,7 @@ class CollectionsFragment : Fragment() {
      * tag afterward.
      */
     private fun startEditFlow(item: CollectionItem) {
+        hideKeyboard() // MMS-288: opened from a search list
         val input = android.widget.EditText(requireContext()).apply {
             inputType = android.text.InputType.TYPE_CLASS_NUMBER or
                 android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL

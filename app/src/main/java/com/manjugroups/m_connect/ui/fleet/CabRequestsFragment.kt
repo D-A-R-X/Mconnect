@@ -1,5 +1,6 @@
 package com.manjugroups.m_connect.ui.fleet
 
+import com.manjugroups.m_connect.ui.common.hideKeyboard
 import android.animation.ObjectAnimator
 import android.app.AlertDialog
 import android.graphics.Color
@@ -300,6 +301,7 @@ class CabRequestsFragment : Fragment() {
     }
 
     private fun approve(r: CabRequest) {
+        hideKeyboard() // MMS-288: opened from a search list
         AlertDialog.Builder(requireContext())
             .setTitle("Approve cab request?")
             .setMessage("${r.staffName ?: "Staff"} · ${formatDate(r.requestedDate)}\n${r.purpose.orEmpty()}")
@@ -313,6 +315,7 @@ class CabRequestsFragment : Fragment() {
     }
 
     private fun reject(r: CabRequest) {
+        hideKeyboard() // MMS-288: opened from a search list
         val input = EditText(requireContext()).apply {
             hint = "Reason for rejection"
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
@@ -343,6 +346,7 @@ class CabRequestsFragment : Fragment() {
     }
 
     private fun cancel(r: CabRequest) {
+        hideKeyboard() // MMS-288: opened from a search list
         AlertDialog.Builder(requireContext())
             .setTitle("Cancel this cab request?")
             .setMessage(r.purpose.orEmpty())
@@ -356,6 +360,7 @@ class CabRequestsFragment : Fragment() {
     }
 
     private fun complete(r: CabRequest) {
+        hideKeyboard() // MMS-288: opened from a search list
         AlertDialog.Builder(requireContext())
             .setTitle("Mark this trip completed?")
             .setMessage("${r.vehicleNumber.orEmpty()} · ${formatDate(r.requestedDate)}")

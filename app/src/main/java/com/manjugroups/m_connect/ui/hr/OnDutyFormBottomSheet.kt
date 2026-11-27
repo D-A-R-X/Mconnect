@@ -1,5 +1,6 @@
 package com.manjugroups.m_connect.ui.hr
 
+import com.manjugroups.m_connect.ui.common.Keyboard
 import com.manjugroups.m_connect.ui.common.toastSafe
 
 import android.app.Dialog
@@ -706,6 +707,7 @@ class OnDutyFormBottomSheet : BottomSheetDialogFragment() {
                 )
 
                 itemView.setOnClickListener {
+                    Keyboard.hide(itemView) // MMS-288: target picked from search
                     selectedTargetId = item.id
                     selectedTargetName = item.name
                     notifyDataSetChanged()
