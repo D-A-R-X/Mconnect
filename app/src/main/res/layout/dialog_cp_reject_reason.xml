@@ -246,14 +246,13 @@
             android:textSize="12sp"
             android:visibility="gone" />
 
-        <!-- Submit Now CTA — green pill matching the confirm action on
-             the main outcome sheet. -->
+        <!-- Submit Now CTA — a reject, so it uses the danger button. -->
         <LinearLayout
             android:id="@+id/btnRejectSubmit"
             android:layout_width="match_parent"
-            android:layout_height="52dp"
+            android:layout_height="@dimen/button_height"
             android:layout_marginTop="24dp"
-            android:background="@drawable/bg_home_trip_action_ready"
+            android:background="@drawable/bg_mc_button_danger"
             android:clickable="true"
             android:focusable="true"
             android:gravity="center"
@@ -266,8 +265,8 @@
                 android:fontFamily="@font/inter_semibold"
                 android:includeFontPadding="false"
                 android:text="Submit Now"
-                android:textColor="#FFFFFF"
-                android:textSize="15sp" />
+                android:textColor="@android:color/white"
+                android:textSize="16sp" />
         </LinearLayout>
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>

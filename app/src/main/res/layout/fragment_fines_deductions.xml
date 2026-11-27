@@ -187,16 +187,12 @@
         android:padding="16dp"
         app:layout_constraintBottom_toBottomOf="parent">
 
-        <android.widget.Button
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnCreateFine"
+            style="@style/Widget.Mconnect.Button.Cta"
             android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:background="@drawable/bg_attendance_btn_primary"
-            android:fontFamily="@font/inter_semibold"
-            android:text="Create Fine"
-            android:textAllCaps="false"
-            android:textColor="#FFFFFF"
-            android:textSize="16sp" />
+            android:layout_height="wrap_content"
+            android:text="Create Fine" />
     </FrameLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

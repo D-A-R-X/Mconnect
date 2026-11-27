@@ -133,7 +133,7 @@
         <LinearLayout
             android:id="@+id/btnRejectAttendance"
             android:layout_width="0dp"
-            android:layout_height="40dp"
+            android:layout_height="@dimen/button_height_compact"
             android:layout_marginEnd="6dp"
             android:layout_weight="1"
             android:background="@drawable/bg_btn_reject_outline_red"
@@ -143,8 +143,8 @@
             android:orientation="horizontal">
 
             <ImageView
-                android:layout_width="14dp"
-                android:layout_height="14dp"
+                android:layout_width="@dimen/button_icon_size_compact"
+                android:layout_height="@dimen/button_icon_size_compact"
                 android:src="@drawable/ic_leave_action_x"
                 app:tint="?attr/colorError" />
 
@@ -162,20 +162,20 @@
         <LinearLayout
             android:id="@+id/btnApproveAttendance"
             android:layout_width="0dp"
-            android:layout_height="40dp"
+            android:layout_height="@dimen/button_height_compact"
             android:layout_marginStart="6dp"
             android:layout_weight="1"
-            android:background="@drawable/bg_btn_gradient_green_8dp"
+            android:background="@drawable/bg_button_primary"
             android:gravity="center"
             android:clickable="true"
             android:focusable="true"
             android:orientation="horizontal">
 
             <ImageView
-                android:layout_width="14dp"
-                android:layout_height="14dp"
+                android:layout_width="@dimen/button_icon_size_compact"
+                android:layout_height="@dimen/button_icon_size_compact"
                 android:src="@drawable/ic_leave_action_check"
-                app:tint="#FFFFFF" />
+                app:tint="@android:color/white" />
 
             <TextView
                 android:layout_width="wrap_content"
@@ -183,7 +183,7 @@
                 android:layout_marginStart="6dp"
                 android:fontFamily="@font/inter_semibold"
                 android:text="Approve"
-                android:textColor="#FFFFFF"
+                android:textColor="@android:color/white"
                 android:textSize="13sp" />
         </LinearLayout>
 
@@ -191,8 +191,8 @@
         <LinearLayout
             android:id="@+id/btnHrReviewAction"
             android:layout_width="match_parent"
-            android:layout_height="40dp"
-            android:background="@drawable/bg_btn_gradient_green_8dp"
+            android:layout_height="@dimen/button_height_compact"
+            android:background="@drawable/bg_button_primary"
             android:gravity="center"
             android:clickable="true"
             android:focusable="true"
@@ -200,10 +200,10 @@
             android:visibility="gone">
 
             <ImageView
-                android:layout_width="14dp"
-                android:layout_height="14dp"
+                android:layout_width="@dimen/button_icon_size_compact"
+                android:layout_height="@dimen/button_icon_size_compact"
                 android:src="@drawable/ic_custom_clipboard_check"
-                app:tint="#FFFFFF" />
+                app:tint="@android:color/white" />
 
             <TextView
                 android:id="@+id/tvHrReviewActionLabel"
@@ -212,7 +212,7 @@
                 android:layout_marginStart="6dp"
                 android:fontFamily="@font/inter_semibold"
                 android:text="HR Review"
-                android:textColor="#FFFFFF"
+                android:textColor="@android:color/white"
                 android:textSize="13sp" />
         </LinearLayout>
     </LinearLayout>

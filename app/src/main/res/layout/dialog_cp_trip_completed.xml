@@ -95,14 +95,14 @@
     <TextView
         android:id="@+id/btnCpCompleteBackHome"
         android:layout_width="match_parent"
-        android:layout_height="48dp"
+        android:layout_height="@dimen/button_height"
         android:layout_marginTop="16dp"
-        android:background="@drawable/bg_cp_seen_yes"
+        android:background="@drawable/bg_mc_button_cta"
         android:clickable="true"
         android:focusable="true"
         android:fontFamily="@font/inter_semibold"
         android:gravity="center"
         android:text="Back to Home"
         android:textColor="@android:color/white"
-        android:textSize="14sp" />
+        android:textSize="16sp" />
 </LinearLayout>

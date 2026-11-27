@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- MMS-289: pop-up dialog buttons. The app theme's colorPrimary is the purple
+     accent, so every AlertDialog showed purple ALL-CAPS buttons. These overlays
+     give them brand blue, sentence case, Inter SemiBold - for androidx
+     (alertDialogTheme), Material builders (materialAlertDialogTheme) and the
+     platform android.app.AlertDialog (android:alertDialogTheme). -->
+<resources>
+
+    <style name="Widget.Mconnect.DialogButton" parent="Widget.MaterialComponents.Button.TextButton.Dialog">
+        <item name="android:textColor">?attr/colorButtonPrimary</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:letterSpacing">0</item>
+        <item name="android:fontFamily">@font/inter_semibold</item>
+        <item name="fontFamily">@font/inter_semibold</item>
+        <item name="android:textSize">15sp</item>
+        <item name="rippleColor">?attr/colorBorderLight</item>
+    </style>
+
+    <style name="ThemeOverlay.Mconnect.AlertDialog" parent="ThemeOverlay.MaterialComponents.Dialog.Alert">
+        <item name="colorPrimary">?attr/colorButtonPrimary</item>
+        <item name="colorAccent">?attr/colorButtonPrimary</item>
+        <item name="buttonBarPositiveButtonStyle">@style/Widget.Mconnect.DialogButton</item>
+        <item name="buttonBarNegativeButtonStyle">@style/Widget.Mconnect.DialogButton</item>
+        <item name="buttonBarNeutralButtonStyle">@style/Widget.Mconnect.DialogButton</item>
+    </style>
+
+    <style name="ThemeOverlay.Mconnect.MaterialAlertDialog" parent="ThemeOverlay.MaterialComponents.MaterialAlertDialog">
+        <item name="colorPrimary">?attr/colorButtonPrimary</item>
+        <item name="buttonBarPositiveButtonStyle">@style/Widget.Mconnect.DialogButton</item>
+        <item name="buttonBarNegativeButtonStyle">@style/Widget.Mconnect.DialogButton</item>
+        <item name="buttonBarNeutralButtonStyle">@style/Widget.Mconnect.DialogButton</item>
+    </style>
+
+    <style name="Theme.Mconnect.PlatformAlertDialog" parent="android:Theme.Material.Light.Dialog.Alert">
+        <item name="android:colorAccent">?attr/colorButtonPrimary</item>
+        <item name="android:buttonBarButtonStyle">@style/Widget.Mconnect.PlatformDialogButton</item>
+    </style>
+
+    <style name="Widget.Mconnect.PlatformDialogButton" parent="android:Widget.Material.Button.Borderless.Colored">
+        <item name="android:textColor">?attr/colorButtonPrimary</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:fontFamily">@font/inter_semibold</item>
+    </style>
+
+</resources>

@@ -1132,7 +1132,7 @@
             android:textColor="#667085"
             android:textSize="11sp" />
 
-        <!-- Uniform 2×2 grid: identical shape (10dp corners) + size (44dp),
+        <!-- Uniform 2×2 grid: identical shape + size (48dp medium buttons),
              colour is the only difference. -->
         <LinearLayout
             android:layout_width="match_parent"
@@ -1143,30 +1143,30 @@
             <TextView
                 android:id="@+id/btnSheetPresent"
                 android:layout_width="0dp"
-                android:layout_height="44dp"
+                android:layout_height="@dimen/button_height_medium"
                 android:layout_marginEnd="8dp"
                 android:layout_weight="1"
-                android:background="@drawable/bg_attn_action_present"
+                android:background="@drawable/bg_button_primary"
                 android:clickable="true"
                 android:focusable="true"
                 android:fontFamily="@font/inter_semibold"
                 android:gravity="center"
                 android:text="Present"
-                android:textColor="#FFFFFF"
+                android:textColor="@android:color/white"
                 android:textSize="14sp" />
 
             <TextView
                 android:id="@+id/btnSheetHalfDay"
                 android:layout_width="0dp"
-                android:layout_height="44dp"
+                android:layout_height="@dimen/button_height_medium"
                 android:layout_weight="1"
-                android:background="@drawable/bg_attn_action_neutral"
+                android:background="@drawable/bg_mc_button_secondary"
                 android:clickable="true"
                 android:focusable="true"
                 android:fontFamily="@font/inter_semibold"
                 android:gravity="center"
                 android:text="Half-day"
-                android:textColor="#344054"
+                android:textColor="?attr/colorForegroundPrimary"
                 android:textSize="14sp" />
         </LinearLayout>
 
@@ -1179,37 +1179,37 @@
             <TextView
                 android:id="@+id/btnSheetAbsent"
                 android:layout_width="0dp"
-                android:layout_height="44dp"
+                android:layout_height="@dimen/button_height_medium"
                 android:layout_marginEnd="8dp"
                 android:layout_weight="1"
-                android:background="@drawable/bg_attn_action_neutral"
+                android:background="@drawable/bg_mc_button_danger_outline"
                 android:clickable="true"
                 android:focusable="true"
                 android:fontFamily="@font/inter_semibold"
                 android:gravity="center"
                 android:text="Absent"
-                android:textColor="#344054"
+                android:textColor="?attr/colorError"
                 android:textSize="14sp" />
 
             <TextView
                 android:id="@+id/btnSheetReject"
                 android:layout_width="0dp"
-                android:layout_height="44dp"
+                android:layout_height="@dimen/button_height_medium"
                 android:layout_weight="1"
-                android:background="@drawable/bg_attn_action_reject"
+                android:background="@drawable/bg_mc_button_danger"
                 android:clickable="true"
                 android:focusable="true"
                 android:fontFamily="@font/inter_semibold"
                 android:gravity="center"
                 android:text="Reject"
-                android:textColor="#F04438"
+                android:textColor="@android:color/white"
                 android:textSize="14sp" />
         </LinearLayout>
 
         <TextView
             android:id="@+id/btnSheetHold"
             android:layout_width="match_parent"
-            android:layout_height="44dp"
+            android:layout_height="@dimen/button_height_medium"
             android:layout_marginTop="8dp"
             android:background="@drawable/bg_btn_hold_outline_amber"
             android:clickable="true"

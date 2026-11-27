@@ -184,30 +184,30 @@
         <TextView
             android:id="@+id/btnApproveAttendance"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:background="@drawable/bg_chip_active"
+            android:layout_height="@dimen/button_height_compact"
+            android:background="@drawable/bg_button_primary"
             android:clickable="true"
             android:focusable="true"
             android:fontFamily="@font/inter_semibold"
-            android:paddingHorizontal="14dp"
-            android:paddingVertical="8dp"
+            android:gravity="center"
+            android:paddingHorizontal="12dp"
             android:text="Approve"
-            android:textColor="?attr/colorForegroundInverse"
-            android:textSize="12sp" />
+            android:textColor="@android:color/white"
+            android:textSize="13sp" />
 
         <TextView
             android:id="@+id/btnRejectAttendance"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_height="@dimen/button_height_compact"
             android:layout_marginStart="10dp"
-            android:background="@drawable/bg_chip_inactive"
+            android:background="@drawable/bg_mc_button_danger_outline"
             android:clickable="true"
             android:focusable="true"
             android:fontFamily="@font/inter_semibold"
-            android:paddingHorizontal="14dp"
-            android:paddingVertical="8dp"
+            android:gravity="center"
+            android:paddingHorizontal="12dp"
             android:text="Reject"
             android:textColor="?attr/colorError"
-            android:textSize="12sp" />
+            android:textSize="13sp" />
     </LinearLayout>
 </LinearLayout>

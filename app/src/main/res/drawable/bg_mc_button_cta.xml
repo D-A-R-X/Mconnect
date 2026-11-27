@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- MMS-289: the screen's main "do it" action (Apply / Submit / Create / Next).
+     ONE-LINE CHOICE (user decision A): point this at bg_mc_button_success
+     (flat green) or bg_button_primary (brand blue). The CTA style in
+     values/buttons.xml has the matching one-line parent switch. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@drawable/bg_button_primary" />
+</layer-list>
