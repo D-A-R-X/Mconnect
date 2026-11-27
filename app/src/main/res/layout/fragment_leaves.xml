@@ -344,7 +344,8 @@
     <FrameLayout
         android:id="@+id/btnApplyLeave"
         android:layout_width="0dp"
-        android:layout_height="48dp"
+        android:layout_height="wrap_content"
+        android:minHeight="48dp"
         android:layout_marginHorizontal="16dp"
         android:layout_marginTop="8dp"
         android:layout_marginBottom="16dp"
@@ -355,15 +356,35 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent">
 
-        <TextView
-            android:id="@+id/tvApplyLeave"
+        <!-- MMS-290: label + a one-line reason shown when nothing is left
+             ("Unavailable" / "No ... left"). Reason is gone otherwise. -->
+        <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center"
-            android:fontFamily="@font/inter_semibold"
-            android:text="Apply Leave"
-            android:textColor="@android:color/white"
-            android:textSize="13sp" />
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:paddingVertical="6dp">
+
+            <TextView
+                android:id="@+id/tvApplyLeave"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/inter_semibold"
+                android:text="Apply Leave"
+                android:textColor="@android:color/white"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/tvApplyLeaveReason"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:fontFamily="@font/inter_medium"
+                android:textColor="?attr/colorForegroundSecondary"
+                android:textSize="11sp"
+                android:visibility="gone" />
+        </LinearLayout>
     </FrameLayout>
 
     <!-- Full-screen blur backdrop for scope dropdown -->

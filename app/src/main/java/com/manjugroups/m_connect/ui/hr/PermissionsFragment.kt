@@ -410,6 +410,19 @@ class PermissionsFragment : Fragment() {
 
         binding.balanceCard.visibility = if (screenMode == MODE_HISTORY) View.VISIBLE else View.GONE
         binding.btnApplyPermission.visibility = if (screenMode == MODE_HISTORY) View.VISIBLE else View.GONE
+        // MMS-290: grey "Unavailable" + reason once this month's hours or
+        // requests are used up (never while loading/failed/unknown).
+        HrApplyButtonBinder.bind(
+            button = binding.btnApplyPermission,
+            label = binding.tvApplyPermission,
+            reason = binding.tvApplyPermissionReason,
+            state = HrApplyAvailability.permission(
+                loaded = state.usageLoaded,
+                remainingHours = state.remainingHours,
+                remainingRequests = state.remainingRequests,
+            ),
+            applyText = "Apply Permission",
+        )
 
         val available = max(state.limitHours - state.usedHours, 0.0)
         binding.tvPermAvailable.text = if (state.usageLoaded) formatHours(available) else "--"

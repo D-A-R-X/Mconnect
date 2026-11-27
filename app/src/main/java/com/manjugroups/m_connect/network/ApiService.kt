@@ -2418,7 +2418,14 @@ data class LeaveBalance(
     val sick: Double = 0.0,
     val sickUsed: Double = 0.0,
     val earned: Double = 0.0,
-    val earnedUsed: Double = 0.0
+    val earnedUsed: Double = 0.0,
+    // MMS-290: the unpaid-leave limit configured on web. Nullable on purpose
+    // (Gson trap): missing (old server) or null limit = unlimited, never blocks.
+    val unpaidLimit: Double? = null,
+    val unpaidPeriod: String? = null,
+    val unpaidUsed: Double? = null,
+    val unpaidPending: Double? = null,
+    val unpaidRemaining: Double? = null,
 )
 
 data class MyLeavesResponse(val success: Boolean, val total: Int?, val leaves: List<LeaveData> = emptyList())
@@ -2511,7 +2518,11 @@ data class PermissionUsageResponse(
     val usedHours: Double? = null,
     val limitHours: Double? = null,
     val remainingHours: Double? = null,
-    @SerializedName("usedRequests", alternate = ["count"]) val count: Int? = null
+    @SerializedName("usedRequests", alternate = ["count"]) val count: Int? = null,
+    // MMS-290: monthly request-count cap. Nullable so an older backend that
+    // doesn't send them reads as "unknown" (never blocks Apply).
+    val requestLimit: Int? = null,
+    val remainingRequests: Int? = null,
 )
 data class MyPermissionsResponse(val success: Boolean, val total: Int?, val permissions: List<PermissionData> = emptyList())
 data class PermissionData(

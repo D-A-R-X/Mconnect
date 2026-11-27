@@ -63,6 +63,9 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
     private var compCredits: List<com.manjugroups.m_connect.network.CompOffCredit> = emptyList()
     private var selectedCredit: com.manjugroups.m_connect.network.CompOffCredit? = null
     private var compCreditsLoaded = false
+    // MMS-290: true only once the credit list actually came back. A failed
+    // fetch leaves it false, so Comp Off stays pickable (unknown != empty).
+    private var compCreditsFetched = false
 
     private val apiDateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
     private val labelDateFormat = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
@@ -185,6 +188,9 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
 
         updateDurationLabel()
         loadLeaveTypes()
+        // MMS-290: fetch comp-off credits up front so the category sheet can
+        // mark "Compensatory … · Unavailable" when there are none.
+        loadCompCredits()
         applyTypeUi()
         updateSessionUi()
         updateSubmitButtonState() // Initial disable
@@ -303,6 +309,7 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
             try {
                 val resp = api.getCompOffCredits(session.bearerToken)
                 compCredits = resp.credits
+                compCreditsFetched = true
             } catch (ce: kotlinx.coroutines.CancellationException) {
                 throw ce
             } catch (_: Exception) {
@@ -572,7 +579,18 @@ class ApplyLeaveBottomSheet : BottomSheetDialogFragment() {
         val rows = mutableListOf<View>()
         leaveTypes.forEachIndexed { index, type ->
             val row = layoutInflater.inflate(R.layout.item_leave_sheet_option, container, false)
-            row.findViewById<TextView>(R.id.tvOption).text = prettyType(type)
+            // MMS-290: a type with nothing to spend reads "<Type> · Unavailable"
+            // and can't be picked (a disabled row never fires its click). Today
+            // only Comp Off has a balance in this picker.
+            val typeAvailable = type != "compensatory" ||
+                HrApplyAvailability.compOffAvailable(compCreditsFetched, compCredits.size)
+            row.findViewById<TextView>(R.id.tvOption).text =
+                if (typeAvailable) prettyType(type) else "${prettyType(type)} · ${HrApplyButtonBinder.UNAVAILABLE_LABEL}"
+            if (!typeAvailable) {
+                row.isEnabled = false
+                row.alpha = 0.5f
+                if (index == selectedIndex) selectedIndex = -1
+            }
             
             val isSelected = index == selectedIndex
             row.setBackgroundResource(

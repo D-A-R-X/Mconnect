@@ -31,6 +31,9 @@ data class LeavesState(
     val isTeamLoading: Boolean = false,
     val isAllLoading: Boolean = false,
     val balanceLoaded: Boolean = false,
+    // MMS-290: web-configured unpaid-leave limit; null = unlimited/unknown.
+    val unpaidLimit: Double? = null,
+    val unpaidRemaining: Double? = null,
     val isApplying: Boolean = false
 )
 
@@ -146,6 +149,8 @@ class LeavesViewModel(private val api: ApiService = ApiService.create()) : ViewM
             earnedLeft = (earned - (b?.earnedUsed ?: 0.0)).coerceAtLeast(0.0),
             casualTotal = casual, sickTotal = sick, earnedTotal = earned,
             balanceLoaded = b != null,
+            unpaidLimit = b?.unpaidLimit,
+            unpaidRemaining = b?.unpaidRemaining,
             leaveTypes = types.ifEmpty { listOf("casual", "sick", "earned") },
         )
     }
