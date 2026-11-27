@@ -50,7 +50,9 @@ object StaffPickerBottomSheet {
         val emptyView = view.findViewById<TextView>(R.id.tvPickerEmpty)
         val rv = view.findViewById<RecyclerView>(R.id.rvPickerList)
         rv.layoutManager = LinearLayoutManager(context)
+        rv.hideKeyboardOnDrag()
         val adapter = StaffAdapter { picked ->
+            Keyboard.hide(view) // MMS-288: keyboard first, then the pick
             onPicked(picked)
             dialog.dismiss()
         }

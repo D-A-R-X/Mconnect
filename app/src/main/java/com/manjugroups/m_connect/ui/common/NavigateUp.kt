@@ -16,6 +16,8 @@ fun Fragment.navigateUp() {
     // "not associated with a fragment manager" (crash in Mobile → Issues,
     // 15 Nov). The screen is gone, so there is nothing to navigate.
     if (!isAdded) return
+    // Leaving this screen: its keyboard must not follow the user back (MMS-288).
+    hideKeyboard()
     val fm = parentFragmentManager
     // Use the ASYNC popBackStack, never popBackStackImmediate(). Immediate pop
     // rebuilds the destination fragment's whole view tree synchronously on the
@@ -84,6 +86,11 @@ fun FragmentManager.pushDetail(next: Fragment, allowStateLoss: Boolean = false) 
     val current = fragments.lastOrNull {
         it.id == R.id.fragmentContainer && it.isAdded && !it.isHidden && it.view != null
     }
+    // The screen below is only hidden, so a focused search box on it would
+    // keep focus and leave the keyboard up over the new screen (MMS-288).
+    // Close it BEFORE the push, so a new screen that opens its own keyboard
+    // (chat composer, a search screen) still can.
+    Keyboard.hide(current?.view)
 
     val tx = beginTransaction()
         .setReorderingAllowed(true)

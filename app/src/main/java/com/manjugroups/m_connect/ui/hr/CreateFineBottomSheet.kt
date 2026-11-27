@@ -1,5 +1,6 @@
 package com.manjugroups.m_connect.ui.hr
 
+import com.manjugroups.m_connect.ui.common.Keyboard
 import com.manjugroups.m_connect.ui.common.ButtonLoader
 import com.manjugroups.m_connect.ui.common.toastSafe
 
@@ -223,6 +224,7 @@ class CreateFineBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun hideEmployeePicker() {
+        Keyboard.hide(binding.root) // MMS-288: picker closed after search
         binding.layoutEmployeePicker.visibility = View.GONE
         binding.layoutFormContent.visibility = View.VISIBLE
     }

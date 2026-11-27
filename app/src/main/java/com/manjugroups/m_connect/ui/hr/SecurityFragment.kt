@@ -1,5 +1,6 @@
 package com.manjugroups.m_connect.ui.hr
 
+import com.manjugroups.m_connect.ui.common.hideKeyboard
 import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
@@ -639,6 +640,7 @@ class SecurityFragment : Fragment() {
         }
 
     private fun showLoggedInDevices(staffId: String, name: String) {
+        hideKeyboard() // MMS-288: opened from a search list
         val canLogout = holdsSecurityKey(session, "settings.staffLogin.create")
         val list = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
@@ -1056,6 +1058,7 @@ class SecurityFragment : Fragment() {
             }
             // The tab decides which action the sheet offers, so a tab is a real
             // choice rather than a label.
+            hideKeyboard() // MMS-288: opened from a search list
             StaffSecurityBottomSheet.show(
                 fm = childFragmentManager,
                 staffId = staff.id!!,

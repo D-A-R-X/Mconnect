@@ -1,5 +1,6 @@
 package com.manjugroups.m_connect.ui.hr
 
+import com.manjugroups.m_connect.ui.common.hideKeyboard
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
@@ -221,6 +222,7 @@ class FinesDeductionsFragment : Fragment() {
 
     /** Bottom sheet for a fine row: the captured picture + the reason. */
     private fun showFineDetail(record: FineRecord) {
+        hideKeyboard() // MMS-288: opened from a search list
         val sheet = com.google.android.material.bottomsheet.BottomSheetDialog(requireContext())
         val content = layoutInflater.inflate(R.layout.sheet_fine_detail, null)
 

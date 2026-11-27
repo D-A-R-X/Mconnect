@@ -1,5 +1,6 @@
 package com.manjugroups.m_connect.ui.library.land
 
+import com.manjugroups.m_connect.ui.common.hideKeyboard
 import com.manjugroups.m_connect.ui.common.toastSafe
 
 import android.os.Bundle
@@ -355,6 +356,7 @@ class QueriesFragment : Fragment() {
      * used to call (so the web Legal tab still reflects the state).
      */
     private fun openDocumentsNeededSheet(row: QueryRow) {
+        hideKeyboard() // MMS-288: opened from a search list
         val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(requireContext())
         val view = layoutInflater.inflate(R.layout.sheet_documents_needed, null)
         dialog.setContentView(view)
