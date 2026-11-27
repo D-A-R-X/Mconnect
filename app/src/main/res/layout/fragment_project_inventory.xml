@@ -66,7 +66,7 @@
         android:gravity="center"
         android:padding="12dp"
         android:text="Open 2D layout map"
-        android:textColor="?attr/colorAccentPrimary"
+        android:textColor="?attr/colorButtonPrimary"
         android:textSize="13sp" />
 
     <com.google.android.material.chip.ChipGroup

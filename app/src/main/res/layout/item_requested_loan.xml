@@ -247,7 +247,7 @@
         android:layout_marginTop="16dp"
         android:text="Accepted"
         app:backgroundTint="@null"
-        android:background="@drawable/bg_btn_gradient_green_8dp"
+        android:background="@drawable/bg_mc_button_success"
         app:icon="@drawable/ic_check_white"
         app:iconTint="@color/white"
         android:alpha="0.6"

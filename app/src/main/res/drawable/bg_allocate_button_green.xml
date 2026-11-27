@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Alias: the Mconnect success button component (values/buttons.xml). -->
+<!-- Alias: the Mconnect CTA button component (MMS-289) (values/buttons.xml). -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@drawable/bg_mc_button_success" />
+    <item android:drawable="@drawable/bg_mc_button_cta" />
 </layer-list>

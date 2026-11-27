@@ -1182,7 +1182,7 @@
         android:layout_marginHorizontal="20dp"
         android:layout_marginTop="6dp"
         android:layout_marginBottom="16dp"
-        android:background="@drawable/bg_mc_button_success"
+        android:background="@drawable/bg_mc_button_cta"
         android:clickable="true"
         android:focusable="true"
         android:fontFamily="@font/inter_bold"

@@ -191,7 +191,7 @@
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
-            android:buttonTint="?attr/colorAccentPrimary"
+            android:buttonTint="?attr/colorButtonPrimary"
             android:fontFamily="@font/inter_medium"
             android:gravity="center_vertical"
             android:text="Select all matching staff"
@@ -203,7 +203,7 @@
             style="?android:attr/progressBarStyleSmall"
             android:layout_width="22dp"
             android:layout_height="22dp"
-            android:indeterminateTint="?attr/colorAccentPrimary"
+            android:indeterminateTint="?attr/colorButtonPrimary"
             android:visibility="gone" />
     </LinearLayout>
 
@@ -388,7 +388,7 @@
                 android:paddingEnd="8dp"
                 android:paddingBottom="4dp"
                 android:text="Clear selection"
-                android:textColor="?attr/colorAccentPrimary"
+                android:textColor="?attr/colorButtonPrimary"
                 android:textSize="12sp" />
         </LinearLayout>
 

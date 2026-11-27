@@ -41,7 +41,7 @@
                 android:layout_height="wrap_content"
                 android:fontFamily="@font/inter_semibold"
                 android:text="Mark all read"
-                android:textColor="?attr/colorAccentPrimary"
+                android:textColor="?attr/colorButtonPrimary"
                 android:textSize="13sp"
                 android:clickable="true"
                 android:focusable="true" />

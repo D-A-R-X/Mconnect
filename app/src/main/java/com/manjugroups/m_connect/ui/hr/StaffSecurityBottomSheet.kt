@@ -527,7 +527,8 @@ class StaffSecurityBottomSheet : BottomSheetDialogFragment() {
             text = "\u2726 Generate strong password"
             textSize = 13f
             setTypeface(typeface, Typeface.BOLD)
-            setTextColor(Color.parseColor("#7C3AED"))
+            // MMS-289: links are brand blue (was purple).
+            setTextColor(brandBlue(ctx))
             setPadding(dp(12), dp(8), dp(12), dp(8))
             background = GradientDrawable().apply {
                 cornerRadius = dp(10).toFloat()
@@ -558,6 +559,14 @@ class StaffSecurityBottomSheet : BottomSheetDialogFragment() {
         // "Force change on next login", on by default like the web dialog.
         val forceSwitch = com.google.android.material.switchmaterial.SwitchMaterial(ctx).apply {
             isChecked = true
+            // MMS-289: brand blue when on (the theme accent made it purple).
+            val on = brandBlue(ctx)
+            val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
+            thumbTintList = android.content.res.ColorStateList(states, intArrayOf(on, Color.parseColor("#F2F4F7")))
+            trackTintList = android.content.res.ColorStateList(
+                states,
+                intArrayOf(androidx.core.graphics.ColorUtils.setAlphaComponent(on, 0x66), Color.parseColor("#D0D5DD")),
+            )
         }
         val forceRow = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -898,6 +907,16 @@ class StaffSecurityBottomSheet : BottomSheetDialogFragment() {
 
     private fun formatTime(ms: Double): String =
         SimpleDateFormat("d MMM yyyy, h:mm a", Locale.US).format(Date(ms.toLong()))
+
+    /** Brand blue (?attr/colorButtonPrimary), the colour of primary buttons and links. */
+    private fun brandBlue(ctx: android.content.Context): Int {
+        val tv = android.util.TypedValue()
+        return if (ctx.theme.resolveAttribute(com.manjugroups.m_connect.R.attr.colorButtonPrimary, tv, true)) {
+            if (tv.resourceId != 0) androidx.core.content.ContextCompat.getColor(ctx, tv.resourceId) else tv.data
+        } else {
+            Color.parseColor("#0B61CA")
+        }
+    }
 
     private fun dp(value: Int): Int =
         (value * resources.displayMetrics.density).toInt()

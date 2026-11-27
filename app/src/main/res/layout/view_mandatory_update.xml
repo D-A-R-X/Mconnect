@@ -83,7 +83,7 @@
         android:layout_gravity="bottom"
         android:layout_marginHorizontal="24dp"
         android:layout_marginBottom="32dp"
-        android:background="@drawable/bg_attendance_btn_primary"
+        android:background="@drawable/bg_mc_button_cta"
         android:fontFamily="@font/inter_semibold"
         android:gravity="center"
         android:text="Update now"
