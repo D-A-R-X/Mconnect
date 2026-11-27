@@ -20,6 +20,10 @@
         <!-- Custom semantic attributes -->
         <item name="colorAccentPrimary">@color/dk_accent_primary</item>
         <item name="colorButtonPrimary">@color/button_primary_blue</item>
+        <!-- MMS-289: dialog buttons in brand blue, sentence case (values/themes_dialog.xml). -->
+        <item name="alertDialogTheme">@style/ThemeOverlay.Mconnect.AlertDialog</item>
+        <item name="materialAlertDialogTheme">@style/ThemeOverlay.Mconnect.MaterialAlertDialog</item>
+        <item name="android:alertDialogTheme">@style/Theme.Mconnect.PlatformAlertDialog</item>
         <item name="colorAccentPrimaryHover">@color/dk_accent_primary_hover</item>
         <item name="colorAccentSecondary">@color/dk_accent_secondary</item>
         <item name="colorSurfacePrimary">@color/dk_surface_primary</item>

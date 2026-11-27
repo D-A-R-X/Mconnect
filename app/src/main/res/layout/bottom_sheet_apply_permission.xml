@@ -202,7 +202,7 @@
     <FrameLayout
         android:id="@+id/btnSubmit"
         android:layout_width="match_parent"
-        android:layout_height="46dp"
+        android:layout_height="@dimen/button_height"
         android:layout_marginHorizontal="20dp"
         android:layout_marginTop="10dp"
         android:layout_marginBottom="16dp"
@@ -219,7 +219,7 @@
             android:fontFamily="@font/inter_semibold"
             android:text="Submit Now"
             android:textColor="@android:color/white"
-            android:textSize="13sp" />
+            android:textSize="16sp" />
 
         <View
             android:id="@+id/skeletonSubmit"

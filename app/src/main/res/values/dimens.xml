@@ -22,6 +22,13 @@
     <!-- Button -->
     <dimen name="button_height">52dp</dimen>
     <dimen name="button_corner">12dp</dimen>
+    <!-- MMS-289 button sizes by placement: footer CTA 52 / in-card 48 (the
+         "Call Client" size) / row action 36. Icons sit before the label. -->
+    <dimen name="button_height_medium">48dp</dimen>
+    <dimen name="button_height_compact">36dp</dimen>
+    <dimen name="button_icon_size">20dp</dimen>
+    <dimen name="button_icon_size_medium">18dp</dimen>
+    <dimen name="button_icon_size_compact">16dp</dimen>
 
     <!-- OTP Box -->
     <dimen name="otp_box_width">48dp</dimen>

@@ -729,23 +729,23 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
-            android:background="@drawable/bg_trip_open_maps"
+            android:background="@drawable/bg_mc_button_secondary"
             android:clickable="true"
             android:drawablePadding="8dp"
             android:focusable="true"
             android:fontFamily="@font/inter_semibold"
             android:gravity="center"
             android:includeFontPadding="false"
-            android:minHeight="44dp"
-            android:paddingStart="14dp"
+            android:minHeight="@dimen/button_height_medium"
+            android:paddingStart="16dp"
             android:paddingTop="11dp"
-            android:paddingEnd="14dp"
+            android:paddingEnd="16dp"
             android:paddingBottom="11dp"
             android:text="Open in Google Maps"
-            android:textColor="#0B61CA"
-            android:textSize="13sp"
+            android:textColor="?attr/colorForegroundPrimary"
+            android:textSize="14sp"
             app:drawableStartCompat="@drawable/ic_cp_address"
-            app:drawableTint="#0B61CA" />
+            app:drawableTint="?attr/colorForegroundPrimary" />
     </LinearLayout>
 
     <FrameLayout
@@ -1121,8 +1121,8 @@
 
             <ImageView
                 android:id="@+id/ivStartTripIcon"
-                android:layout_width="22dp"
-                android:layout_height="22dp"
+                android:layout_width="@dimen/button_icon_size_medium"
+                android:layout_height="@dimen/button_icon_size_medium"
                 android:contentDescription="@null"
                 android:src="@drawable/ic_home_trip_play" />
 

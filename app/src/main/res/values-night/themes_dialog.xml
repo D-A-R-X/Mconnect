@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- MMS-289: dark-mode platform AlertDialog (see values/themes_dialog.xml). -->
+<resources>
+    <style name="Theme.Mconnect.PlatformAlertDialog" parent="android:Theme.Material.Dialog.Alert">
+        <item name="android:colorAccent">?attr/colorButtonPrimary</item>
+        <item name="android:buttonBarButtonStyle">@style/Widget.Mconnect.PlatformDialogButton</item>
+    </style>
+</resources>

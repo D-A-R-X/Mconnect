@@ -41,7 +41,7 @@
         <FrameLayout
             android:id="@+id/btnViewLeaveApproved"
             android:layout_width="match_parent"
-            android:layout_height="46dp"
+            android:layout_height="@dimen/button_height"
             android:layout_marginTop="20dp"
             android:background="@drawable/bg_apply_leave_btn_enabled"
             android:clickable="true"
@@ -54,7 +54,7 @@
                 android:fontFamily="@font/inter_semibold"
                 android:text="View Leave Approved"
                 android:textColor="@android:color/white"
-                android:textSize="13sp" />
+                android:textSize="16sp" />
         </FrameLayout>
     </LinearLayout>
 

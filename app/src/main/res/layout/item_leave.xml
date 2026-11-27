@@ -217,7 +217,7 @@
         <LinearLayout
             android:id="@+id/layoutTeamReviewActions"
             android:layout_width="match_parent"
-            android:layout_height="40dp"
+            android:layout_height="@dimen/button_height_compact"
             android:orientation="horizontal"
             android:visibility="gone">
 
@@ -226,13 +226,13 @@
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
-                android:background="@drawable/bg_leave_action_reject"
+                android:background="@drawable/bg_mc_button_danger_outline"
                 android:clickable="true"
                 android:focusable="true"
                 android:gravity="center"
                 android:fontFamily="@font/inter_semibold"
-                android:text="✕ Reject"
-                android:textColor="#EF4444"
+                android:text="Reject"
+                android:textColor="?attr/colorError"
                 android:textSize="13sp" />
 
             <TextView
@@ -241,12 +241,12 @@
                 android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:layout_marginStart="12dp"
-                android:background="@drawable/bg_leave_action_accept"
+                android:background="@drawable/bg_button_primary"
                 android:clickable="true"
                 android:focusable="true"
                 android:gravity="center"
                 android:fontFamily="@font/inter_semibold"
-                android:text="✓ Accept"
+                android:text="Accept"
                 android:textColor="@android:color/white"
                 android:textSize="13sp" />
         </LinearLayout>
